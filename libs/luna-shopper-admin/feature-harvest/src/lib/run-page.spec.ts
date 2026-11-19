@@ -1279,14 +1279,15 @@ describe('RunPage, on a phone and after a revert', () => {
     fixture.componentInstance.watch.stop();
   });
 
-  it('says the same when the list of admins cannot be read', async () => {
+  it('says the list could not be read, not that the admin is gone', async () => {
     const fixture = await settled(
       await render(run(REVERTED), undefined, { admins: 'fail' })
     );
 
     expect(revertedBy(fixture)?.textContent?.trim()).toBe(
-      'harvest.run.revertedByUnknown'
+      'harvest.run.revertedByUnread'
     );
+    expect(revertedBy(fixture)?.getAttribute('title')).toBe('admin-1');
     fixture.componentInstance.watch.stop();
   });
 

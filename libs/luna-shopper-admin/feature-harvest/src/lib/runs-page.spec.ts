@@ -629,7 +629,10 @@ describe('the runs list, and what a row says', () => {
     expect(text(fixture)).toContain('harvest.runs.empty');
   });
 
-  /** The run holds only the admin's id, which is a uuid (admin plan 0074). */
+  /**
+   * The run holds only the admin's id, which is a uuid. The hover names the
+   * admin and keeps the id after the name (admin plan 0074, section 4).
+   */
   it('names the admin who reverted a run in the hover of its chip', async () => {
     const { fixture, page } = await render();
     await drain();
@@ -637,9 +640,9 @@ describe('the runs list, and what a row says', () => {
 
     expect(
       page.rows().find((row) => row.id === 'run-catalog-reverted')?.revertedBy
-    ).toBe('Ichiroku');
+    ).toBe('Ichiroku (admin-ichiroku)');
     const chip = one<HTMLElement>(fixture, '.runs lib-run-row .reverted');
-    expect(chip?.getAttribute('title')).toBe('Ichiroku');
+    expect(chip?.getAttribute('title')).toBe('Ichiroku (admin-ichiroku)');
   });
 });
 

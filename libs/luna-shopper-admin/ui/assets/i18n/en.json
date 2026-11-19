@@ -1323,6 +1323,7 @@
         "correlationId": "Correlation identifier"
       },
       "revertedByUnknown": "An admin no longer listed",
+      "revertedByUnread": "Could not be read",
       "tabs": {
         "label": "Views of this run",
         "overview": "Overview",

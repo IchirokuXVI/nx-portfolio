@@ -912,19 +912,23 @@ import {
        two covers are painted in the page colour and scroll with the table,
        the two shadows stay at the edges of the box. A cover sits on its
        shadow while that edge of the table is in view, so a table that fits,
-       as every one does at 1360 px, draws no shadow at all. */
+       as every one does at 1360 px, draws no shadow at all.
+
+       The shadow fades from the control outline, the one grey of plan 0041
+       dark enough to read on the page at a glance; the panel border was too
+       light to notice. It fades to nothing over 1.25rem, a soft edge. */
     .scroll {
       inline-size: 100%;
       overflow-x: auto;
       background:
         linear-gradient(to right, var(--admin-surface) 50%, transparent) left /
-          2rem 100% no-repeat local,
+          2.5rem 100% no-repeat local,
         linear-gradient(to left, var(--admin-surface) 50%, transparent) right /
-          2rem 100% no-repeat local,
-        linear-gradient(to right, var(--admin-border), transparent) left / 1rem
-          100% no-repeat scroll,
-        linear-gradient(to left, var(--admin-border), transparent) right / 1rem
-          100% no-repeat scroll;
+          2.5rem 100% no-repeat local,
+        linear-gradient(to right, var(--admin-border-strong), transparent)
+          left / 1.25rem 100% no-repeat scroll,
+        linear-gradient(to left, var(--admin-border-strong), transparent)
+          right / 1.25rem 100% no-repeat scroll;
     }
 
     /* A header and a number never wrap. A body cell wraps between words only,
@@ -1259,8 +1263,10 @@ export class RunPage {
    * Who reverted the run, by name (admin plan 0074, section 2).
    *
    * Nothing while the list of admins is read, so a uuid never shows for a
-   * moment first. Then the name, or the words for an admin the list does not
-   * hold. The id stays in the hover, for whoever needs it.
+   * moment first. Then the name, the words for an admin the list does not
+   * hold, or the words for a list that could not be read: a failed read says
+   * nothing about the admin, so it never claims one is gone. The id stays in
+   * the hover, for whoever needs it.
    */
   private _revertedBy(adminId: string | null): RunFact {
     if (adminId === null || adminId === '') {
@@ -1270,6 +1276,14 @@ export class RunPage {
     const state = this._admins.state();
     if (state === 'idle' || state === 'loading') {
       return fact('revertedBy', '');
+    }
+    if (state === 'failed') {
+      return {
+        key: 'revertedBy',
+        value: '',
+        valueKey: REVERTED_BY_UNREAD,
+        title: adminId,
+      };
     }
 
     const name = this._admins.nameOf(adminId);
@@ -1434,6 +1448,9 @@ export class RunPage {
 
 /** The words for an admin the list of admins does not hold. */
 const REVERTED_BY_UNKNOWN = 'harvest.run.revertedByUnknown';
+
+/** The words for a list of admins that could not be read. */
+const REVERTED_BY_UNREAD = 'harvest.run.revertedByUnread';
 
 /**
  * One fact of the run: a value as text, or a key to translate, and what its

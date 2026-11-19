@@ -7,6 +7,7 @@ import {
   DEPLOYMENT_SERVICE,
   DeploymentStore,
   HARVEST_SERVICE,
+  RESOURCE_GATEWAYS,
   ServerReachability,
   type HarvestServiceI,
   type RunQuery,
@@ -74,7 +75,19 @@ function run(over: Partial<HarvestRun> = {}): HarvestRun {
   } as HarvestRun;
 }
 
-async function render(rows: HarvestRun[]): Promise<{
+/** A gateway whose one list, the admins, is refused. */
+const REFUSING_GATEWAYS = {
+  for: () => ({
+    list: async () => {
+      throw new Error('refused');
+    },
+  }),
+};
+
+async function render(
+  rows: HarvestRun[],
+  around: { readonly adminsFail?: boolean } = {}
+): Promise<{
   fixture: ComponentFixture<RunsPage>;
   queries: RunQuery[];
 }> {
@@ -111,6 +124,9 @@ async function render(rows: HarvestRun[]): Promise<{
         },
       },
       DeploymentStore,
+      ...(around.adminsFail
+        ? [{ provide: RESOURCE_GATEWAYS, useValue: REFUSING_GATEWAYS }]
+        : []),
     ],
   }).compileComponents();
 
@@ -146,10 +162,11 @@ describe('RunsPage, a reverted run', () => {
   });
 
   /**
-   * The operator is named on hover rather than in the row, and by name and
-   * not by id (admin plan 0074): the memory back end lists the seed's admins.
+   * The operator is named on hover rather than in the row, by name with the
+   * id after it (admin plan 0074, section 4): the memory back end lists the
+   * seed's admins.
    */
-  it('names the operator on hover rather than in the row', async () => {
+  it('names the operator on hover, with the id, rather than in the row', async () => {
     const { fixture } = await render([
       run({
         revertedAt: '2026-09-04T08:00:00.000Z',
@@ -160,11 +177,11 @@ describe('RunsPage, a reverted run', () => {
     fixture.detectChanges();
 
     const chip = fixture.nativeElement.querySelector('.reverted');
-    expect(chip.getAttribute('title')).toBe('Ichiroku');
+    expect(chip.getAttribute('title')).toBe('Ichiroku (admin-ichiroku)');
     expect(text(fixture)).not.toContain('Ichiroku');
   });
 
-  it('says an operator is no longer listed, and never shows the id', async () => {
+  it('says an operator is no longer listed, with the id after the words', async () => {
     const { fixture } = await render([
       run({
         revertedAt: '2026-09-04T08:00:00.000Z',
@@ -175,7 +192,28 @@ describe('RunsPage, a reverted run', () => {
     fixture.detectChanges();
 
     const chip = fixture.nativeElement.querySelector('.reverted');
-    expect(chip.getAttribute('title')).toBe('harvest.run.revertedByUnknown');
+    expect(chip.getAttribute('title')).toBe(
+      'harvest.run.revertedByUnknown (owner-1)'
+    );
+  });
+
+  it('says the list could not be read, not that the operator is gone', async () => {
+    const { fixture } = await render(
+      [
+        run({
+          revertedAt: '2026-09-04T08:00:00.000Z',
+          revertedByUserId: 'admin-ichiroku',
+        }),
+      ],
+      { adminsFail: true }
+    );
+    await drain();
+    fixture.detectChanges();
+
+    const chip = fixture.nativeElement.querySelector('.reverted');
+    expect(chip.getAttribute('title')).toBe(
+      'harvest.run.revertedByUnread (admin-ichiroku)'
+    );
   });
 
   it('asks for both until the filter says otherwise', async () => {

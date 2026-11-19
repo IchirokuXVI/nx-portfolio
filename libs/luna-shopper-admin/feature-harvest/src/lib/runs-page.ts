@@ -898,8 +898,10 @@ export class RunsPage {
   }
 
   /**
-   * Who reverted a run, for the hover of its chip: the admin's name, or the
-   * words for an admin the list does not hold. Nothing until the list has
+   * Who reverted a run, for the hover of its chip: the admin's name, the
+   * words for an admin the list does not hold, or the words for a list that
+   * could not be read, each followed by the id in parentheses so the id is on
+   * the page (admin plan 0074, section 4). Nothing until the list has
    * answered, so the hover never shows the uuid alone.
    */
   private _revertedBy(adminId: string | null): string {
@@ -917,10 +919,12 @@ export class RunsPage {
     // they load after the list (decision 46a of the harvester round).
     this._translate.locale();
     this._translate.loaded();
-    return (
-      this._admins.nameOf(adminId) ??
-      this._translate.t('harvest.run.revertedByUnknown')
-    );
+    const who =
+      state === 'failed'
+        ? this._translate.t('harvest.run.revertedByUnread')
+        : (this._admins.nameOf(adminId) ??
+          this._translate.t('harvest.run.revertedByUnknown'));
+    return `${who} (${adminId})`;
   }
 
   /** The chain, where the run has one, for the title of "Running now". */
