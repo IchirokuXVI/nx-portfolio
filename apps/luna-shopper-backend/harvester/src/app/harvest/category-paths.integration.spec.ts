@@ -145,4 +145,26 @@ describeIntegration('SourceIngest.writeCategoryPaths (real Postgres)', () => {
     expect(changed).toBe(0);
     expect(await stored(row.id)).toEqual([COLA, PACKS]);
   });
+
+  it('keeps every stored path under ADD, in its order, even one a longer run path covers', async () => {
+    const A = ['Frescos'];
+    const AB = ['Frescos', 'Frutas'];
+    const C = ['Despensa'];
+    const short = await entry('1001', [A]);
+    const two = await entry('1002', [A, C]);
+
+    const landed: number[] = [];
+    const changed = await ingest.writeCategoryPaths(
+      [
+        { entryId: short.id, paths: [AB], mode: 'ADD' },
+        { entryId: two.id, paths: [AB], mode: 'ADD' },
+      ],
+      () => landed.push(landed.length + 1)
+    );
+
+    expect(changed).toBe(2);
+    expect(landed).toEqual([1, 2]);
+    expect(await stored(short.id)).toEqual([A, AB]);
+    expect(await stored(two.id)).toEqual([A, C, AB]);
+  });
 });

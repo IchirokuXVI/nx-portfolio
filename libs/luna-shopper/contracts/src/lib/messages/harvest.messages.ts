@@ -1030,9 +1030,11 @@ export interface SourceCatalogEntryView {
   /**
    * Every category path the chain files the product under, each root first,
    * in walk order, in the chain's own words (plan 0268). Context for the
-   * curator and the queue, never a category of ours. The first path is the
-   * one `categoryPath` holds, when a run wrote both. Empty for a row no walk
-   * of its chain has stated paths for since that plan.
+   * curator and the queue, never a category of ours. After a run that
+   * replaced the list, the first path is the one `categoryPath` holds. A run
+   * that added to it keeps the stored paths in their order and appends, so
+   * the first path can then differ from `categoryPath`. Empty for a row no
+   * walk of its chain has stated paths for since that plan.
    */
   categoryPaths: string[][];
   url: string | null;

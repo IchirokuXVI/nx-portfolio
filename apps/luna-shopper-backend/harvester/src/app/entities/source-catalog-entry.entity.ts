@@ -190,8 +190,10 @@ export class SourceCatalogEntry extends BaseEntity {
    * Every path the chain files the product under, each root first, in walk
    * order, distinct, in the chain's own words (plan 0268). Context for the
    * curator and the back office: no rule reads it, and nothing maps it to a
-   * category of ours. The first path is the one `categoryPath` holds, when
-   * the run wrote both.
+   * category of ours. After a `REPLACE` write the first path is the one
+   * `categoryPath` holds. An `ADD` write keeps the stored paths verbatim and in
+   * their order and appends the new ones, so its first path can differ from
+   * `categoryPath` (owner decision 75a).
    *
    * **Written only at the end of a run**, by the drain, and never by a chunk:
    * a run that dies before its drain leaves the stored list as it was. A row
