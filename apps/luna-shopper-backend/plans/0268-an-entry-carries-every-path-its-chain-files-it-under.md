@@ -44,8 +44,9 @@
 >
 > **Note of 2026-11-19 (owner decision 75a).** The Constraints line that says the first path of
 > `categoryPaths` is the path that `categoryPath` holds is true for a `REPLACE` write only. An
-> `ADD` write keeps the stored paths verbatim and in their order and appends each run path that
-> is not stored yet, so its first path can differ from `categoryPath`. An aborted run thus
+> `ADD` write keeps the stored paths as they are and in their order, except that an element that
+> is not a path (not a non empty list of strings) is removed, and appends each run path that is
+> not stored yet, so its first path can differ from `categoryPath`. An aborted run thus
 > removes no stored path and reorders none.
 >
 > Prerequisite reading: plan `0173` (our tree is a copy of DIA's), plan `0174` (a DIA row is
