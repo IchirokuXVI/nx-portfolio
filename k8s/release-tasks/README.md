@@ -458,30 +458,60 @@ that size.
   this release adds the command. `post.sh` refuses there.
 - **It leaves no marker, and it does not need one.** A corrected product has
   no size, so a second run counts 0 and writes nothing.
-- **It leaves a review list for the curator.** `post.sh` saves the list of the
-  products it corrected in the ConfigMap `release-task-0007-review`, key
-  `review.tsv`: the chain, the product, the size it took off, the wash text
-  that qualified it, and every size text the product's rows state. The key
-  `mercadona-per-wash.tsv` beside it lists the Mercadona rows that the chain
-  prices per wash (latest label `lv`) and that state a count of units above 1
-  as their size. The task does not correct those. A run never drops a line an
-  earlier run saved: a product corrected by a run that failed later stays on
-  the list with its old size, once. `post.sh` writes the ConfigMap with
-  `kubectl apply --server-side`, because a client side apply copies it into an
-  annotation capped at 256 KiB. The deploy log shows the line counts only,
-  because it is public. Read the lists over SSH on the host, as the `deploy`
-  user:
+- **It leaves a review list for the curator.** `post.sh` saves it in the
+  ConfigMap `release-task-0007-review`, key `review.tsv`: the chain, the
+  product, the size it took off, the wash text that qualified it, every size
+  text the product's rows state, and last the `outcome`. **The curator fixes
+  the `corrected` lines**: their product lost the size the line names. A
+  `planned` line names a product the task meant to correct and did not (it
+  was saved before the run, and its update has not gone through: it failed,
+  or a person changed the product first). Its product still has the size the
+  line names, unless a person changed it. A later run turns a `planned` line
+  into `corrected` when it corrects the product, and never turns a
+  `corrected` line back. A run never drops a line an earlier run saved.
+- **It notes what it does not correct.** The key `notes.tsv` beside it lists,
+  one line per row, the ACTIVE bound rows that look like a wash count and that
+  the task leaves alone. The first column names the kind:
+  - `pack-of-units`: Carrefour's `pack de 2 unidades de 50 lavados.`, on a
+    product that holds 2 × 50 `UNIT`. The Carrefour parser before plan `0270`
+    multiplied it into that size.
+  - `short-wash-word`: El Jamón's `40lav` or `40lv`, on a product that holds
+    40 `UNIT`. No old parser read that as a size, so where the size came from
+    is not known.
+  - `sum`: `23+12 lavados`, `23+12lav`, on a product that holds 35 `UNIT`.
+  - `mercadona-per-wash`: a Mercadona row that the chain prices per wash
+    (latest label `lv`) and that states a count of units above 1 as its size.
+
+  Then the chain, the product, its size as it stands, the row's printed size,
+  every size text the product's rows state, and the row's id. A note is chosen
+  from stored fields only, never from a product name, and a product the task
+  corrects is not also noted. The task writes nothing for a note: the curator
+  decides each one.
+
+  `post.sh` writes the ConfigMap with `kubectl apply --server-side`, because a
+  client side apply copies it into an annotation capped at 256 KiB. The deploy
+  log shows counts only (lines per outcome and per kind), because it is
+  public. Read the lists over SSH on the host, as the `deploy` user:
 
   ```sh
   kubectl -n luna-shopper get configmap release-task-0007-review \
     -o jsonpath='{.data.review\.tsv}'
   kubectl -n luna-shopper get configmap release-task-0007-review \
-    -o jsonpath='{.data.mercadona-per-wash\.tsv}'
+    -o jsonpath='{.data.notes\.tsv}'
   ```
 
   Nothing deletes the ConfigMap. Delete it when the curator has worked through
   it. `node wash-sizes.js --review <file>` writes the same lists again for the
-  products that still qualify.
+  products that still qualify, each of its own lines `planned`.
+
+- **A ConfigMap of another shape is refused before any write.** When a key of
+  `configmap/release-task-0007-review` does not start with this task's header
+  (a ConfigMap of an earlier shape of the task, or the file of an earlier
+  rehearsal), the command refuses, names that ConfigMap, and changes nothing.
+  Delete it, or restore the header of this task as the first line of each
+  key, and deploy again. Deleting it also deletes the record of what earlier
+  runs corrected, so read it first. A rehearsal starts again from an empty
+  `configmap.json`.
 
 - **To undo one product, send one item update** with the old size the list
   names. A restore of the dump also removes everything written to catalog

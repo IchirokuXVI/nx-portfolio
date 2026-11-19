@@ -39,17 +39,20 @@ const ASK_TIMEOUT_MS = 30_000;
  *
  *   node wash-sizes.js --count
  *       prints `chain <slug> <n>`, `products`, `pack`, `content`, `unread`,
- *       `held` and `mercadona-per-wash`, numbers only. Writes nothing.
+ *       `held`, and one line per kind of note (`pack-of-units`,
+ *       `short-wash-word`, `sum`, `mercadona-per-wash`), numbers only.
+ *       Writes nothing.
  *
  *   node wash-sizes.js --review <file>
  *       the same counts, then the review list of the products that still
- *       qualify in <file>, and the Mercadona note beside it. No database row.
+ *       qualify in <file>, each `planned`, and the notes beside it
+ *       (`<file>` with `.notes.tsv` for `.tsv`). No database row.
  *
  *   node wash-sizes.js --max <n> --review <file>
  *       the same counts, refuses before any write above <n>, then corrects
- *       each product and writes the list of what it corrected. Prints
- *       `corrected`, `skipped` and `failures`, and exits 1 when any product
- *       failed.
+ *       each product and writes the list: `corrected` for each product whose
+ *       update went through, `planned` for the rest. Prints `corrected`,
+ *       `skipped` and `failures`, and exits 1 when any product failed.
  *
  *   ... --recorded <file|->
  *       with either list: the ConfigMap earlier runs saved, as
@@ -77,6 +80,10 @@ async function run() {
     url,
     entities: [],
     synchronize: false,
+    // Stated, not left to the default: a logged query error or slow query
+    // prints its parameters, which are product ids, to the deploy log.
+    logging: false,
+    maxQueryExecutionTime: undefined,
   });
   await dataSource.initialize();
   const client = ClientProxyFactory.create({
@@ -113,12 +120,29 @@ async function run() {
   }
 }
 
-run().then(
-  (failures) => process.exit(failures > 0 ? 1 : 0),
-  (err) => {
-    // Never the stack, and never the message of an error the command did not
-    // word itself: the release task prints this line into a public log.
-    console.error(describe(err));
-    process.exit(1);
-  }
-);
+/**
+ * Prints the one line {@link describe} words and stops. Never the stack, and
+ * never the message of an error the command did not word itself: the release
+ * task prints this line into a public log.
+ */
+function fail(err: unknown): never {
+  console.error(describe(err));
+  process.exit(1);
+}
+
+// Node prints an uncaught error whole, query parameters and all, and a
+// warning with its message. Both go through the same words as any failure.
+process.on('uncaughtException', fail);
+process.on('unhandledRejection', fail);
+process.removeAllListeners('warning');
+process.on('warning', (warning) => {
+  const name = /^[A-Za-z]{1,40}$/.test(warning.name) ? warning.name : 'Warning';
+  const code = (warning as { code?: unknown }).code;
+  console.error(
+    typeof code === 'string' && /^[A-Z0-9_]{1,20}$/.test(code)
+      ? `warning ${name} ${code}`
+      : `warning ${name}`
+  );
+});
+
+run().then((failures) => process.exit(failures > 0 ? 1 : 0), fail);
