@@ -1579,7 +1579,7 @@
         "brand": "Brand",
         "size": "Size",
         "ean": "Barcode",
-        "categoryPath": "Its category",
+        "categoryPath": "Its categories",
         "externalId": "Its id",
         "lastSeen": "Last seen"
       },
