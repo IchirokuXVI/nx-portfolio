@@ -70,6 +70,8 @@ interface CardLine {
   readonly value: string;
   /** A barcode or an id, which this app sets in the mono face. */
   readonly mono?: boolean;
+  /** Several values, one a line, which `value` holds joined (plan 0268). */
+  readonly list?: readonly string[];
 }
 
 /** The product a row was matched to, as the panel beside the row draws it. */
@@ -350,7 +352,15 @@ function entryIn(value: unknown): string | null {
                   @if (line.value !== '') {
                     <div>
                       <dt>{{ 'harvest.entries.field.' + line.key | rokuT }}</dt>
-                      <dd [class.mono]="line.mono">{{ line.value }}</dd>
+                      @if (line.list; as list) {
+                        <dd class="list">
+                          @for (part of list; track $index) {
+                            <span>{{ part }}</span>
+                          }
+                        </dd>
+                      } @else {
+                        <dd [class.mono]="line.mono">{{ line.value }}</dd>
+                      }
                     </div>
                   }
                 }
@@ -872,6 +882,13 @@ function entryIn(value: unknown): string | null {
 
     dd {
       overflow-wrap: anywhere;
+    }
+
+    /* A gap, so a path that wraps on a phone does not read as two. */
+    dd.list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-1);
     }
 
     .prices,
@@ -1427,7 +1444,7 @@ export class EntriesQueuePage implements OnDestroy {
       { key: 'brand', value: row.brand },
       { key: 'size', value: row.sizeFormat },
       { key: 'ean', value: row.ean, mono: true },
-      { key: 'categoryPath', value: row.categoryPath },
+      categoryLine(row),
       { key: 'externalId', value: row.externalId, mono: true },
       { key: 'lastSeen', value: row.lastSeen },
     ];
@@ -2074,6 +2091,22 @@ function accepted(
     count,
     name: decided?.name ?? '',
     prices: (decided?.prices ?? []).map(priceSentence).join(', '),
+  };
+}
+
+/**
+ * The chain's category paths of a row, one a line (backend plan 0268): every
+ * path the chain files it under, or the one path a row holds that no walk
+ * has stated every path for yet.
+ */
+function categoryLine(row: SourceEntryRow): CardLine {
+  if (row.categoryPaths.length === 0) {
+    return { key: 'categoryPath', value: row.categoryPath };
+  }
+  return {
+    key: 'categoryPath',
+    value: row.categoryPaths.join('\n'),
+    list: row.categoryPaths,
   };
 }
 

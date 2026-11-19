@@ -88,3 +88,44 @@ describe('the kind of each price of a queued row', () => {
     expect(lines.map((line) => line.sourceKind)).toEqual([null, null, null]);
   });
 });
+
+/**
+ * Every path the chain files a queued row under (backend plan 0268), read
+ * from `unknown`: a shape this app does not expect reads as no paths.
+ */
+describe('the category paths of a queued row', () => {
+  const pathsOf = (categoryPaths: unknown) =>
+    toSourceEntryRow({ id: 'entry-1', categoryPaths }, 'en')?.categoryPaths;
+
+  it('reads each path as one line, root first, in the order the chain gave', () => {
+    expect(
+      pathsOf([
+        ['Agua y refrescos', 'Cola'],
+        ['Navidad', 'Ibéricos y quesos'],
+      ])
+    ).toEqual(['Agua y refrescos / Cola', 'Navidad / Ibéricos y quesos']);
+  });
+
+  it('keeps the one path beside them, as it was', () => {
+    const row = toSourceEntryRow(
+      {
+        id: 'entry-1',
+        categoryPath: ['Agua y refrescos', 'Cola'],
+        categoryPaths: [['Agua y refrescos', 'Cola']],
+      },
+      'en'
+    );
+    expect(row?.categoryPath).toBe('Agua y refrescos / Cola');
+    expect(row?.categoryPaths).toEqual(['Agua y refrescos / Cola']);
+  });
+
+  it('reads a malformed value as no paths', () => {
+    // A server built before the field sends none at all.
+    expect(pathsOf(undefined)).toEqual([]);
+    expect(pathsOf(null)).toEqual([]);
+    expect(pathsOf('Cola')).toEqual([]);
+    expect(pathsOf({ 0: ['Cola'] })).toEqual([]);
+    // An item that is not a path is left out, and so is a path of no names.
+    expect(pathsOf([['Cola', 3], 'Cola', [], [7]])).toEqual(['Cola']);
+  });
+});

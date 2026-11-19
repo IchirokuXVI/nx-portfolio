@@ -1123,6 +1123,9 @@ function describeWrites(written: RunReportResult): Record<string, unknown> {
     approxWeightsSkippedSetByAdmin: written.approxWeightsSkippedSetByAdmin,
     approxWeightsSkippedHasSize: written.approxWeightsSkippedHasSize,
     approxWeightsSkippedHasStep: written.approxWeightsSkippedHasStep,
+    // Plan 0268, section 2: rows whose category paths this run changed. The
+    // last write of the drain, so a failed run states the rows that landed.
+    categoryPathsWritten: written.categoryPathsWritten,
   };
 }
 

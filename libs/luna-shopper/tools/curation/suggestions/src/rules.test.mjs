@@ -1066,3 +1066,12 @@ test('the prompt says a product can hold several barcodes, and what EAN_CONFLICT
     /a `LINK` onto a product carrying a different barcode/
   );
 });
+
+test('the prompt says what every shelf of an entry is, and that none is a category of ours (backend plan 0268)', () => {
+  const template = loadPromptTemplate();
+  assert.match(
+    template,
+    /`entry\.categoryPaths` lists every shelf the chain files the product under/
+  );
+  assert.match(template, /never a category of ours/);
+});

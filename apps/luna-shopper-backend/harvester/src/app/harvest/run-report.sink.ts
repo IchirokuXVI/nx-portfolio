@@ -14,6 +14,7 @@ import { describeError } from '@portfolio/luna-shopper/platform';
 import type { Repository } from 'typeorm';
 import type { SourceCatalogEntry } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
+import { distinctCategoryPaths } from './category-paths';
 import type { NotWholeListing } from './delisting';
 import type {
   BlockedPlace,
@@ -23,6 +24,7 @@ import type { RunScopeResolver } from './price-scope-resolver';
 import type { RunContext } from './run-context';
 import type {
   AvailabilityClaim,
+  CategoryPathsMode,
   ObservedPlace,
   RunReport,
   ScopeDeclaration,
@@ -33,6 +35,7 @@ import type {
   StoredClaim,
 } from './source-entry-availability';
 import type {
+  CategoryPathsWrite,
   PriceConflict,
   ReportedObservation,
   SourceEntryOutcome,
@@ -373,6 +376,11 @@ export interface RunReportResult {
    * decides whether the product is a kilo piece after all.
    */
   approxWeightsSkippedHasStep: number;
+  /**
+   * Rows whose category paths this run changed (plan 0268, section 2). A row
+   * whose paths were already what the run stated is not counted.
+   */
+  categoryPathsWritten: number;
 }
 
 export class RunReportSink implements RunReport {
@@ -421,6 +429,14 @@ export class RunReportSink implements RunReport {
   private readonly entryIdByExternalId = new Map<string, string>();
   /** The item each `ACTIVE` row resolved to, which is what a scope claim uses. */
   private readonly activeItemByExternalId = new Map<string, string>();
+  /**
+   * The category paths the runner stated, by external id, written by the
+   * drain after the last chunk (plan 0268, section 2).
+   */
+  private readonly categoryPathCalls = new Map<
+    string,
+    { paths: string[][]; mode: CategoryPathsMode }
+  >();
 
   private readonly result: RunReportResult = {
     products: 0,
@@ -466,6 +482,7 @@ export class RunReportSink implements RunReport {
     approxWeightsSkippedSetByAdmin: 0,
     approxWeightsSkippedHasSize: 0,
     approxWeightsSkippedHasStep: 0,
+    categoryPathsWritten: 0,
   };
 
   constructor(
@@ -562,6 +579,31 @@ export class RunReportSink implements RunReport {
 
   assortmentComplete(scopeKey: string | null): void {
     this.complete.add(scopeKey);
+  }
+
+  /**
+   * Collected, and written by {@link drain} after the last chunk (plan 0268,
+   * section 2). A second call for one product adds its paths after the
+   * first's, and the product is replaced when either call said so.
+   */
+  categoryPaths(
+    externalId: string,
+    paths: readonly (readonly string[])[],
+    mode: CategoryPathsMode
+  ): void {
+    if (this.firstFailure) {
+      return;
+    }
+    const before = this.categoryPathCalls.get(externalId);
+    const merged = distinctCategoryPaths([...(before?.paths ?? []), ...paths]);
+    if (merged.length === 0) {
+      return;
+    }
+    this.categoryPathCalls.set(externalId, {
+      paths: merged,
+      mode:
+        before?.mode === 'REPLACE' || mode === 'REPLACE' ? 'REPLACE' : 'ADD',
+    });
   }
 
   /**
@@ -673,7 +715,54 @@ export class RunReportSink implements RunReport {
       await this.writeScopeAvailability();
       await this.writePricelessOffers();
     }
+    // Last of all (plan 0268, section 2): the paths are context and nothing
+    // else reads them, so a failed path write costs no pack count, weight or
+    // availability. It still fails the run (plan 0269), and the count holds
+    // the rows that landed before it.
+    if (this.session) {
+      await this.writeCategoryPaths(this.session);
+    }
     return this.result;
+  }
+
+  /**
+   * The category paths the runner stated, onto the rows this run wrote them
+   * to (plan 0268, section 2). After the last chunk, so every row the run
+   * created exists, and after every other write of the drain, so a failure
+   * here costs no pack count, weight or availability. A product the run did not report has no row of this run
+   * and is not touched, and neither is a row no call named.
+   *
+   * **An aborted run writes every call as `ADD`**, by the rule of
+   * {@link RunReport.assortmentComplete}: a walk that stopped early has not
+   * proved that a stored path is gone.
+   */
+  private async writeCategoryPaths(
+    session: SourceIngestSession
+  ): Promise<void> {
+    if (this.categoryPathCalls.size === 0) {
+      return;
+    }
+    const aborted = this.context.signal.aborted;
+    const writes: CategoryPathsWrite[] = [];
+    for (const [externalId, call] of this.categoryPathCalls) {
+      const entryId = this.entryIdByExternalId.get(externalId);
+      if (entryId === undefined) {
+        continue;
+      }
+      writes.push({
+        entryId,
+        paths: call.paths,
+        mode: aborted ? 'ADD' : call.mode,
+      });
+    }
+    if (writes.length === 0) {
+      return;
+    }
+    // Counted as each row lands, so a failure midway leaves the true count
+    // for the report of the failed run (plan 0269, D9).
+    await session.writeCategoryPaths(writes, () => {
+      this.result.categoryPathsWritten += 1;
+    });
   }
 
   /**

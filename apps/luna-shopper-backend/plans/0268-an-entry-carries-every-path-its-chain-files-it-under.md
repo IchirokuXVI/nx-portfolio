@@ -1,3 +1,5 @@
+> **PR:** [#1015](https://github.com/IchirokuXVI/nx-portfolio/pull/1015)
+
 # 0268: an entry carries every path its chain files it under
 
 > Asked by the owner on 2026-11-11, and checked against `origin/dev` on 2026-11-11. A chain
@@ -39,6 +41,12 @@
 >   of `run-report.sink.ts`, `availability()` near line 559 and `drain()` near line 623,
 >   `fieldsOf` is near line 2380 of `source-ingest.ts`, and `sizesDisprovedExamples` is near
 >   line 1073 of `run-executor.service.ts`.
+>
+> **Note of 2026-11-19 (owner decision 75a).** The Constraints line that says the first path of
+> `categoryPaths` is the path that `categoryPath` holds is true for a `REPLACE` write only. An
+> `ADD` write keeps the stored paths verbatim and in their order and appends each run path that
+> is not stored yet, so its first path can differ from `categoryPath`. An aborted run thus
+> removes no stored path and reorders none.
 >
 > Prerequisite reading: plan `0173` (our tree is a copy of DIA's), plan `0174` (a DIA row is
 > filed by its leaf ids), plan `0254` (PR #964, not merged on 2026-11-11: the leaves left with no

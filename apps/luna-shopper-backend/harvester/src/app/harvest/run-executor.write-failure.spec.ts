@@ -52,6 +52,9 @@ const WRITTEN_BEFORE = {
   availabilityWritten: 0,
   packCountsFilled: 0,
   approxWeightsWritten: 0,
+  // Plan 0268: the rows whose category paths landed before a path write
+  // failed, which is the last write of the drain.
+  categoryPathsWritten: 119,
   pricedScopes: [],
   pricesCopied: {},
   availabilityCopied: {},
@@ -115,6 +118,7 @@ function build(options: {
     }
     return {
       products: 0,
+      categoryPathsWritten: 3,
       pricedScopes: [],
       pricesCopied: {},
       availabilityCopied: {},
@@ -275,6 +279,32 @@ describe('RunExecutor and a write that fails during a walk (plan 0269)', () => {
     expect(error).toBe('availability write timed out');
     expect((await store.load('run-1')).report).toEqual(
       expect.objectContaining({ productsWritten: 400, pricesPublished: 7 })
+    );
+  });
+
+  it('states the category paths that landed when the path write of the drain fails (plan 0268)', async () => {
+    const { executor, store } = build({
+      failWrite: false,
+      drainFails: new Error('update of category_paths timed out'),
+    });
+
+    await expect(executor.runToCompletion('run-1')).resolves.toBe(
+      HarvestRunStatus.FAILED
+    );
+
+    expect((await store.load('run-1')).report).toEqual(
+      expect.objectContaining({ categoryPathsWritten: 119 })
+    );
+  });
+
+  it('states the category paths a completed run wrote (plan 0268)', async () => {
+    const { executor, store } = build({ failWrite: false });
+
+    await expect(executor.runToCompletion('run-1')).resolves.toBe(
+      HarvestRunStatus.COMPLETED
+    );
+    expect((await store.load('run-1')).report).toEqual(
+      expect.objectContaining({ categoryPathsWritten: 3 })
     );
   });
 

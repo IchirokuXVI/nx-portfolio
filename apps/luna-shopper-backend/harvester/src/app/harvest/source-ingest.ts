@@ -17,6 +17,7 @@ import { In, IsNull, Repository, type FindOptionsWhere } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
 import { SourceCatalogEntry, SourceEntryPrice } from '../entities';
 import { CatalogClient } from './catalog-client.service';
+import { mergeCategoryPaths } from './category-paths';
 import { toItemPriceDetails } from './harvest.mappers';
 import {
   ChainEanIndex,
@@ -27,6 +28,7 @@ import {
   type MatchResult,
 } from './matching';
 import type { RunContext } from './run-context';
+import type { CategoryPathsMode } from './run-report';
 import {
   applySizeDoubt,
   hasSizeDoubt,
@@ -382,6 +384,14 @@ export interface SourceEntryOutcome {
   rung: 1 | 2 | 3 | 4 | 5;
   /** The item this observation resolves to, set only when the row is ACTIVE. */
   itemId: string | null;
+}
+
+/** The category paths a run states for one of its rows (plan 0268). */
+export interface CategoryPathsWrite {
+  entryId: string;
+  /** Distinct, each root first, in walk order. */
+  paths: readonly (readonly string[])[];
+  mode: CategoryPathsMode;
 }
 
 export interface SourceIngestCounters {
@@ -962,6 +972,51 @@ export class SourceIngest {
       }
     }
     return active;
+  }
+
+  /**
+   * The category paths of these rows, written at the drain of a run, after
+   * its last chunk (plan 0268, section 2). Answers how many rows changed.
+   *
+   * The stored paths are read again first, one query a chunk of rows, so an
+   * `ADD` keeps what the table holds now and not what a chunk cached. Only a
+   * row whose paths change is written, and only its one column, with an
+   * `update` and never a `save` of a cached row (plan 0269, section 3). A row
+   * that no longer exists writes nothing.
+   *
+   * `onWritten` is called as each update lands, so a caller that counts
+   * through it holds the true count when an update midway rejects.
+   */
+  async writeCategoryPaths(
+    writes: readonly CategoryPathsWrite[],
+    onWritten: () => void = () => undefined
+  ): Promise<number> {
+    let changed = 0;
+    for (let i = 0; i < writes.length; i += DECISION_READ_CHUNK) {
+      const chunk = writes.slice(i, i + DECISION_READ_CHUNK);
+      const rows = await this.entries.find({
+        select: { id: true, categoryPaths: true },
+        where: { id: In(chunk.map((write) => write.entryId)) },
+      });
+      const stored = new Map(rows.map((row) => [row.id, row.categoryPaths]));
+      for (const write of chunk) {
+        if (!stored.has(write.entryId)) {
+          continue;
+        }
+        const before = stored.get(write.entryId);
+        const after = mergeCategoryPaths(before, write.paths, write.mode);
+        // jsonb holds exactly what was written, so the text says it all.
+        if (JSON.stringify(before ?? []) === JSON.stringify(after)) {
+          continue;
+        }
+        await this.entries.update({ id: write.entryId }, {
+          categoryPaths: after,
+        } as QueryDeepPartialEntity<SourceCatalogEntry>);
+        changed += 1;
+        onWritten();
+      }
+    }
+    return changed;
   }
 
   /**
@@ -2561,6 +2616,18 @@ export class SourceIngestSession {
    */
   activeItemsOf(entryIds: readonly string[]): Promise<Map<string, string>> {
     return this.ingest.activeItemsOf(entryIds);
+  }
+
+  /**
+   * The category paths of the run's rows (plan 0268, section 2). Written by
+   * the drain, after {@link close} and after every other write of the end of
+   * the run, so a failure here costs nothing else.
+   */
+  writeCategoryPaths(
+    writes: readonly CategoryPathsWrite[],
+    onWritten?: () => void
+  ): Promise<number> {
+    return this.ingest.writeCategoryPaths(writes, onWritten);
   }
 
   /**
