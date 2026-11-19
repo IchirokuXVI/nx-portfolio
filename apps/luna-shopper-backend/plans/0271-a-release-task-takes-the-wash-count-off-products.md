@@ -1,3 +1,5 @@
+> **PR:** [#1013](https://github.com/IchirokuXVI/nx-portfolio/pull/1013)
+
 # 0271: a release task takes the wash count off the products made from wash rows
 
 > The owner's answer to O1 of plan `0270`, 2026-11-16: the products already made from wash rows
