@@ -10,7 +10,10 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuTranslatorPipe,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   ContentLocaleStore,
   HARVEST_SERVICE,
@@ -1162,6 +1165,7 @@ function entryIn(value: unknown): string | null {
 export class EntriesQueuePage implements OnDestroy {
   private readonly _service = inject(HARVEST_SERVICE);
   private readonly _content = inject(ContentLocaleStore);
+  private readonly _translate = inject(RokuTranslatorService);
   private readonly _route = inject(ActivatedRoute);
   private readonly _router = inject(Router);
   /**
@@ -1529,9 +1533,21 @@ export class EntriesQueuePage implements OnDestroy {
    */
   readonly doubtWords = computed(() => {
     const doubt = this.row()?.sizeDoubt ?? null;
+    // Read so the words of a count are taken again once the strings arrive.
+    this._translate.loaded();
     return doubt === null
       ? null
-      : formatSizeDoubt(doubt, this._content.locale());
+      : formatSizeDoubt(doubt, this._content.locale(), (count, figure) =>
+          this._translate.t(
+            'harvest.entries.sizeDoubt.units',
+            undefined,
+            undefined,
+            {
+              count,
+              figure,
+            }
+          )
+        );
   });
 
   /**

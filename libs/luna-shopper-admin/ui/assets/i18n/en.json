@@ -1587,7 +1587,9 @@
         "chip": "Size in doubt",
         "sentence": "States {{stated}}, its price per {{label}} implies {{implied}}.",
         "sentenceNoLabel": "States {{stated}}, its prices imply {{implied}}.",
-        "pack": "Perhaps a pack of {{count}} (a guess)."
+        "pack": "Perhaps a pack of {{count}} (a guess).",
+        "units_one": "{{figure}} unit",
+        "units_other": "{{figure}} units"
       },
       "bind": {
         "heading": "Point it at a product we have",
