@@ -1,3 +1,5 @@
+> **PR:** [#1016](https://github.com/IchirokuXVI/nx-portfolio/pull/1016)
+
 # 0272: a release task re-keys the DEZA entries before the first walk on the new split
 
 > The owner's decision 48b of 2026-11-18: a release task re-keys the stored DEZA source entries
