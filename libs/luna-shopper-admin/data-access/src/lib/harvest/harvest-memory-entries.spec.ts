@@ -84,6 +84,7 @@ describe('HarvestMemory, rows whose size is in doubt', () => {
 
     expect(waiting.items.map((entry) => entry.id)).toEqual([
       CARREFOUR_YOGUR_ENTRY,
+      'entry-huevos',
     ]);
     expect(bound.items.map((entry) => entry.id)).toEqual([
       CARREFOUR_ACEITE_ENTRY,
@@ -102,6 +103,6 @@ describe('HarvestMemory, rows whose size is in doubt', () => {
     expect(every.items.map((entry) => entry.id)).toContain(
       CARREFOUR_YOGUR_ENTRY
     );
-    expect(every.items).toHaveLength(others.items.length + 1);
+    expect(every.items).toHaveLength(others.items.length + 2);
   });
 });

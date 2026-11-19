@@ -1494,6 +1494,47 @@ export const SOURCE_ENTRY_SEED: readonly Wire.HarvestSourceCatalogEntryView[] =
         runId: 'run-catalog-reverted',
       },
     },
+    {
+      // A row sized in units whose price per unit equals its price, so the
+      // tray of thirty reads as one egg. Its label is printed in capitals with
+      // a stop, as chains print them, which the sentence writes as the
+      // harvester keys it (admin plan 0072).
+      id: 'entry-huevos',
+      supermarketId: MERCADONA,
+      externalId: '31074',
+      sourceKind: 'OFFICIAL_API',
+      name: 'Huevos frescos camperos L',
+      brand: 'Hacendado',
+      ean: null,
+      unitSize: 30,
+      sizeUnit: 'UNIT',
+      soldByWeight: false,
+      sizeFormat: 'Bandeja 30 ud.',
+      packCount: null,
+      categoryPath: ['Huevos, leche y mantequilla', 'Huevos'],
+      url: null,
+      imageUrl: null,
+      extra: null,
+      timesSeen: 1,
+      firstSeenAt: '2026-09-02T07:00:00.000Z',
+      lastSeenAt: '2026-09-02T07:00:00.000Z',
+      firstRunId: 'run-catalog-completed',
+      lastRunId: 'run-catalog-completed',
+      itemId: null,
+      candidateEntryId: null,
+      status: 'UNRESOLVED',
+      matchedBy: null,
+      confidence: 0,
+      decidedAt: null,
+      prices: [],
+      sizeDoubt: {
+        implied: 1,
+        unit: 'UNIT',
+        ratio: 1 / 30,
+        label: 'UD.',
+        runId: 'run-catalog-completed',
+      },
+    },
   ];
 
 /**

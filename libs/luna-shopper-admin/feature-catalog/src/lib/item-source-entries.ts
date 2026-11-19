@@ -8,7 +8,10 @@ import {
   signal,
   untracked,
 } from '@angular/core';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuTranslatorPipe,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   ContentLocaleStore,
   GatewayError,
@@ -400,6 +403,7 @@ export class ItemSourceEntries {
   private readonly _references = inject(ResourceReferences);
   private readonly _photos = inject(ItemLinkedImages);
   private readonly _content = inject(ContentLocaleStore);
+  private readonly _translate = inject(RokuTranslatorService);
 
   /** The product whose source rows are drawn. */
   readonly itemId = input.required<string>();
@@ -444,9 +448,24 @@ export class ItemSourceEntries {
   doubtWords(
     row: ItemSourceEntryRow
   ): ReturnType<typeof formatSizeDoubt> | null {
+    // Read so a row drawn before the strings arrive is worded again after.
+    this._translate.loaded();
     return row.sizeDoubt === null
       ? null
-      : formatSizeDoubt(row.sizeDoubt, this._content.locale());
+      : formatSizeDoubt(
+          row.sizeDoubt,
+          this._content.locale(),
+          (count, figure) =>
+            this._translate.t(
+              'harvest.entries.sizeDoubt.units',
+              undefined,
+              undefined,
+              {
+                count,
+                figure,
+              }
+            )
+        );
   }
 
   /** The saved photo of one source row, or `null`. */
