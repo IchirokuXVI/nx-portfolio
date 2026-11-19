@@ -38,8 +38,12 @@ import type { SourceObservation } from './source-ingest';
  *    requests, keeping the rows the coarse category says are groceries.
  * 2. `DETAIL`. One product page per kept row, for the EAN and the region price
  *    map, which the index does not carry. A page that fails costs one product.
- * 3. `INGEST`. Group every observation by the scope its regions resolve to, and
- *    make one call per scope.
+ *    A product goes to the sink as soon as its page answers, after the
+ *    regions it names that the run has not declared yet (plan 0267). The sink
+ *    writes a chunk each time `PRODUCT_CHUNK` products wait, so a walk that
+ *    dies part way keeps what it read, less at most the chunk that was not
+ *    full.
+ * 3. `INGEST`. The sink writes the last chunk when the run drains.
  * 4. `REPORT`.
  *
  * **A price belongs to a region and there are 59 of them** (section 4). The run
@@ -84,12 +88,19 @@ export class LidlCatalogRunner implements CatalogRunner {
       'DETAIL',
       `Reading ${grocery.length} product page(s)`
     );
+    /**
+     * Every product whose page answered, in the order it answered. Each one
+     * went to the sink at that moment (plan 0267, section 5), so this is kept
+     * only for {@link describeRun}, which reads the whole walk at the end.
+     */
     const products: LidlProduct[] = [];
+    /** Every offer region declared so far, by key, with its first name. */
+    const regions = new Map<string, string | null>();
     const unreadable: string[] = [];
     for (const row of grocery) {
       // An abort, a person's or the refusal guard's (plan 0215), ends the
-      // reading and not the run: what was read is reported below, as the end
-      // of the loop does. Products already read are valid data.
+      // reading and not the run. Every product read before it was already
+      // reported, and is valid data.
       if (context.signal.aborted) {
         break;
       }
@@ -97,6 +108,7 @@ export class LidlCatalogRunner implements CatalogRunner {
         const product = await client.getProduct(row);
         if (product) {
           products.push(product);
+          reportProduct(report, regions, product);
         } else {
           // Section 8: a page that fails names the product and costs that one
           // product. 152 written is worth more than a run that failed on one.
@@ -116,16 +128,14 @@ export class LidlCatalogRunner implements CatalogRunner {
       }
     }
 
-    // --- 3. Declare the regions, then report every product -----------------
-    //
-    // **The run declares its regions and creates none** (plan 0103, section
-    // 6.4). Scope creation used to live here and again in the store discovery
-    // runner, which meant no other runner could create one and the ingest could
-    // not create one at all. Declaring is all a source can honestly do: it says
-    // what it named, and the orchestrator decides what that is in catalog.
-    await context.setStage('INGEST', `Recording ${products.length} product(s)`);
-    const regions = declareRegions(report, products);
-    this.reportProducts(report, products);
+    // --- 3. What only the whole walk can say -------------------------------
+    // Every product and every region was reported as its page answered (plan
+    // 0267, section 5). The sink writes what is left of the last chunk when
+    // the run drains.
+    await context.setStage(
+      'INGEST',
+      `Finishing the walk: ${products.length} product(s) recorded as they were read`
+    );
 
     await context.flush();
     await context.setReport(
@@ -134,7 +144,7 @@ export class LidlCatalogRunner implements CatalogRunner {
         grocery.length,
         products,
         unreadable,
-        regions,
+        [...regions.keys()],
         client.requests
       )
     );
@@ -163,66 +173,53 @@ export class LidlCatalogRunner implements CatalogRunner {
       signal: context.signal,
     });
   }
-
-  /**
-   * Step 3: every product, with every price it publishes.
-   *
-   * **One pass, not one per scope** (plan 0103, D5, reversing plan 0089 section
-   * 8). A price carries the region it is for, so the week's 59 regions travel
-   * with their products instead of being grouped into roughly 54 ingest calls
-   * of the same 132 products. Widening the ingest was refused while it could
-   * hold one scope, for the reason that it changed a contract every caller used
-   * to save 53 batched calls a week. That reasoning was right for a plan whose
-   * job was LIDL and wrong for a plan whose job is the contract.
-   *
-   * **A product with no price is still reported** (section 8.1). 21 of the
-   * week's products are in the window with no price at all, and the catalog is
-   * allowed to know the article exists.
-   */
-  private reportProducts(
-    report: RunReport,
-    products: readonly LidlProduct[]
-  ): void {
-    for (const product of products) {
-      report.product(observationOf(product));
-    }
-  }
 }
 
 /**
- * Every offer region the run saw, declared once each (plan 0089, section 4).
+ * One product, as soon as its page answered (plan 0267, section 5): first each
+ * of its offer regions the run has not declared yet, then the product itself.
  *
- * **One scope per region, at the granularity the source publishes at.**
- * Collapsing the regions that agree this week into two or three groups reads as
- * an obvious simplification and cannot store next week's disagreement, so the
- * scope stays as fine as the price map is.
+ * **The region is declared before any price refers to it** (plan 0103, D4).
+ * The sink runs its writes in the order they were said, so a declaration made
+ * here is resolved before the chunk that holds this product is written.
  *
- * Declaring is all the run does. Whether catalog already holds the region, and
- * what to do when it does not, is the orchestrator's (plan 0103, section 3).
+ * **The run declares its regions and creates none** (plan 0103, section 6.4).
+ * Declaring is all a source can honestly do: it says what it named, and the
+ * orchestrator decides what that is in catalog.
+ *
+ * **One scope per region, at the granularity the source publishes at** (plan
+ * 0089, section 4), declared once, named by its first sighting. Collapsing the
+ * regions that agree this week into two or three groups reads as an obvious
+ * simplification and cannot store next week's disagreement.
+ *
+ * **One pass, not one per scope** (plan 0103, D5). A price carries the region
+ * it is for, so the regions travel with their products.
+ *
+ * **A product with no price is still reported** (plan 0089, section 8.1). Some
+ * of the week's products are in the window with no price at all, and the
+ * catalog is allowed to know the article exists.
  */
-function declareRegions(
+function reportProduct(
   report: RunReport,
-  products: readonly LidlProduct[]
-): string[] {
-  const seen = new Map<string, string | null>();
-  for (const product of products) {
-    for (const price of product.prices) {
-      for (const region of price.regions) {
-        if (seen.has(region.id)) {
-          continue;
-        }
-        seen.set(region.id, region.name ?? null);
-        report.scope({
-          key: region.id,
-          // A LIDL offer region is not a postal code and not a shop: it is a
-          // group of shops the chain prices together and names itself.
-          kind: PriceScopeKind.REGION,
-          name: region.name ?? null,
-        });
+  declared: Map<string, string | null>,
+  product: LidlProduct
+): void {
+  for (const price of product.prices) {
+    for (const region of price.regions) {
+      if (declared.has(region.id)) {
+        continue;
       }
+      declared.set(region.id, region.name ?? null);
+      report.scope({
+        key: region.id,
+        // A LIDL offer region is not a postal code and not a shop: it is a
+        // group of shops the chain prices together and names itself.
+        kind: PriceScopeKind.REGION,
+        name: region.name ?? null,
+      });
     }
   }
-  return [...seen.keys()];
+  report.product(observationOf(product));
 }
 
 /**
