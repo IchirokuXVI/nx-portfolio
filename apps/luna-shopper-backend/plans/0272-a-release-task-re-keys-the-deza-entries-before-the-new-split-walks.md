@@ -20,6 +20,28 @@
 > **Builds on `dev` after PR #1007 is merged**, so the specs of section 7 run against the split
 > that the release carries. **Ships in the next velista release**, which carries plan `0266`
 > and PR #1007 together (decision 52a, section 5.3).
+>
+> **Note of 2026-11-19, from the build (owner decision 77a).** The build settled four points
+> that the text below states differently or leaves open. Where the text below disagrees, this
+> note holds:
+>
+> - A collision (section 4) is narrower than the text states. A key counts as held only by a
+>   row that keeps it after every move that can be made. A chain, where the row that holds a
+>   wanted key itself moves to a free key, is thus not a collision: it resolves inside the one
+>   run, in an order that never breaks the unique index. A collision is a wanted key held by a
+>   row that does not move, two rows that want one key, a swap or a longer ring, and every row
+>   whose chain ends on one of these.
+> - The record (section 4.1) is streamed by the write with its result, in one step. `post.sh`
+>   writes the ConfigMap with a server side apply. If that write fails, the record is kept in a
+>   file in the home of the user that runs the deploy (entry ids and keys, no names), the task
+>   stays unfinished, and the next run writes the kept record first. A run that only skips
+>   collisions also saves its record.
+> - When the connection drops during the write (section 6.4), the script counts again and says
+>   whether the run committed with its record lost, or nothing changed, or that the outcome is
+>   unknown.
+> - Saving a DEZA catalog preset is refused in the gap too, because a save validates like a
+>   start (owner decision 73a). Both ceilings of moves are 140. The counts were measured read
+>   only on 2026-11-19 on production and on staging: 137 moves each, 0 collisions, 0 unkeyed.
 
 ## Brief for the agent
 
