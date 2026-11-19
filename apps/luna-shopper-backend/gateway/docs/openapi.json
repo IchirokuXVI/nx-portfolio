@@ -25531,7 +25531,7 @@
             "name": "reverted",
             "required": false,
             "in": "query",
-            "description": "Reverted runs only, or unreverted runs only (plan 0082). Absent lists both. A filter of its own rather than a status, because a revert does not change how the run ended.",
+            "description": "Reverted runs only, or unreverted runs only (plan 0082). Absent lists both. A filter of its own rather than a status, because a revert does not change how the run ended. Parsed strictly: the string `false` is false.",
             "schema": {
               "type": "boolean"
             }
@@ -28149,7 +28149,7 @@
             "name": "dismissed",
             "required": false,
             "in": "query",
-            "description": "Omitted lists the working set, which is the codes nobody has dismissed. True lists the dismissed ones alone, so one can be found and put back.",
+            "description": "Omitted lists the working set, which is the codes nobody has dismissed. True lists the dismissed ones alone, so one can be found and put back. Parsed strictly: the string `false` is false.",
             "schema": {
               "type": "boolean"
             }
@@ -29658,7 +29658,7 @@
             "name": "reverted",
             "required": false,
             "in": "query",
-            "description": "Reverted runs only, or unreverted runs only (plan 0082). Absent lists both. A filter of its own rather than a status, because a revert does not change how the run ended.",
+            "description": "Reverted runs only, or unreverted runs only (plan 0082). Absent lists both. A filter of its own rather than a status, because a revert does not change how the run ended. Parsed strictly: the string `false` is false.",
             "schema": {
               "type": "boolean"
             }
