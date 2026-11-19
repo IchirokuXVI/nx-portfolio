@@ -61,11 +61,16 @@ import {
   type CarrefourFrontier,
 } from './categories';
 import { parseDrives, type CarrefourDrive } from './drives';
-import { CarrefourBrowserError, CarrefourHttpError } from './errors';
+import {
+  CarrefourBrowserError,
+  CarrefourHttpError,
+  CarrefourShortCategoryError,
+} from './errors';
 import { readCards } from './listing';
-import { readDetail, readListing } from './state';
+import { readDetail, readListing, statedTotalResults } from './state';
 import { parseStoreLocator, type CarrefourStoreList } from './stores';
 import {
+  CARREFOUR_CEILING,
   CARREFOUR_DRIVES_PATH,
   CARREFOUR_MIN_DELAY_MS,
   CARREFOUR_ORIGIN,
@@ -327,29 +332,72 @@ export class CarrefourClient {
    * It pages to the ceiling and no further, because paging past it serves
    * nothing: the frontier is chosen so that the ceiling does not bind, and a
    * category where it still does is reported rather than paged forever.
+   *
+   * **A category cut short raises {@link CarrefourShortCategoryError}**, after
+   * every product read before the gap was yielded. A page that answered a 5xx,
+   * a 404 or no page state is a gap. So is an empty card list while the page
+   * still states rows at its own offset. A walk that ended there in silence
+   * read as a category read whole, and a crawl of categories read whole may
+   * replace paths and delist. The natural ends are the last page of
+   * {@link pagesFor}, and an empty page whose own stated total ends at or
+   * before its offset, which is the result set having shrunk since the
+   * frontier was walked. `onPage` is called for every page that held cards.
+   *
+   * `fromPage` starts the walk on a later page, for a caller that read the
+   * pages before it already.
    */
   async *walkCategory(
     category: CarrefourCategory,
-    onPage?: (listing: CarrefourListing, page: number) => void
+    onPage?: (listing: CarrefourListing, page: number) => void,
+    options: { fromPage?: number } = {}
   ): AsyncIterable<CarrefourProduct> {
     const pages = pagesFor(category.totalResults);
     const seen = new Set<string>();
-    for (let page = 0; page < pages; page += 1) {
+    for (let page = options.fromPage ?? 0; page < pages; page += 1) {
       this.options.signal?.throwIfAborted();
-      const listing = await this.readListing(
-        listingPath(category.id, page * CARREFOUR_PAGE_SIZE)
+      const offset = page * CARREFOUR_PAGE_SIZE;
+      const {
+        status,
+        value: state,
+        url,
+      } = await this.answer(
+        listingPath(category.id, offset),
+        async (session, address) => {
+          const answered = await session.goto(address);
+          return { status: answered.status, value: answered.state };
+        }
       );
-      if (!listing) {
-        // A page that did not answer ends this category rather than the run.
-        // The products it held are lost for this run and found by the next.
-        return;
+      if (status !== 200 || !state) {
+        // One page costs the rest of this category and not the run, and the
+        // caller is told: the products it held are lost for this run.
+        throw new CarrefourShortCategoryError(
+          category.id,
+          page,
+          status === 200
+            ? 'Carrefour answered a page with no page state'
+            : `Carrefour answered ${status}`,
+          url
+        );
+      }
+      const listing = readListing(state);
+      if (listing.cards.length === 0) {
+        const stated = statedTotalResults(state);
+        // Paging past the end answers an empty item list rather than an
+        // error, so an empty page is the end when the page itself says the
+        // result set stops at or before this offset.
+        if (stated !== null && offset >= Math.min(stated, CARREFOUR_CEILING)) {
+          return;
+        }
+        throw new CarrefourShortCategoryError(
+          category.id,
+          page,
+          stated === null
+            ? 'Carrefour answered an empty page that states no total'
+            : `Carrefour answered an empty page that states ${stated} results`,
+          url
+        );
       }
       onPage?.(listing, page);
-      if (listing.cards.length === 0) {
-        // Paging past the end answers an empty item list rather than an error,
-        // so an empty page is where the result set stopped.
-        return;
-      }
       for (const product of readCards(listing.cards, category.path)) {
         if (!seen.has(product.externalId)) {
           seen.add(product.externalId);
@@ -387,6 +435,24 @@ export class CarrefourClient {
       url: string
     ) => Promise<{ status: number; value: T | null }>
   ): Promise<T | null> {
+    return (await this.answer(path, read)).value;
+  }
+
+  /**
+   * {@link load}, with the status the page answered and the address it was
+   * asked at.
+   *
+   * A category walk needs the status, because a 503 in the middle of a
+   * category is a gap it has to report and not an end (plan 0090, section 7).
+   * The value is null for every status but 200.
+   */
+  private async answer<T>(
+    path: string,
+    read: (
+      session: CarrefourSession,
+      url: string
+    ) => Promise<{ status: number; value: T | null }>
+  ): Promise<{ status: number; value: T | null; url: string }> {
     this.options.signal?.throwIfAborted();
     await this.pace();
     const session = await this.open();
@@ -409,7 +475,7 @@ export class CarrefourClient {
 
     if (status === 200) {
       this.guard.answered();
-      return value;
+      return { status, value, url };
     }
     if (status === 403 || status === 429) {
       // Never retried, whichever branch this takes: a retry is what turns a
@@ -426,7 +492,7 @@ export class CarrefourClient {
     } else {
       this.guard.answered();
     }
-    return null;
+    return { status, value: null, url };
   }
 
   /**

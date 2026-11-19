@@ -4,10 +4,8 @@ import {
   CARREFOUR_PAGE_SIZE,
   CarrefourClient,
   CarrefourHttpError,
-  listingPath,
-  pagesFor,
+  CarrefourShortCategoryError,
   photoAddressRead,
-  readCards,
   type CarrefourCappedCategory,
   type CarrefourCategory,
   type CarrefourProduct,
@@ -151,7 +149,9 @@ export class CarrefourCatalogRunner implements CatalogRunner {
           }
           // Anything else costs one category. It is counted, logged and named
           // in the report, which is the same shape an unreadable node produces
-          // and reads the same way to an operator.
+          // and reads the same way to an operator. A category the walk ended
+          // early on a 5xx, a 404 or an empty page that still states rows
+          // lands here too, so it is never counted as read.
           this.logger.warn(
             `Run ${context.runId}: category ${category.id} (${category.name}) ` +
               `failed: ${String(error)}`
@@ -395,9 +395,10 @@ export class CarrefourCatalogRunner implements CatalogRunner {
    * One category, from the page that failed to its last.
    *
    * The library's walk always starts at the first page, and a category of
-   * 40 pages refused on its 30th need not ask for 29 again. The page reads go
-   * through {@link CarrefourClient.readListing}, so the pacing, the session
-   * handling and the guard are the walk's own.
+   * 40 pages refused on its 30th need not ask for 29 again. It is the
+   * library's walk from that page, so the pacing, the session handling, the
+   * guard and the rule for a category cut short are the walk's own: a gap
+   * here throws, and the category stays unread.
    */
   private async pageFrom(
     context: RunContext,
@@ -407,21 +408,19 @@ export class CarrefourCatalogRunner implements CatalogRunner {
     products: Map<string, string[][]>
   ): Promise<void> {
     const { category } = entry;
-    const pages = pagesFor(category.totalResults);
     let seen = 0;
+    // The page after the last one that answered is the page that failed.
+    const walk = client.walkCategory(
+      category,
+      (_listing, page) => {
+        entry.page = page + 1;
+      },
+      { fromPage: entry.page }
+    );
     try {
-      for (; entry.page < pages; entry.page += 1) {
-        context.signal.throwIfAborted();
-        const listing = await client.readListing(
-          listingPath(category.id, entry.page * CARREFOUR_PAGE_SIZE)
-        );
-        if (!listing || listing.cards.length === 0) {
-          return;
-        }
-        for (const product of readCards(listing.cards, category.path)) {
-          seen += 1;
-          reportFirstSighting(report, products, product);
-        }
+      for await (const product of walk) {
+        seen += 1;
+        reportFirstSighting(report, products, product);
       }
     } finally {
       await context.report({ processed: seen });
@@ -571,7 +570,9 @@ function warnUnread(
     const cost =
       entry.error instanceof CarrefourHttpError
         ? `Carrefour answered ${entry.error.status}`
-        : String(entry.error);
+        : entry.error instanceof CarrefourShortCategoryError
+          ? entry.error.cost
+          : String(entry.error);
     const again = entry.askedAgain ? ', once more at the end of the run' : '';
     context.warn(
       listingWarning(
@@ -591,7 +592,8 @@ function warnUnread(
  *
  * Whole only when the chain's own `delistCountsCrawl` is on, no seed path
  * narrowed the walk, nothing blocked it, no category was capped at the paging
- * ceiling, no category was unreadable, and the run was not aborted. The doubt
+ * ceiling, no category was unreadable or cut short by a page that failed part
+ * way through it, and the run was not aborted. The doubt
  * that remains is a product filed in no frontier category, which nobody has
  * measured: the switch stays off until two clean crawls were compared. A crawl
  * that is not whole declares nothing and is named with the first reason.
