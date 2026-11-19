@@ -49,6 +49,14 @@ export interface SourceEntryRow {
   /** The chain's own id for the product, or the key a keyless source gets. */
   readonly externalId: string;
   readonly categoryPath: string;
+  /**
+   * Every path the chain files the product under, each joined root first
+   * with ` / `, in walk order (backend plan 0268). The chain's own words, as
+   * context: no rule here reads them. Empty for a row no walk of its chain
+   * has stated them for yet, and for a value of a shape this app does not
+   * expect.
+   */
+  readonly categoryPaths: readonly string[];
   readonly url: string;
 
   /**
@@ -157,11 +165,8 @@ export function toSourceEntryRow(
     ean: asText(entry['ean']),
     sizeFormat: asText(entry['sizeFormat']),
     externalId: asText(entry['externalId']),
-    categoryPath: Array.isArray(entry['categoryPath'])
-      ? entry['categoryPath']
-          .filter((part): part is string => typeof part === 'string')
-          .join(' / ')
-      : '',
+    categoryPath: joinPath(entry['categoryPath']),
+    categoryPaths: readCategoryPaths(entry['categoryPaths']),
     url: asText(entry['url']),
     sourceKind: toOfficialSourceKind(entry['sourceKind']),
     status: toSourceEntryStatus(entry['status']),
@@ -191,6 +196,29 @@ export function proposalOf(row: SourceEntryRow): EntryProposal {
     return 'item';
   }
   return row.candidateEntryId === '' ? 'none' : 'sibling';
+}
+
+/** One path as one line, root first, or `''` for a value that is no path. */
+function joinPath(value: unknown): string {
+  return Array.isArray(value)
+    ? value
+        .filter((part): part is string => typeof part === 'string')
+        .join(' / ')
+    : '';
+}
+
+/**
+ * Every path of a row, one line each (backend plan 0268). A value that is not
+ * a list reads as no paths, and an item that is not a path is left out.
+ */
+function readCategoryPaths(value: unknown): readonly string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((path) => Array.isArray(path))
+    .map(joinPath)
+    .filter((path) => path !== '');
 }
 
 function readPrices(

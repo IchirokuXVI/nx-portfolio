@@ -45242,6 +45242,16 @@
               "type": "string"
             }
           },
+          "categoryPaths": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Every category path the chain files the product under, each root first, in walk order, in the chain’s own words. Context for a person, never a category of ours. Empty until a walk of the chain states them."
+          },
           "url": {
             "type": [
               "string",
@@ -46007,6 +46017,16 @@
               "type": "string"
             }
           },
+          "categoryPaths": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Every category path the chain files the product under, each root first, in walk order, in the chain’s own words. Context for a person, never a category of ours. Empty until a walk of the chain states them."
+          },
           "url": {
             "type": [
               "string",
@@ -46528,6 +46548,16 @@
             "items": {
               "type": "string"
             }
+          },
+          "categoryPaths": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Every category path the chain files the product under, each root first, in walk order, in the chain’s own words. Context for a person, never a category of ours. Empty until a walk of the chain states them."
           },
           "url": {
             "type": [

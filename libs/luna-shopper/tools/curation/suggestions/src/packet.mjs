@@ -31,6 +31,21 @@ function trimExtra(extra) {
 }
 
 /**
+ * Every path of the entry, read from what the gateway sent (backend plan
+ * 0268). A gateway built before the field sends none, and a value of another
+ * shape reads as no paths. The names stay verbatim.
+ */
+function categoryPathsOf(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((path) => Array.isArray(path))
+    .map((path) => path.filter((name) => typeof name === 'string'))
+    .filter((path) => path.length > 0);
+}
+
+/**
  * One candidate as the model sees it.
  *
  * A `run` candidate answers `ref` and no `itemId`, so the only thing the model
@@ -135,6 +150,9 @@ export function buildEntryPacket({
       sizeFormat: entry.sizeFormat ?? null,
       packCount: entry.packCount ?? null,
       categoryPath: entry.categoryPath ?? [],
+      // Every shelf the chain files the product under (backend plan 0268), in
+      // the chain's own words. Empty for a row no walk has stated them for.
+      categoryPaths: categoryPathsOf(entry.categoryPaths),
       url: entry.url ?? null,
       sourceKind: entry.sourceKind ?? null,
       status: entry.status ?? null,

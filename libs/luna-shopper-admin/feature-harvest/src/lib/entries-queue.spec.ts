@@ -450,6 +450,25 @@ describe('the one queue, the card of a row', () => {
     ).toEqual(['ean', 'externalId']);
   });
 
+  it('draws every shelf the chain files the row under, one a line (backend plan 0268)', async () => {
+    const { fixture, page } = await onBread();
+
+    expect(page.row()?.id).toBe('entry-bread');
+    const line = page.lines().find((each) => each.key === 'categoryPath');
+    expect(line?.list).toEqual([
+      'Panaderia',
+      'Desayuno / Pan de molde y tostadas',
+    ]);
+    const says: HTMLElement = fixture.nativeElement.querySelector('.says');
+    const shelves = [...says.querySelectorAll('dd.list span')].map((span) =>
+      span.textContent?.trim()
+    );
+    expect(shelves).toEqual([
+      'Panaderia',
+      'Desayuno / Pan de molde y tostadas',
+    ]);
+  });
+
   it('draws the proposed product beside it, with the reason as a state', async () => {
     const { fixture, page } = await onBread();
 

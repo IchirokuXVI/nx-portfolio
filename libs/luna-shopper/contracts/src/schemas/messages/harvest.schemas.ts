@@ -610,6 +610,14 @@ const sourceCatalogEntryProperties = {
   packaging: nullableString(),
   packCount: packCountOrNull(),
   categoryPath: array(string()),
+  // Plan 0268: every path the chain files the product under, root first, in
+  // the chain's own words. Stated but not required, so a reader built before
+  // it keeps validating what it holds.
+  categoryPaths: {
+    ...array(array(string())),
+    description:
+      'Every category path the chain files the product under, each root first, in walk order, in the chain’s own words. Context for a person, never a category of ours. Empty until a walk of the chain states them.',
+  },
   url: nullableString(),
   // Plan 0198: the photo address the chain prints, on the chain's own host.
   imageUrl: nullableString(),

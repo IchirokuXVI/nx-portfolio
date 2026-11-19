@@ -9,7 +9,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { packCountIn as dezaPackCount } from '@portfolio/luna-shopper/deza';
 import { splitSize as elJamonSize } from '@portfolio/luna-shopper/eljamon';
-import type { Repository } from 'typeorm';
+import type { FindOperator, Repository } from 'typeorm';
 import type { SourceCatalogEntry, SourceLocation } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
 import type { DiscoveredPlaceService } from './discovered-place.service';
@@ -24,12 +24,13 @@ import type {
   SourceEntryAvailabilityWriter,
   StoredClaim,
 } from './source-entry-availability';
-import type {
-  PriceConflict,
+import {
   SourceIngest,
-  SourceIngestCounters,
-  SourceIngestImages,
-  SourceObservation,
+  type CategoryPathsWrite,
+  type PriceConflict,
+  type SourceIngestCounters,
+  type SourceIngestImages,
+  type SourceObservation,
 } from './source-ingest';
 import type { SourceLocationService } from './source-location.service';
 
@@ -140,6 +141,10 @@ function build(
     placesRefreshed?: number;
     /** The pushes, by their index from 0, that reject with this error (plan 0269). */
     pushFails?: Record<number, Error>;
+    /** The category paths each row holds before the run, by external id (plan 0268). */
+    storedPaths?: Record<string, string[][]>;
+    /** Whether the run's signal is aborted by the time it drains. */
+    aborted?: boolean;
   } = {}
 ) {
   const pushed: SourceObservation[][] = [];
@@ -178,6 +183,42 @@ function build(
       ...options.images,
     },
   });
+  // The category paths of the rows, written through the ingest's own
+  // `writeCategoryPaths` over a repository that holds them (plan 0268): a row
+  // exists once a push wrote it, or when the test stored paths on it.
+  const storedPaths = new Map<string, string[][]>(
+    Object.entries(options.storedPaths ?? {}).map(([externalId, paths]) => [
+      `entry-${externalId}`,
+      paths,
+    ])
+  );
+  const pathUpdates: Array<{ id: string; categoryPaths: string[][] }> = [];
+  const pathsRepository = {
+    find: jest.fn(async (query: { where: { id: FindOperator<string[]> } }) =>
+      (query.where.id.value as unknown as string[])
+        .filter(
+          (id) =>
+            storedPaths.has(id) ||
+            pushed.flat().some((each) => `entry-${each.externalId}` === id)
+        )
+        .map((id) => ({ id, categoryPaths: storedPaths.get(id) ?? [] }))
+    ),
+    update: jest.fn(
+      async (where: { id: string }, values: { categoryPaths: string[][] }) => {
+        storedPaths.set(where.id, values.categoryPaths);
+        pathUpdates.push({ id: where.id, categoryPaths: values.categoryPaths });
+        return { affected: 1 };
+      }
+    ),
+  };
+  const pathsIngest = new SourceIngest(
+    pathsRepository as unknown as Repository<SourceCatalogEntry>,
+    {} as never,
+    {} as never
+  );
+  const writeCategoryPaths = jest.fn((writes: readonly CategoryPathsWrite[]) =>
+    pathsIngest.writeCategoryPaths(writes)
+  );
   const closed = jest.fn(async () => totalsOf());
   /** What the chunks so far wrote, without a close (plan 0269, D9). */
   const totals = jest.fn(() => totalsOf());
@@ -214,6 +255,7 @@ function build(
         }),
         close: closed,
         totals,
+        writeCategoryPaths,
         // What the rows are decided as at the drain (plan 0269, section 5):
         // what they resolved to, unless a person decided them since.
         activeItemsOf: jest.fn(async (entryIds: readonly string[]) => {
@@ -355,8 +397,13 @@ function build(
     keys: declared,
   } as unknown as RunScopeResolver;
 
+  const controller = new AbortController();
+  if (options.aborted) {
+    controller.abort();
+  }
   const context = {
     runId: RUN,
+    signal: controller.signal,
     report: jest.fn(async () => undefined),
     advance: jest.fn(async () => undefined),
     warn: jest.fn(),
@@ -405,6 +452,9 @@ function build(
     onWriteFailed,
     closed,
     totals,
+    storedPaths,
+    pathUpdates,
+    writeCategoryPaths,
   };
 }
 
@@ -1773,5 +1823,175 @@ describe('RunReportSink, decisions made after a chunk (plan 0269)', () => {
 
     const session = await (ingest.open as jest.Mock).mock.results[0].value;
     expect(session.activeItemsOf).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Every path the chain files a product under (plan 0268, section 2). The
+ * runner states them at the end of its walk, the sink collects them, and the
+ * drain writes them after the last chunk, through the ingest's own write.
+ */
+describe('RunReportSink, the category paths of a run (plan 0268)', () => {
+  const COLA = ['Agua y refrescos', 'Cola'];
+  const PACKS = ['Agua y refrescos', 'Packs de agua y refrescos'];
+  const IBERICOS = ['Navidad', 'Ibéricos y quesos'];
+
+  it('writes the run paths in place of the stored ones for REPLACE, and adds the new ones once for ADD', async () => {
+    const { sink, storedPaths } = build({
+      storedPaths: { a: [IBERICOS], b: [IBERICOS, COLA] },
+    });
+
+    sink.product(observation({ externalId: 'a' }));
+    sink.product(observation({ externalId: 'b' }));
+    sink.categoryPaths('a', [COLA, PACKS], 'REPLACE');
+    sink.categoryPaths('b', [COLA, PACKS], 'ADD');
+    const written = await sink.drain();
+
+    expect(storedPaths.get('entry-a')).toEqual([COLA, PACKS]);
+    expect(storedPaths.get('entry-b')).toEqual([IBERICOS, COLA, PACKS]);
+    expect(written.categoryPathsWritten).toBe(2);
+  });
+
+  it('writes a REPLACE call of an aborted run as ADD', async () => {
+    const { sink, storedPaths } = build({
+      storedPaths: { a: [IBERICOS] },
+      aborted: true,
+    });
+
+    sink.product(observation({ externalId: 'a' }));
+    sink.categoryPaths('a', [COLA], 'REPLACE');
+    await sink.drain();
+
+    expect(storedPaths.get('entry-a')).toEqual([IBERICOS, COLA]);
+  });
+
+  it('writes in the drain, after the last chunk, and a run that never drains writes no path', async () => {
+    const { sink, pushed, writeCategoryPaths, pathUpdates } = build();
+
+    sink.product(observation({ externalId: 'a' }));
+    sink.categoryPaths('a', [COLA], 'REPLACE');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(writeCategoryPaths).not.toHaveBeenCalled();
+
+    // A run that fails before its drain only settles what it queued.
+    await sink.settle();
+    expect(pushed).toEqual([]);
+    expect(writeCategoryPaths).not.toHaveBeenCalled();
+    expect(pathUpdates).toEqual([]);
+  });
+
+  it('writes the paths once the products are written, and a new row holds them', async () => {
+    const { sink, pushed, writeCategoryPaths, storedPaths } = build();
+    const order: string[] = [];
+    writeCategoryPaths.mockImplementationOnce(async () => {
+      order.push(`paths after ${pushed.flat().length} product(s)`);
+      return 0;
+    });
+
+    for (let n = 0; n < 401; n += 1) {
+      sink.product(observation({ externalId: `p-${n}` }));
+    }
+    sink.categoryPaths('p-400', [COLA], 'REPLACE');
+    await sink.drain();
+
+    // The last chunk, which only the drain queues, came first.
+    expect(order).toEqual(['paths after 401 product(s)']);
+    expect(writeCategoryPaths).toHaveBeenCalledWith([
+      { entryId: 'entry-p-400', paths: [COLA], mode: 'REPLACE' },
+    ]);
+    expect(storedPaths.has('entry-p-400')).toBe(false);
+  });
+
+  it('leaves a row no call named, and a product the run did not report, as they were', async () => {
+    const { sink, storedPaths, pathUpdates } = build({
+      storedPaths: { kept: [IBERICOS], unreported: [IBERICOS] },
+    });
+
+    sink.product(observation({ externalId: 'kept' }));
+    sink.product(observation({ externalId: 'named' }));
+    sink.categoryPaths('named', [COLA], 'REPLACE');
+    sink.categoryPaths('unreported', [COLA], 'REPLACE');
+    await sink.drain();
+
+    expect(storedPaths.get('entry-kept')).toEqual([IBERICOS]);
+    expect(storedPaths.get('entry-unreported')).toEqual([IBERICOS]);
+    expect(pathUpdates).toEqual([{ id: 'entry-named', categoryPaths: [COLA] }]);
+  });
+
+  it('writes nothing for a row whose paths are already what the run stated', async () => {
+    const { sink, pathUpdates } = build({ storedPaths: { a: [COLA, PACKS] } });
+
+    sink.product(observation({ externalId: 'a' }));
+    sink.categoryPaths('a', [COLA, PACKS], 'REPLACE');
+    const written = await sink.drain();
+
+    expect(pathUpdates).toEqual([]);
+    expect(written.categoryPathsWritten).toBe(0);
+  });
+
+  it('drops a repeated path and a path that a longer one of the product covers', async () => {
+    const { sink, storedPaths } = build();
+
+    sink.product(observation({ externalId: 'a' }));
+    sink.categoryPaths('a', [['Agua y refrescos'], COLA, COLA], 'ADD');
+    // A second call for one product adds after the first, and replaces when
+    // either said so.
+    sink.categoryPaths('a', [PACKS, []], 'REPLACE');
+    await sink.drain();
+
+    expect(storedPaths.get('entry-a')).toEqual([COLA, PACKS]);
+  });
+
+  it('keeps the names verbatim', async () => {
+    const { sink, storedPaths } = build();
+
+    sink.product(observation({ externalId: 'a' }));
+    sink.categoryPaths('a', [[' Ibéricos  y QUESOS ', 'Turrón']], 'REPLACE');
+    await sink.drain();
+
+    expect(storedPaths.get('entry-a')).toEqual([
+      [' Ibéricos  y QUESOS ', 'Turrón'],
+    ]);
+  });
+
+  it('writes no path for a run whose chunk failed', async () => {
+    const failure = new Error('connection terminated');
+    const { sink, writeCategoryPaths } = build({ pushFails: { 0: failure } });
+
+    sink.product(observation({ externalId: 'a' }));
+    sink.categoryPaths('a', [COLA], 'REPLACE');
+
+    await expect(sink.drain()).rejects.toBe(failure);
+    expect(writeCategoryPaths).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Once {@link RunReportSink.settle} answered, the sink takes no more work
+ * (plan 0269, D11, 2026-11-17): a worker of the runner that is still going
+ * reports after the run is finished, and nothing of it may land.
+ */
+describe('RunReportSink, work that comes after the run settled (plan 0269)', () => {
+  it('writes no chunk a late worker fills after the settle', async () => {
+    const { sink, pushed, placesObserved, scopes, context } = build();
+
+    await sink.settle();
+
+    // A whole chunk of products and of places, each of which the sink queues
+    // the moment it fills, and a scope, which it queues at once.
+    for (let n = 0; n < 400; n += 1) {
+      sink.product(observation({ externalId: `late-${n}` }));
+    }
+    for (let n = 0; n < 100; n += 1) {
+      sink.place(place({ externalRef: `node/${n}` }));
+    }
+    sink.scope({ key: 'late', kind: 'REGION', name: null } as never);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(pushed).toEqual([]);
+    expect(placesObserved).toEqual([]);
+    expect(scopes.declare).not.toHaveBeenCalled();
+    expect(context.advance).not.toHaveBeenCalled();
+    expect(sink.failure).toBeNull();
   });
 });

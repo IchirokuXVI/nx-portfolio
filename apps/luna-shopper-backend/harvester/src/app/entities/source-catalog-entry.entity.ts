@@ -186,6 +186,21 @@ export class SourceCatalogEntry extends BaseEntity {
   @Column({ type: 'jsonb', default: () => `'[]'::jsonb` })
   categoryPath!: string[];
 
+  /**
+   * Every path the chain files the product under, each root first, in walk
+   * order, distinct, in the chain's own words (plan 0268). Context for the
+   * curator and the back office: no rule reads it, and nothing maps it to a
+   * category of ours. The first path is the one `categoryPath` holds, when
+   * the run wrote both.
+   *
+   * **Written only at the end of a run**, by the drain, and never by a chunk:
+   * a run that dies before its drain leaves the stored list as it was. A row
+   * a run created holds `[]` until then, and a row no walk of its chain has
+   * read since the plan holds `[]` too (D3, no backfill).
+   */
+  @Column({ type: 'jsonb', default: () => `'[]'::jsonb` })
+  categoryPaths!: string[][];
+
   @Column({ type: 'varchar', nullable: true })
   url!: string | null;
 

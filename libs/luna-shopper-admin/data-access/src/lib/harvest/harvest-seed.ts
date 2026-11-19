@@ -1100,6 +1100,11 @@ export const SOURCE_ENTRY_SEED: readonly Wire.HarvestSourceCatalogEntryView[] =
       sizeFormat: '1 L',
       packCount: null,
       categoryPath: ['Lacteos', 'Leche'],
+      // Every shelf the chain files it under (backend plan 0268).
+      categoryPaths: [
+        ['Lacteos', 'Leche'],
+        ['Desayuno', 'Leche y bebidas vegetales'],
+      ],
       url: 'https://tienda.mercadona.es/product/12345',
       imageUrl: null,
       extra: { packaging: 'brik', published: true },
@@ -1148,6 +1153,7 @@ export const SOURCE_ENTRY_SEED: readonly Wire.HarvestSourceCatalogEntryView[] =
       sizeFormat: '460 g',
       packCount: null,
       categoryPath: ['Panaderia'],
+      categoryPaths: [['Panaderia'], ['Desayuno', 'Pan de molde y tostadas']],
       url: null,
       imageUrl: null,
       extra: null,
@@ -1263,6 +1269,11 @@ export const SOURCE_ENTRY_SEED: readonly Wire.HarvestSourceCatalogEntryView[] =
       sizeFormat: 'Paquete 800 g',
       packCount: null,
       categoryPath: ['Dulces', 'Galletas'],
+      // DEZA saw it in two sections.
+      categoryPaths: [
+        ['Dulces', 'Galletas'],
+        ['Desayuno', 'Galletas y bollería'],
+      ],
       url: 'https://www.deza.es/producto/galletas-maria-cuetara',
       imageUrl: null,
       extra: { shops: ['T1', 'T4', 'C2'] },

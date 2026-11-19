@@ -32,6 +32,7 @@ import { PriceRefreshes1760300000000 } from './1760300000000-PriceRefreshes';
 import { ProbeGate1760400000000 } from './1760400000000-ProbeGate';
 import { SourceEntryPackaging1760500000000 } from './1760500000000-SourceEntryPackaging';
 import { SourceEntrySizeDoubt1760600000000 } from './1760600000000-SourceEntrySizeDoubt';
+import { SourceEntryCategoryPaths1760680000000 } from './1760680000000-SourceEntryCategoryPaths';
 
 /**
  * Every harvester migration, in the order TypeORM must apply them (plan 0027,
@@ -76,4 +77,5 @@ export const HARVESTER_MIGRATIONS = [
   ProbeGate1760400000000,
   SourceEntryPackaging1760500000000,
   SourceEntrySizeDoubt1760600000000,
+  SourceEntryCategoryPaths1760680000000,
 ];

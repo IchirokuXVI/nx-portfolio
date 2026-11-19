@@ -270,6 +270,7 @@ export function toSourceCatalogEntryView(
     packaging: row.packaging ?? null,
     packCount: row.packCount ?? null,
     categoryPath: row.categoryPath ?? [],
+    categoryPaths: row.categoryPaths ?? [],
     url: row.url,
     imageUrl: row.imageUrl ?? null,
     extra: row.extra ?? null,

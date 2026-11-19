@@ -4954,6 +4954,7 @@ export type HarvestItemSourceEntryView = {
   packaging?: string | null;
   packCount: number | null;
   categoryPath: string[];
+  categoryPaths?: string[][];
   url: string | null;
   imageUrl: string | null;
   extra: {
@@ -5143,6 +5144,7 @@ export type HarvestQueuedSourceEntryView = {
   packaging?: string | null;
   packCount: number | null;
   categoryPath: string[];
+  categoryPaths?: string[][];
   url: string | null;
   imageUrl: string | null;
   extra: {
@@ -5243,6 +5245,7 @@ export type HarvestSourceCatalogEntryView = {
   packaging?: string | null;
   packCount: number | null;
   categoryPath: string[];
+  categoryPaths?: string[][];
   url: string | null;
   imageUrl: string | null;
   extra: {
