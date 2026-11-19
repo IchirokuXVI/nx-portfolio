@@ -253,6 +253,56 @@ describe('HarvestHeader', () => {
     });
   });
 
+  /**
+   * A walk that does not know its total reads an approximate one from the
+   * last completed run of its chain and mode (decision 86 of the harvester
+   * round). The memory back end holds a completed DEZA walk of 2,361.
+   */
+  describe('a run that does not know its total', () => {
+    const DEZA_GOING: HarvestRun = {
+      ...(HARVEST_RUN_SEED.find(
+        (run) => run.id === 'run-deza-aborted'
+      ) as HarvestRun),
+      id: 'run-deza-going',
+      status: 'RUNNING',
+      finishedAt: null,
+      abortRequestedAt: null,
+    };
+
+    it('says "of about" the earlier run’s count, with a bar', async () => {
+      const { fixture } = await render(HarvestHeader, { running: DEZA_GOING });
+      const run = one(fixture, '[data-running="header"]');
+
+      expect(run?.querySelector('.count')?.textContent).toContain(
+        'harvest.run.progress.ofAbout'
+      );
+      expect(run?.querySelector('.bar')).not.toBeNull();
+    });
+
+    it('keeps the unknown form once the run has passed the estimate', async () => {
+      const { fixture } = await render(HarvestHeader, {
+        running: { ...DEZA_GOING, id: 'run-deza-past', processed: 2400 },
+      });
+      const run = one(fixture, '[data-running="header"]');
+
+      expect(run?.querySelector('.count')?.textContent).toContain(
+        'harvest.run.progress.processed'
+      );
+      expect(run?.querySelector('.bar')).toBeNull();
+    });
+
+    it('keeps a known total', async () => {
+      const { fixture } = await render(HarvestHeader);
+
+      expect(
+        one(fixture, '[data-running="header"] .count')?.textContent
+      ).toContain('harvest.run.progress.of');
+      expect(
+        one(fixture, '[data-running="header"] .count')?.textContent
+      ).not.toContain('ofAbout');
+    });
+  });
+
   /** While a tab is open the dashboard is read at the cadence of a run. */
   describe('the cadence of the read', () => {
     it('follows the run while the header is on screen', async () => {

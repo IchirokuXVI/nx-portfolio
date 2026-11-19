@@ -2,12 +2,17 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  inject,
   input,
 } from '@angular/core';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuTranslatorPipe,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   isReverted,
   runPriceCounters,
+  runProgressLine,
   type HarvestRun,
   type RunProgress,
 } from '@portfolio/luna-shopper-admin/models';
@@ -23,7 +28,11 @@ import {
  * The bar is absent until there is a denominator. `totalPlanned` is null until
  * the category walk has finished counting, which is minutes in, and a bar moving
  * against a number nobody chose says less than the count alone does. So the
- * count is always shown and the bar joins it when the run knows its own size.
+ * count is always shown and the bar joins it when the run knows its own size,
+ * or when an earlier completed run of the same chain and mode gives an
+ * approximate one (decision 86 of the harvester round). That bar never reaches
+ * full, and once the run passes the estimate the bar goes and the count says
+ * how many, as it does with no earlier run.
  *
  * The counters are the run's own, and they are shown separately rather than
  * summed. `notFound` is not a failure: a 404 from a detail call means the
@@ -35,19 +44,8 @@ import {
   imports: [RokuTranslatorPipe],
   template: `
     <div class="head">
-      <p class="count">
-        @if (progress().total !== null) {
-          {{
-            'harvest.run.progress.of'
-              | rokuT
-                : { processed: progress().processed, total: progress().total }
-          }}
-        } @else {
-          {{
-            'harvest.run.progress.processed'
-              | rokuT: { processed: progress().processed }
-          }}
-        }
+      <p class="count" data-progress-count>
+        {{ line().key | rokuT: line().args }}
       </p>
 
       @if (stageLabel(); as stage) {
@@ -56,9 +54,14 @@ import {
     </div>
 
     @if (progress().percent; as percent) {
+      <!-- Against an estimate the bar says so to a screen reader in the words
+           of the line, and stops short of full (decision 86). -->
       <div
         [attr.aria-label]="'harvest.run.progress.label' | rokuT"
         [attr.aria-valuenow]="percent"
+        [attr.aria-valuetext]="
+          approximate() ? (line().key | rokuT: line().args) : null
+        "
         aria-valuemax="100"
         aria-valuemin="0"
         class="track"
@@ -66,6 +69,11 @@ import {
       >
         <div [style.inline-size.%]="percent" class="fill"></div>
       </div>
+      @if (approximate()) {
+        <p class="unsized" data-progress-approximate>
+          {{ 'harvest.run.progress.approximate' | rokuT: line().args }}
+        </p>
+      }
     } @else {
       <p class="unsized">{{ 'harvest.run.progress.unsized' | rokuT }}</p>
     }
@@ -155,8 +163,25 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RunProgressView {
+  private readonly _translate = inject(RokuTranslatorService);
+
   readonly run = input.required<HarvestRun>();
   readonly progress = input.required<RunProgress>();
+
+  /**
+   * "N of T", "N of about T" or "N processed", formatted for the reader's
+   * language. "About" when the total is an earlier run's (decision 86 of the
+   * harvester round), and never a known total replaced by one.
+   */
+  readonly line = computed(() =>
+    runProgressLine(this.progress(), this._translate.locale())
+  );
+
+  /** Whether the bar is drawn against an earlier run's total. */
+  readonly approximate = computed(
+    () =>
+      this.progress().total === null && (this.progress().about ?? null) !== null
+  );
 
   /**
    * The harvester's own words for what it is doing, when it says.

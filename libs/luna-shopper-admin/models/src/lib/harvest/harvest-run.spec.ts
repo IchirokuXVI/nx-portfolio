@@ -1,6 +1,7 @@
 import {
   canAbort,
   canRevert,
+  earlierTotal,
   failureBlockReason,
   isReverted,
   isTerminalRun,
@@ -8,8 +9,10 @@ import {
   runPriceCounters,
   runPricesPublished,
   runProgress,
+  runProgressLine,
   spawnBlockReason,
   TERMINAL_RUN_STATUSES,
+  wantsEarlierTotal,
   type HarvestRun,
 } from './harvest-run';
 
@@ -126,6 +129,159 @@ describe('runProgress', () => {
     expect(
       runProgress(run({ processed: 120, totalPlanned: 100 })).percent
     ).toBe(100);
+  });
+});
+
+/**
+ * An approximate total from an earlier run (decision 86 of the harvester
+ * round). A DEZA walk does not know its total while it runs, and the owner
+ * wants "824 of about 2,361" rather than "824 processed".
+ */
+describe('runProgress with an earlier total', () => {
+  it('gives the earlier total as an approximate one', () => {
+    expect(
+      runProgress(run({ processed: 824, totalPlanned: null }), 2361)
+    ).toEqual({
+      processed: 824,
+      total: null,
+      percent: 35,
+      about: 2361,
+    });
+  });
+
+  it('keeps the unknown form when no earlier run gives a total', () => {
+    expect(
+      runProgress(run({ processed: 824, totalPlanned: null }), null)
+    ).toEqual({ processed: 824, total: null, percent: null });
+  });
+
+  /** "900 of about 824" would print a whole smaller than its part. */
+  it('keeps the unknown form once the run has passed the estimate', () => {
+    expect(
+      runProgress(run({ processed: 2400, totalPlanned: null }), 2361)
+    ).toEqual({ processed: 2400, total: null, percent: null });
+  });
+
+  it('never draws a bar against an estimate as full', () => {
+    expect(
+      runProgress(run({ processed: 2361, totalPlanned: null }), 2361)
+    ).toEqual({ processed: 2361, total: null, percent: 99, about: 2361 });
+  });
+
+  it('never replaces a known total', () => {
+    expect(
+      runProgress(run({ processed: 25, totalPlanned: 100 }), 2361)
+    ).toEqual({ processed: 25, total: 100, percent: 25 });
+  });
+
+  it('gives no estimate beside a known total of zero', () => {
+    expect(
+      runProgress(run({ processed: 0, totalPlanned: 0 }), 2361).about ?? null
+    ).toBeNull();
+  });
+
+  /** A completed run's count is its real total. */
+  it('gives a completed run its own numbers', () => {
+    expect(
+      runProgress(
+        run({ status: 'COMPLETED', processed: 2100, totalPlanned: null }),
+        2361
+      )
+    ).toEqual({ processed: 2100, total: null, percent: null });
+  });
+
+  it.each(['ABORTED', 'FAILED', 'STALE'] as const)(
+    'gives a %s run the estimate, to say how far it got',
+    (status) => {
+      expect(
+        runProgress(run({ status, processed: 824, totalPlanned: null }), 2361)
+          .about
+      ).toBe(2361);
+    }
+  );
+});
+
+describe('runProgressLine', () => {
+  it('says "of about" for an estimate, with the numbers formatted', () => {
+    expect(
+      runProgressLine(
+        { processed: 824, total: null, percent: 35, about: 2361 },
+        'en'
+      )
+    ).toEqual({
+      key: 'harvest.run.progress.ofAbout',
+      args: { processed: '824', total: '2,361' },
+    });
+  });
+
+  it('says "of" for a known total, and never "about"', () => {
+    expect(
+      runProgressLine({ processed: 1907, total: 4383, percent: 44 }, 'en')
+    ).toEqual({
+      key: 'harvest.run.progress.of',
+      args: { processed: '1,907', total: '4,383' },
+    });
+  });
+
+  it('says how many when there is neither', () => {
+    expect(
+      runProgressLine({ processed: 824, total: null, percent: null }, 'en').key
+    ).toBe('harvest.run.progress.processed');
+  });
+
+  it('formats for the reader’s language', () => {
+    expect(
+      runProgressLine(
+        { processed: 824, total: null, percent: 7, about: 12361 },
+        'es'
+      ).args.total
+    ).toBe('12.361');
+  });
+});
+
+describe('earlierTotal', () => {
+  const completed = run({
+    status: 'COMPLETED',
+    processed: 2361,
+    totalPlanned: null,
+  });
+
+  it('is what a completed run that stands processed', () => {
+    expect(earlierTotal(completed)).toBe(2361);
+  });
+
+  it('ignores a reverted run', () => {
+    expect(
+      earlierTotal({ ...completed, revertedAt: '2026-09-01T11:20:00.000Z' })
+    ).toBeNull();
+  });
+
+  it.each(['FAILED', 'ABORTED', 'STALE', 'RUNNING', 'PENDING'] as const)(
+    'ignores a %s run, which says nothing of the whole',
+    (status) => {
+      expect(earlierTotal({ ...completed, status })).toBeNull();
+    }
+  );
+
+  it('ignores a run that processed nothing, and no run at all', () => {
+    expect(earlierTotal({ ...completed, processed: 0 })).toBeNull();
+    expect(earlierTotal(null)).toBeNull();
+    expect(earlierTotal(undefined)).toBeNull();
+  });
+});
+
+describe('wantsEarlierTotal', () => {
+  const going = run({ supermarketId: 'sm_deza', totalPlanned: null });
+
+  it('is true for a run of one chain that does not know its total', () => {
+    expect(wantsEarlierTotal(going)).toBe(true);
+  });
+
+  it('is false for a known total, a completed run, every chain, no run', () => {
+    expect(wantsEarlierTotal({ ...going, totalPlanned: 100 })).toBe(false);
+    expect(wantsEarlierTotal({ ...going, status: 'COMPLETED' })).toBe(false);
+    expect(wantsEarlierTotal({ ...going, supermarketId: null })).toBe(false);
+    expect(wantsEarlierTotal(null)).toBe(false);
   });
 });
 

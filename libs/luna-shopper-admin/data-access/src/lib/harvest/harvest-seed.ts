@@ -320,6 +320,44 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     revertedPriceCount: null,
   },
   {
+    // A DEZA walk somebody stopped (decision 86 of the harvester round). DEZA
+    // reports products section by section and never knows its total while it
+    // runs (backend plan 0267), so `totalPlanned` is null. The completed DEZA
+    // walk below is the earlier run its screen takes an approximate total
+    // from: "824 of about 2,361". After the first five, so the dashboard's
+    // recent runs stay as they were.
+    id: 'run-deza-aborted',
+    supermarketId: DEZA,
+    sourceId: 'source-deza',
+    mode: 'CATALOG_DISCOVERY',
+    trigger: 'MANUAL',
+    status: 'ABORTED',
+    requestedAt: '2026-09-01T21:00:00.000Z',
+    startedAt: '2026-09-01T21:00:03.000Z',
+    finishedAt: '2026-09-01T21:14:40.000Z',
+    heartbeatAt: '2026-09-01T21:14:40.000Z',
+    totalPlanned: null,
+    processed: 824,
+    created: 0,
+    updated: 0,
+    unchanged: 824,
+    notFound: 0,
+    skipped: 0,
+    failed: 0,
+    stage: 'fetch-sections',
+    stageLabel: 'Reading section 02 Alimentación',
+    warnings: [],
+    documentSha256: null,
+    abortRequestedAt: '2026-09-01T21:14:31.000Z',
+    error: null,
+    report: {},
+    correlationId: 'seed-correlation-deza-aborted',
+    requestedByUserId: null,
+    revertedAt: null,
+    revertedByUserId: null,
+    revertedPriceCount: null,
+  },
+  {
     // A DEZA walk (admin plan 0071; backend plans 0257 and 0258): one section
     // out of queries, one that stopped growing with queries still at the
     // ceiling, one read whole. DEZA prints no price, so it created none.

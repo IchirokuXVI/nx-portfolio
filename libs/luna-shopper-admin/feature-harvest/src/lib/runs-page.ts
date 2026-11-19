@@ -15,6 +15,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   AdminNames,
+  EarlierRunTotals,
   HARVEST_SERVICE,
   toGatewayError,
   type GatewayError,
@@ -31,6 +32,7 @@ import {
   runProgress,
   type HarvestRun,
   type InfoContent,
+  type RunProgress,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import {
@@ -751,6 +753,7 @@ export class RunsPage {
   private readonly _registry = inject(ResourceRegistry);
   private readonly _admins = inject(AdminNames);
   private readonly _translate = inject(RokuTranslatorService);
+  private readonly _earlier = inject(EarlierRunTotals);
 
   readonly shell = inject(HarvestShell);
   readonly status = inject(HarvestStatus);
@@ -826,7 +829,14 @@ export class RunsPage {
   /** The run in progress, which the dashboard read names. */
   readonly running = this.status.running;
 
-  readonly progress = runProgress;
+  /**
+   * How far the run in progress is, with an approximate total from the last
+   * completed run of its chain and mode while it does not know its own
+   * (decision 86 of the harvester round).
+   */
+  progress(run: HarvestRun): RunProgress {
+    return runProgress(run, this._earlier.of(run));
+  }
   readonly canAbort = canAbort;
 
   readonly rows = computed<readonly RunRow[]>(() =>
@@ -880,12 +890,17 @@ export class RunsPage {
       });
     });
 
-    // The chain of the run in progress, for the panel's title.
+    // The chain of the run in progress, for the panel's title, and its
+    // earlier run, once for each run that does not know its total.
     effect(() => {
-      const chain = this.running()?.supermarketId ?? '';
-      if (chain !== '') {
-        untracked(() => void this.names.resolve([chain]));
-      }
+      const run = this.running();
+      const chain = run?.supermarketId ?? '';
+      untracked(() => {
+        if (chain !== '') {
+          void this.names.resolve([chain]);
+        }
+        void this._earlier.resolve(run);
+      });
     });
 
     // The admins, once for the page and only when a listed run was reverted:

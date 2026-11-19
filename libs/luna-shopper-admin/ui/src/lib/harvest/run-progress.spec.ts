@@ -1,6 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
-import type { HarvestRun } from '@portfolio/luna-shopper-admin/models';
+import type {
+  HarvestRun,
+  RunProgress,
+} from '@portfolio/luna-shopper-admin/models';
 import { RunProgressView } from './run-progress';
 
 function run(over: Partial<HarvestRun> = {}): HarvestRun {
@@ -117,6 +120,75 @@ describe('RunProgressView', () => {
     const fixture = await render(run({ mode: 'STORE_DISCOVERY' }));
 
     expect(fixture.nativeElement.querySelector('.prices')).toBeNull();
+  });
+});
+
+/**
+ * An approximate total from an earlier run (decision 86 of the harvester
+ * round): "824 of about 2,361", never a known total replaced by one.
+ */
+describe('RunProgressView with an approximate total', () => {
+  async function draw(progress: RunProgress, over: Partial<HarvestRun> = {}) {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [RunProgressView, RokuTranslatorTestingModule.forTesting()],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(RunProgressView);
+    fixture.componentRef.setInput(
+      'run',
+      run({ status: 'ABORTED', totalPlanned: null, ...over })
+    );
+    fixture.componentRef.setInput('progress', progress);
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  const text = (page: HTMLElement, selector: string) =>
+    (page.querySelector(selector)?.textContent ?? '').trim();
+
+  it('says "of about" and why, beside a bar that says so too', async () => {
+    const page = await draw({
+      processed: 824,
+      total: null,
+      percent: 35,
+      about: 2361,
+    });
+
+    expect(text(page, '[data-progress-count]')).toBe(
+      'harvest.run.progress.ofAbout'
+    );
+    expect(page.querySelector('[data-progress-approximate]')).not.toBeNull();
+    const bar = page.querySelector('[role="progressbar"]');
+    expect(bar?.getAttribute('aria-valuenow')).toBe('35');
+    expect(bar?.getAttribute('aria-valuetext')).toBe(
+      'harvest.run.progress.ofAbout'
+    );
+    expect(page.textContent).not.toContain('harvest.run.progress.unsized');
+  });
+
+  it('keeps the unknown form when there is no estimate', async () => {
+    const page = await draw({ processed: 824, total: null, percent: null });
+
+    expect(text(page, '[data-progress-count]')).toBe(
+      'harvest.run.progress.processed'
+    );
+    expect(page.querySelector('[role="progressbar"]')).toBeNull();
+    expect(page.querySelector('[data-progress-approximate]')).toBeNull();
+    expect(page.textContent).toContain('harvest.run.progress.unsized');
+  });
+
+  it('draws a known total as it always did', async () => {
+    const page = await draw(
+      { processed: 1907, total: 4383, percent: 44, about: null },
+      { status: 'RUNNING', totalPlanned: 4383 }
+    );
+
+    expect(text(page, '[data-progress-count]')).toBe('harvest.run.progress.of');
+    expect(
+      page.querySelector('[role="progressbar"]')?.getAttribute('aria-valuetext')
+    ).toBeNull();
+    expect(page.querySelector('[data-progress-approximate]')).toBeNull();
   });
 });
 

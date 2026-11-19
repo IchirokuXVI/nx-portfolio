@@ -13,9 +13,11 @@ import {
   RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
+import { EarlierRunTotals } from '@portfolio/luna-shopper-admin/data-access';
 import {
   harvestRunPath,
   runProgress,
+  runProgressLine,
   type InfoContent,
 } from '@portfolio/luna-shopper-admin/models';
 import { PageHeader, Viewport } from '@portfolio/luna-shopper-admin/ui';
@@ -31,7 +33,8 @@ import { HarvestStatus } from './harvest-status';
  *
  * **A run in progress shows here, on every tab.** In the header on a wide
  * screen, and as one line under the tabs on a phone: the state, the chain and
- * the kind of run, a bar, and "N of M". It is a link to the run. Nothing is
+ * the kind of run, a bar, and "N of M", or "N of about M" when the total is
+ * the last completed run's (decision 86). It is a link to the run. Nothing is
  * drawn when no run is in progress, so the header says nothing about runs on
  * a quiet day.
  *
@@ -63,12 +66,7 @@ import { HarvestStatus } from './harvest-status';
           @if (run.percent !== null) {
             <span class="bar"><b [style.inline-size.%]="run.percent"></b></span>
           }
-          <span class="count">{{
-            (run.total === null
-              ? 'harvest.run.progress.processed'
-              : 'harvest.run.progress.of'
-            ) | rokuT: { processed: run.processed, total: run.total }
-          }}</span>
+          <span class="count">{{ run.line.key | rokuT: run.line.args }}</span>
         </a>
       }
       <ng-content ngProjectAs="[pageAction]" select="[pageAction]" />
@@ -90,12 +88,7 @@ import { HarvestStatus } from './harvest-status';
         @if (run.percent !== null) {
           <span class="bar"><b [style.inline-size.%]="run.percent"></b></span>
         }
-        <span class="count">{{
-          (run.total === null
-            ? 'harvest.run.progress.processed'
-            : 'harvest.run.progress.of'
-          ) | rokuT: { processed: run.processed, total: run.total }
-        }}</span>
+        <span class="count">{{ run.line.key | rokuT: run.line.args }}</span>
       </a>
     }
   `,
@@ -180,6 +173,7 @@ export class HarvestHeader {
   private readonly _chains = inject(ChainNames);
   private readonly _viewport = inject(Viewport);
   private readonly _translate = inject(RokuTranslatorService);
+  private readonly _earlier = inject(EarlierRunTotals);
 
   /** What the info button says. No button is drawn without it. */
   readonly info = input<InfoContent | null>(null);
@@ -191,15 +185,18 @@ export class HarvestHeader {
       return null;
     }
 
-    const progress = runProgress(run);
+    // An approximate total from the last completed run of this chain and
+    // mode, while the run does not know its own (decision 86 of the harvester
+    // round). Null until that read answers, and the line says how many then.
+    const progress = runProgress(run, this._earlier.of(run));
 
     return {
       status: run.status,
       mode: run.mode,
       supermarketId: run.supermarketId ?? '',
       processed: progress.processed,
-      total: progress.total,
       percent: progress.percent ?? null,
+      line: runProgressLine(progress, this._translate.locale()),
       link: harvestRunPath(run.id),
     };
   });
@@ -248,6 +245,12 @@ export class HarvestHeader {
       if (chain !== '') {
         untracked(() => void this._chains.resolve([chain]));
       }
+    });
+
+    // The earlier run, once for each run that does not know its total.
+    effect(() => {
+      const run = this._status.running();
+      untracked(() => void this._earlier.resolve(run));
     });
   }
 }

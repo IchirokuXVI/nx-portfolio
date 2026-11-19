@@ -12,6 +12,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   AdminNames,
+  EarlierRunTotals,
   HARVEST_SERVICE,
   RunWatches,
 } from '@portfolio/luna-shopper-admin/data-access';
@@ -28,6 +29,7 @@ import {
   PRICE_WRITING_MODES,
   queuedByRun,
   REVIEW_CHAIN_PARAM,
+  runProgress,
   runWarningRows,
   type HarvestAddress,
 } from '@portfolio/luna-shopper-admin/models';
@@ -197,7 +199,7 @@ import {
           </div>
         }
 
-        <lib-run-progress [progress]="watch.progress()!" [run]="run" />
+        <lib-run-progress [progress]="progress()!" [run]="run" />
 
         @if (watch.paused()) {
           <p class="note">{{ 'harvest.run.paused' | rokuT }}</p>
@@ -1135,6 +1137,18 @@ export class RunPage {
     this._route.snapshot.paramMap.get('id') ?? ''
   );
 
+  private readonly _earlier = inject(EarlierRunTotals);
+
+  /**
+   * How far the run is, with an approximate total from the last completed run
+   * of its chain and mode while it does not know its own (decision 86 of the
+   * harvester round). A known total and a completed run keep their own.
+   */
+  readonly progress = computed(() => {
+    const run = this.watch.run();
+    return run === null ? null : runProgress(run, this._earlier.of(run));
+  });
+
   /**
    * Whether a schedule started this run, and where that schedule is. `null`
    * for a run a person started.
@@ -1490,6 +1504,13 @@ export class RunPage {
       if ((this.watch.run()?.revertedByUserId ?? '') !== '') {
         untracked(() => void this._admins.load());
       }
+    });
+
+    // The earlier run, once for a run that does not know its total. The poll
+    // gives a new run object every read, and the lookup asks once per id.
+    effect(() => {
+      const run = this.watch.run();
+      untracked(() => void this._earlier.resolve(run));
     });
 
     // On the component, never on a route provider. A route's injector is not

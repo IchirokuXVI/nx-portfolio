@@ -1218,8 +1218,10 @@
       "progress": {
         "label": "Run progress",
         "of": "{{processed}} of {{total}}",
+        "ofAbout": "{{processed}} of about {{total}}",
         "processed": "{{processed}} processed",
-        "unsized": "The run does not know yet how much work it has."
+        "unsized": "The run does not know yet how much work it has.",
+        "approximate": "This run does not know its total. About {{total}} is what the last completed run of this kind for this chain processed."
       },
       "counter": {
         "created": "Created",
