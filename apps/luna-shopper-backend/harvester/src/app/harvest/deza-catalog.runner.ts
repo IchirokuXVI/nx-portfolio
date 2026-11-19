@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  HarvestRunMode,
   HarvestWarningCode,
   type SourceSizeUnit,
 } from '@portfolio/luna-shopper/contracts';
@@ -16,6 +17,7 @@ import type { HarvesterConfig } from '../config/app-config';
 import type { SupermarketSource } from '../entities';
 import { runWorkerPool } from '../runner/worker-pool';
 import type { CatalogDiscoveryInput, CatalogRunner } from './catalog-runner';
+import { DezaKeyGuard } from './deza-key-guard';
 import { entryKey, normalizeName } from './matching';
 import { listingWarning, type RunContext } from './run-context';
 import type { RunReport } from './run-report';
@@ -74,7 +76,10 @@ export { entryKey } from './matching';
 export class DezaCatalogRunner implements CatalogRunner {
   private readonly logger = new Logger(DezaCatalogRunner.name);
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly dezaKeys: DezaKeyGuard
+  ) {}
 
   async run(
     context: RunContext,
@@ -82,6 +87,16 @@ export class DezaCatalogRunner implements CatalogRunner {
     input: CatalogDiscoveryInput,
     source: SupermarketSource
   ): Promise<void> {
+    // The spawn refused this already while a stored row waits for its new
+    // key (plan 0272, section 5.1). Asked again before the first request, for
+    // a run that was inserted before the guard existed or before the rollout.
+    const dezaRefusal = await this.dezaKeys.refusal(
+      source,
+      HarvestRunMode.CATALOG_DISCOVERY
+    );
+    if (dezaRefusal) {
+      throw new Error(dezaRefusal);
+    }
     const settings = this.config.getOrThrow<HarvesterConfig>('harvester');
     const client = (): DezaClient =>
       new DezaClient({

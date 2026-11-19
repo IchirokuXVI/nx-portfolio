@@ -45,6 +45,7 @@ import type {
   SupermarketSource,
 } from '../entities';
 import { CatalogClient } from './catalog-client.service';
+import { DezaKeyGuard } from './deza-key-guard';
 import { readHarvestDocument } from './harvest-document.reader';
 import { HarvestRunPresetStore } from './harvest-run-preset.store';
 import {
@@ -255,7 +256,8 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     private readonly catalog: CatalogClient,
     private readonly admin: PlatformAdminService,
     private readonly config: ConfigService,
-    private readonly presets: HarvestRunPresetStore
+    private readonly presets: HarvestRunPresetStore,
+    private readonly dezaKeys: DezaKeyGuard
   ) {}
 
   private settings(): HarvesterConfig {
@@ -881,6 +883,13 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
         'That supermarket has no configured source. Create one with ' +
           'supermarketSource.upsert before starting a run.'
       );
+    }
+    // No DEZA walk while a stored row waits for the key the deployed split
+    // builds (plan 0272, section 5.1). A preset saved in that gap is refused
+    // too, by the same sentence, and a scheduled slot is recorded REFUSED.
+    const dezaRefusal = await this.dezaKeys.refusal(source, req.mode);
+    if (dezaRefusal) {
+      throw new ValidationException(dezaRefusal);
     }
     return validated;
   }

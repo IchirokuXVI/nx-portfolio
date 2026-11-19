@@ -17,6 +17,7 @@ import { CatalogDiscoveryRunner } from './catalog-discovery.runner';
 import { HarvestDashboardService } from './dashboard.service';
 import { DelistingService } from './delisting.service';
 import { DezaCatalogRunner } from './deza-catalog.runner';
+import { DezaKeyGuard } from './deza-key-guard';
 import { DezaStoreDiscoveryRunner } from './deza-store-discovery.runner';
 import { DiaCatalogRunner } from './dia-catalog.runner';
 import { DiaStoreDiscoveryRunner } from './dia-store-discovery.runner';
@@ -131,6 +132,9 @@ import { SupermarketSourceService } from './supermarket-source.service';
     SourceIngest,
     PriceScopeResolver,
     MercadonaCatalogRunner,
+    // No DEZA walk while a stored row waits for its new key (plan 0272). It
+    // only reads, so the runner may hold it.
+    DezaKeyGuard,
     DezaCatalogRunner,
     CarrefourCatalogRunner,
     CarrefourDetailRunner,

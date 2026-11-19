@@ -19,13 +19,17 @@ import {
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
+import type { Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
 import type {
   HarvestRun,
   HarvestRunPreset,
+  SourceCatalogEntry,
   SupermarketSource,
 } from '../entities';
+import { dezaKeysRefusal, type StoredRow } from '../release-tasks/deza-keys';
 import type { CatalogClient } from './catalog-client.service';
+import { DezaKeyGuard } from './deza-key-guard';
 import type { HarvestRunPresetStore } from './harvest-run-preset.store';
 import { HarvestRunService } from './harvest-run.service';
 import {
@@ -33,6 +37,7 @@ import {
   DocumentAlreadyImportedError,
   type HarvestRunStore,
 } from './harvest-run.store';
+import { entryKey } from './matching';
 import type { PlatformAdminService } from './platform-admin.service';
 import type { RunExecutor } from './run-executor.service';
 import type { SourceEntryService } from './source-entry.service';
@@ -172,6 +177,8 @@ function build(
     activeOfChain?: HarvestRun | null;
     /** The store discovery in flight anywhere, for the busy cases. */
     activeDiscovery?: HarvestRun | null;
+    /** The stored rows of the chain the DEZA key guard reads (plan 0272). */
+    dezaRows?: StoredRow[];
   } = {}
 ) {
   const admin = {
@@ -303,6 +310,12 @@ function build(
     }),
   } as unknown as HarvestRunPresetStore;
 
+  // The real guard over a repository that answers the chain's rows.
+  const dezaQuery = jest.fn(async () => overrides.dezaRows ?? []);
+  const dezaKeys = new DezaKeyGuard({
+    query: dezaQuery,
+  } as unknown as Repository<SourceCatalogEntry>);
+
   const service = new HarvestRunService(
     store,
     executor,
@@ -311,9 +324,19 @@ function build(
     catalog,
     admin,
     config,
-    presets
+    presets,
+    dezaKeys
   );
-  return { service, store, executor, sources, rows, catalog, created };
+  return {
+    service,
+    store,
+    executor,
+    sources,
+    rows,
+    catalog,
+    created,
+    dezaQuery,
+  };
 }
 
 /**
@@ -2372,5 +2395,144 @@ describe('HarvestRunService.reapStale', () => {
     const { service, store } = build();
     (store.reapStale as jest.Mock).mockRejectedValueOnce(new Error('db gone'));
     await expect(service.reapStale()).resolves.toBeUndefined();
+  });
+});
+
+/** A walk row stored under the key of its stored text. */
+function storedRow(
+  id: string,
+  name: string,
+  sizeFormat: string | null
+): StoredRow {
+  return {
+    id,
+    externalId: entryKey(name, sizeFormat),
+    name,
+    sizeFormat,
+    status: 'ACTIVE',
+    sourceKind: 'OFFICIAL_WEB',
+  };
+}
+
+describe('deza keys: the spawn refuses a DEZA walk while a row waits for its key (plan 0272)', () => {
+  const PRESET = '5efa0000-0000-4000-a000-0000000002e1';
+  const SCHEDULE = { id: 'schedule-1', presetId: PRESET };
+
+  /** The whole description as the name, which the split now reads. */
+  const moving = storedRow('e-1', 'Calcetines 3 pares', null);
+  /** The same row after the task. */
+  const rekeyed = storedRow('e-1', 'Calcetines', '3 pares');
+
+  const walk = {
+    mode: HarvestRunMode.CATALOG_DISCOVERY,
+    supermarketId: SUPERMARKET,
+  };
+
+  it('refuses a DEZA CATALOG_DISCOVERY with the validation code and the sentence', async () => {
+    const { service, store } = build({
+      source: { adapterKey: 'deza-web' },
+      dezaRows: [moving],
+    });
+
+    const refusal = service.validateRequest(walk, {
+      supermarketId: SUPERMARKET,
+      adapterKey: 'deza-web',
+    } as SupermarketSource);
+    await expect(refusal).rejects.toBeInstanceOf(ValidationException);
+    await expect(refusal).rejects.toThrow(dezaKeysRefusal(1));
+    await expect(
+      service.spawn({ userId: ADMIN, ...walk })
+    ).rejects.toBeInstanceOf(ValidationException);
+    expect(store.create).not.toHaveBeenCalled();
+  });
+
+  it('accepts it once the task re-keyed the row', async () => {
+    const { service, store } = build({
+      source: { adapterKey: 'deza-web' },
+      dezaRows: [rekeyed],
+    });
+
+    await service.spawn({ userId: ADMIN, ...walk });
+
+    expect(store.create).toHaveBeenCalled();
+  });
+
+  it('does not count a collision or an unkeyed row', async () => {
+    const holder = storedRow('e-2', 'Calcetines', '3 pares');
+    const unkeyed = {
+      ...storedRow('e-3', 'Toalla 2 u', null),
+      externalId: 'not-its-key',
+    };
+    const { service, store } = build({
+      source: { adapterKey: 'deza-web' },
+      dezaRows: [moving, holder, unkeyed],
+    });
+
+    await service.spawn({ userId: ADMIN, ...walk });
+
+    expect(store.create).toHaveBeenCalled();
+  });
+
+  it('never reads for a Mercadona walk', async () => {
+    const { service, store, dezaQuery } = build({ dezaRows: [moving] });
+
+    await service.spawn({ userId: ADMIN, ...walk, priceScopeIds: [SCOPE] });
+
+    expect(store.create).toHaveBeenCalled();
+    expect(dezaQuery).not.toHaveBeenCalled();
+  });
+
+  it('records a scheduled slot REFUSED and writes no run', async () => {
+    const { service, store } = build({
+      source: { adapterKey: 'deza-web' },
+      dezaRows: [moving],
+      preset: {
+        id: PRESET,
+        supermarketId: SUPERMARKET,
+        name: 'Weekly DEZA',
+        input: { mode: HarvestRunMode.CATALOG_DISCOVERY },
+      } as HarvestRunPreset,
+    });
+
+    await expect(service.startScheduled(SCHEDULE)).resolves.toEqual({
+      outcome: HarvestScheduleOutcome.REFUSED,
+      note: `The preset "Weekly DEZA" (${PRESET}) cannot start a run: ${dezaKeysRefusal(1)}`,
+      runId: null,
+    });
+    expect(store.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('deza keys: the guard asks only about a DEZA catalog walk (plan 0272)', () => {
+  const deza = {
+    supermarketId: SUPERMARKET,
+    adapterKey: 'deza-web',
+  } as SupermarketSource;
+
+  function guard() {
+    const query = jest.fn(async () => [
+      storedRow('e-1', 'Calcetines 3 pares', null),
+    ]);
+    const subject = new DezaKeyGuard({
+      query,
+    } as unknown as Repository<SourceCatalogEntry>);
+    return { subject, query };
+  }
+
+  it.each([HarvestRunMode.FILE_IMPORT, HarvestRunMode.STORE_DISCOVERY])(
+    'lets a DEZA %s through without reading',
+    async (mode) => {
+      const { subject, query } = guard();
+      await expect(subject.refusal(deza, mode)).resolves.toBeNull();
+      expect(query).not.toHaveBeenCalled();
+    }
+  );
+
+  it('reads the chain of the source it is asked about', async () => {
+    const { subject, query } = guard();
+    await expect(
+      subject.refusal(deza, HarvestRunMode.CATALOG_DISCOVERY)
+    ).resolves.toBe(dezaKeysRefusal(1));
+    expect(query).toHaveBeenCalledWith(expect.any(String), [SUPERMARKET]);
   });
 });

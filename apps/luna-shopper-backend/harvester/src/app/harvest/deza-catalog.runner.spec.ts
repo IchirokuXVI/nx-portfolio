@@ -6,11 +6,19 @@ import {
 } from '@portfolio/luna-shopper/source-guard';
 import type { SupermarketSource } from '../entities';
 import {
+  descriptionOf,
+  dezaKeysRefusal,
+  rekeyable,
+  selectMoves,
+  type StoredRow,
+} from '../release-tasks/deza-keys';
+import {
   DezaCatalogRunner,
   entryKey,
   heaviestUntried,
   type CappedQuery,
 } from './deza-catalog.runner';
+import type { DezaKeyGuard } from './deza-key-guard';
 import { startFakeListing, type FakeListing } from './deza-listing.fake';
 import type { RunContext } from './run-context';
 import { RecordingRunReport } from './run-report';
@@ -140,7 +148,11 @@ interface Built {
  * with a report, including resolving shop codes and writing availability, is
  * `run-report.sink.spec.ts`.
  */
-function build(_listing: FakeListing): Built {
+function build(
+  _listing: FakeListing,
+  /** What the DEZA key guard answers (plan 0272): none, by default. */
+  dezaRefusal: string | null = null
+): Built {
   const runReport: Record<string, unknown> = {};
   const context = {
     runId: RUN,
@@ -157,9 +169,12 @@ function build(_listing: FakeListing): Built {
     }),
   } as unknown as RunContext;
 
-  const runner = new DezaCatalogRunner({
-    getOrThrow: () => ({ userAgent: 'test' }),
-  } as unknown as ConfigService);
+  const runner = new DezaCatalogRunner(
+    {
+      getOrThrow: () => ({ userAgent: 'test' }),
+    } as unknown as ConfigService,
+    { refusal: async () => dezaRefusal } as unknown as DezaKeyGuard
+  );
 
   return { runner, context, report: new RecordingRunReport(), runReport };
 }
@@ -1691,5 +1706,103 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     ).toBe(true);
     // No request went out after the stop, the one it cut off included.
     expect(listing.requests()).toBe(3);
+  });
+});
+
+describe('deza keys: a DEZA walk and the stored keys (plan 0272)', () => {
+  let listing: FakeListing | undefined;
+
+  afterEach(async () => {
+    await listing?.close();
+    listing = undefined;
+  });
+
+  /** A walk row as a walk before the split change stored it. */
+  function stored(
+    id: string,
+    name: string,
+    sizeFormat: string | null
+  ): StoredRow {
+    return {
+      id,
+      externalId: entryKey(name, sizeFormat),
+      name,
+      sizeFormat,
+      status: 'ACTIVE',
+      sourceKind: 'OFFICIAL_WEB',
+    };
+  }
+
+  it('throws the guard sentence before its first request', async () => {
+    listing = await startFakeListing(SECTIONS, [
+      { description: 'Calcetines 3 pares', section: 'W011', shops: ['T1'] },
+    ]);
+    const sentence = dezaKeysRefusal(1);
+    const { runner, context, report } = build(listing, sentence);
+
+    await expect(
+      runner.run(
+        context,
+        report,
+        { supermarketId: CHAIN },
+        source({ baseUrl: listing.url })
+      )
+    ).rejects.toThrow(sentence);
+    expect(listing.requests()).toBe(0);
+    expect(report.products).toHaveLength(0);
+  });
+
+  it('records every description the task re-keyed under the key the task wrote', async () => {
+    // Each held the whole description as its name and no size text, which
+    // is the stored shape of every moved row counted on 2026-11-18.
+    const rows = [
+      stored('e-1', 'Calcetines ALTEZA 3 pares', null),
+      stored('e-2', 'Yogur natural ALTEZA 2X125 g', null),
+      stored('e-3', 'Manguera riego ALTEZA 15 m.', null),
+      // A collision: its new key is the key of the row below.
+      stored('e-4', 'Infusion ALTEZA 20 bolsitas', null),
+      stored('e-5', 'Infusion ALTEZA', '20 bolsitas'),
+    ];
+    const selection = selectMoves(rows);
+    const rekeyed = rekeyable(selection);
+    expect(rekeyed.map((move) => move.id)).toEqual(['e-1', 'e-2', 'e-3']);
+    expect(selection.moves.filter((move) => move.collision)).toEqual([
+      expect.objectContaining({ id: 'e-4', holder: 'e-5' }),
+    ]);
+
+    listing = await startFakeListing(
+      SECTIONS,
+      rows
+        .filter((row) => row.id !== 'e-5')
+        .map((row) => ({
+          description: descriptionOf(row.name, row.sizeFormat),
+          section: 'W011',
+          shops: ['T1'],
+        }))
+    );
+    const { runner, context, report } = build(listing);
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+
+    const byKey = new Map(
+      report.products.map((product) => [product.externalId, product])
+    );
+    expect(byKey.size).toBe(4);
+    // The ingest upserts on (chain, key), so the same key is the same row.
+    for (const move of rekeyed) {
+      expect(byKey.get(move.newKey)).toEqual(
+        expect.objectContaining({
+          name: move.name,
+          sizeFormat: move.sizeFormat,
+        })
+      );
+    }
+    // The skipped row's description lands on the holder of its key.
+    expect(byKey.has(rows[4].externalId)).toBe(true);
+    expect(byKey.has(rows[3].externalId)).toBe(false);
   });
 });

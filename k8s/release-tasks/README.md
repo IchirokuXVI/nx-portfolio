@@ -492,6 +492,83 @@ ENVIRONMENT=staging \
   bash k8s/release-tasks/tasks/0007-wash-count-leaves-products/post.sh
 ```
 
+## Task 0008
+
+`0008-deza-keys-follow-the-split` re-keys the stored DEZA walk rows whose key
+the deployed size split no longer builds (backend plan `0272`). A DEZA row is
+keyed on `entryKey(name, sizeFormat)`, and `name` and `sizeFormat` come from
+`splitSize`. Plans `0266` and `0270` changed that split, so the next walk would
+not find a row stored under the old split, and the row a person linked to a
+product would no longer be seen.
+
+- **It runs a command inside the harvester pod.** `post.sh` runs
+  `node deza-keys.js` after the rollout, so the image that computes the new
+  keys is the image that walks next. For every `OFFICIAL_WEB` row of the
+  `deza-web` chain whose stored key is `entryKey` of its stored text, the
+  command rebuilds the description, splits it, and rewrites the key, the name
+  and the size text of each row whose key moved. Every write is an `UPDATE` of
+  those three columns, in one transaction under a table lock. Nothing is
+  deleted or inserted, and no decision, price, availability or presence row
+  changes. A leaflet row and a row whose key its text does not build are never
+  touched.
+- **It is armed for staging and for production.** The staging window ends on
+  2026-11-26 and the production one on 2026-12-03, and `PRODUCTION_RELEASE` is
+  `0.20.0`, the release of task 0007. A release published after that date
+  needs the dates moved in a commit before it.
+- **It states three ceilings per environment**: `MAX_MOVES`, `MAX_UNKEYED`
+  and `MAX_COLLISIONS`. `check.sh` counts with `--count` and refuses above any
+  of them. `post.sh` counts again, waits while a run of the chain is in flight
+  (every 30 seconds, for at most 15 minutes), and passes `MAX_MOVES` as
+  `--max`, so the command refuses too. The command also refuses to commit when
+  the count of rows, the counts by status and match, any row's decision, or
+  the count of the prices, claims and presence rows of the chain differ before
+  and after.
+- **A collision is skipped.** A moved row whose new key another row of the
+  chain holds, or two moved rows that give one new key, are left as they are
+  and counted under `collisions`. Both ceilings are 0, so one collision makes
+  the task refuse, the moves stay, and the guard below refuses every DEZA
+  catalog walk until the owner raises the ceiling in a commit and links that
+  row by hand.
+- **No DEZA walk runs before it.** The harvester refuses a `CATALOG_DISCOVERY`
+  of a `deza-web` source while a row the task would re-key exists, in the
+  spawn and again at the start of the runner. A scheduled slot in that gap is
+  recorded `REFUSED`. Collisions and unkeyed rows do not hold the walk.
+- **Its `check.sh` passes where the pod has no `deza-keys.js` yet**, because
+  this release adds the command. `post.sh` refuses there.
+- **It leaves no marker, and it does not need one.** A re-keyed row holds the
+  key its text builds, so a second run counts `moves 0` and writes nothing.
+  The command and the guard stay after the task: a later change of the split
+  ships a new task directory that runs the same command.
+- **It leaves a record.** `post.sh` saves one line per re-keyed or skipped row
+  in the ConfigMap `release-task-0008-record`, key `record.tsv`: the row's id,
+  its old key, its new key, the outcome, and for a collision the id of the row
+  that holds the key. No name. The deploy log shows the line count only. Read
+  it over SSH on the host, as the `deploy` user:
+
+  ```sh
+  kubectl -n luna-shopper get configmap release-task-0008-record \
+    -o jsonpath='{.data.record\.tsv}'
+  ```
+
+  Nothing deletes the ConfigMap. Delete it when it is no longer needed.
+
+- **To undo one row, prefer an update to a restore.** Put its `old_key` back
+  from the record, with the whole description as the name and no size text:
+  that was the stored shape of every row counted on 2026-11-18. A row of
+  another shape is read from the dump while it exists. A restore of the dump
+  also removes everything walks wrote to the harvester after the task.
+
+To rehearse it, point the override at the built bundle and at a database that
+you made for the rehearsal:
+
+```sh
+ENVIRONMENT=staging \
+  HARVESTER_DB_URL=postgres://... \
+  DEZA_KEYS='node dist/apps/luna-shopper-backend-harvester/deza-keys.js' \
+  RECORD_APPLY='tee configmap.yaml' \
+  bash k8s/release-tasks/tasks/0008-deza-keys-follow-the-split/post.sh
+```
+
 ## Reverting a task
 
 Restore each dump that the ledger names into a scratch database, then promote
