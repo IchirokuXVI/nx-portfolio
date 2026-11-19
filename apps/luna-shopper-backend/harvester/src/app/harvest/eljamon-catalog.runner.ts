@@ -116,6 +116,12 @@ export class SilentAttempts {
  * not full. Only a row whose page the walk did not read waits for the end,
  * because only the end knows whether its page will be read.
  *
+ * **Every category path of a product is stated at the end** (plan 0268): the
+ * breadcrumb of its page when this run read it, and each top level category
+ * that listed it. It replaces the stored paths only when this run read the
+ * page and the whole listing; otherwise it adds to them, so a breadcrumb read
+ * on an earlier walk is never cleared by a walk that did not read the page.
+ *
  * **`processed` counts products**, the unit of `totalPlanned` (plan 0217,
  * section 4), and this runner counts it itself (plan 0253, section 2): a known
  * product when the detail stage starts, a new one when its page is read or
@@ -250,7 +256,18 @@ export class ElJamonCatalogRunner implements CatalogRunner {
       }
     }
 
-    declareListing(report, walk, context.signal);
+    const whole = declareListing(report, walk, context.signal);
+    // Every path of every product, after the walk and before the drain (plan
+    // 0268). Never on an observation: a streamed one was written at the first
+    // sighting, before the later categories were listed.
+    for (const listed of walk.rows.values()) {
+      const code = listed.row.code;
+      report.categoryPaths(
+        code,
+        walk.pathsOf(code),
+        whole && walk.details.has(code) ? 'REPLACE' : 'ADD'
+      );
+    }
     warnShortCategories(context, walk);
     warnDetailUnread(context, walk, detail, fresh.length);
 
@@ -309,6 +326,9 @@ export class ElJamonCatalogRunner implements CatalogRunner {
             throw new Error('The page carried no product JSON-LD.');
           }
           walk.details.add(listed.row.code);
+          if (product.categoryPath.length > 0) {
+            walk.breadcrumbs.set(listed.row.code, product.categoryPath);
+          }
           if (product.price !== null && product.price !== listed.row.price) {
             walk.priceDisagreements.push({
               code: listed.row.code,
@@ -495,14 +515,18 @@ export class ElJamonCatalogRunner implements CatalogRunner {
  * so a category may read more than it printed, never fewer.
  *
  * The key is the chain's product code, so a renamed product keeps its key.
+ *
+ * Answers whether it declared the listing whole. Only a whole listing met
+ * every category a product is listed in, so only then can its category paths
+ * replace the stored ones (plan 0268).
  */
 function declareListing(
   report: RunReport,
   walk: Walk,
   signal: AbortSignal
-): void {
+): boolean {
   if (signal.aborted) {
-    return;
+    return false;
   }
   const listed = walk.rows.keys();
   if (walk.failedPages.length > 0) {
@@ -515,7 +539,7 @@ function declareListing(
       })),
       listed
     );
-    return;
+    return false;
   }
   const short = walk.categories.filter(
     (category) =>
@@ -533,9 +557,10 @@ function declareListing(
       })),
       listed
     );
-    return;
+    return false;
   }
   report.listingWhole(null, listed);
+  return true;
 }
 
 /**
@@ -837,20 +862,51 @@ class Walk {
    * is reported twice and the end of the walk reports only what is left.
    */
   readonly reported = new Set<string>();
+  /**
+   * Article code -> the breadcrumb of its page, for a page read this run whose
+   * breadcrumb named a level (plan 0268).
+   */
+  readonly breadcrumbs = new Map<string, string[]>();
+  /**
+   * Article code -> every top level category that listed it, in walk order
+   * (plan 0268). The first is the one {@link rows} keeps.
+   */
+  private readonly listedUnder = new Map<string, ElJamonCategory[]>();
   private repeated = 0;
 
   /**
    * One listing row. A product filed under two top level categories keeps the
-   * first, and the repeat is counted so the listed total reads against the
-   * printed one. Answers whether this was the first sighting.
+   * first as its row and its category path, and keeps each later one for its
+   * category paths. The repeat is counted so the listed total reads against
+   * the printed one. Answers whether this was the first sighting.
    */
   record(category: ElJamonCategory, row: ElJamonListingRow): boolean {
-    if (this.rows.has(row.code)) {
+    const under = this.listedUnder.get(row.code);
+    if (under) {
       this.repeated += 1;
+      if (!under.some((other) => other.code === category.code)) {
+        under.push(category);
+      }
       return false;
     }
     this.rows.set(row.code, { category, row });
+    this.listedUnder.set(row.code, [category]);
     return true;
+  }
+
+  /**
+   * Every path this walk met for one product (plan 0268): the breadcrumb of
+   * its page when this run read it, then `[name]` of each top level category
+   * that listed it, in walk order. So the first path is the one
+   * `categoryPath` holds. The names are the chain's, verbatim: a breadcrumb
+   * level and a category name that differ only in case are two paths.
+   */
+  pathsOf(code: string): string[][] {
+    const breadcrumb = this.breadcrumbs.get(code);
+    return [
+      ...(breadcrumb ? [breadcrumb] : []),
+      ...(this.listedUnder.get(code) ?? []).map((category) => [category.name]),
+    ];
   }
 
   /** One product to the sink, once. */
