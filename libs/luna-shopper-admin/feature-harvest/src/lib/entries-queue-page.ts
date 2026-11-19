@@ -20,6 +20,7 @@ import {
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   formatSize,
+  formatSizeDoubt,
   PRICE_SCOPES,
   priceScopeMark,
   priceScopeSource,
@@ -257,6 +258,18 @@ function entryIn(value: unknown): string | null {
         </select>
       </label>
 
+      <!-- The rows whose own prices disprove their size (admin plan 0072). -->
+      <label class="check">
+        <input
+          (change)="chooseSizeDoubt($event)"
+          [checked]="sizeDoubtOnly()"
+          name="sizeDoubt"
+          type="checkbox"
+          data-size-doubt-filter
+        />
+        <span>{{ 'harvest.entries.filter.sizeDoubt' | rokuT }}</span>
+      </label>
+
       <!-- The queue narrowed to one entry by its address (admin plan 0073).
            The other filters are not sent while it is, so it says so, and the
            button is the way back to the whole queue. -->
@@ -323,6 +336,14 @@ function entryIn(value: unknown): string | null {
                 data-status
                 >{{ 'harvest.entryStatus.' + entry.status | rokuT }}</span
               >
+              <!-- Its own prices disprove its size (admin plan 0072). A state
+                   a person reads, so the waiting tone, and the sentence beside
+                   the size says what the two figures are. -->
+              @if (entry.sizeDoubt) {
+                <span class="chip doubt" data-size-doubt>{{
+                  'harvest.entries.sizeDoubt.chip' | rokuT
+                }}</span>
+              }
               @if (chainName(entry.supermarketId); as chain) {
                 <span class="chip chain">{{ chain }}</span>
               }
@@ -357,6 +378,27 @@ function entryIn(value: unknown): string | null {
                           @for (part of list; track $index) {
                             <span>{{ part }}</span>
                           }
+                        </dd>
+                      } @else if (
+                        line.key === 'size' && doubtWords();
+                        as words
+                      ) {
+                        <dd>
+                          {{ line.value }}
+                          <span class="doubt-note" data-size-doubt-sentence>
+                            {{
+                              (words.label === ''
+                                ? 'harvest.entries.sizeDoubt.sentenceNoLabel'
+                                : 'harvest.entries.sizeDoubt.sentence'
+                              ) | rokuT: words
+                            }}
+                            @if (entry.sizeDoubt?.packGuess; as count) {
+                              <span data-size-doubt-pack>{{
+                                'harvest.entries.sizeDoubt.pack'
+                                  | rokuT: { count }
+                              }}</span>
+                            }
+                          </span>
                         </dd>
                       } @else {
                         <dd [class.mono]="line.mono">{{ line.value }}</dd>
@@ -688,6 +730,11 @@ function entryIn(value: unknown): string | null {
               'harvest.entries.proposalBadge.' + lineBadge(row) | rokuT
             }}</span
           >
+          @if (row.sizeDoubt) {
+            <span class="chip doubt" data-line-size-doubt>{{
+              'harvest.entries.sizeDoubt.chip' | rokuT
+            }}</span>
+          }
         </ng-template>
       </lib-queue-frame>
 
@@ -795,6 +842,45 @@ function entryIn(value: unknown): string | null {
     .chip.OFFICIAL_LEAFLET {
       background: var(--admin-accent-wash);
       color: var(--admin-accent-on-wash);
+    }
+
+    /* A size in doubt is for a person to look at, so the waiting tone, on the
+       chip alone (admin plan 0072). */
+    .chip.doubt {
+      background: var(--admin-waiting-wash);
+      color: var(--admin-waiting-on-wash);
+    }
+
+    /* Under the stated size, in the muted ink of a note, so the size stays
+       what the line says and the sentence reads as what is wrong with it. */
+    .doubt-note {
+      display: block;
+      margin-block-start: var(--admin-space-1);
+      font-size: 0.8125rem;
+      color: var(--admin-ink-muted);
+    }
+
+    /* A box and its words on one line, one tap target, level with the boxes
+       of the selects beside it rather than with their names. */
+    .filters > .check {
+      flex: 0 0 auto;
+      flex-direction: row;
+      align-items: center;
+      align-self: flex-end;
+      min-block-size: 2.75rem;
+      cursor: pointer;
+    }
+
+    .check > input {
+      inline-size: 1.125rem;
+      block-size: 1.125rem;
+      margin: 0;
+      accent-color: var(--admin-accent);
+    }
+
+    .check > span {
+      font-size: 0.875rem;
+      color: var(--admin-ink);
     }
 
     .kind,
@@ -1114,6 +1200,11 @@ export class EntriesQueuePage implements OnDestroy {
    */
   readonly status = signal<SourceEntryStatus | ''>('');
   readonly sourceKind = signal<OfficialSourceKind | ''>('');
+  /**
+   * Only the rows whose size is in doubt (admin plan 0072). Off lists them
+   * all, so only `true` is ever sent.
+   */
+  readonly sizeDoubtOnly = signal(false);
 
   /** The brand, as it was typed. The key it makes is what goes out. */
   readonly brandText = signal('');
@@ -1429,6 +1520,21 @@ export class EntriesQueuePage implements OnDestroy {
   });
 
   /**
+   * The two sizes of the row in front and the label that disproved one, as
+   * the sentence beside the stated size reads them, or `null` for a row whose
+   * size nobody doubts (admin plan 0072).
+   *
+   * Asserted on as a value rather than as rendered text, because the sentence
+   * interpolates and the testing translator does not interpolate.
+   */
+  readonly doubtWords = computed(() => {
+    const doubt = this.row()?.sizeDoubt ?? null;
+    return doubt === null
+      ? null
+      : formatSizeDoubt(doubt, this._content.locale());
+  });
+
+  /**
    * What the source says about the row, under that heading.
    *
    * The page at the chain is a link under these and not a line among them.
@@ -1442,7 +1548,13 @@ export class EntriesQueuePage implements OnDestroy {
     return [
       { key: 'name', value: row.name },
       { key: 'brand', value: row.brand },
-      { key: 'size', value: row.sizeFormat },
+      // A doubted row with no printed format still draws the line, with the
+      // size it states, so the sentence has a place beside it (admin plan
+      // 0072).
+      {
+        key: 'size',
+        value: row.sizeFormat || (this.doubtWords()?.stated ?? ''),
+      },
       { key: 'ean', value: row.ean, mono: true },
       categoryLine(row),
       { key: 'externalId', value: row.externalId, mono: true },
@@ -1517,6 +1629,18 @@ export class EntriesQueuePage implements OnDestroy {
 
   chooseKind(sourceKind: OfficialSourceKind | ''): void {
     this.sourceKind.set(sourceKind);
+    this._leaveEntry();
+    this.reload();
+  }
+
+  /**
+   * Narrow the queue to the rows whose size is in doubt, or widen it back
+   * (admin plan 0072). Read off the box itself, so the state is the one the
+   * person sees, and like the kind it ends the one entry view.
+   */
+  chooseSizeDoubt(event: Event): void {
+    const box = event.target;
+    this.sizeDoubtOnly.set(box instanceof HTMLInputElement && box.checked);
     this._leaveEntry();
     this.reload();
   }
@@ -1636,6 +1760,8 @@ export class EntriesQueuePage implements OnDestroy {
             ...(status === '' ? {} : { status }),
             ...(sourceKind === '' ? {} : { sourceKind }),
             ...(brandKeyFilter === null ? {} : { brandKey: brandKeyFilter }),
+            // Admin plan 0072: off sends nothing, which lists both.
+            ...(this.sizeDoubtOnly() ? { sizeDoubt: true } : {}),
             cursor,
           });
           this.shell.observeReachable();

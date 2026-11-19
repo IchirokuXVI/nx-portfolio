@@ -230,6 +230,40 @@ describe('the queue names the brands a printed brand answers to (plan 0178)', ()
     expect(context.sent).toHaveLength(1);
   });
 
+  it.each([
+    ['true', true],
+    ['false', false],
+  ])(
+    'reads sizeDoubt=%p strictly and hands the harvester %p (admin plan 0072)',
+    async (spelled, read) => {
+      context = await boot({
+        [SOURCE_ENTRY_PATTERNS.list]: { items: [], nextCursor: null },
+      });
+
+      const response = await fetch(
+        `${context.origin}/v1/admin/harvest/entries?sizeDoubt=${spelled}`
+      );
+
+      expect(response.status).toBe(200);
+      expect(context.sent[0].payload['sizeDoubt']).toBe(read);
+    }
+  );
+
+  it('leaves sizeDoubt out when the query does not name it, and refuses a typo', async () => {
+    context = await boot({
+      [SOURCE_ENTRY_PATTERNS.list]: { items: [], nextCursor: null },
+    });
+
+    await fetch(`${context.origin}/v1/admin/harvest/entries`);
+    expect(context.sent[0].payload['sizeDoubt']).toBeUndefined();
+
+    const typo = await fetch(
+      `${context.origin}/v1/admin/harvest/entries?sizeDoubt=yes`
+    );
+    expect(typo.status).toBe(400);
+    expect(context.sent).toHaveLength(1);
+  });
+
   it('hands the harvester the entry id the query names, beside the chain (admin plan 0073)', async () => {
     context = await boot({
       [SOURCE_ENTRY_PATTERNS.list]: { items: [], nextCursor: null },

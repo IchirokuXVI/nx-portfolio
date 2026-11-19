@@ -1734,6 +1734,8 @@ const listEntriesRequest = object(
     brandKey: string(),
     // Plan 0220: true lists the gone rows only, false leaves them out.
     delisted: boolean(),
+    // Admin plan 0072: true lists the rows whose size is in doubt only.
+    sizeDoubt: boolean(),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),

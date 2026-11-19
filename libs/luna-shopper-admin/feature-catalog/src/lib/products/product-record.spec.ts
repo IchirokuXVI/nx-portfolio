@@ -1037,6 +1037,29 @@ describe('the Sources tab of a product', () => {
     expect(chips[0].textContent).toContain('catalog.items.sources.sharedEan');
   });
 
+  it('draws the size doubt chip on a doubted row, and on no other (admin plan 0072)', async () => {
+    // The seeded Carrefour olive oil is bound to it and states 1000 ml, and
+    // its price per litre implies 750 ml.
+    const doubted = await boot('/products/it_olive_oil_1l/sources');
+    const chips = [
+      ...doubted.nativeElement.querySelectorAll('[data-size-doubt]'),
+    ] as HTMLElement[];
+
+    expect(chips).toHaveLength(1);
+    expect(chips[0].textContent).toContain('harvest.entries.sizeDoubt.chip');
+    expect(chips[0].closest('td')?.textContent).toContain(
+      'Aceite de oliva virgen extra 1 l'
+    );
+    expect(
+      doubted.nativeElement.querySelector('[data-size-doubt-sentence]')
+        ?.textContent
+    ).toContain('harvest.entries.sizeDoubt.sentence');
+
+    // The milk's three rows carry none.
+    const clean = await boot('/products/it_milk_1l/sources');
+    expect(clean.nativeElement.querySelector('[data-size-doubt]')).toBeNull();
+  });
+
   it('says so for a product nothing names', async () => {
     const fixture = await boot('/products/it_dish_soap/sources');
 
@@ -1079,6 +1102,28 @@ describe('the Sources tab of a product', () => {
       matchKey: 'catalog.items.sources.matchSharedEan',
       // One row is its own barcode, not a shared one.
       sharedBy: 0,
+      sizeDoubt: null,
+    });
+    // A doubt reads with both sizes in the row's own unit.
+    expect(
+      toItemSourceEntryRow({
+        id: 'e2',
+        unitSize: 1,
+        sizeUnit: 'LITER',
+        packCount: null,
+        sizeDoubt: {
+          implied: 750,
+          unit: 'MILLILITER',
+          ratio: 0.75,
+          label: 'l',
+          runId: 'run-1',
+        },
+      })?.sizeDoubt
+    ).toMatchObject({
+      stated: 1,
+      implied: 0.75,
+      unit: 'LITER',
+      packGuess: null,
     });
   });
 });

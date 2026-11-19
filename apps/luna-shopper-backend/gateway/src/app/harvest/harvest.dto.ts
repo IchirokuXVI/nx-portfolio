@@ -891,6 +891,15 @@ export class SourceEntryListQueryDto extends PageQueryDto {
   delisted?: boolean;
 
   @ApiPropertyOptional({
+    description:
+      'True lists only the rows whose size their own price and comparison price disprove (`sizeDoubt` set, plan 0249), false leaves them out, and omitted lists both (admin plan 0072). Parsed strictly: the string `false` is false.',
+  })
+  @IsOptional()
+  @Transform(asQueryFlag)
+  @IsBoolean()
+  sizeDoubt?: boolean;
+
+  @ApiPropertyOptional({
     format: 'uuid',
     description:
       'The one row with this id, whatever its status, which is how the back office addresses one entry (admin plan 0073). Every other filter given still applies, and with no `status` the default CANDIDATE and UNRESOLVED clause is not added.',

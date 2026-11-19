@@ -28652,6 +28652,15 @@
             }
           },
           {
+            "name": "sizeDoubt",
+            "required": false,
+            "in": "query",
+            "description": "True lists only the rows whose size their own price and comparison price disprove (`sizeDoubt` set, plan 0249), false leaves them out, and omitted lists both (admin plan 0072). Parsed strictly: the string `false` is false.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "name": "entryId",
             "required": false,
             "in": "query",

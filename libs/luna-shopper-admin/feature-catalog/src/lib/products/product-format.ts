@@ -156,6 +156,47 @@ export function formatSize(
   return packed ? `${pack} x ${one}` : one;
 }
 
+/**
+ * The two sizes of a doubted source row as the sentence beside its size
+ * writes them (admin plan 0072): `125 g` and `500 g`, both for the whole pack
+ * and both in the row's own unit, so the number a person reads is the number
+ * they would type back as the size.
+ *
+ * Six significant digits rather than a fixed number of decimals, because a
+ * litre row that a price per millilitre disproves implies `0.0012 L`, and
+ * three decimals would print a size it does not imply.
+ *
+ * `label` is the price label as the chain printed it, with a leading `€/`
+ * left off, since the sentence already says "price per": the harvester keys
+ * its label table the same way (backend plan 0249). `''` for none, which picks
+ * the sentence that names no label.
+ */
+export function formatSizeDoubt(
+  doubt: {
+    readonly stated: number;
+    readonly implied: number;
+    readonly unit: string;
+    readonly label: string | null;
+  },
+  locale: string
+): {
+  readonly stated: string;
+  readonly implied: string;
+  readonly label: string;
+} {
+  const number = new Intl.NumberFormat(locale, {
+    maximumSignificantDigits: 6,
+  });
+  const word = UNIT_WORDS[doubt.unit] ?? '';
+  const size = (value: number): string =>
+    word === '' ? number.format(value) : `${number.format(value)} ${word}`;
+  return {
+    stated: size(doubt.stated),
+    implied: size(doubt.implied),
+    label: (doubt.label ?? '').replace(/^\s*(€|eur)\s*\/\s*/i, '').trim(),
+  };
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**

@@ -320,6 +320,13 @@ export class SourceEntryService {
     } else if (req.delisted === false) {
       qb.andWhere('e."delistedAt" IS NULL');
     }
+    // Admin plan 0072: true is the rows whose size their own prices disprove
+    // (plan 0249), false leaves them out, and absent lists both.
+    if (req.sizeDoubt === true) {
+      qb.andWhere('e."sizeDoubtImplied" IS NOT NULL');
+    } else if (req.sizeDoubt === false) {
+      qb.andWhere('e."sizeDoubtImplied" IS NULL');
+    }
     if (cursor) {
       qb.andWhere('(e."lastSeenAt", e.id) < (:cv, :cid)', {
         cv: cursor.value,

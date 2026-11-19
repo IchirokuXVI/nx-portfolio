@@ -67,3 +67,41 @@ describe('HarvestMemory, one entry by its id', () => {
     ]);
   });
 });
+
+/**
+ * The rows whose size is in doubt, as the route reads the flag (admin plan
+ * 0072): true is the doubted rows, false the others, and absent both.
+ */
+describe('HarvestMemory, rows whose size is in doubt', () => {
+  it('lists the doubted rows only, with the other filters still applied', async () => {
+    const memory = new HarvestMemory();
+
+    const waiting = await memory.listEntries({ sizeDoubt: true });
+    const bound = await memory.listEntries({
+      sizeDoubt: true,
+      status: 'ACTIVE',
+    });
+
+    expect(waiting.items.map((entry) => entry.id)).toEqual([
+      CARREFOUR_YOGUR_ENTRY,
+    ]);
+    expect(bound.items.map((entry) => entry.id)).toEqual([
+      CARREFOUR_ACEITE_ENTRY,
+    ]);
+  });
+
+  it('leaves them out when false, and lists both when absent', async () => {
+    const memory = new HarvestMemory();
+
+    const others = await memory.listEntries({ sizeDoubt: false });
+    const every = await memory.listEntries({});
+
+    expect(others.items.map((entry) => entry.id)).not.toContain(
+      CARREFOUR_YOGUR_ENTRY
+    );
+    expect(every.items.map((entry) => entry.id)).toContain(
+      CARREFOUR_YOGUR_ENTRY
+    );
+    expect(every.items).toHaveLength(others.items.length + 1);
+  });
+});

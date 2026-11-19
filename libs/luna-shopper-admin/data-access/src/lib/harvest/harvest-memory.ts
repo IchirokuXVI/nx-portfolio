@@ -657,6 +657,11 @@ export class HarvestMemory implements HarvestServiceI {
         // the route does with it: `brandKey` never answers punctuation.
         (query.brandKey === undefined ||
           brandKey(entry.brand ?? '') === query.brandKey) &&
+        // Admin plan 0072, as the route reads it: true is the doubted rows,
+        // false the others, and absent both.
+        (query.sizeDoubt === undefined ||
+          (entry.sizeDoubt !== null && entry.sizeDoubt !== undefined) ===
+            query.sizeDoubt) &&
         (term === '' ||
           entry.name.toLowerCase().includes(term) ||
           (entry.brand ?? '').toLowerCase().includes(term) ||

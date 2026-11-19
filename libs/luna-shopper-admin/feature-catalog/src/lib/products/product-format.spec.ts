@@ -1,4 +1,4 @@
-import { formatSize } from './product-format';
+import { formatSize, formatSizeDoubt } from './product-format';
 
 /**
  * The size of a product with no size (admin plan 0068, criterion 4): the
@@ -105,5 +105,33 @@ describe('formatSize, for a product with no size', () => {
     expect(
       formatSize({ unitSize: 6, defaultUnit: 'LITER', packCount: 6 }, 'en')
     ).toBe('6 x 1 L');
+  });
+});
+
+/** The two sizes of a doubted row, as its sentence reads them (admin plan 0072). */
+describe('formatSizeDoubt', () => {
+  it('writes both sizes in the row unit, with the label it was disproved by', () => {
+    expect(
+      formatSizeDoubt(
+        { stated: 125, implied: 500, unit: 'GRAM', label: 'kg' },
+        'en'
+      )
+    ).toEqual({ stated: '125 g', implied: '500 g', label: 'kg' });
+  });
+
+  it('keeps a small implied size, and leaves the currency off a label', () => {
+    // A litre and a fifth, priced per millilitre, under a label like `€/kg`.
+    expect(
+      formatSizeDoubt(
+        { stated: 1.2, implied: 0.0012, unit: 'LITER', label: '€/ml' },
+        'en'
+      )
+    ).toEqual({ stated: '1.2 L', implied: '0.0012 L', label: 'ml' });
+  });
+
+  it('writes a count with no word, and no label as none', () => {
+    expect(
+      formatSizeDoubt({ stated: 30, implied: 1, unit: 'UNIT', label: null }, 'en')
+    ).toEqual({ stated: '30', implied: '1', label: '' });
   });
 });
