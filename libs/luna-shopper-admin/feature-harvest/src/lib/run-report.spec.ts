@@ -308,7 +308,92 @@ describe('readRunReport, an empty bag', () => {
       categories: [],
       detailStage: null,
       sizes: null,
+      unslottedOnly: null,
     });
+    expect(reportHasContent(report)).toBe(false);
+  });
+});
+
+describe('readRunReport, the DIA products only in leaves with no slug', () => {
+  it('reads the count, the leaves and their examples', () => {
+    const report = readRunReport({
+      unslottedOnly: {
+        products: 3,
+        leaves: [
+          {
+            id: 'L2222',
+            rootName: 'Especial Navidad',
+            name: 'Ibéricos y quesos',
+            products: 2,
+            examples: [
+              { externalId: '1', name: 'Lomo ibérico' },
+              { externalId: '2', name: '' },
+              { name: 'Queso curado' },
+              'Chorizo',
+            ],
+          },
+          {
+            id: 'L2255',
+            rootName: 'Especial Navidad',
+            name: 'Platos especiales',
+            products: 1,
+          },
+        ],
+      },
+    });
+
+    expect(report.unslottedOnly).toEqual({
+      products: 3,
+      leaves: [
+        {
+          id: 'L2222',
+          rootName: 'Especial Navidad',
+          name: 'Ibéricos y quesos',
+          products: 2,
+          examples: [
+            { externalId: '1', name: 'Lomo ibérico' },
+            { externalId: '', name: 'Queso curado' },
+          ],
+        },
+        {
+          id: 'L2255',
+          rootName: 'Especial Navidad',
+          name: 'Platos especiales',
+          products: 1,
+          examples: [],
+        },
+      ],
+    });
+    expect(reportHasContent(report)).toBe(true);
+  });
+
+  it('reads the wrong shapes as absent', () => {
+    const report = readRunReport({
+      unslottedOnly: {
+        products: 2,
+        leaves: [
+          { id: 'L1', rootName: 'R', name: 'N', products: '2' },
+          { id: 7, rootName: 'R', name: 'N', products: 2 },
+          { id: 'L2', rootName: 'R', name: 'N', products: 0 },
+          'L3',
+        ],
+      },
+    });
+
+    expect(report.unslottedOnly).toEqual({ products: 2, leaves: [] });
+  });
+
+  it.each([
+    [undefined],
+    ['nine'],
+    [[]],
+    [{ products: '9', leaves: [] }],
+    [{ products: 0, leaves: [] }],
+    [{ leaves: [] }],
+  ])('reads %p as no block', (block) => {
+    const report = readRunReport({ unslottedOnly: block });
+
+    expect(report.unslottedOnly).toBeNull();
     expect(reportHasContent(report)).toBe(false);
   });
 });

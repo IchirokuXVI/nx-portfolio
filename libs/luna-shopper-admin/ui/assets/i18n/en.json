@@ -1290,6 +1290,14 @@
           "implied": "Implied",
           "unit": "Unit",
           "label": "Label"
+        },
+        "unslottedOnly": {
+          "heading": "Products only in chain categories we do not map",
+          "count_one": "{{count}} product sits only in chain categories with no category of ours. It waits as uncategorised.",
+          "count_other": "{{count}} products sit only in chain categories with no category of ours. They wait as uncategorised.",
+          "leaf_one": "{{root}} / {{name}}: {{count}} product",
+          "leaf_other": "{{root}} / {{name}}: {{count}} products",
+          "examples": "For example: {{names}}"
         }
       },
       "queue": {

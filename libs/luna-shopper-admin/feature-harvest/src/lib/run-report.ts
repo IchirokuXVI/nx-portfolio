@@ -8,7 +8,8 @@
  * 0118's `copies` and plan 0119's detail counts and resolved settings, the
  * parts the Carrefour, DEZA and El Jamón walks name as unread or short
  * (backend plans 0251, 0253, 0257 and 0258), and the sizes any walk found
- * disproved by their own price (backend plan 0249).
+ * disproved by their own price (backend plan 0249), and the DIA products that
+ * sit only in leaves with no category of ours (backend plan 0268, section 5).
  */
 
 /** One walked scope and the scopes it was copied to. */
@@ -107,6 +108,31 @@ export interface RunReportSizes {
   readonly examples: readonly RunReportSizeExample[];
 }
 
+/** A product a DIA leaf with no slug names as an example. */
+export interface RunReportUnslottedExample {
+  readonly externalId: string;
+  readonly name: string;
+}
+
+/** One DIA leaf with no slug that holds products from such leaves only. */
+export interface RunReportUnslottedLeaf {
+  readonly id: string;
+  readonly rootName: string;
+  readonly name: string;
+  readonly products: number;
+  /** At most five, in walk order, as the runner names them. */
+  readonly examples: readonly RunReportUnslottedExample[];
+}
+
+/**
+ * The DIA products whose every leaf has no category of ours (backend plan
+ * 0268, section 5). They wait as uncategorised.
+ */
+export interface RunReportUnslotted {
+  readonly products: number;
+  readonly leaves: readonly RunReportUnslottedLeaf[];
+}
+
 export interface RunReportView {
   readonly copies: readonly RunReportCopy[];
   /** Null for a run whose report names none of the three counts. */
@@ -128,6 +154,8 @@ export interface RunReportView {
   readonly detailStage: RunReportDetailStage | null;
   /** Null for a walk that found no size disproved. */
   readonly sizes: RunReportSizes | null;
+  /** Null for a run whose report names no product of a DIA leaf with no slug. */
+  readonly unslottedOnly: RunReportUnslotted | null;
 }
 
 export function readRunReport(report: unknown): RunReportView {
@@ -187,6 +215,7 @@ export function readRunReport(report: unknown): RunReportView {
     categories: readCategories(bag['categories']),
     detailStage: readDetailStage(bag['detail']),
     sizes: readSizes(bag),
+    unslottedOnly: readUnslotted(bag['unslottedOnly']),
   };
 }
 
@@ -203,7 +232,8 @@ export function reportHasContent(report: RunReportView): boolean {
     report.sections.length > 0 ||
     report.categories.length > 0 ||
     report.detailStage !== null ||
-    report.sizes !== null
+    report.sizes !== null ||
+    report.unslottedOnly !== null
   );
 }
 
@@ -336,6 +366,63 @@ function readSizes(bag: Record<string, unknown>): RunReportSizes | null {
             implied,
             unit: entry['unit'],
             label: typeof entry['label'] === 'string' ? entry['label'] : '',
+          },
+        ];
+      }
+    ),
+  };
+}
+
+/**
+ * The DIA block of products only from leaves with no slug. A block with no
+ * product, or one whose count is not a number, is no block: a run that found
+ * none says nothing about it. A leaf that names no product of its own is left
+ * out, and so is an example with no name, since a blank says nothing to read.
+ */
+function readUnslotted(value: unknown): RunReportUnslotted | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const products = count(value['products']);
+  if (products === null || products <= 0) {
+    return null;
+  }
+
+  return {
+    products,
+    leaves: records(value['leaves']).flatMap(
+      (leaf): RunReportUnslottedLeaf[] => {
+        const leafProducts = count(leaf['products']);
+        if (
+          typeof leaf['id'] !== 'string' ||
+          typeof leaf['rootName'] !== 'string' ||
+          typeof leaf['name'] !== 'string' ||
+          leafProducts === null ||
+          leafProducts <= 0
+        ) {
+          return [];
+        }
+        return [
+          {
+            id: leaf['id'],
+            rootName: leaf['rootName'],
+            name: leaf['name'],
+            products: leafProducts,
+            examples: records(leaf['examples']).flatMap(
+              (example): RunReportUnslottedExample[] =>
+                typeof example['name'] === 'string' &&
+                example['name'].trim() !== ''
+                  ? [
+                      {
+                        externalId:
+                          typeof example['externalId'] === 'string'
+                            ? example['externalId']
+                            : '',
+                        name: example['name'],
+                      },
+                    ]
+                  : []
+            ),
           },
         ];
       }

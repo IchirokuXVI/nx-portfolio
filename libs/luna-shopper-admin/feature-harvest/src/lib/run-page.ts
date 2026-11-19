@@ -45,6 +45,7 @@ import {
   COPY_TARGETS_SHOWN,
   readRunReport,
   reportHasContent,
+  type RunReportUnslottedLeaf,
 } from './run-report';
 
 /**
@@ -496,6 +497,48 @@ import {
                         }
                 }}
               </p>
+            }
+
+            <!-- The DIA products whose every leaf has no category of ours
+                 (backend plan 0268, section 5): one line a leaf, and the
+                 products it names. A list, so it wraps on a phone. -->
+            @if (report().unslottedOnly; as unslotted) {
+              <div class="part" data-unslotted-only>
+                <h3>
+                  {{ 'harvest.run.report.unslottedOnly.heading' | rokuT }}
+                </h3>
+                <p>
+                  {{
+                    'harvest.run.report.unslottedOnly.count'
+                      | rokuT: { count: unslotted.products }
+                  }}
+                </p>
+                @if (unslotted.leaves.length > 0) {
+                  <ul>
+                    @for (leaf of unslotted.leaves; track leaf.id) {
+                      <li data-unslotted-leaf>
+                        {{
+                          'harvest.run.report.unslottedOnly.leaf'
+                            | rokuT
+                              : {
+                                  root: leaf.rootName,
+                                  name: leaf.name,
+                                  count: leaf.products,
+                                }
+                        }}
+                        @if (leaf.examples.length > 0) {
+                          <span class="examples" data-unslotted-examples>
+                            {{
+                              'harvest.run.report.unslottedOnly.examples'
+                                | rokuT: { names: exampleNames(leaf) }
+                            }}
+                          </span>
+                        }
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
             }
 
             <!-- A pack count is a guess from a ratio (backend plan 0249), and
@@ -991,6 +1034,7 @@ import {
 
     .outcome,
     .open,
+    .examples,
     .stopped .message {
       color: var(--admin-ink-muted);
     }
@@ -1006,7 +1050,8 @@ import {
       align-items: baseline;
     }
 
-    .open {
+    .open,
+    .examples {
       display: block;
       font-size: 0.8125rem;
       font-weight: 400;
@@ -1157,6 +1202,14 @@ export class RunPage {
   /** A size in base units, to one decimal at most: `333.3`, `1000`. */
   amount(value: number): string {
     return String(Math.round(value * 10) / 10);
+  }
+
+  /**
+   * The products a DIA leaf names, as the chain names them. Joined with
+   * commas and no "and": five examples are a sample, not the whole leaf.
+   */
+  exampleNames(leaf: RunReportUnslottedLeaf): string {
+    return leaf.examples.map((example) => example.name).join(', ');
   }
 
   /** The scopes named in the copies table, by id, once the lookup answered. */
