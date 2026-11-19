@@ -1948,6 +1948,134 @@ describe('deza: a walk reports what it has read as it goes (plan 0267)', () => {
   });
 });
 
+describe('deza: every path a product is filed under (plan 0268)', () => {
+  let listing: FakeListing | undefined;
+
+  afterEach(async () => {
+    await listing?.close();
+    listing = undefined;
+  });
+
+  const repeated = {
+    description: 'Perlas de perfume LENOR classic 195 g',
+    shops: ['T1'],
+  };
+  const lenor = entryKey('Perlas de perfume LENOR classic', '195 g');
+  const croissants = entryKey('Croissants ALTEZA', '360 g');
+  /**
+   * One product filed under both sections, met twice in Bolleria, and one
+   * product under Bolleria only. The listing of the fake prints no attribute
+   * icon, so a path is the section path alone.
+   */
+  const twoSections = () => [
+    { ...repeated, section: 'W011' },
+    { ...repeated, section: 'W051' },
+    { ...repeated, section: 'W051' },
+    { description: 'Croissants ALTEZA 360 g', section: 'W051', shops: ['T1'] },
+  ];
+  const callOf = (report: RecordingRunReport, externalId: string) =>
+    report.categoryPathCalls.find((call) => call.externalId === externalId);
+
+  async function crawl(): Promise<Built> {
+    listing = await startFakeListing(SECTIONS, twoSections());
+    const built = build(listing);
+    await built.runner.run(
+      built.context,
+      built.report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+    return built;
+  }
+
+  it('gives a product met in two sections both paths, in walk order, and adds them', async () => {
+    const { report } = await crawl();
+
+    expect(callOf(report, lenor)).toEqual({
+      externalId: lenor,
+      paths: [
+        ['FRIO', 'Carniceria'],
+        ['PAN', 'Bolleria'],
+      ],
+      mode: 'ADD',
+    });
+    // The first path is the one `categoryPath` holds, which is unchanged: the
+    // section of the first sighting.
+    const product = report.products.find((p) => p.externalId === lenor);
+    expect(product?.categoryPath).toEqual(['FRIO', 'Carniceria']);
+    expect(callOf(report, lenor)?.paths[0]).toEqual(product?.categoryPath);
+    // A product of one section gets that one path.
+    expect(callOf(report, croissants)).toEqual({
+      externalId: croissants,
+      paths: [['PAN', 'Bolleria']],
+      mode: 'ADD',
+    });
+    // One call a product, in the order the walk first met them.
+    expect(report.categoryPathCalls.map((call) => call.externalId)).toEqual([
+      lenor,
+      croissants,
+    ]);
+  });
+
+  it('never replaces, writes no price, and puts the paths on no observation', async () => {
+    listing = await startFakeListing(SECTIONS, twoSections());
+    const built = build(listing);
+    const events: string[] = [];
+    const product = built.report.product.bind(built.report);
+    built.report.product = (observation) => {
+      events.push('product');
+      product(observation);
+    };
+    const paths = built.report.categoryPaths.bind(built.report);
+    built.report.categoryPaths = (externalId, list, mode) => {
+      events.push('paths');
+      paths(externalId, list, mode);
+    };
+
+    await built.runner.run(
+      built.context,
+      built.report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+    // The executor drains the sink after the run returns.
+    events.push('drain');
+
+    // **Always ADD**: no DEZA walk proves it saw every section a product sits
+    // in, so none can say a stored path is gone.
+    expect(built.report.categoryPathCalls).toHaveLength(2);
+    expect(
+      built.report.categoryPathCalls.every((call) => call.mode === 'ADD')
+    ).toBe(true);
+    for (const observed of built.report.products) {
+      expect(observed).not.toHaveProperty('categoryPaths');
+      // DEZA writes no price, ever.
+      expect(observed.prices).toEqual([]);
+    }
+    expect(events.lastIndexOf('product')).toBeLessThan(events.indexOf('paths'));
+    expect(events.at(-1)).toBe('drain');
+  });
+
+  it('makes no call when the walk dies before its end', async () => {
+    // A listing that is gone before the section tree is read.
+    const gone = await startFakeListing(SECTIONS, twoSections());
+    const url = gone.url;
+    await gone.close();
+    const built = build(gone);
+
+    await expect(
+      built.runner.run(
+        built.context,
+        built.report,
+        { supermarketId: CHAIN },
+        source({ baseUrl: url })
+      )
+    ).rejects.toThrow();
+
+    expect(built.report.categoryPathCalls).toEqual([]);
+  });
+});
+
 describe('deza keys: a DEZA walk and the stored keys (plan 0272)', () => {
   let listing: FakeListing | undefined;
 

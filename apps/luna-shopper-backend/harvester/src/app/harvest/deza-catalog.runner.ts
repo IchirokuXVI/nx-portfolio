@@ -52,8 +52,8 @@ export { entryKey } from './matching';
  *    reads. A product goes when the section that saw it first ends, after its
  *    split queries (plan 0267, section 6), and the sink writes a chunk each
  *    time `PRODUCT_CHUNK` products wait. A walk that dies part way thus keeps
- *    the rows of the sections it finished, less at most the chunk that was not
- *    full.
+ *    the rows that were written, less what was still queued or in flight in
+ *    the sink when it died.
  * 4. Read back which catalog item each product resolved to, from the outcomes.
  * 5. Resolve the shop codes through `source_locations` (plan 0084, section 6),
  *    and store a claim for every product at every shop, positive **and**
@@ -61,6 +61,11 @@ export { entryKey } from './matching';
  * 6. Call `supermarketLocationItem.setAvailability` once per mapped shop, with
  *    the stored claims of the products that are bound. The rest wait in the
  *    table for a binding or a mapping, and are sent when it happens.
+ *
+ * **Every category path of a product is stated at the end** (plan 0268): the
+ * section path and attribute icons of each sighting, in walk order. They are
+ * always added to the stored paths and never replace them, because a DEZA
+ * crawl never proves that it saw every section a product sits in.
  *
  * Step 3 is what makes an aborted run cheap to resume, exactly as plan 0038
  * section 6.3 describes: the snapshot is already the answer.
@@ -174,6 +179,7 @@ export class DezaCatalogRunner implements CatalogRunner {
         `product(s) left to record`
     );
     this.reportProducts(report, left);
+    this.reportCategoryPaths(report, crawl);
 
     // --- 5 and 6. The shops, and what each carries ------------------------
     //
@@ -245,6 +251,24 @@ export class DezaCatalogRunner implements CatalogRunner {
         extra: null,
         prices: [],
       });
+    }
+  }
+
+  /**
+   * Every path of every product, after the walk and before the drain (plan
+   * 0268, section 3), once a product. Never on an observation: a section
+   * reports its products when it ends, and a later section can still list
+   * them.
+   *
+   * **Always `ADD`.** Each query answers at most 300 rows however it is
+   * filtered, and a capped section is split by search terms until a pass adds
+   * nothing or the budget ends, so no walk proves that it saw every section a
+   * product is filed in. A product the walk did not meet under a section is
+   * thus no proof that it left that section, and a stored path stays.
+   */
+  private reportCategoryPaths(report: RunReport, crawl: Crawl): void {
+    for (const [externalId, paths] of crawl.categoryPaths) {
+      report.categoryPaths(externalId, paths, 'ADD');
     }
   }
 
@@ -647,6 +671,12 @@ class Crawl {
   readonly products = new Map<string, CrawledProduct>();
   /** Shop code -> the name the source printed for it, most recently. */
   readonly shops = new Map<string, string>();
+  /**
+   * Identity key -> the path of every sighting, in walk order, each once
+   * (plan 0268). The first is the one {@link products} keeps as its
+   * `categoryPath`. Only a key with a non empty path is here.
+   */
+  readonly categoryPaths = new Map<string, string[][]>();
 
   /**
    * Section code -> the keys of the products it saw first that are not
@@ -874,7 +904,8 @@ class Crawl {
    * two sections comes back in both, and was seen twice inside a single result
    * set. The key is what deduplicates it. The section path of the **first**
    * sighting is kept, because a product genuinely filed in two places has no one
-   * true section and the first is as good an answer as the last.
+   * true section and the first is as good an answer as the last. The path of
+   * every sighting is kept for the category paths (plan 0268).
    *
    * Answers the row's key and whether it was new to the run, which is what a
    * section's barren rule, its growth rule and its `firstSeen` count read.
@@ -894,6 +925,10 @@ class Crawl {
 
     const summarized = this.summaries.get(section.code);
     summarized?.products.add(key);
+    // The attribute icons sit beside the section path because they are the
+    // only classification beyond the section the page offers (section 8).
+    const path = [...section.path, ...row.attributes];
+    this.keepPath(key, path);
     const held = this.products.get(key);
     if (held) {
       for (const shop of row.shops) {
@@ -912,9 +947,7 @@ class Crawl {
       approxWeight: row.approxWeight,
       packCount: row.packCount,
       brand: row.brand,
-      // The attribute icons sit beside the section path because they are the
-      // only classification beyond the section the page offers (section 8).
-      categoryPath: [...section.path, ...row.attributes],
+      categoryPath: path,
       shops: new Set(row.shops.map((shop) => shop.code)),
     });
     const waiting = this.unreported.get(section.code);
@@ -924,6 +957,19 @@ class Crawl {
       this.unreported.set(section.code, [key]);
     }
     return { key, added: true };
+  }
+
+  /** One sighting's path, kept once, after the paths met before it. */
+  private keepPath(key: string, path: string[]): void {
+    if (path.length === 0) {
+      return;
+    }
+    const paths = this.categoryPaths.get(key);
+    if (!paths) {
+      this.categoryPaths.set(key, [path]);
+    } else if (!paths.some((other) => sameNames(other, path))) {
+      paths.push(path);
+    }
   }
 
   toReport(): Record<string, unknown> {
@@ -991,6 +1037,11 @@ class Crawl {
     }
     return held.summary;
   }
+}
+
+/** Whether two paths name the same nodes, in the same order and case. */
+function sameNames(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((name, i) => name === b[i]);
 }
 
 /** The words of a description that are worth narrowing a query by. */
