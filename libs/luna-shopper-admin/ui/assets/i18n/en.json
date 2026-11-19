@@ -982,7 +982,8 @@
       "setup": "Setup"
     },
     "running": {
-      "open": "Open the run in progress: {{what}}, {{processed}} processed"
+      "open": "Open the run in progress: {{what}}, {{processed}} processed",
+      "openAbout": "Open the run in progress: {{what}}, {{processed}} of about {{total}}, an estimate"
     },
     "review": {
       "queues": "Queue",
@@ -1219,9 +1220,11 @@
         "label": "Run progress",
         "of": "{{processed}} of {{total}}",
         "ofAbout": "{{processed}} of about {{total}}",
+        "ofAboutEnded": "{{processed}} processed of about {{total}}",
         "processed": "{{processed}} processed",
         "unsized": "The run does not know yet how much work it has.",
-        "approximate": "This run does not know its total. About {{total}} is what the last completed run of this kind for this chain processed."
+        "approximate": "This run does not know its total. About {{total}} is an estimate taken from the latest completed run of the same kind.",
+        "approximateEnded": "This run did not know its total. About {{total}} is an estimate taken from the latest completed run of the same kind."
       },
       "counter": {
         "created": "Created",

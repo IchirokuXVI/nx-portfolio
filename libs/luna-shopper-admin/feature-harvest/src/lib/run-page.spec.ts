@@ -305,21 +305,52 @@ describe('RunPage, arriving mid run', () => {
           ?.textContent ?? ''
       ).trim();
 
-    it('says "of about" the earlier walk, against a bar short of full', async () => {
-      const fixture = await open(going, [whole]);
+    it('says "of about" the earlier walk while it runs, against a bar short of full', async () => {
+      const fixture = await open({ ...going, status: 'RUNNING' }, [whole]);
 
       expect(fixture.componentInstance.progress()).toEqual({
         processed: 824,
         total: null,
         percent: 35,
         about: 2361,
+        ended: false,
       });
       expect(count(fixture)).toBe('harvest.run.progress.ofAbout');
+      const bar = fixture.nativeElement.querySelector('[role="progressbar"]');
+      expect(bar?.getAttribute('aria-valuenow')).toBe('35');
+      expect(bar?.getAttribute('aria-valuetext')).toBe(
+        'harvest.run.progress.ofAbout'
+      );
+      expect(text(fixture)).toContain('harvest.run.progress.approximate');
+      expect(text(fixture)).not.toContain('harvest.run.progress.unsized');
+      fixture.componentInstance.watch.stop();
+    });
+
+    /** Owner decision 97b: the number stays, in the past, and no bar. */
+    it('keeps the estimate on an ended walk, in the past tense, with no bar', async () => {
+      const fixture = await open(going, [whole]);
+
+      expect(count(fixture)).toBe('harvest.run.progress.ofAboutEnded');
+      expect(
+        fixture.nativeElement.querySelector('[role="progressbar"]')
+      ).toBeNull();
       expect(
         fixture.nativeElement
-          .querySelector('[role="progressbar"]')
-          ?.getAttribute('aria-valuenow')
-      ).toBe('35');
+          .querySelector('[data-progress-approximate]')
+          ?.textContent.trim()
+      ).toBe('harvest.run.progress.approximateEnded');
+      expect(text(fixture)).not.toContain('harvest.run.progress.unsized');
+      fixture.componentInstance.watch.stop();
+    });
+
+    it('keeps the form it had before for a walk that processed nothing', async () => {
+      const fixture = await open({ ...going, processed: 0 }, [whole]);
+
+      expect(count(fixture)).toBe('harvest.run.progress.processed');
+      expect(text(fixture)).toContain('harvest.run.progress.unsized');
+      expect(
+        fixture.nativeElement.querySelector('[data-progress-approximate]')
+      ).toBeNull();
       fixture.componentInstance.watch.stop();
     });
 

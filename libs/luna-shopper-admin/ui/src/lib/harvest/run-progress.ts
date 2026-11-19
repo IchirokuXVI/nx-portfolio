@@ -29,10 +29,11 @@ import {
  * the category walk has finished counting, which is minutes in, and a bar moving
  * against a number nobody chose says less than the count alone does. So the
  * count is always shown and the bar joins it when the run knows its own size,
- * or when an earlier completed run of the same chain and mode gives an
+ * or, while the run goes, when another completed run of the same kind gives an
  * approximate one (decision 86 of the harvester round). That bar never reaches
  * full, and once the run passes the estimate the bar goes and the count says
- * how many, as it does with no earlier run.
+ * how many, as it does with no earlier run. An ended run keeps the estimate,
+ * in the past tense, and no bar (owner decision 97b).
  *
  * The counters are the run's own, and they are shown separately rather than
  * summed. `notFound` is not a failure: a 404 from a detail call means the
@@ -55,7 +56,8 @@ import {
 
     @if (progress().percent; as percent) {
       <!-- Against an estimate the bar says so to a screen reader in the words
-           of the line, and stops short of full (decision 86). -->
+           of the line, and stops short of full (decision 86). An ended run
+           has no percent against an estimate, so it gets no bar. -->
       <div
         [attr.aria-label]="'harvest.run.progress.label' | rokuT"
         [attr.aria-valuenow]="percent"
@@ -69,12 +71,12 @@ import {
       >
         <div [style.inline-size.%]="percent" class="fill"></div>
       </div>
-      @if (approximate()) {
-        <p class="unsized" data-progress-approximate>
-          {{ 'harvest.run.progress.approximate' | rokuT: line().args }}
-        </p>
-      }
-    } @else {
+    }
+    @if (approximate()) {
+      <p class="unsized" data-progress-approximate>
+        {{ approximateNote() | rokuT: line().args }}
+      </p>
+    } @else if (!progress().percent) {
       <p class="unsized">{{ 'harvest.run.progress.unsized' | rokuT }}</p>
     }
 
@@ -169,18 +171,22 @@ export class RunProgressView {
   readonly progress = input.required<RunProgress>();
 
   /**
-   * "N of T", "N of about T" or "N processed", formatted for the reader's
-   * language. "About" when the total is an earlier run's (decision 86 of the
-   * harvester round), and never a known total replaced by one.
+   * "N of T", "N processed", or the estimate line. "About" when the total is
+   * another run's (decision 86 of the harvester round), and never a known
+   * total replaced by one.
    */
   readonly line = computed(() =>
     runProgressLine(this.progress(), this._translate.locale())
   );
 
-  /** Whether the bar is drawn against an earlier run's total. */
-  readonly approximate = computed(
-    () =>
-      this.progress().total === null && (this.progress().about ?? null) !== null
+  /** Whether the line is drawn against another run's total. */
+  readonly approximate = computed(() => this.line().approximate);
+
+  /** The note under the estimate: present while the run goes, past after. */
+  readonly approximateNote = computed(() =>
+    this.progress().ended
+      ? 'harvest.run.progress.approximateEnded'
+      : 'harvest.run.progress.approximate'
   );
 
   /**

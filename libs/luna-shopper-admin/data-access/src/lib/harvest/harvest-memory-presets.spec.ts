@@ -70,6 +70,28 @@ describe('HarvestMemory, presets', () => {
     ).resolves.toMatchObject({ name: 'Weekly Warehouses' });
   });
 
+  /**
+   * One active run per chain, as `uq_harvest_run_active` holds it: the seed's
+   * running DEZA walk does not stop a Mercadona start, and the running
+   * Mercadona walk does.
+   */
+  it('refuses a start only while the same chain has a run going', async () => {
+    const memory = new HarvestMemory();
+
+    await expect(
+      memory.spawnRun({ supermarketId: MERCADONA, mode: 'CATALOG_DISCOVERY' })
+    ).rejects.toMatchObject({ status: 409, code: 'conflict' });
+    await expect(
+      memory.spawnRun({ supermarketId: DEZA, mode: 'CATALOG_DISCOVERY' })
+    ).rejects.toMatchObject({ status: 409, code: 'conflict' });
+
+    await memory.abortRun('run-catalog-running');
+
+    await expect(
+      memory.spawnRun({ supermarketId: MERCADONA, mode: 'CATALOG_DISCOVERY' })
+    ).resolves.toMatchObject({ supermarketId: MERCADONA });
+  });
+
   it('records the preset on a run started from it', async () => {
     const memory = new HarvestMemory();
     // The seed holds a running walk, and one harvester runs one thing.

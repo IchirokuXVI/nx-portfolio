@@ -52,10 +52,7 @@ import { HarvestStatus } from './harvest-status';
       <ng-content ngProjectAs="[pageChip]" select="[pageChip]" />
       @if (wide(); as run) {
         <a
-          [attr.aria-label]="
-            'harvest.running.open'
-              | rokuT: { what: what(), processed: run.processed }
-          "
+          [attr.aria-label]="label()!.key | rokuT: label()!.args"
           [routerLink]="run.link"
           class="run"
           pageChip
@@ -75,10 +72,7 @@ import { HarvestStatus } from './harvest-status';
 
     @if (narrow(); as run) {
       <a
-        [attr.aria-label]="
-          'harvest.running.open'
-            | rokuT: { what: what(), processed: run.processed }
-        "
+        [attr.aria-label]="label()!.key | rokuT: label()!.args"
         [routerLink]="run.link"
         class="run line"
         data-running="line"
@@ -185,20 +179,44 @@ export class HarvestHeader {
       return null;
     }
 
-    // An approximate total from the last completed run of this chain and
-    // mode, while the run does not know its own (decision 86 of the harvester
-    // round). Null until that read answers, and the line says how many then.
+    // An approximate total from the latest completed run of the same preset,
+    // or else of this chain and mode, while the run does not know its own
+    // (decision 86 of the harvester round). Null until that read answers, and
+    // the line says how many then.
     const progress = runProgress(run, this._earlier.of(run));
+    const line = runProgressLine(progress, this._translate.locale());
 
     return {
       status: run.status,
       mode: run.mode,
       supermarketId: run.supermarketId ?? '',
-      processed: progress.processed,
       percent: progress.percent ?? null,
-      line: runProgressLine(progress, this._translate.locale()),
+      line,
       link: harvestRunPath(run.id),
+      processed: run.processed,
     };
+  });
+
+  /**
+   * What a screen reader hears for the link. With an estimate it reads the
+   * estimate line and says it is one, as the visible line says "about". With
+   * none it reads as it did before the estimate existed.
+   */
+  readonly label = computed(() => {
+    const run = this._run();
+    if (run === null) {
+      return null;
+    }
+    const what = this.what();
+    return run.line.approximate
+      ? {
+          key: 'harvest.running.openAbout',
+          args: { what, ...run.line.args },
+        }
+      : {
+          key: 'harvest.running.open',
+          args: { what, processed: run.processed },
+        };
   });
 
   /** In the header on a wide screen. */
