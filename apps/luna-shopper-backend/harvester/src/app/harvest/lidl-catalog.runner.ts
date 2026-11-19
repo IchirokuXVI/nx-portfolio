@@ -40,11 +40,19 @@ import type { SourceObservation } from './source-ingest';
  *    map, which the index does not carry. A page that fails costs one product.
  *    A product goes to the sink as soon as its page answers, after the
  *    regions it names that the run has not declared yet (plan 0267). The sink
- *    writes a chunk each time `PRODUCT_CHUNK` products wait. For LIDL, whose
- *    walk is about a hundred and fifty products, the chunk that is not full
- *    is the whole walk, so it is written when the run drains. A walk that
- *    dies keeps what the sink had written, less what was still queued or in
- *    flight in it.
+ *    writes a chunk each time `PRODUCT_CHUNK` (400) products wait. For LIDL,
+ *    whose walk is about a hundred and fifty products, the chunk that is not
+ *    full is the whole walk, so it is written when the run drains. What a
+ *    walk that ends early keeps depends on how it ends:
+ *    - The process dies: the walk keeps the chunks the sink had written, less
+ *      what was still queued or in flight in it.
+ *    - The runner throws with no abort: the executor settles the sink, which
+ *      lets the queued chunks finish and writes no partial chunk. What is
+ *      lost is the chunk that never filled, which for LIDL is the whole walk.
+ *    - A person or a deploy aborts the run: the executor drains the sink,
+ *      which writes the partial chunk too, and every path call goes as `ADD`.
+ *    The paths of the walk are written only by the drain, after the last
+ *    chunk, so only an aborted or completed run writes any.
  * 3. `INGEST`. Every path of each product read (plan 0268), then the sink
  *    writes the last chunk when the run drains.
  * 4. `REPORT`.

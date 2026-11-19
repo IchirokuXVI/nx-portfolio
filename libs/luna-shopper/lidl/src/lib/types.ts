@@ -55,9 +55,10 @@ export interface LidlListRow {
   /**
    * `wonCategoryBreadcrumbs` of the row's `meta` (plan 0268): every path of
    * the online shop tree the chain files the row under, each root first, in
-   * the chain's own names. Null when the row states no such list, which is
-   * not the same as an empty one: an empty list says the chain files it
-   * nowhere in that tree.
+   * the chain's own names. Null when the row states no such list, or a list
+   * that is not empty and of which no path can be read. That is not the same
+   * as an empty one: an empty list says the chain files it nowhere in that
+   * tree.
    */
   categoryBreadcrumbs: string[][] | null;
   /** `canonicalPath`, e.g. `/p/uva-blanca/p11029954`. Relative to the base URL. */
@@ -141,10 +142,11 @@ export interface LidlProduct {
   categoryPaths: string[][];
   /**
    * Whether the page itself stated both fields the paths come from: its need
-   * world path and its `wonCategoryBreadcrumbs` list. Only then are
-   * {@link categoryPaths} every place the chain files the product under that
-   * a read can reach. A path taken from the index row, or a list the page left
-   * out, proves nothing about a path stored before.
+   * world path and its `wonCategoryBreadcrumbs` list, and every breadcrumb of
+   * that list could be read. Only then are {@link categoryPaths} every place
+   * the chain files the product under that a read can reach. A path taken
+   * from the index row, a list the page left out, or a list with a part the
+   * code could not read, proves nothing about a path stored before.
    */
   categoryPathsStated: boolean;
   /** Null beside an {@link approxWeight}: a weight that varies is no size. */

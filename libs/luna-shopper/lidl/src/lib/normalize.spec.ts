@@ -381,8 +381,6 @@ describe('every path a product is filed under (plan 0268)', () => {
           ],
           [{ id: '3', name: 'Especial otoño', hiddenCategory: false }],
           [{ id: '3', name: 'Especial otoño', hiddenCategory: false }],
-          [{ id: '4', name: '' }],
-          'not a path',
         ],
       },
       { row: emptyRow('1'), observedAt: OBSERVED_AT }
@@ -393,6 +391,99 @@ describe('every path a product is filed under (plan 0268)', () => {
       ['Alimentación', 'Quesos'],
       ['Especial otoño'],
     ]);
+    expect(product?.categoryPathsStated).toBe(true);
+  });
+
+  it('keeps the readable paths of a list read in part, and says it did not state its paths', () => {
+    const product = normalizeProduct(
+      {
+        keyfacts: { wonCategoryPrimary: NEED_WORLD_QUESO.join('/') },
+        wonCategoryBreadcrumbs: [
+          [{ id: '1', name: 'Alimentación', hiddenCategory: false }],
+          [{ id: '4', name: '' }],
+          'not a path',
+        ],
+      },
+      { row: emptyRow('1'), observedAt: OBSERVED_AT }
+    );
+
+    expect(product?.categoryPaths).toEqual([
+      NEED_WORLD_QUESO,
+      ['Alimentación'],
+    ]);
+    // A part the code could not read may name a path a REPLACE would drop.
+    expect(product?.categoryPathsStated).toBe(false);
+  });
+
+  it('says a path with one unreadable node was not read in full', () => {
+    const product = normalizeProduct(
+      {
+        keyfacts: { wonCategoryPrimary: NEED_WORLD_QUESO.join('/') },
+        wonCategoryBreadcrumbs: [
+          [
+            { id: '1', name: 'Alimentación' },
+            { id: '2', title: 'Quesos' },
+          ],
+        ],
+      },
+      { row: emptyRow('1'), observedAt: OBSERVED_AT }
+    );
+
+    expect(product?.categoryPaths).toEqual([
+      NEED_WORLD_QUESO,
+      ['Alimentación'],
+    ]);
+    expect(product?.categoryPathsStated).toBe(false);
+  });
+
+  it('reads a list that is not empty and of which nothing is readable as no list', () => {
+    // A renamed field: every node is of another shape.
+    const product = normalizeProduct(
+      {
+        keyfacts: { wonCategoryPrimary: NEED_WORLD_QUESO.join('/') },
+        wonCategoryBreadcrumbs: [
+          [{ id: '1', label: 'Alimentación' }],
+          [{ id: '2', label: 'Quesos' }],
+        ],
+      },
+      {
+        row: {
+          ...emptyRow('1'),
+          categoryBreadcrumbs: [['Hogar y decoración', 'Cocina']],
+        },
+        observedAt: OBSERVED_AT,
+      }
+    );
+
+    // The row's list is the fall back, as for a page that prints none.
+    expect(product?.categoryPaths).toEqual([
+      NEED_WORLD_QUESO,
+      ['Hogar y decoración', 'Cocina'],
+    ]);
+    expect(product?.categoryPathsStated).toBe(false);
+  });
+
+  it('reads an index row list of which nothing is readable as no list', () => {
+    const row = normalizeListRow(
+      { productId: '1' },
+      { wonCategoryBreadcrumbs: [[{ id: '1', label: 'Cocina' }]] }
+    );
+
+    expect(row?.categoryBreadcrumbs).toBeNull();
+  });
+
+  it('today: says a page with a need world path and an empty list stated its paths, pending the owner', () => {
+    // Today's behaviour, pinned. Whether an empty list may clear the stored
+    // breadcrumb paths is an open owner decision; this spec changes with it.
+    const product = normalizeProduct(
+      {
+        keyfacts: { wonCategoryPrimary: NEED_WORLD_QUESO.join('/') },
+        wonCategoryBreadcrumbs: [],
+      },
+      { row: emptyRow('1'), observedAt: OBSERVED_AT }
+    );
+
+    expect(product?.categoryPaths).toEqual([NEED_WORLD_QUESO]);
     expect(product?.categoryPathsStated).toBe(true);
   });
 

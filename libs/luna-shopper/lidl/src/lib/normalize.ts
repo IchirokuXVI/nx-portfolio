@@ -128,7 +128,7 @@ export function normalizeListRow(
     brand: brandOf(readString(readRecord(data, 'brand'), 'name')),
     siteCategory: readString(data, 'category') ?? '',
     categoryPath: categoryPathOf(readString(keyfacts, 'wonCategoryPrimary')),
-    categoryBreadcrumbs: readCategoryBreadcrumbs(meta),
+    categoryBreadcrumbs: readCategoryBreadcrumbs(meta)?.paths ?? null,
     path: readString(data, 'canonicalPath'),
     sizeFormat: readString(readRecord(price, 'packaging'), 'text'),
     listPrice: readNumber(price, 'price'),
@@ -199,9 +199,12 @@ export function normalizeProduct(
     categorySlug: resolveCategory(categoryPath),
     categoryPaths: categoryPathsOf(
       categoryPath,
-      pageBreadcrumbs ?? row.categoryBreadcrumbs ?? []
+      pageBreadcrumbs?.paths ?? row.categoryBreadcrumbs ?? []
     ),
-    categoryPathsStated: pagePrimary.length > 0 && pageBreadcrumbs !== null,
+    // Only a list read in full states every path (plan 0268): a part the
+    // code could not read may name a path a REPLACE would drop.
+    categoryPathsStated:
+      pagePrimary.length > 0 && pageBreadcrumbs?.wholly === true,
     // A weight the chain does not promise is no size (plan 0244, section
     // 5.2): it travels as `approxWeight`, and the row has neither a size nor
     // a unit.
@@ -447,14 +450,24 @@ function pickPath(fromPage: string[], fromRow: string[]): string[] {
 
 /**
  * `wonCategoryBreadcrumbs` as paths of names (plan 0268), or null when the
- * holder states no such list.
+ * holder states no list this code can read.
  *
  * Each breadcrumb is a list of nodes, root first, each `{ id, name, url,
  * hiddenCategory }`. A node with no name is skipped and a path left with none
  * is dropped. A hidden node is kept: it is still a category the chain files
  * the product under, and the name is the chain's.
+ *
+ * **A list read only in part is not a stated list.** `wholly` is false when
+ * any breadcrumb is not a list of nodes, is empty, or holds a node with no
+ * name: a renamed field or a node of another shape. The readable paths are
+ * still returned, but they are not every path the page names, so they cannot
+ * disprove a path stored before. A list that is not empty and of which no
+ * path can be read is null, as an absent list is: it proves nothing. The
+ * empty list `[]` is read wholly and stays a list that states no path.
  */
-function readCategoryBreadcrumbs(holder: Json): string[][] | null {
+function readCategoryBreadcrumbs(
+  holder: Json
+): { paths: string[][]; wholly: boolean } | null {
   if (!isRecord(holder)) {
     return null;
   }
@@ -463,18 +476,26 @@ function readCategoryBreadcrumbs(holder: Json): string[][] | null {
     return null;
   }
   const paths: string[][] = [];
+  let wholly = true;
   for (const crumb of crumbs) {
-    if (!Array.isArray(crumb)) {
+    if (!Array.isArray(crumb) || crumb.length === 0) {
+      wholly = false;
       continue;
     }
     const names = crumb
       .map((node) => readString(node, 'name'))
       .filter((name): name is string => name !== null);
+    if (names.length < crumb.length) {
+      wholly = false;
+    }
     if (names.length > 0) {
       paths.push(names);
     }
   }
-  return paths;
+  if (crumbs.length > 0 && paths.length === 0) {
+    return null;
+  }
+  return { paths, wholly };
 }
 
 /**

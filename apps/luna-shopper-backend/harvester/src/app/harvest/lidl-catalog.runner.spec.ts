@@ -119,6 +119,8 @@ function product(options: {
    * the list out of the page, as the pages captured before November do.
    */
   breadcrumbs?: string[][];
+  /** The page's `wonCategoryBreadcrumbs` as printed, over {@link breadcrumbs}. */
+  rawBreadcrumbs?: unknown[];
 }): string {
   const regionsV2: Record<string, unknown> = {};
   const regionsPrices: Record<string, unknown> = {};
@@ -161,6 +163,9 @@ function product(options: {
             regionsPrices,
             ...(options.breadcrumbs
               ? { wonCategoryBreadcrumbs: crumbs(options.breadcrumbs) }
+              : {}),
+            ...(options.rawBreadcrumbs
+              ? { wonCategoryBreadcrumbs: options.rawBreadcrumbs }
               : {}),
           },
         },
@@ -983,6 +988,68 @@ describe('LidlCatalogRunner', () => {
 
       expect(report.categoryPathCalls).toEqual([
         { externalId: '1', paths: [QUESO], mode: 'ADD' },
+      ]);
+    });
+
+    it('says ADD for a page whose list is not empty and has nothing readable', async () => {
+      const runner = new TestRunner({
+        index: [row({ id: '1', title: 'Queso', category: 'Food' })],
+        products: {
+          '/p/x/p1': product({
+            id: '1',
+            groups: priced,
+            // A renamed field: no node carries a name.
+            rawBreadcrumbs: [[{ id: '1', label: 'Alimentación' }]],
+          }),
+        },
+      });
+
+      await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: '1', paths: [QUESO], mode: 'ADD' },
+      ]);
+    });
+
+    it('says ADD for a page whose list was read only in part', async () => {
+      const runner = new TestRunner({
+        index: [row({ id: '1', title: 'Queso', category: 'Food' })],
+        products: {
+          '/p/x/p1': product({
+            id: '1',
+            groups: priced,
+            rawBreadcrumbs: [
+              [
+                { id: '1', name: 'Alimentación' },
+                { id: '2', name: 'Quesos' },
+              ],
+              [{ id: '3', label: 'Especial otoño' }],
+            ],
+          }),
+        },
+      });
+
+      await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: '1', paths: [QUESO, SHOP], mode: 'ADD' },
+      ]);
+    });
+
+    it('today: says REPLACE for a page that states an empty list, pending the owner', async () => {
+      // Today's behaviour, pinned. Whether an empty list may clear the stored
+      // breadcrumb paths is an open owner decision; this spec changes with it.
+      const runner = new TestRunner({
+        index: [row({ id: '1', title: 'Queso', category: 'Food' })],
+        products: {
+          '/p/x/p1': product({ id: '1', groups: priced, rawBreadcrumbs: [] }),
+        },
+      });
+
+      await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: '1', paths: [QUESO], mode: 'REPLACE' },
       ]);
     });
 

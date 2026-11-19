@@ -217,6 +217,24 @@ describe('RunExecutor, a run that is stopped (plan 0206)', () => {
     );
   });
 
+  it('writes the category paths a file import changed into the report, under the key a walk uses (plan 0268)', async () => {
+    const { executor, store } = build();
+    const importing = executor['fileImport'] as unknown as {
+      run: jest.Mock;
+    };
+    importing.run.mockImplementationOnce(async () => ({
+      ...counters(),
+      categoryPathsWritten: 3,
+    }));
+
+    await executor.runToCompletion('run-1');
+
+    expect(store.setReport).toHaveBeenCalledWith(
+      'run-1',
+      expect.objectContaining({ categoryPathsWritten: 3 })
+    );
+  });
+
   it('still counts a run that failed on its own', async () => {
     const { executor, sources } = build();
     const failing = executor['fileImport'] as unknown as {
