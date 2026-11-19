@@ -530,9 +530,17 @@ product would no longer be seen.
   the count of rows, the counts by status and match, any row's decision, or
   the count of the prices, claims and presence rows of the chain differ before
   and after.
-- **A collision is skipped.** A moved row whose new key another row of the
-  chain holds, or two moved rows that give one new key, are left as they are
-  and counted under `collisions`. Both ceilings are 0, so one collision makes
+- **A chain of moves is not a collision.** When a moved row's new key is the
+  key of another row that moves too, the command moves the holder first, in
+  the same transaction, so a chain of any length is re-keyed in one run. A key
+  counts as held only by a row that keeps it after every move that can be
+  made.
+- **A collision is skipped.** A moved row whose new key a row that does not
+  move holds, two moved rows that give one new key, and a swap or a longer
+  ring of rows that each want the next one's key are left as they are and
+  counted under `collisions`, and so is every row whose chain ends on one of
+  them. `--count`, the write run and the guard read the same selection, so
+  they agree on each of these. Both ceilings are 0, so one collision makes
   the task refuse, the moves stay, and the guard below refuses every DEZA
   catalog walk until the owner raises the ceiling in a commit and links that
   row by hand.
@@ -549,8 +557,13 @@ product would no longer be seen.
 - **It leaves a record.** `post.sh` saves one line per re-keyed or skipped row
   in the ConfigMap `release-task-0008-record`, key `record.tsv`: the row's id,
   its old key, its new key, the outcome, and for a collision the id of the row
-  that holds the key. No name. The deploy log shows the line count only. Read
-  it over SSH on the host, as the `deploy` user:
+  that holds the key. No name. The write run streams the record in the same
+  `kubectl exec` that commits, and `post.sh` applies it server side, so no
+  annotation cap limits its size. Until the ConfigMap holds it, the record is
+  kept on the host in `~/release-task-records/`; when the apply fails,
+  `post.sh` exits 1 and the next deploy writes the kept record first. The
+  deploy log shows the line count only. Read it over SSH on the host, as the
+  `deploy` user:
 
   ```sh
   kubectl -n luna-shopper get configmap release-task-0008-record \
@@ -562,8 +575,10 @@ product would no longer be seen.
 - **To undo one row, prefer an update to a restore.** Put its `old_key` back
   from the record, with the whole description as the name and no size text:
   that was the stored shape of every row counted on 2026-11-18. A row of
-  another shape is read from the dump while it exists. A restore of the dump
-  also removes everything walks wrote to the harvester after the task.
+  another shape is read from the dump while it exists. A row whose `old_key`
+  another re-keyed row now holds (a chain) goes back after that row. A
+  restore of the dump also removes everything walks wrote to the harvester
+  after the task.
 
 To rehearse it, point the override at the built bundle and at a database that
 you made for the rehearsal:
@@ -572,7 +587,8 @@ you made for the rehearsal:
 ENVIRONMENT=staging \
   HARVESTER_DB_URL=postgres://... \
   DEZA_KEYS='node dist/apps/luna-shopper-backend-harvester/deza-keys.js' \
-  RECORD_APPLY='tee configmap.yaml' \
+  RECORD_APPLY='tee configmap.json' \
+  RECORD_KEEP="$PWD/kept-record.tsv" \
   bash k8s/release-tasks/tasks/0008-deza-keys-follow-the-split/post.sh
 ```
 

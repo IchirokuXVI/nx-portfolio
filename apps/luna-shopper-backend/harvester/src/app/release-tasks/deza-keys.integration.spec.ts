@@ -210,28 +210,37 @@ describeIntegration('release task 0008, deza keys (real Postgres)', () => {
       [CHAIN]
     );
     for (const row of Object.values(SEEDS)) {
-      const status = row.status ?? (row.itemId ? 'ACTIVE' : 'UNRESOLVED');
-      await dataSource.query(
-        `INSERT INTO "source_catalog_entries"
-           ("supermarketId", "externalId", "sourceKind", "name", "itemId",
-            "status", "sizeFormat", "matchedBy", "confidence", "decidedAt",
-            "createdAt", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)`,
-        [
-          CHAIN,
-          row.externalId ?? entryKey(row.name, row.sizeFormat),
-          row.sourceKind ?? 'OFFICIAL_WEB',
-          row.name,
-          row.itemId ?? null,
-          status,
-          row.sizeFormat,
-          status === 'ACTIVE' ? 'MANUAL' : null,
-          status === 'ACTIVE' ? 1 : 0,
-          status === 'ACTIVE' || status === 'REJECTED' ? SEEDED_AT : null,
-          SEEDED_AT,
-        ]
-      );
+      await insert(row);
     }
+    await hangOffSocks();
+  }
+
+  /** One stored row of the chain, as a walk or a leaflet wrote it. */
+  async function insert(row: Seed): Promise<void> {
+    const status = row.status ?? (row.itemId ? 'ACTIVE' : 'UNRESOLVED');
+    await dataSource.query(
+      `INSERT INTO "source_catalog_entries"
+         ("supermarketId", "externalId", "sourceKind", "name", "itemId",
+          "status", "sizeFormat", "matchedBy", "confidence", "decidedAt",
+          "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)`,
+      [
+        CHAIN,
+        row.externalId ?? entryKey(row.name, row.sizeFormat),
+        row.sourceKind ?? 'OFFICIAL_WEB',
+        row.name,
+        row.itemId ?? null,
+        status,
+        row.sizeFormat,
+        status === 'ACTIVE' ? 'MANUAL' : null,
+        status === 'ACTIVE' ? 1 : 0,
+        status === 'ACTIVE' || status === 'REJECTED' ? SEEDED_AT : null,
+        SEEDED_AT,
+      ]
+    );
+  }
+
+  async function hangOffSocks(): Promise<void> {
     // What hangs off the socks: a price, a shop claim and a scope presence.
     const socks = await rowOf('socks');
     await dataSource.query(
@@ -541,6 +550,125 @@ describeIntegration('release task 0008, deza keys (real Postgres)', () => {
     expect(now('teaHolder').now.lastRunId).toBe(WALK);
     expect(now('tea').now.lastRunId).toBeNull();
   });
+
+  /**
+   * Moves that depend on each other (the review of PR #1016). The texts
+   * differ in a comma, which the key ignores and the split does not.
+   * `chainEnd` moves to a key nobody holds, `chainMiddle` to the key of
+   * `chainEnd`, `chainStart` to the key of `chainMiddle`. `ringCloser` holds
+   * the key `chainEnd` wants and wants the key of `chainMiddle`: with those
+   * two it closes a ring of three.
+   */
+  const SHAPES: Record<string, Seed> = {
+    chainEnd: { name: 'Zumo ALTEZA', sizeFormat: '3 x 187 ml,' },
+    chainMiddle: {
+      name: 'Zumo ALTEZA 3 x',
+      sizeFormat: '187 ml',
+      itemId: ITEM.tea,
+    },
+    chainStart: { name: 'Zumo ALTEZA 3', sizeFormat: 'x, 187 ml' },
+    ringCloser: { name: 'Zumo ALTEZA 3 x, 187 ml', sizeFormat: null },
+    swapWhole: { name: 'Calcetines ALTEZA 7 pares', sizeFormat: null },
+    swapSplit: { name: 'Calcetines ALTEZA', sizeFormat: '7 pares,' },
+    endHolder: {
+      name: 'Zumo ALTEZA 3 x 187 ml',
+      sizeFormat: null,
+      sourceKind: 'OFFICIAL_LEAFLET',
+    },
+  };
+
+  /** The chain holds only these rows. */
+  async function only(...shapes: (keyof typeof SHAPES)[]): Promise<void> {
+    await dataSource.query(
+      `DELETE FROM "source_catalog_entries" WHERE "supermarketId" = $1`,
+      [CHAIN]
+    );
+    for (const shape of shapes) {
+      await insert(SHAPES[shape]);
+    }
+  }
+
+  /** The count lines, then a write run, streaming its record. */
+  async function countThenWrite(max: number) {
+    const counted = await count();
+    const o = out();
+    await runDezaKeysOn(o.ports, { mode: 'write', max, record: '-' }, [CHAIN]);
+    // The write reports first exactly what --count printed.
+    expect(o.lines.slice(0, counted.length)).toEqual(counted);
+    return { counted, lines: o.lines };
+  }
+
+  it.each([
+    ['two', ['chainMiddle', 'chainEnd'] as const],
+    ['three', ['chainStart', 'chainMiddle', 'chainEnd'] as const],
+  ])(
+    'resolves a chain of %s in one run, past the unique index',
+    async (_, shapes) => {
+      await only(...shapes);
+      const guard = new DezaKeyGuard(entries);
+      const source = {
+        supermarketId: CHAIN,
+        adapterKey: 'deza-web',
+      } as SupermarketSource;
+      const { CATALOG_DISCOVERY } = HarvestRunMode;
+      await expect(guard.refusal(source, CATALOG_DISCOVERY)).resolves.toBe(
+        dezaKeysRefusal(shapes.length)
+      );
+
+      const { counted, lines } = await countThenWrite(shapes.length);
+
+      expect(counted).toContain(`moves ${shapes.length}`);
+      expect(counted).toContain('collisions 0');
+      expect(lines.at(-1)).toBe(`rekeyed ${shapes.length}`);
+      const rows = await chainRows();
+      expect(rows).toHaveLength(shapes.length);
+      for (const row of rows) {
+        expect(row.externalId).toBe(entryKey(row.name, row.sizeFormat));
+      }
+      expect(rows.find((row) => row.itemId === ITEM.tea)).toEqual(
+        expect.objectContaining({
+          name: 'Zumo ALTEZA',
+          sizeFormat: '3 x 187 ml',
+        })
+      );
+      const again = await count();
+      expect(again).toContain('moves 0');
+      expect(again).toContain('collisions 0');
+      await expect(
+        guard.refusal(source, CATALOG_DISCOVERY)
+      ).resolves.toBeNull();
+    }
+  );
+
+  it.each([
+    ['a swap', ['swapWhole', 'swapSplit'] as const, 2],
+    ['a ring of three', ['chainEnd', 'chainMiddle', 'ringCloser'] as const, 3],
+    [
+      'a chain whose last key a leaflet row holds',
+      ['chainMiddle', 'chainEnd', 'endHolder'] as const,
+      2,
+    ],
+  ])(
+    'writes nothing for %s, and counts each moved row a collision',
+    async (_, shapes, collisions) => {
+      await only(...shapes);
+      const before = JSON.stringify(await chainRows());
+
+      const { counted, lines } = await countThenWrite(10);
+
+      expect(counted).toContain(`moves ${collisions}`);
+      expect(counted).toContain(`collisions ${collisions}`);
+      expect(lines.at(-1)).toBe('rekeyed 0');
+      expect(JSON.stringify(await chainRows())).toBe(before);
+      // The guard does not wait for rows the task never changes.
+      await expect(
+        new DezaKeyGuard(entries).refusal(
+          { supermarketId: CHAIN, adapterKey: 'deza-web' } as SupermarketSource,
+          HarvestRunMode.CATALOG_DISCOVERY
+        )
+      ).resolves.toBeNull();
+    }
+  );
 
   /** One DEZA walk over a listing: the real runner, sink and ingest. */
   async function walk(fake: FakeListing): Promise<void> {

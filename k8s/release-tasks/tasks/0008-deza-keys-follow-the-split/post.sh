@@ -17,13 +17,35 @@
 # minutes. It then passes MAX_MOVES as `--max`, so the command refuses too if
 # the count grew in between.
 #
-# The run writes the record of plan 0272 section 4.1 to a file inside the pod:
-# per re-keyed or skipped row its id, old key, new key and outcome, no name.
-# This file copies it into the ConfigMap `release-task-<NNNN>-record` of the
-# namespace, key `record.tsv`, through `kubectl apply`, so a second run
-# replaces it. It prints the line count and the ConfigMap's name, never a
-# line: the deploy log is public. A run that re-keyed nothing leaves an
-# earlier record in place. Nothing deletes that ConfigMap; the owner does.
+# The run and its record arrive in one `kubectl exec`. The record of plan 0272
+# section 4.1 holds, per re-keyed or skipped row, its id, old key, new key and
+# outcome, no name. The command streams it on standard output right after the
+# commit, each line behind `record` and a tab, then `record-end <lines>`. This
+# file takes those lines out into a file and prints only the count lines. A
+# second exec to copy the record out, which could fail after the commit and
+# lose it, does not exist.
+#
+# The record goes into the ConfigMap `release-task-<NNNN>-record` of the
+# namespace, key `record.tsv`, through `kubectl apply --server-side`, so a
+# second run replaces the object and never stacks a copy. Server side, because
+# a client side apply also copies the whole object into the
+# `last-applied-configuration` annotation, and an annotation is capped at
+# 256 KiB, far below the 1 MiB a ConfigMap holds. It prints the line count and
+# the ConfigMap's name, never a line: the deploy log is public. A run that
+# re-keyed nothing leaves an earlier record in place. Nothing deletes that
+# ConfigMap; the owner does.
+#
+# A record is kept on this host until the ConfigMap holds it (RECORD_KEEP).
+# After the commit the old keys exist nowhere else: a second run counts
+# `moves 0` and has nothing to build a record from. So the record is written
+# to the keep file before the apply, and removed only after the apply
+# succeeded. When the apply fails, this file exits 1, the runner leaves the
+# task at `pre-done`, and the next deploy's run writes the kept record into
+# the ConfigMap before it counts. The deploy host is the cluster's own VPS,
+# and the keep file lies outside the directory the deploy rsyncs with
+# --delete. The one case that loses a record is a commit whose stream breaks
+# before `record-end` arrives; this file then says so in plain words, and the
+# dump of the harvester database still holds the old keys.
 #
 # It refuses where the harvester deployment's pod has no `deza-keys.js`: the
 # rollout did not happen there. The runner then leaves the task at
@@ -36,18 +58,21 @@
 # Environment overrides:
 #   NAMESPACE     kubernetes namespace (default: luna-shopper)
 #   DEZA_KEYS     command that runs deza-keys.js of the harvester
-#   RECORD_APPLY  command that receives the ConfigMap's YAML on stdin
-#                 (default: kubectl -n <namespace> apply -f -)
+#   RECORD_APPLY  command that receives the ConfigMap's JSON on stdin
+#                 (default: kubectl -n <namespace> apply --server-side
+#                 --force-conflicts --field-manager=release-task-<NNNN> -f -)
+#   RECORD_KEEP   the file that keeps a record until the ConfigMap holds it
+#                 (default: ~/release-task-records/<namespace>-<configmap>.tsv)
 #   WAIT_SECONDS  the pause between two counts while a run is in flight
 #                 (default: 30), and WAIT_ROUNDS the most counts (default: 30)
 #
 # The overrides are for a rehearsal against a local stack. Run it only on a
 # database that you made for the rehearsal. With DEZA_KEYS set the command
-# runs on this machine, so its record is written and read here. Its
-# environment must hold HARVESTER_DB_URL:
+# runs on this machine. Its environment must hold HARVESTER_DB_URL:
 #   ENVIRONMENT=staging \
 #     DEZA_KEYS='node dist/apps/luna-shopper-backend-harvester/deza-keys.js' \
-#     RECORD_APPLY='tee configmap.yaml' \
+#     RECORD_APPLY='tee configmap.json' \
+#     RECORD_KEEP="$PWD/kept-record.tsv" \
 #     bash post.sh
 
 set -euo pipefail
@@ -61,6 +86,11 @@ SVC=luna-shopper-backend-harvester
 CONFIGMAP="release-task-$NUMBER-record"
 WAIT_SECONDS="${WAIT_SECONDS:-30}"
 WAIT_ROUNDS="${WAIT_ROUNDS:-30}"
+if [ -z "${RECORD_KEEP:-}" ] && [ -z "${HOME:-}" ]; then
+  echo "  neither RECORD_KEEP nor HOME is set, so a record has nowhere to wait for its ConfigMap. Nothing was changed." >&2
+  exit 1
+fi
+RECORD_KEEP="${RECORD_KEEP:-$HOME/release-task-records/$NAMESPACE-$CONFIGMAP.tsv}"
 
 # What a command wrote to stderr is kept aside and never read as its answer.
 ERR="$(mktemp)"
@@ -173,11 +203,45 @@ count() {
   fi
 }
 
+# What a failed apply wrote to stderr, with anything shaped like an entry id
+# or a key taken out: an error about the object can quote a piece of it.
+apply_error() {
+  tr -d '\r' < "$ERR" | sed -E 's/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{40}/<id or key>/g'
+}
+
+# Writes a record file into the ConfigMap, replacing the object, and prints
+# its line count. Never a line of it.
+save_record() {
+  local file="$1" lines
+  if ! kubectl create configmap "$CONFIGMAP" -n "$NAMESPACE" \
+    --from-file=record.tsv="$file" \
+    --dry-run=client -o json \
+    | ${RECORD_APPLY:-kubectl -n "$NAMESPACE" apply --server-side --force-conflicts --field-manager="release-task-$NUMBER" -f -} > /dev/null 2> "$ERR"; then
+    return 1
+  fi
+  # The header line is not a row.
+  lines=$(($(wc -l < "$file") - 1))
+  echo "  $2: the record holds $lines lines, in the ConfigMap $CONFIGMAP"
+}
+
+# A record an earlier run kept because its ConfigMap could not be written.
+# It goes in first, before anything is counted or changed.
+save_kept() {
+  [ -f "$RECORD_KEEP" ] || return 0
+  if ! save_record "$RECORD_KEEP" "the record an earlier run kept"; then
+    echo "  the ConfigMap $CONFIGMAP could not be written: $(apply_error)" >&2
+    echo "  The record an earlier run kept stays in $RECORD_KEEP on this host. Nothing was changed." >&2
+    return 1
+  fi
+  rm -f "$RECORD_KEEP"
+}
+
 if ! cmd="$(command_for)"; then exit 1; fi
 if [ "$cmd" = absent ]; then
   echo "  no harvester deployment, so nothing to re-key"
   exit 0
 fi
+if ! save_kept; then exit 1; fi
 
 out='' moves='' active=''
 if ! count; then exit 1; fi
@@ -204,40 +268,72 @@ if [ "$moves" -eq 0 ]; then
   exit 0
 fi
 
-# The pod's /tmp, or a directory of this machine for a rehearsal.
-if [ -n "${DEZA_KEYS:-}" ]; then
-  record="$WORK/run-record.tsv"
+# The run and its record in one exec. Standard output goes to a file: the
+# count lines are printed from it, and the record lines are taken out of it
+# into a file of their own and never printed.
+echo "  re-keying $moves DEZA rows"
+run_out="$WORK/run.out"
+record="$WORK/record.tsv"
+# shellcheck disable=SC2086
+if $cmd --max "$max_moves" --record - > "$run_out" 2> "$ERR"; then
+  status=0
 else
-  record="/tmp/$CONFIGMAP.tsv"
+  status=1
+fi
+printed="$(sed $'/^record\t/d' "$run_out" | tr -d '\r')"
+sed -n $'s/^record\t//p' "$run_out" | tr -d '\r' > "$record"
+printf '%s\n' "$printed" | sed 's/^/    /'
+
+committed="$(count_of committed "$printed")"
+record_end="$(count_of record-end "$printed")"
+whole=false
+if [ -n "$record_end" ] && [ "$(wc -l < "$record")" -eq "$record_end" ]; then
+  whole=true
 fi
 
-echo "  re-keying $moves DEZA rows"
-# shellcheck disable=SC2086
-if ! out="$($cmd --max "$max_moves" --record "$record" 2> "$ERR")"; then
-  printf '%s\n' "$out" | tr -d '\r' | sed 's/^/    /'
+if [ -z "$committed" ]; then
+  # The command prints `committed` first after the commit: without it,
+  # nothing was committed.
   echo "  the run failed: $(cat "$ERR")" >&2
   echo "  One transaction holds every update, so no row was re-keyed. The next deploy" >&2
   echo "  runs this file again." >&2
   exit 1
 fi
-printf '%s\n' "$out" | tr -d '\r' | sed 's/^/    /'
+if [ "$status" -ne 0 ]; then
+  echo "  the run committed and then failed: $(cat "$ERR")" >&2
+fi
 
 # The record of what the run did replaces the one the ConfigMap held. A run
 # that re-keyed nothing leaves it in place.
-rekeyed="$(count_of rekeyed "$out")"
-if [ -n "$rekeyed" ] && [ "$rekeyed" -gt 0 ]; then
-  if [ -n "${DEZA_KEYS:-}" ]; then
-    cp "$record" "$WORK/record.tsv"
-  else
-    kubectl -n "$NAMESPACE" exec "deploy/$SVC" -c "$SVC" -- cat "$record" > "$WORK/record.tsv"
+if [ "$committed" -gt 0 ]; then
+  if [ "$whole" != true ]; then
+    echo "  The run re-keyed $committed DEZA rows and committed, but its record did not arrive whole." >&2
+    echo "  The record of this run is lost: no ConfigMap $CONFIGMAP holds it, and a second run" >&2
+    echo "  counts moves 0. The dump of the harvester database taken before helm upgrade" >&2
+    echo "  still holds every old key." >&2
+    exit 1
   fi
-  kubectl create configmap "$CONFIGMAP" -n "$NAMESPACE" \
-    --from-file=record.tsv="$WORK/record.tsv" \
-    --dry-run=client -o yaml \
-    | ${RECORD_APPLY:-kubectl -n "$NAMESPACE" apply -f -} > /dev/null
-  # The header line is not a row.
-  lines=$(($(wc -l < "$WORK/record.tsv") - 1))
-  echo "  the record holds $lines lines, in the ConfigMap $CONFIGMAP"
+  # Kept on this host first. Once the ConfigMap holds it, the keep file goes.
+  kept=false
+  if mkdir -p "$(dirname "$RECORD_KEEP")" && (umask 077 && cp "$record" "$RECORD_KEEP"); then
+    kept=true
+  fi
+  if ! save_record "$record" "after the run"; then
+    echo "  the ConfigMap $CONFIGMAP could not be written: $(apply_error)" >&2
+    if [ "$kept" = true ]; then
+      echo "  The run re-keyed $committed DEZA rows and committed. Its record is kept in" >&2
+      echo "  $RECORD_KEEP on this host, and the next deploy writes it into the" >&2
+      echo "  ConfigMap before anything else." >&2
+    else
+      echo "  The run re-keyed $committed DEZA rows and committed, and its record could not be" >&2
+      echo "  kept on this host either: the record of this run is lost. The dump of the" >&2
+      echo "  harvester database taken before helm upgrade still holds every old key." >&2
+    fi
+    exit 1
+  fi
+  if [ "$kept" = true ]; then
+    rm -f "$RECORD_KEEP"
+  fi
 fi
 
 # Counted again for the record.
@@ -245,3 +341,4 @@ fi
 if out="$($cmd --count 2> "$ERR")"; then
   echo "  after the run: moves=$(count_of moves "$out") collisions=$(count_of collisions "$out") unkeyed=$(count_of unkeyed "$out")"
 fi
+exit "$status"

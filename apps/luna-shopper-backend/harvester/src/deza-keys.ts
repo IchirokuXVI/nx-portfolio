@@ -25,13 +25,16 @@ import {
  *       `moves-unresolved`, `moves-other`, `collisions` and `active-runs`,
  *       numbers only. Writes nothing.
  *
- *   node deza-keys.js --max <n> [--record <file>]
+ *   node deza-keys.js --max <n> [--record <file> | -]
  *       the same counts, refuses while a run of the chain is in flight, then
  *       re-keys every move that is not a collision in one transaction under a
  *       table lock, and refuses before the commit above <n> moves or when a
- *       count of section 7.1 differs. Prints those counts before and after,
- *       the counts again, and `rekeyed <n>`. Writes the record of section 4.1
- *       to <file> (default /tmp/deza-keys-record.tsv).
+ *       count of section 7.1 differs. After the commit it prints
+ *       `committed <n>`, the counts before and after, the counts again, and
+ *       `rekeyed <n>`. Writes the record of section 4.1 to <file> (default
+ *       /tmp/deza-keys-record.tsv), or with `-` to standard output, right
+ *       after `committed`: each line behind `record` and a tab, then
+ *       `record-end <lines>`. release task 0008 uses `-`.
  *
  * It needs HARVESTER_DB_URL, which the pod already has.
  */
@@ -71,11 +74,15 @@ async function run() {
   }
 }
 
-run().then(
-  () => process.exit(0),
-  (err) => {
-    // The message, not the stack: the release task prints it as its refusal.
-    console.error(describe(err));
-    process.exit(1);
-  }
-);
+// The message, not the stack: the release task prints standard error as its
+// refusal, into a public log. Node prints an uncaught error whole, with every
+// property of it, and a failed query holds its parameters: keys and names.
+// So nothing reaches standard error but `describe`.
+function fail(err: unknown): never {
+  console.error(describe(err));
+  process.exit(1);
+}
+process.on('uncaughtException', fail);
+process.on('unhandledRejection', fail);
+
+run().then(() => process.exit(0), fail);

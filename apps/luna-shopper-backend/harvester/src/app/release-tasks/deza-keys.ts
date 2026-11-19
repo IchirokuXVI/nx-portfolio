@@ -20,7 +20,9 @@ import { entryKey } from '../harvest/matching';
  *
  * **What it prints.** Numbers only. `check.sh` and `post.sh` print the
  * command's output into the deploy log, which is public. The record of
- * section 4.1 holds ids and keys and no name, and goes to a file.
+ * section 4.1 holds ids and keys and no name. It goes to a file, or with
+ * `--record -` to standard output behind {@link RECORD_PREFIX}, which
+ * `post.sh` takes out into a file and never prints.
  */
 
 /** The adapter whose walk keys its rows on the split. */
@@ -53,12 +55,20 @@ export interface Move {
   name: string;
   sizeFormat: string | null;
   /**
-   * Whether section 4 skips it: its new key is held by another row of the
-   * chain, or another moved row gives the same new key.
+   * Whether section 4 skips it: its new key is held by a row that keeps it,
+   * another moved row gives the same new key, or it is on a cycle of moves.
    */
   collision: boolean;
-  /** The id of the row that holds the new key, or null for two moved rows. */
+  /**
+   * The id of the row that holds the new key now, or null for a free key and
+   * for two moved rows.
+   */
   holder: string | null;
+  /**
+   * When the write applies it, or null for a collision: 0 for a free key,
+   * one more than its holder's step when the holder moves out of the key.
+   */
+  step: number | null;
 }
 
 /** What {@link selectMoves} found in one chain, or in several added up. */
@@ -92,10 +102,24 @@ export function descriptionOf(name: string, sizeFormat: string | null): string {
  * 4. The row moves when the key the split builds from its description is not
  *    its stored key.
  *
- * A moved row is a collision when another row of the chain, of any kind,
- * already holds its new key, or when two moved rows give one new key. A
- * holder that would itself move still counts as a holder: the skipped row
- * then moves on a later run, after the holder left the key.
+ * A moved row is a collision when its new key cannot be reached inside one
+ * run. The moves are resolved to a fixed point: a key counts as held only by
+ * a row that keeps it after every move that can be made.
+ *
+ * - **Free.** No row holds the new key: the row moves, at step 0.
+ * - **A chain.** The holder of the new key moves itself, and its move is not
+ *   a collision: the row moves one step after its holder, which has left the
+ *   key by then. A chain of any length thus resolves in one run.
+ * - **Held.** A row that does not move holds the new key: a leaflet row, an
+ *   unkeyed row, a row the split already built, or a moved row that is itself
+ *   a collision. The row is a collision, and so is every row whose chain ends
+ *   on it.
+ * - **Shared.** Two or more moved rows give one new key: each is a collision.
+ * - **A cycle.** A swap, or a longer ring of rows each wanting the next one's
+ *   key: no order of updates frees a key first, so each is a collision.
+ *
+ * The step is the order the write applies the moves in, so that the unique
+ * index `uq_source_catalog_entry` never sees two rows on one key.
  */
 export function selectMoves(rows: StoredRow[]): Selection {
   const holders = new Map<string, string>();
@@ -120,7 +144,6 @@ export function selectMoves(rows: StoredRow[]): Selection {
     if (newKey === row.externalId) {
       continue;
     }
-    const holder = holders.get(newKey) ?? null;
     moves.push({
       id: row.id,
       status: row.status,
@@ -128,8 +151,9 @@ export function selectMoves(rows: StoredRow[]): Selection {
       newKey,
       name: split.name,
       sizeFormat: split.sizeFormat,
-      collision: holder !== null,
-      holder,
+      collision: false,
+      holder: holders.get(newKey) ?? null,
+      step: null,
     });
   }
 
@@ -137,18 +161,76 @@ export function selectMoves(rows: StoredRow[]): Selection {
   for (const move of moves) {
     byNewKey.set(move.newKey, (byNewKey.get(move.newKey) ?? 0) + 1);
   }
+  const shared = (move: Move) => (byNewKey.get(move.newKey) ?? 0) > 1;
+  const moveOf = new Map(moves.map((move) => [move.id, move]));
+
+  // The step of every move, or null for a collision. Each key has one holder
+  // and, outside the shared keys, one row that wants it, so following the
+  // holders from a move is a path: it ends on a free key, on a row that does
+  // not move, or comes back to itself. Walked without recursion, because a
+  // chain can be as long as the chain has rows.
+  const settled = new Map<string, number | null>();
+  for (const start of moves) {
+    const path: Move[] = [];
+    const onPath = new Set<string>();
+    let current = start;
+    let outcome: number | null;
+    for (;;) {
+      const known = settled.get(current.id);
+      if (known !== undefined) {
+        outcome = known;
+        break;
+      }
+      if (onPath.has(current.id)) {
+        // A cycle: every row on it, and every row whose chain reaches it.
+        outcome = null;
+        break;
+      }
+      if (shared(current)) {
+        outcome = null;
+        settled.set(current.id, null);
+        break;
+      }
+      const holder = holders.get(current.newKey);
+      if (holder === undefined) {
+        outcome = 0;
+        settled.set(current.id, 0);
+        break;
+      }
+      const next = moveOf.get(holder);
+      if (!next) {
+        outcome = null;
+        settled.set(current.id, null);
+        break;
+      }
+      path.push(current);
+      onPath.add(current.id);
+      current = next;
+    }
+    for (let i = path.length - 1; i >= 0; i -= 1) {
+      outcome = outcome === null ? null : outcome + 1;
+      settled.set(path[i].id, outcome);
+    }
+  }
+
   for (const move of moves) {
-    if ((byNewKey.get(move.newKey) ?? 0) > 1) {
-      move.collision = true;
+    move.step = settled.get(move.id) ?? null;
+    move.collision = move.step === null;
+    if (shared(move)) {
       move.holder = null;
     }
   }
   return { rows: walkRows, unkeyed, moves };
 }
 
-/** The moves section 4 does not skip: the rows the task re-keys. */
+/**
+ * The moves section 4 does not skip: the rows the task re-keys, in the order
+ * that frees each key before the row that wants it is written.
+ */
 export function rekeyable(selection: Selection): Move[] {
-  return selection.moves.filter((move) => !move.collision);
+  return selection.moves
+    .filter((move) => !move.collision)
+    .sort((a, b) => (a.step ?? 0) - (b.step ?? 0));
 }
 
 /** Two selections added up, for a database with more than one DEZA source. */
@@ -418,12 +500,23 @@ export type DezaKeysOptions =
 export const DEFAULT_RECORD = '/tmp/deza-keys-record.tsv';
 
 /**
- * Reads `--count`, or `--max <n>` with an optional `--record <file>`.
- * Anything else is refused, so a typo never becomes a run without a ceiling.
+ * `--record -`: the record goes to standard output, beside the count lines,
+ * each of its lines behind {@link RECORD_PREFIX}. `post.sh` takes the write
+ * and its record from one `kubectl exec`, so no second call can lose it.
+ */
+export const STREAM_RECORD = '-';
+
+/** What starts each streamed record line. No count line starts with it. */
+export const RECORD_PREFIX = 'record\t';
+
+/**
+ * Reads `--count`, or `--max <n>` with an optional `--record <file>` or
+ * `--record -`. Anything else is refused, so a typo never becomes a run
+ * without a ceiling.
  */
 export function parseDezaKeysArgs(argv: string[]): DezaKeysOptions {
   const usage =
-    'usage: node deza-keys.js --count | --max <n> [--record <file>]';
+    'usage: node deza-keys.js --count | --max <n> [--record <file> | -]';
   if (argv.length === 1 && argv[0] === '--count') {
     return { mode: 'count' };
   }
@@ -560,22 +653,41 @@ export async function runDezaKeysOn(
         `Refused, and nothing was changed: ${difference}.`
       );
     }
-    if (rekeyable(await readSelection(tx, chains)).length > 0) {
+    // Every move was resolved before the first update, chains included, so
+    // nothing the selection would re-key can be left once they are applied.
+    // A row that is, is a selection that disagrees with its own write.
+    const left = rekeyable(await readSelection(tx, chains)).length;
+    if (left > 0) {
       throw new DezaKeysRefusal(
-        'Refused, and nothing was changed: a re-keyed row would move again.'
+        `Refused, and nothing was changed: ${left} rows the selection ` +
+          're-keys are still to re-key after the run.'
       );
     }
     return { before, after, moves: locked.moves, rekeyed: moves.length };
   });
 
+  // The first line after the commit, so a caller that sees it knows the
+  // updates are in, whatever is lost after it.
+  ports.log(`committed ${written.rekeyed}`);
+  if (written.moves.length > 0) {
+    const record = recordOf(written.moves);
+    if (options.record === STREAM_RECORD) {
+      const lines = record.trimEnd().split('\n');
+      for (const line of lines) {
+        ports.log(`${RECORD_PREFIX}${line}`);
+      }
+      // The number of lines streamed, header included, so a caller can tell
+      // a whole record from one cut short.
+      ports.log(`record-end ${lines.length}`);
+    } else {
+      await ports.files.write(options.record, record);
+    }
+  }
   for (const line of snapshotLines(written.before)) {
     ports.log(`before ${line}`);
   }
   for (const line of snapshotLines(written.after)) {
     ports.log(`after ${line}`);
-  }
-  if (written.moves.length > 0) {
-    await ports.files.write(options.record, recordOf(written.moves));
   }
   const now = await readSelection(ports.db, chains);
   for (const line of countLines(now, await readActiveRuns(ports.db, chains))) {
@@ -595,6 +707,11 @@ export function describe(error: unknown): string {
     const code = (error as { code?: unknown }).code;
     if (typeof code === 'string') {
       return `the command failed: ${error.name} ${code}`;
+    }
+    // A failed query with no SQLSTATE, a client side driver error, still
+    // carries the driver's text, and its query and parameters beside it.
+    if ('query' in error || 'driverError' in error) {
+      return `the command failed: ${error.name}`;
     }
     return error.message;
   }

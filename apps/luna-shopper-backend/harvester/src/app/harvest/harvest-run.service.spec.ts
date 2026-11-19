@@ -2473,6 +2473,63 @@ describe('deza keys: the spawn refuses a DEZA walk while a row waits for its key
     expect(store.create).toHaveBeenCalled();
   });
 
+  it('counts a chain of moves as pending before the task, and none after it', async () => {
+    // `end` moves to a key nobody holds, `middle` to the key `end` holds:
+    // the task re-keys both in one run, so both wait for it.
+    const end = storedRow('e-4', 'Zumo', '3 x 187 ml,');
+    const middle = storedRow('e-5', 'Zumo 3 x', '187 ml');
+    const deza = {
+      supermarketId: SUPERMARKET,
+      adapterKey: 'deza-web',
+    } as SupermarketSource;
+
+    const waiting = build({
+      source: { adapterKey: 'deza-web' },
+      dezaRows: [middle, end],
+    });
+    await expect(waiting.service.validateRequest(walk, deza)).rejects.toThrow(
+      dezaKeysRefusal(2)
+    );
+
+    const done = build({
+      source: { adapterKey: 'deza-web' },
+      dezaRows: [
+        storedRow('e-4', 'Zumo 3 x 187 ml,', null),
+        storedRow('e-5', 'Zumo', '3 x 187 ml'),
+      ],
+    });
+    await expect(
+      done.service.validateRequest(walk, deza)
+    ).resolves.toBeDefined();
+  });
+
+  it('lets a DEZA leaflet import through validateRequest while a row waits', async () => {
+    const { service, store, dezaQuery } = build({
+      source: { adapterKey: 'deza-web' },
+      dezaRows: [moving],
+    });
+    const leaflet = {
+      mode: HarvestRunMode.FILE_IMPORT,
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+      supermarketId: SUPERMARKET,
+      priceScopeId: SCOPE,
+      document: harvestDocument(),
+    };
+
+    await expect(
+      service.validateRequest(leaflet, {
+        supermarketId: SUPERMARKET,
+        adapterKey: 'deza-web',
+      } as SupermarketSource)
+    ).resolves.toBeDefined();
+    await service.spawn({ userId: ADMIN, ...leaflet });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: HarvestRunMode.FILE_IMPORT })
+    );
+    expect(dezaQuery).not.toHaveBeenCalled();
+  });
+
   it('never reads for a Mercadona walk', async () => {
     const { service, store, dezaQuery } = build({ dezaRows: [moving] });
 
