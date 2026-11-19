@@ -104,6 +104,7 @@ export {
   queuedByRun,
   runWarningRows,
 } from './lib/harvest/run-warnings';
+export { toSizeDoubt, type SizeDoubt } from './lib/harvest/size-doubt';
 export {
   OFFICIAL_SOURCE_KINDS,
   SOURCE_ENTRY_STATUSES,

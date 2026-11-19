@@ -1536,6 +1536,7 @@
         "sourceKind": "What named it",
         "anyKind": "Anything",
         "brand": "Brand",
+        "sizeDoubt": "Size in doubt",
         "brandKey": "Filtering on the key {{key}}.",
         "brandNoKey": "This text makes no key, so nothing matches it."
       },
@@ -1581,9 +1582,15 @@
         "brand": "Brand",
         "size": "Size",
         "ean": "Barcode",
-        "categoryPath": "Its category",
+        "categoryPath": "Its categories",
         "externalId": "Its id",
         "lastSeen": "Last seen"
+      },
+      "sizeDoubt": {
+        "chip": "Size in doubt",
+        "sentence": "States {{stated}}, its price per {{label}} implies {{implied}}.",
+        "sentenceNoLabel": "States {{stated}}, its prices imply {{implied}}.",
+        "pack": "Perhaps a pack of {{count}} (a guess)."
       },
       "bind": {
         "heading": "Point it at a product we have",

@@ -1810,3 +1810,117 @@ describe('the source products queue, a column and no list', () => {
     expect(page.row()?.id).toBe(before[2]);
   });
 });
+
+/**
+ * A row whose own price and comparison price disprove its size (backend plan
+ * 0249) wears a chip on its identity line and its line of the column, and the
+ * size it states carries a sentence with both sizes (admin plan 0072). The
+ * seeded yogurt states 125 g and its price per kilo implies 500 g.
+ */
+describe('the one queue, a size in doubt', () => {
+  const host = (fixture: ComponentFixture<EntriesQueuePage>): HTMLElement =>
+    fixture.nativeElement;
+
+  it('draws the chip and the sentence on a doubted entry', async () => {
+    const { fixture } = await render({
+      entry: CARREFOUR_YOGUR_ENTRY,
+      chain: CARREFOUR,
+    });
+    const page = fixture.componentInstance;
+
+    expect(
+      host(fixture).querySelector('.identity [data-size-doubt]')?.textContent
+    ).toContain('harvest.entries.sizeDoubt.chip');
+    const sentence = host(fixture).querySelector(
+      '.says [data-size-doubt-sentence]'
+    );
+    expect(sentence?.textContent).toContain(
+      'harvest.entries.sizeDoubt.sentence'
+    );
+    // The sentence sits with the size the row states.
+    expect(sentence?.closest('dd')?.textContent).toContain('125 g');
+    // Asserted as values: the testing translator does not interpolate.
+    expect(page.doubtWords()).toEqual({
+      stated: '125 g',
+      implied: '500 g',
+      label: 'kg',
+    });
+    // Four times the size, and no pack stated: the guess, said as one.
+    expect(page.row()?.sizeDoubt?.packGuess).toBe(4);
+    expect(
+      host(fixture).querySelector('[data-size-doubt-pack]')?.textContent
+    ).toContain('harvest.entries.sizeDoubt.pack');
+  });
+
+  it('draws no pack guess when the ratio is no whole number', async () => {
+    const { fixture } = await render({
+      entry: CARREFOUR_ACEITE_ENTRY,
+      chain: CARREFOUR,
+    });
+
+    expect(
+      host(fixture).querySelector('.identity [data-size-doubt]')
+    ).not.toBeNull();
+    expect(fixture.componentInstance.doubtWords()?.label).toBe('l');
+    expect(host(fixture).querySelector('[data-size-doubt-pack]')).toBeNull();
+  });
+
+  it('draws none of it on an entry nobody doubts', async () => {
+    const { fixture, page } = await opened(MERCADONA);
+
+    expect(page.row()?.sizeDoubt).toBeNull();
+    expect(page.doubtWords()).toBeNull();
+    expect(host(fixture).querySelector('[data-size-doubt]')).toBeNull();
+    expect(
+      host(fixture).querySelector('[data-size-doubt-sentence]')
+    ).toBeNull();
+  });
+
+  it('draws the chip on the line of the doubted row only', async () => {
+    const { fixture } = await render({}, true);
+    await drain();
+    fixture.detectChanges();
+
+    const lines = [
+      ...host(fixture).querySelectorAll('.column button.line'),
+    ] as HTMLElement[];
+    const doubted = lines.filter(
+      (line) => line.querySelector('[data-line-size-doubt]') !== null
+    );
+
+    expect(lines.length).toBeGreaterThan(1);
+    expect(doubted).toHaveLength(1);
+    expect(doubted[0].textContent).toContain('Yogur natural Carrefour 125 g');
+    expect(doubted[0].textContent).toContain('harvest.entries.sizeDoubt.chip');
+  });
+
+  it('narrows the queue to the doubted rows, and widens it back', async () => {
+    const { fixture, calls } = await render();
+    const page = fixture.componentInstance;
+    const box = host(fixture).querySelector(
+      '[data-size-doubt-filter]'
+    ) as HTMLInputElement;
+
+    box.checked = true;
+    box.dispatchEvent(new Event('change'));
+    await drain();
+    fixture.detectChanges();
+
+    expect(named(calls, 'listEntries').at(-1)?.[0]).toMatchObject({
+      sizeDoubt: true,
+    });
+    // The bound olive oil is doubted too, and the queue lists only what waits.
+    expect(page.queue?.items().map((entry) => entry.id)).toEqual([
+      CARREFOUR_YOGUR_ENTRY,
+    ]);
+
+    box.checked = false;
+    box.dispatchEvent(new Event('change'));
+    await drain();
+
+    expect(named(calls, 'listEntries').at(-1)?.[0]).not.toHaveProperty(
+      'sizeDoubt'
+    );
+    expect(page.queue?.items().length).toBeGreaterThan(1);
+  });
+});

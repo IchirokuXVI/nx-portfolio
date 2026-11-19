@@ -1816,6 +1816,12 @@ export interface ListSourceEntriesRequest extends PageQuery, AdminCredential {
    */
   delisted?: boolean;
   /**
+   * True lists only the rows whose size their own price and comparison price
+   * disprove (`sizeDoubtImplied` set, plan 0249), false leaves them out, and
+   * absent lists both (admin plan 0072).
+   */
+  sizeDoubt?: boolean;
+  /**
    * The one row with this id, whatever its status (admin plan 0073). Every
    * other filter given still applies, and with no `status` the default
    * `CANDIDATE` and `UNRESOLVED` clause is not added, because the row a link

@@ -129,3 +129,125 @@ describe('the category paths of a queued row', () => {
     expect(pathsOf([['Cola', 3], 'Cola', [], [7]])).toEqual(['Cola']);
   });
 });
+
+/**
+ * A row whose own price and comparison price disprove its size (backend plan
+ * 0249), read from `unknown` (admin plan 0072). Both sizes come out in the
+ * row's own unit, as the harvester's refusal writes them.
+ */
+describe('the size doubt of a queued row', () => {
+  const doubtOf = (row: Record<string, unknown>) =>
+    toSourceEntryRow({ id: 'entry-1', ...row }, 'en')?.sizeDoubt;
+
+  it('maps a doubt, with the implied size in the row unit', () => {
+    // Mercadona's Ajax: a litre and a fifth stated, a price per millilitre.
+    expect(
+      doubtOf({
+        unitSize: 1.2,
+        sizeUnit: 'LITER',
+        packCount: null,
+        sizeDoubt: {
+          implied: 1.2,
+          unit: 'MILLILITER',
+          ratio: 0.001,
+          label: 'ml',
+          runId: 'run-1',
+        },
+      })
+    ).toEqual({
+      stated: 1.2,
+      implied: 0.0012,
+      unit: 'LITER',
+      ratio: 0.001,
+      label: 'ml',
+      runId: 'run-1',
+      packGuess: null,
+    });
+  });
+
+  it('keeps a base unit row in its own unit', () => {
+    expect(
+      doubtOf({
+        unitSize: 125,
+        sizeUnit: 'GRAM',
+        sizeDoubt: {
+          implied: 500,
+          unit: 'GRAM',
+          ratio: 4,
+          label: 'kg',
+          runId: 'run-1',
+        },
+      })
+    ).toMatchObject({ stated: 125, implied: 500, unit: 'GRAM', packGuess: 4 });
+  });
+
+  it('reads a missing or malformed doubt as none', () => {
+    const doubt = {
+      implied: 500,
+      unit: 'GRAM',
+      ratio: 4,
+      label: null,
+      runId: 'run-1',
+    };
+    const row = { unitSize: 125, sizeUnit: 'GRAM' };
+
+    // A server built before the field, and a row nobody doubts.
+    expect(doubtOf(row)).toBeNull();
+    expect(doubtOf({ ...row, sizeDoubt: null })).toBeNull();
+    expect(doubtOf({ ...row, sizeDoubt: 'yes' })).toBeNull();
+    // A figure missing or not a number, and no run.
+    expect(
+      doubtOf({ ...row, sizeDoubt: { ...doubt, implied: '500' } })
+    ).toBeNull();
+    expect(
+      doubtOf({ ...row, sizeDoubt: { ...doubt, ratio: null } })
+    ).toBeNull();
+    expect(doubtOf({ ...row, sizeDoubt: { ...doubt, runId: '' } })).toBeNull();
+    // No stated size to doubt.
+    expect(doubtOf({ sizeUnit: 'GRAM', sizeDoubt: doubt })).toBeNull();
+    // A base unit that is not the row's dimension is not one size.
+    expect(
+      doubtOf({ unitSize: 1, sizeUnit: 'LITER', sizeDoubt: doubt })
+    ).toBeNull();
+  });
+
+  it('falls back to the base unit for a row that states no unit', () => {
+    expect(
+      doubtOf({
+        unitSize: 30,
+        sizeUnit: null,
+        sizeDoubt: {
+          implied: 1,
+          unit: 'UNIT',
+          ratio: 0.0333,
+          label: 'ud',
+          runId: 'run-1',
+        },
+      })
+    ).toMatchObject({ stated: 30, implied: 1, unit: 'UNIT' });
+  });
+
+  it('guesses a pack for a ratio of 6.01 with no pack count, and not for 6.2', () => {
+    const at = (ratio: number, packCount: number | null = null) =>
+      doubtOf({
+        unitSize: 330,
+        sizeUnit: 'MILLILITER',
+        packCount,
+        sizeDoubt: {
+          implied: 330 * ratio,
+          unit: 'MILLILITER',
+          ratio,
+          label: 'l',
+          runId: 'run-1',
+        },
+      })?.packGuess;
+
+    expect(at(6.01)).toBe(6);
+    expect(at(6.2)).toBeNull();
+    // A row that states its pack gets no guess, as the harvester rules.
+    expect(at(6.01, 6)).toBeNull();
+    // Outside 2 to 48 is no pack at all.
+    expect(at(1.01)).toBeNull();
+    expect(at(49)).toBeNull();
+  });
+});

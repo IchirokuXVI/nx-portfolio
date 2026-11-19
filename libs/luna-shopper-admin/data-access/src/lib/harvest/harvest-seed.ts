@@ -1437,6 +1437,17 @@ export const SOURCE_ENTRY_SEED: readonly Wire.HarvestSourceCatalogEntryView[] =
       confidence: 0,
       decidedAt: null,
       prices: [],
+      // Its price and its price per kilo imply four times the size it states,
+      // the example the run's report names (backend plan 0249). The ratio is
+      // a whole number and the row states no pack, so the queue draws the pack
+      // guess (admin plan 0072).
+      sizeDoubt: {
+        implied: 500,
+        unit: 'GRAM',
+        ratio: 4,
+        label: 'kg',
+        runId: 'run-catalog-reverted',
+      },
     },
     {
       // A walk doubts the size of a decided row too (backend plan 0249), so a
@@ -1472,6 +1483,16 @@ export const SOURCE_ENTRY_SEED: readonly Wire.HarvestSourceCatalogEntryView[] =
       confidence: 1,
       decidedAt: '2026-08-01T09:00:00.000Z',
       prices: [],
+      // Bound and still doubted, as the run's report names it: the product's
+      // panel of source rows draws the chip on it (admin plan 0072). Three
+      // quarters is no whole number, so no pack is guessed.
+      sizeDoubt: {
+        implied: 750,
+        unit: 'MILLILITER',
+        ratio: 0.75,
+        label: 'l',
+        runId: 'run-catalog-reverted',
+      },
     },
   ];
 

@@ -579,6 +579,7 @@ export class AdminHarvestEntriesController {
         query: query.query,
         brandKey: query.brandKey,
         delisted: query.delisted,
+        sizeDoubt: query.sizeDoubt,
         entryId: query.entryId,
         cursor: query.cursor,
         limit: query.limit,

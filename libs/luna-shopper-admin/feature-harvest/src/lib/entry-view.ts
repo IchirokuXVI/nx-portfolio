@@ -1,10 +1,12 @@
 import {
   formatCurrencyAmount,
   toOfficialSourceKind,
+  toSizeDoubt,
   toSourceEntryMatch,
   toSourceEntryStatus,
   unitPriceUnit,
   type OfficialSourceKind,
+  type SizeDoubt,
   type SourceEntryMatch,
   type SourceEntryStatus,
 } from '@portfolio/luna-shopper-admin/models';
@@ -103,6 +105,13 @@ export interface SourceEntryRow {
   readonly lastSeen: string;
   /** The run that last observed it, for a link. `''` when the row predates one. */
   readonly lastRunId: string;
+
+  /**
+   * The size its own price and comparison price disprove (backend plan 0249),
+   * with both sizes in the row's unit, or `null` (admin plan 0072). It never
+   * holds a decision back: the server refuses a create that names no size.
+   */
+  readonly sizeDoubt: SizeDoubt | null;
 }
 
 /**
@@ -179,6 +188,7 @@ export function toSourceEntryRow(
     extra: readExtra(entry['extra']),
     lastSeen: formatInstant(asText(entry['lastSeenAt']) || null, locale),
     lastRunId: asText(entry['lastRunId']),
+    sizeDoubt: toSizeDoubt(entry),
   };
 }
 
