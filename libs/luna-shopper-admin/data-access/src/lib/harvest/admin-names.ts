@@ -1,8 +1,5 @@
 import { inject, Injectable, signal } from '@angular/core';
-import type {
-  ResourcePage,
-  ResourceRow,
-} from '@portfolio/luna-shopper-admin/models';
+import type { ResourcePage, Wire } from '@portfolio/luna-shopper-admin/models';
 import { ADMIN_ADMINS_PATH } from '../directory/directory-paths';
 import {
   RESOURCE_GATEWAYS,
@@ -12,13 +9,13 @@ import {
 /**
  * The accounts of the memory back end, for a run reverted with no server.
  *
- * The same two rows as the People section's seed, by the same ids. The memory
- * gateway keeps one table per path and seeds it from the first source that
- * asks, so whichever screen opens first, both read the same admins. The seed
- * of `feature-people` cannot be imported here: a data access library does not
- * reach into a feature library.
+ * The one copy of these rows: the People section builds its `ADMIN_SEED` from
+ * this array. The memory gateway keeps one table per path and seeds it from
+ * the first source that asks, so two copies that drifted would let the screen
+ * opened first decide what the other shows. A feature library may import data
+ * access, and not the reverse, so the rows live here.
  */
-export const ADMIN_NAME_SEED: readonly ResourceRow[] = [
+export const ADMIN_NAME_SEED: readonly Wire.AdminAuthAdminIdentityView[] = [
   {
     adminId: 'admin-ichiroku',
     username: 'ichiroku',

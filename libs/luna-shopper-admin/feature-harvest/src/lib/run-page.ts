@@ -727,6 +727,15 @@ import {
       text-transform: uppercase;
     }
 
+    /* On a phone the chip sits on the page, whose ground is the surface it
+       takes in the header, so a state with no wash of its own takes the grey
+       of a run that ended, as in the list of runs. Before the washes below,
+       which win at the same weight. */
+    .run-chips .status {
+      background: var(--admin-neutral-wash);
+      color: var(--admin-neutral-on-wash);
+    }
+
     .status.RUNNING,
     .status.PENDING {
       background: var(--admin-accent-wash);
