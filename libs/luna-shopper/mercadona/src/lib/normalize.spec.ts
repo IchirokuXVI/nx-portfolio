@@ -27,6 +27,7 @@ import {
   normalizeCategories,
   normalizeCategoryProducts,
   normalizeProduct,
+  readProductCategoryPaths,
   unavailableProduct,
 } from './normalize';
 import { isImportableSizeFormat, mapSizeFormat } from './units';
@@ -50,6 +51,9 @@ describe('normalizeProduct', () => {
       packCount: null,
       categorySlug: 'oils',
       categoryPath: ['Aceite, especias y salsas', 'Aceite, vinagre y sal'],
+      detailCategoryPaths: [
+        ['Aceite, especias y salsas', 'Aceite, vinagre y sal'],
+      ],
       price: 8.75,
       unitPrice: 8.75,
       unitPriceLabel: 'L',
@@ -587,6 +591,58 @@ describe('the category tree', () => {
       id: 4,
       name: 'Charcutería y quesos',
     });
+  });
+});
+
+describe('every branch of a detail (plan 0268)', () => {
+  const names = (paths: { name: string }[][]) =>
+    paths.map((path) => path.map((node) => node.name));
+
+  it('reads both roots of the pack of wipes', () => {
+    expect(names(readProductCategoryPaths(packOfWipes))).toEqual([
+      ['Cuidado facial y corporal', 'Cuidado corporal', 'Toallitas'],
+      ['Limpieza y hogar', 'Papel higiénico y celulosa', 'Papel higiénico'],
+    ]);
+    expect(readProductCategoryPaths(packOfWipes)[0][0]).toEqual({
+      id: 20,
+      name: 'Cuidado facial y corporal',
+    });
+  });
+
+  it('reads both children under one root of the Russian salad', () => {
+    expect(names(readProductCategoryPaths(approximateWeightPerPiece))).toEqual([
+      ['Pizzas y platos preparados', 'Listo para Comer', 'Platos fríos'],
+      ['Pizzas y platos preparados', 'Platos preparados fríos', 'Ensaladilla'],
+    ]);
+  });
+
+  it('carries every branch on the product and leaves the path of the first alone', () => {
+    const product = normalizeProduct(packOfWipes, { observedAt: OBSERVED_AT });
+    expect(product.categoryPath).toEqual([
+      'Cuidado facial y corporal',
+      'Cuidado corporal',
+      'Toallitas',
+    ]);
+    expect(product.detailCategoryPaths).toEqual([
+      ['Cuidado facial y corporal', 'Cuidado corporal', 'Toallitas'],
+      ['Limpieza y hogar', 'Papel higiénico y celulosa', 'Papel higiénico'],
+    ]);
+  });
+
+  it('reads the detail branches whatever path the walk passed', () => {
+    const product = normalizeProduct(packOfWipes, {
+      observedAt: OBSERVED_AT,
+      categoryPath: [{ id: 1, name: 'A walk path' }],
+    });
+    expect(product.categoryPath).toEqual(['A walk path']);
+    expect(product.detailCategoryPaths).toHaveLength(2);
+  });
+
+  it('reads no branch from a payload with no categories', () => {
+    expect(readProductCategoryPaths({ id: '1' })).toEqual([]);
+    expect(unavailableProduct('1', OBSERVED_AT).detailCategoryPaths).toEqual(
+      []
+    );
   });
 });
 

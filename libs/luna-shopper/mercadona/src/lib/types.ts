@@ -65,6 +65,13 @@ export interface MercadonaProduct {
   /** The path the walk took to reach it, deepest last. Drives the category map. */
   categoryPath: string[];
   /**
+   * Every branch of the detail payload's own `categories`, each root first
+   * and deepest last (plan 0268, section 3). Read from the payload whatever
+   * path the walk passed, and never read by the category map. Empty for a
+   * product the warehouse does not stock.
+   */
+  detailCategoryPaths: string[][];
+  /**
    * `unit_price`: the price of the pack. This is the price. For a product
    * sold by weight it is `bulk_price`, the price of a kilo (plan 0181).
    */
