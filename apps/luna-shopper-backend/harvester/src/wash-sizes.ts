@@ -9,7 +9,7 @@ import { readFile, writeFile } from 'fs/promises';
 import { firstValueFrom, timeout } from 'rxjs';
 import { DataSource } from 'typeorm';
 import {
-  describe,
+  guardOutput,
   parseWashSizesArgs,
   runWashSizes,
   WashSizesRefusal,
@@ -46,7 +46,9 @@ const ASK_TIMEOUT_MS = 30_000;
  *   node wash-sizes.js --review <file>
  *       the same counts, then the review list of the products that still
  *       qualify in <file>, each `planned`, and the notes beside it
- *       (`<file>` with `.notes.tsv` for `.tsv`). No database row.
+ *       (`<file>` with `.notes.tsv` for `.tsv`). No database row. Prints
+ *       `save 1` when a run with no product to correct must still save the
+ *       lists (a recorded `planned` line, or a new note), else `save 0`.
  *
  *   node wash-sizes.js --max <n> --review <file>
  *       the same counts, refuses before any write above <n>, then corrects
@@ -57,7 +59,9 @@ const ASK_TIMEOUT_MS = 30_000;
  *   ... --recorded <file|->
  *       with either list: the ConfigMap earlier runs saved, as
  *       `kubectl get -o json` prints it (`-` reads standard input, empty
- *       means none). Every line it holds stays in the lists written.
+ *       means none). Every line it holds stays in the lists written, and
+ *       each `planned` line whose product catalog now holds with no size and
+ *       as `UNIT` is written `corrected` (the reconcile, which only reads).
  *
  * It needs HARVESTER_DB_URL, NATS_URL and HARVESTER_ACTOR_ID, which the pod
  * already has. Catalog knows that actor as a service (`SERVICE_ACTOR_IDS`).
@@ -120,29 +124,14 @@ async function run() {
   }
 }
 
-/**
- * Prints the one line {@link describe} words and stops. Never the stack, and
- * never the message of an error the command did not word itself: the release
- * task prints this line into a public log.
- */
-function fail(err: unknown): never {
-  console.error(describe(err));
-  process.exit(1);
-}
-
-// Node prints an uncaught error whole, query parameters and all, and a
-// warning with its message. Both go through the same words as any failure.
-process.on('uncaughtException', fail);
-process.on('unhandledRejection', fail);
-process.removeAllListeners('warning');
-process.on('warning', (warning) => {
-  const name = /^[A-Za-z]{1,40}$/.test(warning.name) ? warning.name : 'Warning';
-  const code = (warning as { code?: unknown }).code;
-  console.error(
-    typeof code === 'string' && /^[A-Z0-9_]{1,20}$/.test(code)
-      ? `warning ${name} ${code}`
-      : `warning ${name}`
-  );
-});
+// Prints the one line `describe` words and stops, for an uncaught error and
+// for the command's own failure. Never the stack, and never the message of an
+// error the command did not word itself: the release task prints this line
+// into a public log. A warning prints its class and code only.
+const fail = guardOutput(
+  process,
+  (line) => console.error(line),
+  (code) => process.exit(code)
+);
 
 run().then((failures) => process.exit(failures > 0 ? 1 : 0), fail);

@@ -457,18 +457,23 @@ that size.
 - **Its `check.sh` passes where the pod has no `wash-sizes.js` yet**, because
   this release adds the command. `post.sh` refuses there.
 - **It leaves no marker, and it does not need one.** A corrected product has
-  no size, so a second run counts 0 and writes nothing.
+  no size, so a second run counts 0 and corrects nothing. With nothing to
+  correct it still saves the lists below when a recorded line is `planned`
+  (to confirm it) or it found a note the ConfigMap does not hold yet, and
+  otherwise writes nothing.
 - **It leaves a review list for the curator.** `post.sh` saves it in the
   ConfigMap `release-task-0007-review`, key `review.tsv`: the chain, the
   product, the size it took off, the wash text that qualified it, every size
   text the product's rows state, and last the `outcome`. **The curator fixes
-  the `corrected` lines**: their product lost the size the line names. A
-  `planned` line names a product the task meant to correct and did not (it
-  was saved before the run, and its update has not gone through: it failed,
-  or a person changed the product first). Its product still has the size the
-  line names, unless a person changed it. A later run turns a `planned` line
-  into `corrected` when it corrects the product, and never turns a
-  `corrected` line back. A run never drops a line an earlier run saved.
+  the `corrected` lines**: the product's wash count was taken off. A
+  `planned` line names a product the task meant to correct and has no
+  confirmation that it did, so check the product. An update can go through
+  with no answer that says so: the run stopped before it wrote its lists, the
+  save after it failed, or the answer timed out. So a later run confirms each
+  `planned` line by reading its product: when catalog now holds it as `UNIT`
+  with no size, the line turns `corrected`. A planned line whose product holds
+  any size, or that catalog lacks or merged, stays `planned`. A `corrected`
+  line never goes back. A run never drops a line an earlier run saved.
 - **It notes what it does not correct.** The key `notes.tsv` beside it lists,
   one line per row, the ACTIVE bound rows that look like a wash count and that
   the task leaves alone. The first column names the kind:

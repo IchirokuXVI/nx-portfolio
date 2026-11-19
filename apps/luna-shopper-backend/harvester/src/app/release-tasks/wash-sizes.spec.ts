@@ -3,10 +3,15 @@ import {
   type ItemView,
   type UpdateItemInput,
 } from '@portfolio/luna-shopper/contracts';
+import { EventEmitter } from 'events';
 import {
   chainOf,
+  confirmsCorrection,
   countLines,
   describe as describeFailure,
+  describeWarning,
+  guardOutput,
+  listsToSave,
   mergeList,
   NOTES_SHAPE,
   notesList,
@@ -16,6 +21,9 @@ import {
   readNoteFormat,
   readRecorded,
   readWashFormat,
+  reconcileReview,
+  REVIEW_HEADER,
+  REVIEW_SHAPE,
   reviewList,
   runWashSizes,
   SELECT_STATED_ROWS_SQL,
@@ -947,40 +955,53 @@ describe('wash sizes: lists across runs', () => {
   });
 });
 
+/** Texts a note reads, with the kind and the count. */
+const NOTE_ACCEPTS: [string, string, number][] = [
+  ['pack de 2 unidades de 50 lavados.', 'pack-of-units', 100],
+  ['pack 2 de 50 lavados', 'pack-of-units', 100],
+  ['pack de 3 de 20 lavados', 'pack-of-units', 60],
+  ['2 cajas de 40 lavados', 'pack-of-units', 80],
+  ['pack 2 bolsas 30 lavados.', 'pack-of-units', 60],
+  ['PACK DE 2 UNIDADES DE 50 LAVADOS', 'pack-of-units', 100],
+  ['40lav', 'short-wash-word', 40],
+  ['40 lv.', 'short-wash-word', 40],
+  ['40LV', 'short-wash-word', 40],
+  ['23+12 lavados', 'sum', 35],
+  ['23+12  lavados', 'sum', 35],
+  ['23 + 12lav', 'sum', 35],
+  ['23+12 lv', 'sum', 35],
+  ['23+12lv.', 'sum', 35],
+];
+
+/** Texts no note reads, among them the spacings the prefilter rejects. */
+const NOTE_REJECTS: (string | null)[] = [
+  '40 lavados',
+  '2x40 lavados',
+  'pk 40lav',
+  '40lava',
+  '40 l',
+  '40  lav',
+  '40\tlv',
+  '40lav gel',
+  'caja de 50 lavados',
+  'pack de 2 unidades de 2x50 lavados',
+  'pack de 2 unidades de 28+16 lavados',
+  '23+12 l',
+  '23+12  lav',
+  '23+12\tlv',
+  '23+12 lv',
+  'ud',
+  '',
+  null,
+];
+
 describe('wash sizes: the notes', () => {
-  it.each([
-    ['pack de 2 unidades de 50 lavados.', 'pack-of-units', 100],
-    ['pack 2 de 50 lavados', 'pack-of-units', 100],
-    ['pack de 3 de 20 lavados', 'pack-of-units', 60],
-    ['2 cajas de 40 lavados', 'pack-of-units', 80],
-    ['pack 2 bolsas 30 lavados.', 'pack-of-units', 60],
-    ['40lav', 'short-wash-word', 40],
-    ['40 lv.', 'short-wash-word', 40],
-    ['40LV', 'short-wash-word', 40],
-    ['23+12 lavados', 'sum', 35],
-    ['23 + 12lav', 'sum', 35],
-    ['23+12lv.', 'sum', 35],
-  ])('reads %s as %s of %d', (text, kind, count) => {
+  it.each(NOTE_ACCEPTS)('reads %s as %s of %d', (text, kind, count) => {
     expect(readNoteFormat(text)).toEqual({ kind, count });
     expect(readWashFormat(text)).toBeNull();
   });
 
-  it.each([
-    '40 lavados',
-    '2x40 lavados',
-    'pk 40lav',
-    '40lava',
-    '40 l',
-    '40  lav',
-    '40lav gel',
-    'caja de 50 lavados',
-    'pack de 2 unidades de 2x50 lavados',
-    'pack de 2 unidades de 28+16 lavados',
-    '23+12 l',
-    'ud',
-    '',
-    null,
-  ])('reads no note in %s', (text) => {
+  it.each(NOTE_REJECTS)('reads no note in %s', (text) => {
     expect(readNoteFormat(text)).toBeNull();
   });
 
@@ -1196,6 +1217,22 @@ describe('wash sizes: the wider prefilter', () => {
     }
   });
 
+  it('admits every text a note pattern accepts anywhere in this spec', () => {
+    // A note pattern wider than the prefilter notes a row only when another
+    // row of its product happens to pass, so the two must agree.
+    const prefilter = new RegExp(WASH_PREFILTER, 'i');
+    const texts = [
+      ...NOTE_ACCEPTS.map(([text]) => text),
+      ...NOTE_REJECTS,
+      ...corpus,
+    ];
+    const accepted = texts.filter(
+      (text): text is string => readNoteFormat(text) !== null
+    );
+    expect(accepted.length).toBeGreaterThanOrEqual(NOTE_ACCEPTS.length);
+    expect(accepted.filter((text) => !prefilter.test(text))).toEqual([]);
+  });
+
   it('is the text the SQL asks with', () => {
     expect(WASH_PREFILTER).not.toContain('\\');
     expect(SELECT_WASH_ROWS_SQL).toContain(
@@ -1250,5 +1287,304 @@ describe('wash sizes: what a failure prints', () => {
     );
     expect(describeFailure(error)).not.toMatch(/Nombre/);
     expect(s.log.join('\n')).not.toMatch(/Nombre/);
+  });
+});
+
+/** A review list of whole lines, `[item_id, outcome]` each, chain `deza`. */
+function review(...lines: [string, string][]): string {
+  return (
+    [
+      REVIEW_HEADER.join('\t'),
+      ...lines.map(([id, outcome]) =>
+        [
+          'deza',
+          id,
+          `Detergente ${id}`,
+          '40',
+          'UNIT',
+          '',
+          '40 lavados',
+          'deza: 40 lavados',
+          outcome,
+        ].join('\t')
+      ),
+    ].join('\n') + '\n'
+  );
+}
+
+describe('wash sizes: a corrected line never goes back', () => {
+  it('keeps a recorded corrected line when the next run lists it planned', () => {
+    const recorded = review(['a', 'corrected']);
+    expect(mergeList(REVIEW_SHAPE, recorded, review(['a', 'planned']))).toBe(
+      recorded
+    );
+  });
+
+  it('turns a recorded planned line when the next run lists it corrected', () => {
+    expect(
+      mergeList(
+        REVIEW_SHAPE,
+        review(['a', 'planned']),
+        review(['a', 'corrected'])
+      )
+    ).toBe(review(['a', 'corrected']));
+  });
+});
+
+describe('wash sizes: the reconcile', () => {
+  const recorded = () =>
+    review(
+      ['cleared', 'planned'],
+      ['sized', 'planned'],
+      ['gone', 'planned'],
+      ['merged', 'planned'],
+      ['grams', 'planned'],
+      ['done', 'corrected']
+    );
+  const catalog = () =>
+    new FakeCatalog(
+      new Map(
+        [
+          item('cleared', { unitSize: null }),
+          item('sized', { unitSize: 750 }),
+          item('merged', { unitSize: null, mergedInto: 'sized' }),
+          item('grams', { unitSize: null, defaultUnit: UnitOfMeasure.GRAM }),
+          // A person sized it again after the task: the line stays as it was.
+          item('done', { unitSize: 40 }),
+        ].map((i) => [i.id, i])
+      )
+    );
+
+  it('turns a planned line corrected only when its product holds no size as UNIT', async () => {
+    const c = catalog();
+    const { text, turned } = await reconcileReview(c, recorded());
+    expect(turned).toBe(1);
+    expect(outcomes(text)).toEqual({
+      cleared: 'corrected',
+      sized: 'planned',
+      gone: 'planned',
+      merged: 'planned',
+      grams: 'planned',
+      done: 'corrected',
+    });
+    // Every other cell of the turned line is the recorded one.
+    expect(text).toContain(
+      '\tcleared\tDetergente cleared\t40\tUNIT\t\t40 lavados\t' +
+        'deza: 40 lavados\tcorrected'
+    );
+  });
+
+  it('reads only, and never reads a corrected line', async () => {
+    const c = catalog();
+    const asked: string[] = [];
+    c.beforeRead = (ids) => asked.push(...ids);
+    await reconcileReview(c, recorded());
+    expect(c.updates).toEqual([]);
+    expect(asked).not.toContain('done');
+    expect(asked.sort()).toEqual([
+      'cleared',
+      'gone',
+      'grams',
+      'merged',
+      'sized',
+    ]);
+  });
+
+  it('asks nothing for a list with no planned line', async () => {
+    const c = catalog();
+    const list = review(['done', 'corrected']);
+    expect(await reconcileReview(c, list)).toEqual({ text: list, turned: 0 });
+    expect(await reconcileReview(c, '')).toEqual({ text: '', turned: 0 });
+    expect(c.reads).toBe(0);
+  });
+
+  it('reads a product as catalog answers it', () => {
+    expect(confirmsCorrection(item('a', { unitSize: null }))).toBe(true);
+    expect(confirmsCorrection(item('a', { unitSize: 40 }))).toBe(false);
+    expect(confirmsCorrection(undefined)).toBe(false);
+  });
+
+  it.each(['review', 'write'] as const)(
+    'confirms the planned lines a stopped run left, in --%s',
+    async (mode) => {
+      // The run saved its planned list, then corrected both and stopped
+      // before it wrote its own: the products have no size and the
+      // selection no longer finds them.
+      const s = stack([row('a'), row('b')], [item('a'), item('b')]);
+      await runWashSizes(s.ports, {
+        mode: 'review',
+        file: 'r1.tsv',
+        recorded: null,
+      });
+      s.files.set('cm1.json', configMap(s.files, 'r1.tsv'));
+      s.catalog.items.set('a', item('a', { unitSize: null }));
+      s.catalog.items.set('b', item('b', { unitSize: null }));
+
+      await runWashSizes(
+        s.ports,
+        mode === 'review'
+          ? { mode, file: 'r2.tsv', recorded: 'cm1.json' }
+          : { mode, max: 2, file: 'r2.tsv', recorded: 'cm1.json' }
+      );
+      expect(s.catalog.updates).toEqual([]);
+      expect(outcomes(s.files.get('r2.tsv'))).toEqual({
+        a: 'corrected',
+        b: 'corrected',
+      });
+      // The old size the first run recorded stays on the line.
+      expect(s.files.get('r2.tsv')).toContain('\ta\tDetergente a\t40\tUNIT\t');
+    }
+  );
+
+  it('confirms a line whose update timed out after catalog applied it', async () => {
+    const s = stack([row('a')], [item('a')]);
+    const update = s.catalog.update.bind(s.catalog);
+    s.catalog.update = async (input) => {
+      await update(input);
+      throw new Error('Timeout has occurred');
+    };
+    await runWashSizes(s.ports, {
+      mode: 'write',
+      max: 1,
+      file: 'r1.tsv',
+      recorded: null,
+    });
+    expect(outcomes(s.files.get('r1.tsv'))).toEqual({ a: 'planned' });
+    s.files.set('cm1.json', configMap(s.files, 'r1.tsv'));
+    s.catalog.update = update;
+
+    await runWashSizes(s.ports, {
+      mode: 'review',
+      file: 'r2.tsv',
+      recorded: 'cm1.json',
+    });
+    expect(outcomes(s.files.get('r2.tsv'))).toEqual({ a: 'corrected' });
+    expect(s.log).toContain('save 1');
+  });
+});
+
+describe('wash sizes: what a run with nothing to correct saves', () => {
+  const eljamon = { chain: 'eljamon', adapterKey: 'eljamon-web' };
+  const notes = (...ids: string[]) =>
+    notesList(
+      plan(
+        ids.map((id) => row(id, { ...eljamon, sizeFormat: '40lav' })),
+        ids.map((id) => item(id))
+      ).notes
+    );
+
+  it('saves for a recorded planned line, or a note not recorded yet', () => {
+    expect(listsToSave(1, notes('a'), notes('a'))).toBe(true);
+    expect(listsToSave(0, notes('a'), notes('a', 'b'))).toBe(true);
+    expect(listsToSave(0, '', notes('a'))).toBe(true);
+    expect(listsToSave(0, notes('a', 'b'), notes('a', 'b'))).toBe(false);
+    expect(listsToSave(0, '', '')).toBe(false);
+  });
+
+  it('prints save 1 once for three new notes, then save 0', async () => {
+    const s = stack(
+      [
+        row('a', { ...eljamon, sizeFormat: '40lav' }),
+        row('b', { sizeFormat: '23+12 lavados' }),
+        row('c', { sizeFormat: '23+12 lv' }),
+      ],
+      [item('a'), item('b', { unitSize: 35 }), item('c', { unitSize: 35 })]
+    );
+    await runWashSizes(s.ports, {
+      mode: 'review',
+      file: 'r1.tsv',
+      recorded: null,
+    });
+    expect(s.log).toEqual(expect.arrayContaining(['products 0', 'save 1']));
+    expect(
+      (s.files.get('r1.notes.tsv') ?? '').trimEnd().split('\n')
+    ).toHaveLength(4);
+    s.files.set('cm1.json', configMap(s.files, 'r1.tsv'));
+
+    s.log.length = 0;
+    await runWashSizes(s.ports, {
+      mode: 'review',
+      file: 'r2.tsv',
+      recorded: 'cm1.json',
+    });
+    expect(s.log).toContain('save 0');
+    expect(s.catalog.updates).toEqual([]);
+  });
+
+  it('prints save 0 with no ConfigMap, no note and no product', async () => {
+    const s = stack([row('a', { sizeFormat: '1 l' })], [item('a')]);
+    await runWashSizes(s.ports, {
+      mode: 'review',
+      file: 'r.tsv',
+      recorded: null,
+    });
+    expect(s.log).toContain('save 0');
+  });
+});
+
+describe('wash sizes: what the entry file prints', () => {
+  function guarded() {
+    const target = new EventEmitter();
+    const printed: string[] = [];
+    const exits: number[] = [];
+    target.on('warning', () => printed.push('the default printer ran'));
+    const fail = guardOutput(
+      target,
+      (line) => printed.push(line),
+      (code) => exits.push(code)
+    );
+    return { target, printed, exits, fail };
+  }
+
+  it('prints an uncaught error as its class and code, and exits 1', () => {
+    const g = guarded();
+    g.target.emit(
+      'uncaughtException',
+      Object.assign(new Error('could not update Detergente secreto (0b1c)'), {
+        name: 'QueryFailedError',
+        code: '22P02',
+      })
+    );
+    g.target.emit(
+      'unhandledRejection',
+      new Error('item Detergente secreto timed out')
+    );
+    expect(g.printed).toEqual([
+      'the command failed: QueryFailedError 22P02',
+      'the command failed: Error',
+    ]);
+    expect(g.exits).toEqual([1, 1]);
+  });
+
+  it('prints a warning that names a product as its class and code only', () => {
+    const g = guarded();
+    g.target.emit(
+      'warning',
+      Object.assign(new Error('Detergente secreto is slow'), {
+        name: 'DeprecationWarning',
+        code: 'DEP0005',
+      })
+    );
+    g.target.emit(
+      'warning',
+      Object.assign(new Error('x'), { name: 'Detergente secreto', code: 'a b' })
+    );
+    expect(g.printed).toEqual([
+      'warning DeprecationWarning DEP0005',
+      'warning Warning',
+    ]);
+    expect(describeWarning('Detergente secreto')).toBe('warning Warning');
+    expect(g.exits).toEqual([]);
+  });
+
+  it('answers the failure handler the command uses for its own rejection', () => {
+    const g = guarded();
+    g.fail(new WashSizesRefusal('Refused: 3 products'));
+    g.fail({ code: 'validation_failed', message: 'Detergente secreto' });
+    expect(g.printed).toEqual([
+      'Refused: 3 products',
+      'the command failed: validation_failed',
+    ]);
+    expect(g.exits).toEqual([1, 1]);
   });
 });

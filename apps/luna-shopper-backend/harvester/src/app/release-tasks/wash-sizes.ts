@@ -52,8 +52,14 @@ import {
  * command reads the ConfigMap the earlier runs saved (`--recorded`) and keeps
  * each of its lines as it stands, old size and all, adding only the lines it
  * does not hold yet ({@link mergeList}). The one change a later run makes to a
- * recorded line is the review list's `outcome`, from `planned` to `corrected`,
- * once that product's update went through.
+ * recorded line is the review list's `outcome`, from `planned` to `corrected`.
+ *
+ * `planned` means the task meant to correct the product and has no
+ * confirmation that it did: check the product. `corrected` means the
+ * product's wash count was taken off. An update can go through with no answer
+ * that says so (a run stopped after it, or an answer that timed out), so every
+ * run that is given recorded lists confirms their planned lines by reading
+ * the product ({@link reconcileReview}).
  */
 
 /** The chain whose per wash packs are noted and never corrected. */
@@ -144,9 +150,11 @@ const SHORT_WASH_WORD = /^(\d+) ?(?:lav|lv)\.?$/i;
 
 /**
  * A bonus pack printed as a sum of washes: `N+M lavados`, `N+Mlav` or
- * `N+Mlv`, spaces allowed around the `+`, at most a full stop after.
+ * `N+Mlv`, spaces allowed around the `+`, at most a full stop after. The
+ * short words take at most one space after the number, as
+ * {@link WASH_PREFILTER} admits them; `lavados` takes any.
  */
-const WASH_SUM = /^(\d+)\s*\+\s*(\d+)\s*(?:lavados?|lav|lv)\.?$/i;
+const WASH_SUM = /^(\d+)\s*\+\s*(\d+)(?:\s*lavados?| ?(?:lav|lv))\.?$/i;
 
 /** The kind of note a row's printed text has, and the size it would state. */
 export interface NoteFormat {
@@ -847,17 +855,28 @@ export async function runWashSizes(
   // when the lists are written after the updates.
   mergeList(REVIEW_SHAPE, recorded.review, '');
   mergeList(NOTES_SHAPE, recorded.notes, '');
+  // Whether there is anything to save is decided on the lists as they were
+  // recorded, before the reconcile reads catalog.
+  const plannedBefore = plannedIdsOf(recorded.review).length;
+  const reconciled: RecordedLists = {
+    ...recorded,
+    review: (await reconcileReview(ports.catalog, recorded.review)).text,
+  };
   if (options.mode === 'review') {
     // Nothing is written to a database, so every line this run adds is
-    // `planned`. A line an earlier run recorded keeps its outcome.
-    await writeLists(
+    // `planned`. A line an earlier run recorded keeps its outcome, except a
+    // planned line the reconcile confirmed.
+    const written = await writeLists(
       ports,
       options.file,
       reviewList(plan.corrections),
       plan.notes,
-      recorded
+      reconciled
     );
     ports.log(`review ${plan.corrections.length}`);
+    ports.log(
+      `save ${listsToSave(plannedBefore, recorded.notes, written.notes) ? 1 : 0}`
+    );
     return 0;
   }
 
@@ -907,7 +926,7 @@ export async function runWashSizes(
     options.file,
     reviewList(listed, done),
     plan.notes,
-    recorded
+    reconciled
   );
   ports.log(`corrected ${done.size}`);
   ports.log(`skipped ${skipped}`);
@@ -949,12 +968,106 @@ async function writeLists(
   review: string,
   notes: Note[],
   recorded: RecordedLists
-): Promise<void> {
+): Promise<RecordedLists> {
   // Both merged before either is written, so a refusal writes neither.
   const reviewText = mergeList(REVIEW_SHAPE, recorded.review, review);
   const notesText = mergeList(NOTES_SHAPE, recorded.notes, notesList(notes));
   await ports.files.write(file, reviewText);
   await ports.files.write(notesPathOf(file), notesText);
+  return { review: reviewText, notes: notesText };
+}
+
+/** The column of the review list that holds the outcome. */
+const OUTCOME = REVIEW_HEADER.length - 1;
+
+/** The lines of a list below its header, each split into its cells. */
+function linesOf(text: string): string[][] {
+  return text
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .slice(1)
+    .map((line) => line.replace(/\r$/, '').split('\t'));
+}
+
+/** The product of each `planned` line of a review list. */
+export function plannedIdsOf(review: string): string[] {
+  return linesOf(review)
+    .filter((cells) => cells[OUTCOME] === 'planned')
+    .map((cells) => cells[1]);
+}
+
+/**
+ * Whether the product a `planned` line names now shows that its wash count
+ * was taken off: catalog has it, unmerged, `UNIT`, with no size. A product
+ * that holds any size, or that catalog lacks or merged, confirms nothing.
+ */
+export function confirmsCorrection(item: ItemView | undefined): boolean {
+  return (
+    item !== undefined &&
+    !item.mergedInto &&
+    item.defaultUnit === UnitOfMeasure.UNIT &&
+    (item.unitSize === null || item.unitSize === undefined)
+  );
+}
+
+/**
+ * The reconcile: each `planned` line of a recorded review list is read again
+ * from catalog with the same read the selection uses, and becomes
+ * `corrected` when its product confirms it ({@link confirmsCorrection}). The
+ * size the line names is then gone, which is what the curator acts on. Every
+ * other line stays as it stands, and a `corrected` line is never read.
+ * Reads only: it sends no update. Answers the list and how many lines turned.
+ */
+export async function reconcileReview(
+  catalog: CatalogPort,
+  review: string
+): Promise<{ text: string; turned: number }> {
+  const planned = linesOf(review).filter(
+    (cells) => cells[OUTCOME] === 'planned'
+  );
+  if (planned.length === 0) {
+    return { text: review, turned: 0 };
+  }
+  const items = await readItems(
+    catalog,
+    planned.map((cells) => cells[1])
+  );
+  const turned = planned
+    .filter((cells) => confirmsCorrection(items.get(cells[1])))
+    .map((cells) =>
+      cells.map((value, i) => (i === OUTCOME ? 'corrected' : value))
+    );
+  if (turned.length === 0) {
+    return { text: review, turned: 0 };
+  }
+  // The shape's own replacement turns each held `planned` line.
+  const next = table(
+    REVIEW_HEADER,
+    turned.map((cells) => ({
+      chain: REVIEW_SHAPE.groupOf(cells),
+      name: REVIEW_SHAPE.nameOf(cells),
+      cells,
+    }))
+  );
+  return { text: mergeList(REVIEW_SHAPE, review, next), turned: turned.length };
+}
+
+/**
+ * Whether a run with no product to correct must still save the lists
+ * (`post.sh`, on `products 0`): when the recorded review list held a
+ * `planned` line, which the reconcile may have confirmed, or when the notes
+ * of this run hold a line the recorded notes do not. Otherwise nothing is
+ * saved and an earlier ConfigMap stays as it is.
+ */
+export function listsToSave(
+  plannedRecorded: number,
+  recordedNotes: string,
+  mergedNotes: string
+): boolean {
+  return (
+    plannedRecorded > 0 ||
+    linesOf(mergedNotes).length > linesOf(recordedNotes).length
+  );
 }
 
 interface Line {
@@ -1031,6 +1144,55 @@ export function describe(error: unknown): string {
       : null;
   const what = [name, code].filter((part) => part !== null).join(' ');
   return what ? `the command failed: ${what}` : 'the command failed';
+}
+
+/**
+ * The line printed for a process warning: its class name and its code, never
+ * its message, which can quote a value (a deprecation names the call, a
+ * listener leak names the emitter).
+ */
+export function describeWarning(warning: unknown): string {
+  const raw =
+    warning && typeof warning === 'object'
+      ? (warning as { name?: unknown; code?: unknown })
+      : {};
+  const name =
+    typeof raw.name === 'string' && /^[A-Za-z]{1,40}$/.test(raw.name)
+      ? raw.name
+      : 'Warning';
+  return typeof raw.code === 'string' && /^[A-Z0-9_]{1,20}$/.test(raw.code)
+    ? `warning ${name} ${raw.code}`
+    : `warning ${name}`;
+}
+
+/** The part of `process` {@link guardOutput} hooks into. */
+export interface GuardedProcess {
+  on(event: string, listener: (value: unknown) => void): unknown;
+  removeAllListeners(event: string): unknown;
+}
+
+/**
+ * Routes everything Node would print on its own through the words above.
+ * Node prints an uncaught error whole, query parameters and all, and a
+ * warning with its message; after this an uncaught error prints
+ * {@link describe} and exits 1, and a warning prints
+ * {@link describeWarning}. Answers the failure handler, for the command's own
+ * rejection.
+ */
+export function guardOutput(
+  target: GuardedProcess,
+  printError: (line: string) => void,
+  exit: (code: number) => void
+): (error: unknown) => void {
+  const fail = (error: unknown) => {
+    printError(describe(error));
+    exit(1);
+  };
+  target.on('uncaughtException', fail);
+  target.on('unhandledRejection', fail);
+  target.removeAllListeners('warning');
+  target.on('warning', (warning) => printError(describeWarning(warning)));
+  return fail;
 }
 
 /** A Postgres error's SQLSTATE, five letters or digits, which names nothing. */

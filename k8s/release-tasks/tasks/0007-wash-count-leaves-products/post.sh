@@ -27,14 +27,18 @@
 # (`--recorded -`, on standard input), and the command keeps every line it
 # holds, with the old size it recorded, adding only lines it does not hold yet
 # (`mergeList` in the harvester, which the specs prove). The review list's last
-# column, `outcome`, says where a line stands: `planned` when it was saved
-# before the run and its update has not gone through, `corrected` once the
-# update did. A `planned` line becomes `corrected` in a later run that
-# corrects the product, and a `corrected` line never goes back. A run that
-# fails after correcting some products and the run that finishes them thus
-# leave every product on the list, once, with its outcome. It prints line
-# counts and the ConfigMap's name, never a line of either list: the deploy log
-# is public.
+# column, `outcome`, says where a line stands. `corrected`: the product's wash
+# count was taken off. `planned`: the task meant to correct this product and
+# has no confirmation that it did, so check the product. A run can correct a
+# product and not learn it (it stops before it writes its lists, the save
+# after it fails, an answer times out), so a later run confirms each planned
+# line by reading its product: a product catalog now holds as `UNIT` with no
+# size turns the line `corrected`. A planned line whose product holds any
+# size, or that catalog lacks or merged, stays `planned`. A `corrected` line
+# never goes back. A run that fails after correcting some products and the run
+# that finishes them thus leave every product on the list, once, with its
+# outcome. It prints line counts and the ConfigMap's name, never a line of
+# either list: the deploy log is public.
 #
 # A ConfigMap whose keys do not start with this task's headers (an earlier
 # shape of the task, or a file of an earlier rehearsal) is refused before any
@@ -47,8 +51,11 @@
 # `pre-done`, and the next deploy runs this file again.
 #
 # Safe to run again. A corrected product has no size, so it no longer matches
-# the selection, and a second run counts 0 and writes nothing. It does nothing
-# where there is no harvester deployment.
+# the selection, and a second run counts 0 and corrects nothing. With nothing
+# to correct it still saves the lists when a recorded line is `planned` (to
+# confirm it) or this run found a note the ConfigMap does not hold, and
+# otherwise writes nothing. It does nothing where there is no harvester
+# deployment.
 #
 # Environment overrides:
 #   NAMESPACE     kubernetes namespace (default: luna-shopper)
@@ -196,11 +203,6 @@ if [ "$products" -gt "$max" ]; then
   echo "  $products products sized by a wash count, above the ceiling of $max. Nothing was changed." >&2
   exit 1
 fi
-if [ "$products" -eq 0 ]; then
-  echo "  no product holds a wash count as its size, so nothing to change"
-  exit 0
-fi
-
 # The pod's /tmp, or a directory of this machine for a rehearsal.
 if [ -n "${WASH_SIZES:-}" ]; then
   list="$WORK/run-review.tsv"
@@ -260,6 +262,29 @@ if ! recorded_lists > "$recorded"; then
   exit 1
 fi
 
+# With nothing to correct, the lists are still written once: the command
+# confirms each recorded `planned` line by reading its product, and adds the
+# notes this run found. It prints `save 1` when there is something to keep (a
+# recorded `planned` line, or a note the ConfigMap does not hold yet), and
+# only then is the ConfigMap replaced. Otherwise an earlier one stays as it is.
+if [ "$products" -eq 0 ]; then
+  echo "  no product holds a wash count as its size, so nothing to change"
+  # shellcheck disable=SC2086
+  if ! out="$($cmd_in --review "$list" --recorded - < "$recorded" 2> "$ERR")"; then
+    echo "  the lists could not be written, and nothing was changed: $(cat "$ERR")" >&2
+    exit 1
+  fi
+  save="$(count_of save "$out")"
+  if [ -z "$save" ]; then
+    echo "  the review run printed no answer to whether the lists are saved" >&2
+    exit 1
+  fi
+  if [ "$save" -gt 0 ]; then
+    save_lists "with nothing to correct"
+  fi
+  exit 0
+fi
+
 # The list of what is about to change goes in first, every line `planned`. A
 # run that stops after its writes and before its own list is saved thus still
 # leaves every product it may have corrected on the list, with its old size.
@@ -285,9 +310,10 @@ fi
 
 # A run that printed `corrected` finished its loop and wrote its list: every
 # line earlier runs saved, and every product it counted, `corrected` where its
-# update went through and `planned` where it did not. That replaces the list
+# update was answered and `planned` where it was not. That replaces the list
 # above. A run that printed no `corrected` stopped before its list, so the
-# list above stays, every line of this run `planned`.
+# list above stays, every line of this run `planned`, and the next run
+# confirms those lines by reading their products.
 corrected="$(count_of corrected "$out")"
 if [ -n "$corrected" ]; then
   save_lists "after the run"
