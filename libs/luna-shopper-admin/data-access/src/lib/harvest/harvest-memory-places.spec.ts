@@ -18,6 +18,11 @@ const CARREFOUR = 'place-carrefour-1';
 const ALDI = 'place-aldi-1';
 /** A place that carries the key of Dia, a chain the catalog holds. */
 const DIA = 'place-dia-1';
+/**
+ * A place that carries the key of Dia and prints `Maxi Dia`, a name no chain
+ * of the catalog carries. Only the key resolves it.
+ */
+const MAXI_DIA = 'place-dia-2';
 /** A place with no key that prints Deza, the name of a chain the catalog holds. */
 const DEZA = 'place-osm-deza';
 
@@ -226,7 +231,7 @@ describe('HarvestMemory, a link', () => {
 
   it('resolves the chain of a place by its key', async () => {
     const error = await refusal(
-      new HarvestMemory().linkPlace(DIA, {
+      new HarvestMemory().linkPlace(MAXI_DIA, {
         supermarketLocationId: 'loc_sierra',
       })
     );
