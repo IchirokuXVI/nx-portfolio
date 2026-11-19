@@ -1,3 +1,5 @@
+> **PR:** [#1015](https://github.com/IchirokuXVI/nx-portfolio/pull/1015)
+
 # 0268: an entry carries every path its chain files it under
 
 > Asked by the owner on 2026-11-11, and checked against `origin/dev` on 2026-11-11. A chain
