@@ -1612,7 +1612,7 @@
             "name": "verified",
             "required": false,
             "in": "query",
-            "description": "True for confirmed addresses only. False is unconfirmed **and** absent: an account with no address has not confirmed one, and an operator looking for unconfirmed accounts wants it in the answer.",
+            "description": "True for confirmed addresses only. False is unconfirmed **and** absent: an account with no address has not confirmed one, and an operator looking for unconfirmed accounts wants it in the answer. Parsed strictly: the string `false` is false.",
             "schema": {
               "type": "boolean"
             }
@@ -5153,7 +5153,7 @@
             "name": "served",
             "required": false,
             "in": "query",
-            "description": "True for codes with at least one shop, false for those with none. Omitted is every code, which is the default because a listing that hid the empty ones would hide the coverage gap it exists to show.",
+            "description": "True for codes with at least one shop, false for those with none. Omitted is every code, which is the default because a listing that hid the empty ones would hide the coverage gap it exists to show. Parsed strictly: the string `false` is false.",
             "schema": {
               "type": "boolean"
             }
@@ -10109,7 +10109,7 @@
             "name": "includeArchived",
             "required": false,
             "in": "query",
-            "description": "Include archived baskets, which the default listing leaves out without deleting them.",
+            "description": "Include archived baskets, which the default listing leaves out without deleting them. Parsed strictly: the string `false` is false.",
             "schema": {
               "type": "boolean"
             }
@@ -12339,7 +12339,7 @@
             "name": "revokeParticipants",
             "required": false,
             "in": "query",
-            "description": "Also revoke everybody this link let in. Without it the link stops accepting new people and every existing participant keeps working, which is the common case: stop it spreading, do not throw out the people in the shop.",
+            "description": "Also revoke everybody this link let in. Without it the link stops accepting new people and every existing participant keeps working, which is the common case: stop it spreading, do not throw out the people in the shop. Parsed strictly: the string `false` is false.",
             "schema": {
               "type": "boolean"
             }
@@ -14967,7 +14967,7 @@
             "name": "includeExcluded",
             "required": false,
             "in": "query",
-            "description": "Include what you have refused, flagged. The screen that edits those choices is the caller that asks for it; every other caller is offering a shop.",
+            "description": "Include what you have refused, flagged. The screen that edits those choices is the caller that asks for it; every other caller is offering a shop. Parsed strictly: the string `false` is false.",
             "schema": {
               "type": "boolean"
             }
@@ -15075,7 +15075,7 @@
             "name": "includeExcluded",
             "required": false,
             "in": "query",
-            "description": "Include what you have refused, flagged. The screen that edits those choices is the caller that asks for it; every other caller is offering a shop.",
+            "description": "Include what you have refused, flagged. The screen that edits those choices is the caller that asks for it; every other caller is offering a shop. Parsed strictly: the string `false` is false.",
             "schema": {
               "type": "boolean"
             }
@@ -18425,7 +18425,7 @@
             "name": "merged",
             "required": false,
             "in": "query",
-            "description": "Only the products that were merged into another one, each with its own name, brand and size and with `mergedInto` naming the survivor. Absent or false lists the live products: a merged product is never in a list or a search otherwise.",
+            "description": "Only the products that were merged into another one, each with its own name, brand and size and with `mergedInto` naming the survivor. Absent or false lists the live products: a merged product is never in a list or a search otherwise. Parsed strictly: the string `false` is false.",
             "schema": {
               "type": "boolean"
             }
@@ -22176,7 +22176,7 @@
             "name": "stale",
             "required": false,
             "in": "query",
-            "description": "The rows shown on sufferance: nothing eligible prices them, so the newest row of any kind is shown and flagged (plan 0080, section 5).",
+            "description": "The rows shown on sufferance: nothing eligible prices them, so the newest row of any kind is shown and flagged (plan 0080, section 5). Parsed strictly: the string `false` is false.",
             "schema": {
               "type": "boolean"
             }
@@ -22185,7 +22185,7 @@
             "name": "available",
             "required": false,
             "in": "query",
-            "description": "The scope wide flag, not the per store override on a location item.",
+            "description": "The scope wide flag, not the per store override on a location item. Parsed strictly: the string `false` is false.",
             "schema": {
               "type": "boolean"
             }

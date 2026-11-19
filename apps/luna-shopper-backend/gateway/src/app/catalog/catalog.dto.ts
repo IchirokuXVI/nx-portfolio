@@ -22,7 +22,7 @@ import {
   SECTION_SLUG_MAX_LENGTH,
   UnitOfMeasure,
 } from '@portfolio/luna-shopper/contracts';
-import { PageQueryDto } from '@portfolio/luna-shopper/platform';
+import { asQueryFlag, PageQueryDto } from '@portfolio/luna-shopper/platform';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -1511,19 +1511,6 @@ export class SearchOrderQueryDto extends PageQueryDto {
 const MAX_SELECTORS = 20;
 
 /**
- * A flag as a query string spells it: `?flag=true`, or bare `?flag`, which
- * arrives as an empty string and means the caller set it. Anything else is
- * handed on untouched, so `@IsBoolean` refuses it rather than reading it as
- * false, which is what a typo deserves.
- */
-export const asBoolean = ({ value }: { value: unknown }) => {
-  if (value === '' || value === 'true' || value === true) {
-    return true;
-  }
-  return value === 'false' || value === false ? false : value;
-};
-
-/**
  * Where the caller shops, for the reads that return items or prices (plan 0048
  * section 3.1, and plan 0049 section 3).
  *
@@ -1760,10 +1747,10 @@ export class ShopQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'Include what you have refused, flagged. The screen that edits those choices is the caller that asks for it; every other caller is offering a shop.',
+      'Include what you have refused, flagged. The screen that edits those choices is the caller that asks for it; every other caller is offering a shop. Parsed strictly: the string `false` is false.',
   })
   @IsOptional()
-  @Transform(asBoolean)
+  @Transform(asQueryFlag)
   @IsBoolean()
   includeExcluded?: boolean;
 }

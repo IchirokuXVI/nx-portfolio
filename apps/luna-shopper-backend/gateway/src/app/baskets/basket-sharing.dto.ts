@@ -2,8 +2,8 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   BASKET_SHARING_LIMITS,
 } from '@portfolio/luna-shopper/contracts';
-import { MAX_PAGE_SIZE } from '@portfolio/luna-shopper/platform';
-import { Type } from 'class-transformer';
+import { asQueryFlag, MAX_PAGE_SIZE } from '@portfolio/luna-shopper/platform';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsInt,
@@ -43,9 +43,10 @@ export const BASKET_SUGGEST_QUERY_MAX_LENGTH = 120;
 export class RevokeShareLinkDto {
   @ApiPropertyOptional({
     description:
-      'Also revoke everybody this link let in. Without it the link stops accepting new people and every existing participant keeps working, which is the common case: stop it spreading, do not throw out the people in the shop.',
+      'Also revoke everybody this link let in. Without it the link stops accepting new people and every existing participant keeps working, which is the common case: stop it spreading, do not throw out the people in the shop. Parsed strictly: the string `false` is false.',
   })
   @IsOptional()
+  @Transform(asQueryFlag)
   @IsBoolean()
   revokeParticipants?: boolean;
 }
