@@ -1,3 +1,5 @@
+> **PR:** [#1014](https://github.com/IchirokuXVI/nx-portfolio/pull/1014)
+
 # 0074: the run page fits a phone and names who reverted a run
 
 > Four findings from the screenshots of PR #972 (admin plan `0071`), taken on 2026-11-11 at
