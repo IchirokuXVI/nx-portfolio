@@ -2,7 +2,10 @@ import { provideLocationMocks } from '@angular/common/testing';
 import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter } from '@angular/router';
-import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuTranslatorService,
+  RokuTranslatorTestingModule,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   DEPLOYMENT_SERVICE,
   DeploymentStore,
@@ -134,6 +137,11 @@ interface Around {
   readonly compact?: boolean;
   /** The rows of `GET /v1/admin/admins`, or `'fail'` for a refused read. */
   readonly admins?: readonly unknown[] | 'fail';
+  /**
+   * Writes the words for a key, for a case about the copy itself. The testing
+   * translator answers the key and ignores the values.
+   */
+  readonly words?: (key: string, values?: Record<string, unknown>) => string;
 }
 
 async function render(
@@ -190,6 +198,23 @@ async function render(
           split: signal(false),
         },
       },
+      ...(around.words === undefined
+        ? []
+        : [
+            {
+              provide: RokuTranslatorService,
+              useValue: {
+                loaded: signal(true),
+                locale: signal('en'),
+                t: (
+                  key: string,
+                  _ns?: string,
+                  _locale?: string,
+                  values?: Record<string, unknown>
+                ) => around.words?.(key, values) ?? key,
+              },
+            },
+          ]),
       ...(around.admins === undefined
         ? []
         : [
@@ -1166,9 +1191,160 @@ describe('RunPage, what a walk did not read', () => {
       '[data-categories]',
       '[data-detail-stage]',
       '[data-sizes]',
+      '[data-unslotted-only]',
     ]) {
       expect(part(fixture, selector)).toBeNull();
     }
+    fixture.componentInstance.watch.stop();
+  });
+});
+
+/**
+ * The DIA products whose every leaf has no category of ours (backend plan
+ * 0268, section 5), drawn in the report section (admin plan 0071, section 2).
+ * The copy goes through a real i18next on `en.json`, because the testing
+ * translator answers the key and the plural is the point.
+ */
+describe('RunPage, the DIA products only in leaves with no slug', () => {
+  let words: (key: string, values?: Record<string, unknown>) => string;
+
+  beforeAll(async () => {
+    const { readFileSync } = await import('fs');
+    const { resolve } = await import('path');
+    const i18next = (await import('i18next')).default;
+    const file = resolve(__dirname, '../../../ui/assets/i18n/en.json');
+    const instance = i18next.createInstance();
+    await instance.init({
+      lng: 'en',
+      interpolation: { escapeValue: false },
+      resources: {
+        en: { translation: JSON.parse(readFileSync(file, 'utf8')) },
+      },
+    });
+    words = (key, values) => instance.t(key, values ?? {});
+  });
+
+  function walk(report: Record<string, unknown>): HarvestRun {
+    return run({
+      status: 'COMPLETED',
+      finishedAt: '2026-09-03T09:30:00.000Z',
+      report,
+    });
+  }
+
+  const block = (fixture: ComponentFixture<RunPage>) =>
+    fixture.nativeElement.querySelector(
+      '[data-unslotted-only]'
+    ) as HTMLElement | null;
+
+  const said = (element: Element | null | undefined) =>
+    (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
+  const EXAMPLES = [
+    'Paleta de cebo ibérica loncheada',
+    'Queso curado de oveja cuña',
+    'Lomo ibérico de bellota',
+    'Tabla de quesos variados',
+    'Chorizo ibérico cular',
+  ];
+
+  it('draws the count, one line a leaf and its examples', async () => {
+    const fixture = await render(
+      walk({
+        unslottedOnly: {
+          products: 9,
+          leaves: [
+            {
+              id: 'L2222',
+              rootName: 'Especial Navidad',
+              name: 'Ibéricos y quesos',
+              products: 7,
+              examples: EXAMPLES.map((name, i) => ({
+                externalId: `28000${i}`,
+                name,
+              })),
+            },
+            {
+              id: 'L2255',
+              rootName: 'Especial Navidad',
+              name: 'Platos especiales',
+              products: 2,
+              examples: [],
+            },
+          ],
+        },
+      }),
+      undefined,
+      { words: (key, values) => words(key, values) }
+    );
+
+    const drawn = block(fixture);
+    expect(fixture.componentInstance.hasReport()).toBe(true);
+    expect(said(drawn?.querySelector('h3'))).toBe(
+      'Products only in chain categories we do not map'
+    );
+    expect(said(drawn?.querySelector('p'))).toBe(
+      '9 products sit only in chain categories with no category of ours. They wait as uncategorised.'
+    );
+    const leaves = [
+      ...(drawn?.querySelectorAll('[data-unslotted-leaf]') ?? []),
+    ];
+    expect(leaves).toHaveLength(2);
+    expect(said(leaves[0])).toContain(
+      'Especial Navidad / Ibéricos y quesos: 7 products'
+    );
+    expect(said(leaves[0].querySelector('[data-unslotted-examples]'))).toBe(
+      `For example: ${EXAMPLES.join(', ')}`
+    );
+    expect(said(leaves[1])).toBe(
+      'Especial Navidad / Platos especiales: 2 products'
+    );
+    expect(leaves[1].querySelector('[data-unslotted-examples]')).toBeNull();
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('reads one product in the singular', async () => {
+    const fixture = await render(
+      walk({
+        unslottedOnly: {
+          products: 1,
+          leaves: [
+            {
+              id: 'L2255',
+              rootName: 'Especial Navidad',
+              name: 'Platos especiales',
+              products: 1,
+              examples: [{ externalId: '282840', name: 'Cordero asado' }],
+            },
+          ],
+        },
+      }),
+      undefined,
+      { words: (key, values) => words(key, values) }
+    );
+
+    const drawn = block(fixture);
+    expect(said(drawn?.querySelector('p'))).toBe(
+      '1 product sits only in chain categories with no category of ours. It waits as uncategorised.'
+    );
+    expect(said(drawn?.querySelector('[data-unslotted-leaf]'))).toBe(
+      'Especial Navidad / Platos especiales: 1 product For example: Cordero asado'
+    );
+    fixture.componentInstance.watch.stop();
+  });
+
+  it.each([
+    ['absent', {}],
+    ['not an object', { unslottedOnly: 'nine' }],
+    ['a count that is not a number', { unslottedOnly: { products: '9' } }],
+    ['zero products', { unslottedOnly: { products: 0, leaves: [] } }],
+  ])('draws nothing for a block that is %s', async (_case, report) => {
+    const fixture = await render(walk(report), undefined, {
+      words: (key, values) => words(key, values),
+    });
+
+    expect(block(fixture)).toBeNull();
+    expect(fixture.componentInstance.hasReport()).toBe(false);
     fixture.componentInstance.watch.stop();
   });
 });

@@ -23,6 +23,8 @@ const CARREFOUR = '22222222-2222-4222-8222-222222222222';
 const DEZA = '33333333-3333-4333-8333-333333333333';
 /** A chain with no source row here, for its walk on the run screen alone. */
 const ELJAMON = '88888888-8888-4888-8888-888888888881';
+/** A chain with no source row here, for its walk on the run screen alone. */
+const DIA = '44444444-4444-4444-8444-444444444441';
 
 /**
  * The scopes a price belongs to, fixed so a spec can name one.
@@ -479,6 +481,73 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
       detail: { pages: 3402, failed: 92, timeouts: 17, silentAttempts: 4 },
     },
     correlationId: 'seed-correlation-7',
+    requestedByUserId: null,
+    revertedAt: null,
+    revertedByUserId: null,
+    revertedPriceCount: null,
+  },
+  {
+    // A DIA walk (backend plan 0268, section 5): the products whose every leaf
+    // has no category of ours, by leaf, the first five of each as examples.
+    id: 'run-dia-completed',
+    supermarketId: DIA,
+    sourceId: null,
+    mode: 'CATALOG_DISCOVERY',
+    trigger: 'MANUAL',
+    status: 'COMPLETED',
+    requestedAt: '2026-08-28T20:00:00.000Z',
+    startedAt: '2026-08-28T20:00:02.000Z',
+    finishedAt: '2026-08-28T20:31:10.000Z',
+    heartbeatAt: '2026-08-28T20:31:10.000Z',
+    totalPlanned: 5738,
+    processed: 5738,
+    created: 5702,
+    updated: 0,
+    unchanged: 0,
+    notFound: 0,
+    skipped: 0,
+    failed: 0,
+    stage: null,
+    stageLabel: null,
+    warnings: [],
+    documentSha256: null,
+    abortRequestedAt: null,
+    error: null,
+    report: {
+      listed: 5738,
+      unslottedOnly: {
+        products: 9,
+        leaves: [
+          {
+            id: 'L2222',
+            rootName: 'Especial Navidad',
+            name: 'Ibéricos y quesos',
+            products: 7,
+            examples: [
+              {
+                externalId: '279931',
+                name: 'Paleta de cebo ibérica loncheada',
+              },
+              { externalId: '280112', name: 'Queso curado de oveja cuña' },
+              { externalId: '280455', name: 'Lomo ibérico de bellota' },
+              { externalId: '281030', name: 'Tabla de quesos variados' },
+              { externalId: '281207', name: 'Chorizo ibérico cular' },
+            ],
+          },
+          {
+            id: 'L2255',
+            rootName: 'Especial Navidad',
+            name: 'Platos especiales',
+            products: 2,
+            examples: [
+              { externalId: '282840', name: 'Cordero asado al horno' },
+              { externalId: '282901', name: 'Canelones de carne' },
+            ],
+          },
+        ],
+      },
+    },
+    correlationId: 'seed-correlation-dia',
     requestedByUserId: null,
     revertedAt: null,
     revertedByUserId: null,
