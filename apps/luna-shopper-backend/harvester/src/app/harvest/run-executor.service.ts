@@ -44,7 +44,10 @@ import {
 } from './delisting';
 import { DelistingService } from './delisting.service';
 import { DiscoveredPlaceService } from './discovered-place.service';
-import { FileImportRunner } from './file-import.runner';
+import {
+  FileImportRunner,
+  type FileImportCounters,
+} from './file-import.runner';
 import { HarvestRunStore } from './harvest-run.store';
 import { PriceScopeResolver } from './price-scope-resolver';
 import { refusalPolicyOf, stopSentence } from './refusal-policy';
@@ -500,7 +503,7 @@ export class RunExecutor implements OnApplicationShutdown {
 
       // What a file import's ingest counted. A file import has no sink, so this
       // is the one path whose prices the report can learn about no other way.
-      let imported: SourceIngestCounters | null = null;
+      let imported: FileImportCounters | null = null;
 
       // A runner that throws after an abort still reported what it read,
       // and the sink holds the last partial chunk of it (plan 0215,
@@ -657,6 +660,9 @@ export class RunExecutor implements OnApplicationShutdown {
           // Plan 0249: sizes their own prices disprove, held for a person.
           sizesDisproved: imported.sizesDisproved,
           probablePackCounts: imported.probablePackCounts,
+          // Plan 0268, section 3: rows whose category paths this import
+          // changed, under the key a walk's report uses.
+          categoryPathsWritten: imported.categoryPathsWritten,
         });
       }
       if (thrownAfterAbort) {

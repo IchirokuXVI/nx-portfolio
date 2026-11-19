@@ -67,9 +67,14 @@ function row(options: {
   brand?: string;
   size?: string;
   won?: string;
+  /** `wonCategoryBreadcrumbs` of the row's `meta`, by name (plan 0268). */
+  breadcrumbs?: string[][];
 }): Record<string, unknown> {
   return {
     gridbox: {
+      ...(options.breadcrumbs
+        ? { meta: { wonCategoryBreadcrumbs: crumbs(options.breadcrumbs) } }
+        : {}),
       data: {
         productId: options.id,
         category: options.category,
@@ -90,6 +95,18 @@ function row(options: {
   };
 }
 
+/** Paths of names as the chain prints a breadcrumb list: nodes, root first. */
+function crumbs(paths: string[][]): unknown[] {
+  return paths.map((path) =>
+    path.map((name, i) => ({
+      id: `${name.length}${i}`,
+      name,
+      url: '/c/x',
+      hiddenCategory: false,
+    }))
+  );
+}
+
 /** One product page's state, with a price per region group. */
 function product(options: {
   id: string;
@@ -97,6 +114,11 @@ function product(options: {
   /** The size the page prints, verbatim. */
   size?: string;
   groups?: Array<{ priceId: string; regions: string[]; price: number | null }>;
+  /**
+   * The page's `wonCategoryBreadcrumbs`, by name (plan 0268). Absent leaves
+   * the list out of the page, as the pages captured before November do.
+   */
+  breadcrumbs?: string[][];
 }): string {
   const regionsV2: Record<string, unknown> = {};
   const regionsPrices: Record<string, unknown> = {};
@@ -137,6 +159,9 @@ function product(options: {
             storeFacts: { retail: true, online: false },
             regionsV2,
             regionsPrices,
+            ...(options.breadcrumbs
+              ? { wonCategoryBreadcrumbs: crumbs(options.breadcrumbs) }
+              : {}),
           },
         },
       },
@@ -858,6 +883,164 @@ describe('LidlCatalogRunner', () => {
       expect(failing.dropped).toBe(0);
       expect(failing.wholeListings).toEqual([]);
       expect(failing.notWhole).toEqual([]);
+    });
+  });
+
+  describe('every path a product is filed under (plan 0268)', () => {
+    const QUESO = [
+      'Mundos de necesidad',
+      'Comida y cerca de la comida',
+      'Quesos, productos lácteos y huevos',
+      'Queso',
+    ];
+    const SHOP = ['Alimentación', 'Quesos'];
+    const AUTUMN = ['Especial otoño'];
+    const priced = [{ priceId: 'a', regions: ['1'], price: 2.5 }];
+
+    const callFor = (externalId: string) =>
+      report.categoryPathCalls.find((call) => call.externalId === externalId);
+
+    it('gives a product its need world path and every breadcrumb, in that order, as REPLACE', async () => {
+      const run = context();
+      const runner = new TestRunner({
+        index: [
+          row({ id: '1', title: 'Queso', category: 'Food' }),
+          row({ id: '2', title: 'Leche', category: 'Food' }),
+        ],
+        products: {
+          '/p/x/p1': product({
+            id: '1',
+            groups: priced,
+            breadcrumbs: [SHOP, AUTUMN],
+          }),
+          // The page states the list, and it is empty.
+          '/p/x/p2': product({ id: '2', groups: priced, breadcrumbs: [] }),
+        },
+      });
+      let callsAtFlush = -1;
+      (run.flush as jest.Mock).mockImplementation(async () => {
+        callsAtFlush = report.categoryPathCalls.length;
+      });
+
+      await runner.run(run, report, { supermarketId: CHAIN }, source());
+
+      expect(callFor('1')).toEqual({
+        externalId: '1',
+        paths: [QUESO, SHOP, AUTUMN],
+        mode: 'REPLACE',
+      });
+      expect(callFor('2')).toEqual({
+        externalId: '2',
+        paths: [QUESO],
+        mode: 'REPLACE',
+      });
+      // One call a product.
+      expect(report.categoryPathCalls).toHaveLength(2);
+      // `categoryPath` is what it was, and the first path of the call.
+      const observed = report.products.find(
+        (observation) => observation.externalId === '1'
+      );
+      expect(observed?.categoryPath).toEqual(QUESO);
+      expect(observed?.categoryPath).toEqual(callFor('1')?.paths[0]);
+      // No observation carries the paths.
+      for (const observation of report.products) {
+        expect(observation).not.toHaveProperty('categoryPaths');
+      }
+      // Made at the end of the walk, before the run flushes and the sink
+      // drains.
+      expect(callsAtFlush).toBe(2);
+    });
+
+    it('takes the breadcrumbs of the index row for a page that prints none, as ADD', async () => {
+      const runner = new TestRunner({
+        index: [
+          row({
+            id: '1',
+            title: 'Queso',
+            category: 'Food',
+            breadcrumbs: [SHOP],
+          }),
+        ],
+        // A page that leaves the list out, as every page captured before
+        // November does.
+        products: { '/p/x/p1': product({ id: '1', groups: priced }) },
+      });
+
+      await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: '1', paths: [QUESO, SHOP], mode: 'ADD' },
+      ]);
+    });
+
+    it('says ADD for a page that states its need world path and leaves the list out', async () => {
+      const runner = new TestRunner({
+        index: [row({ id: '1', title: 'Queso', category: 'Food' })],
+        products: { '/p/x/p1': product({ id: '1', groups: priced }) },
+      });
+
+      await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: '1', paths: [QUESO], mode: 'ADD' },
+      ]);
+    });
+
+    it('makes no call for a product whose page did not answer', async () => {
+      const runner = new TestRunner({
+        index: [
+          row({ id: '1', title: 'Queso', category: 'Food' }),
+          row({ id: '2', title: 'Uva', category: 'F+V' }),
+        ],
+        products: {
+          '/p/x/p1': product({ id: '1', groups: priced, breadcrumbs: [] }),
+          '/p/x/p2': 500,
+        },
+      });
+
+      await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+      expect(report.categoryPathCalls.map((call) => call.externalId)).toEqual([
+        '1',
+      ]);
+    });
+
+    it('says ADD for every product when the run was aborted', async () => {
+      const controller = new AbortController();
+      const runner = new TestRunner(
+        {
+          index: [
+            row({ id: '1', title: 'Queso', category: 'Food' }),
+            row({ id: '2', title: 'Uva', category: 'F+V' }),
+            row({ id: '3', title: 'Leche', category: 'Food' }),
+          ],
+          products: {
+            '/p/x/p1': product({ id: '1', groups: priced, breadcrumbs: [] }),
+            '/p/x/p2': product({ id: '2', groups: priced, breadcrumbs: [] }),
+            '/p/x/p3': product({ id: '3', groups: priced, breadcrumbs: [] }),
+          },
+        },
+        (path) => {
+          if (path === '/p/x/p2') {
+            controller.abort();
+          }
+        }
+      );
+
+      await runner.run(
+        context(controller.signal),
+        report,
+        { supermarketId: CHAIN },
+        source()
+      );
+
+      expect(report.categoryPathCalls.map((call) => call.externalId)).toEqual([
+        '1',
+        '2',
+      ]);
+      expect(
+        report.categoryPathCalls.every((call) => call.mode === 'ADD')
+      ).toBe(true);
     });
   });
 });

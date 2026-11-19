@@ -73,6 +73,7 @@ function row(overrides: Partial<LidlListRow> = {}): LidlListRow {
     brand: 'Solevita',
     siteCategory: 'F+V',
     categoryPath: [],
+    categoryBreadcrumbs: null,
     path: '/p/uva-blanca-sabores-sin-semillas/p11029954',
     sizeFormat: '400 g',
     listPrice: 1.69,

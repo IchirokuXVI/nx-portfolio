@@ -47,6 +47,7 @@ function emptyRow(externalId: string): LidlListRow {
     brand: null,
     siteCategory: '',
     categoryPath: [],
+    categoryBreadcrumbs: null,
     path: null,
     sizeFormat: null,
     listPrice: null,
@@ -95,6 +96,9 @@ describe('normalizeListPage', () => {
         'Quesos, productos lácteos y huevos',
         'Leche y nata',
       ],
+      // The index states the list and files this row nowhere in the online
+      // shop tree (plan 0268).
+      categoryBreadcrumbs: [],
       path: '/p/vemondo-bebida-de-almendras-con-calcio/p11038145',
       sizeFormat: '4x1 / l',
       listPrice: 3.49,
@@ -282,6 +286,127 @@ describe('normalizeProduct', () => {
   it('reads a page with no payload as no product', () => {
     expect(readFixture([], '11029954')).toBeNull();
     expect(readFixture(productShortCode, '404040')).toBeNull();
+  });
+});
+
+describe('every path a product is filed under (plan 0268)', () => {
+  const page = normalizeListPage(searchPage);
+  const NEED_WORLD_QUESO = [
+    'Mundos de necesidad',
+    'Comida y cerca de la comida',
+    'Quesos, productos lácteos y huevos',
+    'Queso',
+  ];
+
+  it('reads the online shop breadcrumbs the index prints beside a row', () => {
+    const kitchen = page.rows.find((row) => row.externalId === '11110760');
+
+    // In `meta`, not in `data`: the breadcrumb is the one path the row has
+    // in the online shop tree.
+    expect(kitchen?.categoryBreadcrumbs).toEqual([
+      ['Hogar y decoración', 'Cocina'],
+    ]);
+  });
+
+  it('reads a row that prints no breadcrumb list as stating none', () => {
+    const [almonds] = page.rows;
+    const data = (
+      searchPage as { items: Array<{ gridbox: { data: unknown } }> }
+    ).items[0].gridbox.data;
+
+    expect(almonds.categoryBreadcrumbs).toEqual([]);
+    expect(normalizeListRow(data)?.categoryBreadcrumbs).toBeNull();
+  });
+
+  it('gives a product the breadcrumbs of its index row as a second path', () => {
+    const kitchen = page.rows.find((row) => row.externalId === '11110760');
+    // This page was captured before LIDL printed the list on a product page,
+    // so the row's breadcrumbs are what is known.
+    const product = readFixture(productShortCode, '11029954', {
+      categoryBreadcrumbs: kitchen?.categoryBreadcrumbs ?? null,
+    });
+
+    expect(product?.categoryPaths).toEqual([
+      product?.categoryPath,
+      ['Hogar y decoración', 'Cocina'],
+    ]);
+    expect(product?.categoryPaths[0]).toEqual(product?.categoryPath);
+    // The page did not state the list itself, so the paths prove nothing
+    // about a path stored before.
+    expect(product?.categoryPathsStated).toBe(false);
+  });
+
+  it('gives a product with no breadcrumb one path, stated by its page', () => {
+    // Captured on 2026-11-05, when the page states the list, and it is empty.
+    const product = readFixture(productApproximateWeight, '11031963');
+
+    expect(product?.categoryPaths).toEqual([
+      [
+        'Mundos de necesidad',
+        'Comida y cerca de la comida',
+        'Carne y aves',
+        'Carne de cerdo',
+      ],
+    ]);
+    expect(product?.categoryPathsStated).toBe(true);
+  });
+
+  it('takes the page list over the row list, even when the page list is empty', () => {
+    const product = readFixture(productApproximateWeight, '11031963', {
+      categoryBreadcrumbs: [['Hogar y decoración', 'Cocina']],
+    });
+
+    expect(product?.categoryPaths).toHaveLength(1);
+  });
+
+  it('gives a product with no path at all no paths', () => {
+    expect(
+      normalizeProduct(
+        { keyfacts: {} },
+        { row: emptyRow('1'), observedAt: OBSERVED_AT }
+      )?.categoryPaths
+    ).toEqual([]);
+  });
+
+  it('keeps a hidden node and every breadcrumb, root first, without repeats', () => {
+    const product = normalizeProduct(
+      {
+        keyfacts: {
+          wonCategoryPrimary: NEED_WORLD_QUESO.join('/'),
+        },
+        wonCategoryBreadcrumbs: [
+          [
+            { id: '1', name: 'Alimentación', hiddenCategory: false },
+            { id: '2', name: 'Quesos', hiddenCategory: true },
+          ],
+          [{ id: '3', name: 'Especial otoño', hiddenCategory: false }],
+          [{ id: '3', name: 'Especial otoño', hiddenCategory: false }],
+          [{ id: '4', name: '' }],
+          'not a path',
+        ],
+      },
+      { row: emptyRow('1'), observedAt: OBSERVED_AT }
+    );
+
+    expect(product?.categoryPaths).toEqual([
+      NEED_WORLD_QUESO,
+      ['Alimentación', 'Quesos'],
+      ['Especial otoño'],
+    ]);
+    expect(product?.categoryPathsStated).toBe(true);
+  });
+
+  it('says a page that states no need world path did not state its paths', () => {
+    const product = normalizeProduct(
+      { keyfacts: {}, wonCategoryBreadcrumbs: [] },
+      {
+        row: { ...emptyRow('1'), categoryPath: NEED_WORLD_QUESO },
+        observedAt: OBSERVED_AT,
+      }
+    );
+
+    expect(product?.categoryPaths).toEqual([NEED_WORLD_QUESO]);
+    expect(product?.categoryPathsStated).toBe(false);
   });
 });
 

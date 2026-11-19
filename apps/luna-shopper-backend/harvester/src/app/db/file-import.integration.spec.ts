@@ -5,6 +5,7 @@ import {
   ItemSourceMatch,
   PriceSourceKind,
   SourceEntryStatus,
+  type HarvestDocument,
 } from '@portfolio/luna-shopper/contracts';
 import {
   describeIntegration,
@@ -18,8 +19,13 @@ import {
   SourceEntryPrice,
 } from '../entities';
 import type { CatalogClient } from '../harvest/catalog-client.service';
+import { FileImportRunner } from '../harvest/file-import.runner';
+import { entryKey } from '../harvest/matching';
 import type { PlatformAdminService } from '../harvest/platform-admin.service';
+import { PriceScopeResolver } from '../harvest/price-scope-resolver';
+import type { RunContext } from '../harvest/run-context';
 import { SourceEntryService } from '../harvest/source-entry.service';
+import { SourceIngest } from '../harvest/source-ingest';
 import type { SupermarketSourceService } from '../harvest/supermarket-source.service';
 
 /**
@@ -521,6 +527,78 @@ describeIntegration('the one source product schema (real Postgres)', () => {
       const remaining = await prices.find({ where: { runId: LATER_RUN } });
       expect(remaining).toHaveLength(1);
       expect(await prices.find({ where: { runId: RUN } })).toEqual([]);
+    });
+  });
+
+  describe('the one category path of a product (plan 0268)', () => {
+    /** The import over the real ingest, as `RunExecutor` builds it. */
+    function importer(): FileImportRunner {
+      const catalog = {
+        listAllPriceScopes: async () => [],
+        searchItems: async () => ({ items: [], nextCursor: null }),
+        addPrices: async () => ({ written: 0, confirmed: 0, declined: [] }),
+        findItemByEan: async () => ({ item: null }),
+      } as unknown as CatalogClient;
+      return new FileImportRunner(
+        new SourceIngest(entries, prices, catalog),
+        new PriceScopeResolver(catalog)
+      );
+    }
+
+    function importContext(document: HarvestDocument): RunContext {
+      return {
+        runId: RUN,
+        run: { id: RUN, input: { document } },
+        signal: new AbortController().signal,
+        setStage: async () => undefined,
+        setTotalPlanned: async () => undefined,
+        report: async () => undefined,
+        advance: async () => undefined,
+        warn: () => undefined,
+        flush: async () => undefined,
+      } as unknown as RunContext;
+    }
+
+    it('adds the document path after the stored ones, and writes none for a product with none', async () => {
+      const WALKED = ['Alimentación', 'Bebidas', 'Cervezas'];
+      const LEAFLET = ['Bebidas'];
+      const known = await entries.save(
+        row({
+          externalId: entryKey('Cerveza Alhambra Tradicional', 'lata 33 cl'),
+          categoryPaths: [WALKED],
+        })
+      );
+
+      const counters = await importer().run(
+        importContext({
+          schema_version: 1,
+          sha256: DIGEST,
+          producer: { name: MARK, produced_at: '2026-09-04T18:02:11Z' },
+          products: [
+            {
+              name: 'Cerveza Alhambra Tradicional',
+              size: { label: 'lata 33 cl' },
+              category_path: LEAFLET,
+            },
+            { name: 'Pan de molde', size: { label: '500 g' } },
+          ],
+        }),
+        {
+          supermarketId: CHAIN,
+          priceScopeId: NORTH,
+          sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+          adapterKey: null,
+        }
+      );
+
+      const stored = await entries.find({ where: { supermarketId: CHAIN } });
+      const byName = new Map(stored.map((each) => [each.name, each]));
+      // ADD: one leaflet has not shown that the walked shelf is gone.
+      expect(byName.get(known.name)?.categoryPaths).toEqual([WALKED, LEAFLET]);
+      // A row the import created keeps the column default until a path
+      // is written, and a product with none writes none.
+      expect(byName.get('Pan de molde')?.categoryPaths).toEqual([]);
+      expect(counters.categoryPathsWritten).toBe(1);
     });
   });
 });
