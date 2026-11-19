@@ -275,6 +275,7 @@ describe('the one queue, with no chain chosen', () => {
       'entry-galletas',
       'entry-leche-leaflet',
       CARREFOUR_YOGUR_ENTRY,
+      'entry-huevos',
     ]);
   });
 
@@ -323,12 +324,13 @@ describe('the one queue, with no chain chosen', () => {
       'entry-milk',
       'entry-bread',
       'entry-leche-leaflet',
+      'entry-huevos',
     ]);
 
     page.open('');
     await drain();
     fixture.detectChanges();
-    expect(page.queue?.items().length).toBe(6);
+    expect(page.queue?.items().length).toBe(7);
   });
 
   /**
@@ -1865,6 +1867,22 @@ describe('the one queue, a size in doubt', () => {
     expect(host(fixture).querySelector('[data-size-doubt-pack]')).toBeNull();
   });
 
+  it('words a row sized in units through the plural of a count', async () => {
+    const { fixture, page } = await opened(MERCADONA);
+
+    page.openRow('entry-huevos');
+    fixture.detectChanges();
+
+    expect(page.row()?.id).toBe('entry-huevos');
+    // The testing translator answers the key: the count goes through the
+    // plural, and the label reads as the harvester keys it.
+    expect(fixture.componentInstance.doubtWords()).toEqual({
+      stated: 'harvest.entries.sizeDoubt.units',
+      implied: 'harvest.entries.sizeDoubt.units',
+      label: 'ud',
+    });
+  });
+
   it('draws none of it on an entry nobody doubts', async () => {
     const { fixture, page } = await opened(MERCADONA);
 
@@ -1876,7 +1894,7 @@ describe('the one queue, a size in doubt', () => {
     ).toBeNull();
   });
 
-  it('draws the chip on the line of the doubted row only', async () => {
+  it('draws the chip on the lines of the doubted rows only', async () => {
     const { fixture } = await render({}, true);
     await drain();
     fixture.detectChanges();
@@ -1889,8 +1907,9 @@ describe('the one queue, a size in doubt', () => {
     );
 
     expect(lines.length).toBeGreaterThan(1);
-    expect(doubted).toHaveLength(1);
+    expect(doubted).toHaveLength(2);
     expect(doubted[0].textContent).toContain('Yogur natural Carrefour 125 g');
+    expect(doubted[1].textContent).toContain('Huevos frescos camperos L');
     expect(doubted[0].textContent).toContain('harvest.entries.sizeDoubt.chip');
   });
 
@@ -1912,6 +1931,7 @@ describe('the one queue, a size in doubt', () => {
     // The bound olive oil is doubted too, and the queue lists only what waits.
     expect(page.queue?.items().map((entry) => entry.id)).toEqual([
       CARREFOUR_YOGUR_ENTRY,
+      'entry-huevos',
     ]);
 
     box.checked = false;

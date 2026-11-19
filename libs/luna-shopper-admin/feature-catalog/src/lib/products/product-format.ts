@@ -166,10 +166,17 @@ export function formatSize(
  * litre row that a price per millilitre disproves implies `0.0012 L`, and
  * three decimals would print a size it does not imply.
  *
+ * A row sized in units has no short word, so `units` words its count: the
+ * caller passes the translator's plural, which is handed the count as a number
+ * to choose the form by and the figure in the locale's format to print
+ * (`30 units`, `1 unit`, `1.5 units`).
+ *
  * `label` is the price label as the chain printed it, with a leading `€/`
- * left off, since the sentence already says "price per": the harvester keys
- * its label table the same way (backend plan 0249). `''` for none, which picks
- * the sentence that names no label.
+ * left off, since the sentence already says "price per", lower cased and with
+ * one trailing full stop dropped, as the harvester keys its label table
+ * (backend plan 0249, `labelKey`): `KILO` reads `kilo` and `100 ML.` reads
+ * `100 ml`. The word stays the chain's. `''` for none, which picks the
+ * sentence that names no label.
  */
 export function formatSizeDoubt(
   doubt: {
@@ -178,7 +185,8 @@ export function formatSizeDoubt(
     readonly unit: string;
     readonly label: string | null;
   },
-  locale: string
+  locale: string,
+  units: (count: number, figure: string) => string
 ): {
   readonly stated: string;
   readonly implied: string;
@@ -189,11 +197,20 @@ export function formatSizeDoubt(
   });
   const word = UNIT_WORDS[doubt.unit] ?? '';
   const size = (value: number): string =>
-    word === '' ? number.format(value) : `${number.format(value)} ${word}`;
+    doubt.unit === 'UNIT'
+      ? units(value, number.format(value))
+      : word === ''
+        ? number.format(value)
+        : `${number.format(value)} ${word}`;
   return {
     stated: size(doubt.stated),
     implied: size(doubt.implied),
-    label: (doubt.label ?? '').replace(/^\s*(€|eur)\s*\/\s*/i, '').trim(),
+    label: (doubt.label ?? '')
+      .replace(/^\s*(€|eur)\s*\/\s*/i, '')
+      .trim()
+      .toLowerCase()
+      .replace(/\.$/, '')
+      .trim(),
   };
 }
 
