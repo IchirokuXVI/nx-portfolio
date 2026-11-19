@@ -45,7 +45,6 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { asBoolean } from '../catalog/catalog.dto';
 
 /**
  * What an operator may type into a postal code field.
@@ -743,9 +742,10 @@ export class HarvestRunListQueryDto extends PageQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'Reverted runs only, or unreverted runs only (plan 0082). Absent lists both. A filter of its own rather than a status, because a revert does not change how the run ended.',
+      'Reverted runs only, or unreverted runs only (plan 0082). Absent lists both. A filter of its own rather than a status, because a revert does not change how the run ended. Parsed strictly: the string `false` is false.',
   })
   @IsOptional()
+  @Transform(asQueryFlag)
   @IsBoolean()
   reverted?: boolean;
 
@@ -957,10 +957,10 @@ export class PostalCodeDiscoveryListQueryDto extends PageQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'Omitted lists the working set, which is the codes nobody has dismissed. True lists the dismissed ones alone, so one can be found and put back.',
+      'Omitted lists the working set, which is the codes nobody has dismissed. True lists the dismissed ones alone, so one can be found and put back. Parsed strictly: the string `false` is false.',
   })
   @IsOptional()
-  @Transform(asBoolean)
+  @Transform(asQueryFlag)
   @IsBoolean()
   dismissed?: boolean;
 }
