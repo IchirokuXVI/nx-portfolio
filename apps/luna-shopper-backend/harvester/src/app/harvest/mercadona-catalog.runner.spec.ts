@@ -184,6 +184,10 @@ function stubFetch(options: {
   detailStatus?: (externalId: string, warehouse: string) => number | undefined;
   /** A status to answer in place of the fixture, such as a refusal. */
   statusFor?: (url: string) => number | undefined;
+  /** The tree to answer in place of {@link CATEGORY_TREE} (plan 0268). */
+  tree?: unknown;
+  /** A listing to answer for one category of one warehouse (plan 0268). */
+  categoryBody?: (categoryId: string, warehouse: string) => unknown;
 }): { urls: string[]; fetchImpl: typeof fetch } {
   const urls: string[] = [];
   const fetchImpl = (async (input: string | URL) => {
@@ -209,14 +213,22 @@ function stubFetch(options: {
     const warehouse = new URL(url).searchParams.get('wh') ?? '';
 
     if (url.startsWith(`${BASE}/categories/?`)) {
-      return answer(200, CATEGORY_TREE);
+      return answer(200, options.tree ?? CATEGORY_TREE);
     }
-    if (/\/categories\/\d+\//.test(url)) {
+    const category = /\/categories\/(\d+)\//.exec(url);
+    if (category) {
       const status = options.categoryStatus?.(warehouse);
       if (status !== undefined) {
         return answer(status, null);
       }
-      return answer(200, categoryProducts(warehouse, options.listingPriceFor));
+      const body = options.categoryBody?.(category[1], warehouse);
+      if (body === null) {
+        return answer(404, null);
+      }
+      return answer(
+        200,
+        body ?? categoryProducts(warehouse, options.listingPriceFor)
+      );
     }
     const product = /\/products\/([^/?]+)\//.exec(url);
     if (product) {
@@ -801,6 +813,275 @@ describe('MercadonaCatalogRunner (plans 0103 and 0108)', () => {
     expect(report.availabilities).toEqual([]);
     expect(report.wholeListings).toEqual([]);
     expect(report.notWhole).toEqual([]);
+  });
+
+  describe('every path a product is filed under (plan 0268)', () => {
+    const ROOT = 'Aceite, especias y salsas';
+    const OIL = ['Aceite, vinagre y sal', 'Aceite de oliva'];
+    const VINEGAR = ['Vinagres y aliños', 'Vinagre de vino'];
+
+    /** One root holding two children: the oil of every case, and vinegar. */
+    const TWO_CHILDREN = {
+      results: [
+        {
+          ...CATEGORY_TREE.results[0],
+          categories: [
+            ...CATEGORY_TREE.results[0].categories,
+            { id: 114, name: VINEGAR[0], order: 2, published: true },
+          ],
+        },
+      ],
+    };
+
+    /** The vinegar listing, which files these products of a warehouse too. */
+    function vinegar(warehouse: string, ids: readonly string[]) {
+      return {
+        id: 114,
+        name: VINEGAR[0],
+        categories: [
+          {
+            id: 115,
+            name: VINEGAR[1],
+            products: ids.map((id) => listed(id, warehouse)),
+          },
+        ],
+      };
+    }
+
+    const callFor = (report: RecordingRunReport, externalId: string) =>
+      report.categoryPathCalls.find((call) => call.externalId === externalId);
+
+    it('gives a product met in two children both paths, in walk order, as REPLACE', async () => {
+      const { fetchImpl } = stubFetch({
+        tree: TWO_CHILDREN,
+        categoryBody: (id, warehouse) =>
+          id === '114' ? vinegar(warehouse, ['7012']) : undefined,
+      });
+      restore = withFetch(fetchImpl);
+      const { runner, context, report } = build();
+      let callsAtFlush = -1;
+      (context.flush as jest.Mock).mockImplementation(async () => {
+        callsAtFlush = report.categoryPathCalls.length;
+      });
+
+      await runner.run(context, report, walking('4661'), source());
+
+      expect(callFor(report, '7012')).toEqual({
+        externalId: '7012',
+        paths: [
+          [ROOT, ...OIL],
+          [ROOT, ...VINEGAR],
+        ],
+        mode: 'REPLACE',
+      });
+      expect(callFor(report, '4241')).toEqual({
+        externalId: '4241',
+        paths: [[ROOT, ...OIL]],
+        mode: 'REPLACE',
+      });
+      // One call a product.
+      expect(report.categoryPathCalls).toHaveLength(2);
+      // `categoryPath` is what it was, the first path met, and so the first
+      // path of the REPLACE call.
+      const observed = report.products.find(
+        (product) => product.externalId === '7012'
+      );
+      expect(observed?.categoryPath).toEqual([ROOT, ...OIL]);
+      expect(observed?.categoryPath).toEqual(callFor(report, '7012')?.paths[0]);
+      // No observation carries the paths.
+      for (const product of report.products) {
+        expect(product).not.toHaveProperty('categoryPaths');
+      }
+      // Made at the end of the walk, before the run flushes and the sink
+      // drains.
+      expect(callsAtFlush).toBe(2);
+    });
+
+    it('keeps the paths across the warehouses, each warehouse after the one before', async () => {
+      const { fetchImpl } = stubFetch({
+        tree: TWO_CHILDREN,
+        // Only 4149 files 7012 under vinegar too.
+        categoryBody: (id, warehouse) =>
+          id === '114'
+            ? vinegar(warehouse, warehouse === '4149' ? ['7012'] : [])
+            : undefined,
+      });
+      restore = withFetch(fetchImpl);
+      const { runner, context, report } = build();
+
+      await runner.run(context, report, walking('4661', '4149'), source());
+
+      expect(callFor(report, '7012')?.paths).toEqual([
+        [ROOT, ...OIL],
+        [ROOT, ...VINEGAR],
+      ]);
+      // The oil path both warehouses listed is kept once.
+      expect(callFor(report, '4241')?.paths).toEqual([[ROOT, ...OIL]]);
+      expect(callFor(report, '9001')?.paths).toEqual([[ROOT, ...OIL]]);
+      expect(
+        report.categoryPathCalls.every((call) => call.mode === 'REPLACE')
+      ).toBe(true);
+    });
+
+    it('says ADD for every product when a category of any warehouse answered 404', async () => {
+      const { fetchImpl } = stubFetch({
+        tree: TWO_CHILDREN,
+        categoryBody: (id, warehouse) =>
+          id === '114'
+            ? warehouse === '4149'
+              ? null
+              : vinegar(warehouse, [])
+            : undefined,
+      });
+      restore = withFetch(fetchImpl);
+      const { runner, context, report } = build();
+
+      await runner.run(context, report, walking('4661', '4149'), source());
+
+      expect(report.categoryPathCalls.length).toBeGreaterThan(0);
+      expect(
+        report.categoryPathCalls.every((call) => call.mode === 'ADD')
+      ).toBe(true);
+    });
+
+    it('says ADD when the run was aborted', async () => {
+      const controller = new AbortController();
+      let details = 0;
+      const { fetchImpl } = stubFetch({
+        onRequest: (_count, url) => {
+          if (url.includes('/products/')) {
+            details += 1;
+            if (details >= 2) {
+              controller.abort();
+            }
+          }
+        },
+      });
+      restore = withFetch(fetchImpl);
+      const { runner, context, report } = build({ controller });
+
+      await runner.run(context, report, walking('4661'), source());
+
+      expect(report.categoryPathCalls.length).toBeGreaterThan(0);
+      expect(
+        report.categoryPathCalls.every((call) => call.mode === 'ADD')
+      ).toBe(true);
+    });
+
+    it('gives a product with no walk path every branch of its detail, as ADD', async () => {
+      // A listing whose every node is unnamed reaches the product with no
+      // path, so the detail's own categories are what is known.
+      const { fetchImpl } = stubFetch({
+        tree: {
+          results: [
+            {
+              id: 12,
+              name: '',
+              categories: [{ id: 112, name: '' }],
+            },
+          ],
+        },
+        categoryBody: (_id, warehouse) => ({
+          id: 112,
+          name: '',
+          categories: [
+            { id: 113, name: '', products: [listed('7012', warehouse)] },
+          ],
+        }),
+        detailFor: (id, warehouse) => ({
+          ...detailed(id, warehouse, '8480000135636'),
+          categories: [
+            {
+              id: 20,
+              name: 'Cuidado facial y corporal',
+              level: 0,
+              categories: [
+                {
+                  id: 189,
+                  name: 'Cuidado corporal',
+                  level: 1,
+                  categories: [{ id: 614, name: 'Toallitas', level: 2 }],
+                },
+              ],
+            },
+            {
+              id: 26,
+              name: 'Limpieza y hogar',
+              level: 0,
+              categories: [
+                {
+                  id: 238,
+                  name: 'Papel higiénico y celulosa',
+                  level: 1,
+                  categories: [{ id: 755, name: 'Papel higiénico', level: 2 }],
+                },
+              ],
+            },
+          ],
+        }),
+      });
+      restore = withFetch(fetchImpl);
+      const { runner, context, report } = build();
+
+      await runner.run(context, report, walking('4661'), source());
+
+      expect(report.categoryPathCalls).toEqual([
+        {
+          externalId: '7012',
+          paths: [
+            ['Cuidado facial y corporal', 'Cuidado corporal', 'Toallitas'],
+            [
+              'Limpieza y hogar',
+              'Papel higiénico y celulosa',
+              'Papel higiénico',
+            ],
+          ],
+          mode: 'ADD',
+        },
+      ]);
+    });
+
+    it('gives a known product its walk paths with no detail request', async () => {
+      const { urls, fetchImpl } = stubFetch({
+        tree: TWO_CHILDREN,
+        categoryBody: (id, warehouse) =>
+          id === '114' ? vinegar(warehouse, ['7012']) : undefined,
+      });
+      restore = withFetch(fetchImpl);
+      const { runner, context, report } = build();
+
+      await runner.run(
+        context,
+        report,
+        {
+          ...walking('4661'),
+          details: HarvestDetailFetch.NEW,
+          knownExternalIds: new Set(['4241', '7012']),
+          externalIdsWithoutEan: new Set(),
+        },
+        source()
+      );
+
+      expect(urls.filter((url) => url.includes('/products/'))).toEqual([]);
+      expect(callFor(report, '7012')?.paths).toEqual([
+        [ROOT, ...OIL],
+        [ROOT, ...VINEGAR],
+      ]);
+    });
+
+    it('makes no call for a product the run did not report', async () => {
+      const { fetchImpl } = stubFetch({
+        detailStatus: (id) => (id === '4241' ? 404 : undefined),
+      });
+      restore = withFetch(fetchImpl);
+      const { runner, context, report } = build();
+
+      await runner.run(context, report, walking('4661'), source());
+
+      expect(report.categoryPathCalls.map((call) => call.externalId)).toEqual([
+        '7012',
+      ]);
+    });
   });
 
   describe('a run the refusal guard stops (plan 0215)', () => {

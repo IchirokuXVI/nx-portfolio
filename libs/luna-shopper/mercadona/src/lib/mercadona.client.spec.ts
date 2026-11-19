@@ -1,6 +1,7 @@
 import { SourceGuard } from '@portfolio/luna-shopper/source-guard';
 import categoriesTree from './__fixtures__/categories-tree.json';
 import categoryExpanded from './__fixtures__/category-expanded.json';
+import cheeseListing from './__fixtures__/category-listing-cheese.json';
 import oliveOilEn from './__fixtures__/product-detail-en.json';
 import oliveOilEs from './__fixtures__/product-detail-es.json';
 import {
@@ -238,6 +239,74 @@ describe('walkCatalog', () => {
       ids.push(product.externalId);
     }
     expect(ids).toEqual(['7012', '8271']);
+  });
+
+  it('keeps every path of a product listed in two children, and yields it once with the first (plan 0268)', async () => {
+    // Root 51 holds 53 and 55. 53 answers the expanded listing, where 7012
+    // sits in both of its children, and 55 answers the cheese listing. Two
+    // committed listing payloads, and 7012 is met on two paths.
+    const { fetchImpl } = stubFetch([
+      { body: { results: [categoriesTree.results[1]] } },
+      { body: categoryExpanded },
+      { body: cheeseListing },
+    ]);
+    const c = client(fetchImpl);
+    const yielded = [];
+    for await (const product of c.walkCatalog()) {
+      yielded.push(product);
+    }
+
+    const ids = yielded.map((product) => product.externalId);
+    expect(ids.filter((id) => id === '7012')).toHaveLength(1);
+    const names = (path: readonly { name: string }[]) =>
+      path.map((node) => node.name);
+    const paths = c.walkedCategoryPaths.get('7012') ?? [];
+    expect(paths.map(names)).toEqual([
+      [
+        'Charcutería y quesos',
+        'Charcutería y quesos',
+        'Queso curado, semicurado y tierno',
+      ],
+      ['Charcutería y quesos', 'Charcutería y quesos', 'Jamón serrano'],
+    ]);
+    // The yield is what it was before: the first category that listed it.
+    const first = yielded.find((product) => product.externalId === '7012');
+    expect(first?.categoryPath).toEqual(paths[0]);
+    // A product listed once has its one path, and every yielded product has
+    // its paths.
+    expect((c.walkedCategoryPaths.get('8271') ?? []).map(names)).toEqual([
+      ['Charcutería y quesos', 'Charcutería y quesos', 'Jamón serrano'],
+    ]);
+    expect([...c.walkedCategoryPaths.keys()].sort()).toEqual([...ids].sort());
+    expect((c.walkedCategoryPaths.get('50946') ?? []).map(names)).toEqual([
+      [
+        'Charcutería y quesos',
+        'Queso curado, semicurado y tierno',
+        'Queso semicurado',
+      ],
+    ]);
+  });
+
+  it('keeps a path listed twice once, and starts every walk with no path', async () => {
+    const { fetchImpl } = stubFetch([
+      { body: { results: [categoriesTree.results[1]] } },
+      { body: categoryExpanded },
+      { body: categoryExpanded },
+      { body: { results: [categoriesTree.results[1]] } },
+      { status: 404 },
+      { status: 404 },
+    ]);
+    const c = client(fetchImpl);
+    for await (const _ of c.walkCatalog()) {
+      // Drained.
+    }
+    // 53 and 55 answered the same payload, so each path came twice.
+    expect(c.walkedCategoryPaths.get('7012')).toHaveLength(2);
+    expect(c.walkedCategoryPaths.get('8271')).toHaveLength(1);
+    for await (const _ of c.walkCatalog()) {
+      // Drained again, and nothing answered.
+    }
+    expect(c.walkedCategoryPaths.size).toBe(0);
   });
 
   it('names a category that answered 404 and yields no product for it (plan 0220)', async () => {
