@@ -9,7 +9,7 @@ import { readFile, writeFile } from 'fs/promises';
 import { firstValueFrom, timeout } from 'rxjs';
 import { DataSource } from 'typeorm';
 import {
-  describe,
+  guardOutput,
   parseWashSizesArgs,
   runWashSizes,
   WashSizesRefusal,
@@ -39,22 +39,29 @@ const ASK_TIMEOUT_MS = 30_000;
  *
  *   node wash-sizes.js --count
  *       prints `chain <slug> <n>`, `products`, `pack`, `content`, `unread`,
- *       `held` and `mercadona-per-wash`, numbers only. Writes nothing.
+ *       `held`, and one line per kind of note (`pack-of-units`,
+ *       `short-wash-word`, `sum`, `mercadona-per-wash`), numbers only.
+ *       Writes nothing.
  *
  *   node wash-sizes.js --review <file>
  *       the same counts, then the review list of the products that still
- *       qualify in <file>, and the Mercadona note beside it. No database row.
+ *       qualify in <file>, each `planned`, and the notes beside it
+ *       (`<file>` with `.notes.tsv` for `.tsv`). No database row. Prints
+ *       `save 1` when a run with no product to correct must still save the
+ *       lists (a recorded `planned` line, or a new note), else `save 0`.
  *
  *   node wash-sizes.js --max <n> --review <file>
  *       the same counts, refuses before any write above <n>, then corrects
- *       each product and writes the list of what it corrected. Prints
- *       `corrected`, `skipped` and `failures`, and exits 1 when any product
- *       failed.
+ *       each product and writes the list: `corrected` for each product whose
+ *       update went through, `planned` for the rest. Prints `corrected`,
+ *       `skipped` and `failures`, and exits 1 when any product failed.
  *
  *   ... --recorded <file|->
  *       with either list: the ConfigMap earlier runs saved, as
  *       `kubectl get -o json` prints it (`-` reads standard input, empty
- *       means none). Every line it holds stays in the lists written.
+ *       means none). Every line it holds stays in the lists written, and
+ *       each `planned` line whose product catalog now holds with no size and
+ *       as `UNIT` is written `corrected` (the reconcile, which only reads).
  *
  * It needs HARVESTER_DB_URL, NATS_URL and HARVESTER_ACTOR_ID, which the pod
  * already has. Catalog knows that actor as a service (`SERVICE_ACTOR_IDS`).
@@ -77,6 +84,10 @@ async function run() {
     url,
     entities: [],
     synchronize: false,
+    // Stated, not left to the default: a logged query error or slow query
+    // prints its parameters, which are product ids, to the deploy log.
+    logging: false,
+    maxQueryExecutionTime: undefined,
   });
   await dataSource.initialize();
   const client = ClientProxyFactory.create({
@@ -113,12 +124,14 @@ async function run() {
   }
 }
 
-run().then(
-  (failures) => process.exit(failures > 0 ? 1 : 0),
-  (err) => {
-    // Never the stack, and never the message of an error the command did not
-    // word itself: the release task prints this line into a public log.
-    console.error(describe(err));
-    process.exit(1);
-  }
+// Prints the one line `describe` words and stops, for an uncaught error and
+// for the command's own failure. Never the stack, and never the message of an
+// error the command did not word itself: the release task prints this line
+// into a public log. A warning prints its class and code only.
+const fail = guardOutput(
+  process,
+  (line) => console.error(line),
+  (code) => process.exit(code)
 );
+
+run().then((failures) => process.exit(failures > 0 ? 1 : 0), fail);

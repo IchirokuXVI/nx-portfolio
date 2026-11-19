@@ -13,11 +13,11 @@
 # environment (task.env) before it changes anything. It then passes the same
 # ceiling as `--max`, so the command refuses too if the count grew in between.
 #
-# The run writes the review list of what it corrected (plan 0271, section 5)
-# to a file inside the pod, and the Mercadona note beside it. This file copies
-# both into the ConfigMap `release-task-<NNNN>-review` of the namespace, keys
-# `review.tsv` and `mercadona-per-wash.tsv`, through `kubectl apply
-# --server-side`, so a second run replaces the object and never stacks a copy.
+# The run writes the review list (plan 0271, section 5) to a file inside the
+# pod, and the notes beside it: the rows that look like a wash count and that
+# the task does not correct, one line per row and kind. This file copies both
+# into the ConfigMap `release-task-<NNNN>-review` of the namespace, keys
+# `review.tsv` and `notes.tsv`, through `kubectl apply --server-side`, so a second run replaces the object and never stacks a copy.
 # Server side, because a client side apply also copies the whole object into
 # the `last-applied-configuration` annotation, and an annotation is capped at
 # 256 KiB, far below the 1 MiB a ConfigMap holds.
@@ -25,11 +25,24 @@
 # A list never loses a line that an earlier run saved. This file reads the
 # ConfigMap as it stands before the run and hands it to the command
 # (`--recorded -`, on standard input), and the command keeps every line it
-# holds, with the old size it recorded, adding only products it does not hold
-# yet (`mergeList` in the harvester, which the specs prove). A run that fails
-# after correcting some products and the run that finishes them thus leave
-# every corrected product on the list, once. It prints the line counts and the
-# ConfigMap's name, never a line of either list: the deploy log is public.
+# holds, with the old size it recorded, adding only lines it does not hold yet
+# (`mergeList` in the harvester, which the specs prove). The review list's last
+# column, `outcome`, says where a line stands. `corrected`: the product's wash
+# count was taken off. `planned`: the task meant to correct this product and
+# has no confirmation that it did, so check the product. A run can correct a
+# product and not learn it (it stops before it writes its lists, the save
+# after it fails, an answer times out), so a later run confirms each planned
+# line by reading its product: a product catalog now holds as `UNIT` with no
+# size turns the line `corrected`. A planned line whose product holds any
+# size, or that catalog lacks or merged, stays `planned`. A `corrected` line
+# never goes back. A run that fails after correcting some products and the run
+# that finishes them thus leave every product on the list, once, with its
+# outcome. It prints line counts and the ConfigMap's name, never a line of
+# either list: the deploy log is public.
+#
+# A ConfigMap whose keys do not start with this task's headers (an earlier
+# shape of the task, or a file of an earlier rehearsal) is refused before any
+# write. Delete it, or restore its headers, and run again.
 # Nothing deletes that ConfigMap; the owner does when the curator has worked
 # through it.
 #
@@ -38,8 +51,11 @@
 # `pre-done`, and the next deploy runs this file again.
 #
 # Safe to run again. A corrected product has no size, so it no longer matches
-# the selection, and a second run counts 0 and writes nothing. It does nothing
-# where there is no harvester deployment.
+# the selection, and a second run counts 0 and corrects nothing. With nothing
+# to correct it still saves the lists when a recorded line is `planned` (to
+# confirm it) or this run found a note the ConfigMap does not hold, and
+# otherwise writes nothing. It does nothing where there is no harvester
+# deployment.
 #
 # Environment overrides:
 #   NAMESPACE     kubernetes namespace (default: luna-shopper)
@@ -187,18 +203,13 @@ if [ "$products" -gt "$max" ]; then
   echo "  $products products sized by a wash count, above the ceiling of $max. Nothing was changed." >&2
   exit 1
 fi
-if [ "$products" -eq 0 ]; then
-  echo "  no product holds a wash count as its size, so nothing to change"
-  exit 0
-fi
-
 # The pod's /tmp, or a directory of this machine for a rehearsal.
 if [ -n "${WASH_SIZES:-}" ]; then
   list="$WORK/run-review.tsv"
 else
   list="/tmp/$CONFIGMAP.tsv"
 fi
-note="${list%.tsv}.mercadona-per-wash.tsv"
+notes="${list%.tsv}.notes.tsv"
 
 # Prints the ConfigMap as earlier runs left it, as JSON, or nothing when there
 # is none. Anything else it cannot read is a refusal: a list that could not be
@@ -223,30 +234,60 @@ recorded_lists() {
 # merged in every line the ConfigMap held before the run.
 save_lists() {
   fetch "$list" "$WORK/review.tsv"
-  fetch "$note" "$WORK/mercadona-per-wash.tsv"
+  fetch "$notes" "$WORK/notes.tsv"
   kubectl create configmap "$CONFIGMAP" -n "$NAMESPACE" \
     --from-file=review.tsv="$WORK/review.tsv" \
-    --from-file=mercadona-per-wash.tsv="$WORK/mercadona-per-wash.tsv" \
+    --from-file=notes.tsv="$WORK/notes.tsv" \
     --dry-run=client -o json \
     | ${REVIEW_APPLY:-kubectl -n "$NAMESPACE" apply --server-side --force-conflicts --field-manager="release-task-$NUMBER" -f -} > /dev/null
-  # Each list has a header line, which is not a product.
-  local lines notes
+  # Each list has a header line, which is not a product. Only the last column
+  # of the review list and the first of the notes are counted: an outcome and
+  # a kind, which name nothing.
+  local lines planned corrected noted kinds
   lines=$(($(wc -l < "$WORK/review.tsv") - 1))
-  notes=$(($(wc -l < "$WORK/mercadona-per-wash.tsv") - 1))
-  echo "  $1: the review list holds $lines lines and the Mercadona note $notes, in the ConfigMap $CONFIGMAP"
+  planned="$(awk -F '\t' 'NR > 1 && $NF == "planned"' "$WORK/review.tsv" | wc -l | tr -d ' ')"
+  corrected="$(awk -F '\t' 'NR > 1 && $NF == "corrected"' "$WORK/review.tsv" | wc -l | tr -d ' ')"
+  noted=$(($(wc -l < "$WORK/notes.tsv") - 1))
+  kinds="$(awk -F '\t' 'NR > 1 && $1 ~ /^[a-z-]+$/ { n[$1]++ } END { for (k in n) printf " %s=%d", k, n[k] }' "$WORK/notes.tsv")"
+  echo "  $1: the review list holds $lines lines (planned=$planned corrected=$corrected) and the notes $noted lines${kinds:+ (${kinds# })}, in the ConfigMap $CONFIGMAP"
 }
 
 # What earlier runs saved, read once, before this run saves anything. Both
-# runs below merge into this, so the second never keeps the first's guesses.
+# runs below merge into this. The write run lists every product it counted,
+# so the `planned` lines of the first are in its list too, as `corrected`
+# where the update went through.
 recorded="$WORK/recorded.json"
 if ! recorded_lists > "$recorded"; then
   echo "  Nothing was changed." >&2
   exit 1
 fi
 
-# The list of what is about to change goes in first. A run that stops after
-# its writes and before the list of what it corrected is saved thus still
-# leaves every product it may have corrected on a list, with its old size.
+# With nothing to correct, the lists are still written once: the command
+# confirms each recorded `planned` line by reading its product, and adds the
+# notes this run found. It prints `save 1` when there is something to keep (a
+# recorded `planned` line, or a note the ConfigMap does not hold yet), and
+# only then is the ConfigMap replaced. Otherwise an earlier one stays as it is.
+if [ "$products" -eq 0 ]; then
+  echo "  no product holds a wash count as its size, so nothing to change"
+  # shellcheck disable=SC2086
+  if ! out="$($cmd_in --review "$list" --recorded - < "$recorded" 2> "$ERR")"; then
+    echo "  the lists could not be written, and nothing was changed: $(cat "$ERR")" >&2
+    exit 1
+  fi
+  save="$(count_of save "$out")"
+  if [ -z "$save" ]; then
+    echo "  the review run printed no answer to whether the lists are saved" >&2
+    exit 1
+  fi
+  if [ "$save" -gt 0 ]; then
+    save_lists "with nothing to correct"
+  fi
+  exit 0
+fi
+
+# The list of what is about to change goes in first, every line `planned`. A
+# run that stops after its writes and before its own list is saved thus still
+# leaves every product it may have corrected on the list, with its old size.
 # shellcheck disable=SC2086
 if ! out="$($cmd_in --review "$list" --recorded - < "$recorded" 2> "$ERR")"; then
   echo "  the review list could not be written, and nothing was changed: $(cat "$ERR")" >&2
@@ -268,10 +309,11 @@ else
 fi
 
 # A run that printed `corrected` finished its loop and wrote its list: every
-# line earlier runs saved, and the products it corrected. That replaces the
-# list above, whose products it may only have been about to correct. With
-# nothing corrected, it is what earlier runs saved. A run that printed no
-# `corrected` stopped before its list, so the list above stays.
+# line earlier runs saved, and every product it counted, `corrected` where its
+# update was answered and `planned` where it was not. That replaces the list
+# above. A run that printed no `corrected` stopped before its list, so the
+# list above stays, every line of this run `planned`, and the next run
+# confirms those lines by reading their products.
 corrected="$(count_of corrected "$out")"
 if [ -n "$corrected" ]; then
   save_lists "after the run"

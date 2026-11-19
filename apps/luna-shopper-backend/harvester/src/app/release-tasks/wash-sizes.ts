@@ -28,19 +28,38 @@ import {
  * themselves go to the review list file (section 5), which `post.sh` copies
  * into a ConfigMap and never prints.
  *
- * **The Mercadona note.** Mercadona is outside the selection. The note lists
- * every ACTIVE bound Mercadona row that states a count of units above 1 as its
- * size (`unitSize` above 1, `sizeUnit` `UNIT`) and whose latest price label is
- * `lv`, the chain pricing it per wash. Such a count may be the number of
- * washes, whichever path of the adapter's `readUnitSize` produced it: the
- * stored `unit_size`, or `total_units` when the comparison price is the pack
- * price over it. Those rows are listed for the curator in a second file and
- * never corrected.
+ * **The notes.** Some rows look like a wash count and are outside the
+ * selection. The task lists them for the curator in a second file, one line
+ * per row, and never corrects them ({@link readNoteFormat}, {@link NoteKind}).
+ * A note is selected from stored fields only, never from a product name, and a
+ * product the task corrects is not also noted.
+ *
+ * - `mercadona-per-wash`: an ACTIVE bound Mercadona row that states a count of
+ *   units above 1 as its size (`unitSize` above 1, `sizeUnit` `UNIT`) and
+ *   whose latest price label is `lv`, the chain pricing it per wash. Such a
+ *   count may be the number of washes, whichever path of the adapter's
+ *   `readUnitSize` produced it: the stored `unit_size`, or `total_units` when
+ *   the comparison price is the pack price over it.
+ * - `pack-of-units`: Carrefour's `pack de 2 unidades de 50 lavados.`, the pack
+ *   phrase that its parser before plan 0270 multiplied into N × Q `UNIT`, on a
+ *   product that holds N × Q `UNIT`.
+ * - `short-wash-word`: El Jamón's `40lav` or `40lv`, on a product that holds
+ *   40 `UNIT`. No old parser read these as a size, so where the product's size
+ *   came from is not known.
+ * - `sum`: `23+12 lavados`, `23+12lav`, on a product that holds N + M `UNIT`.
  *
  * **Across runs.** A list never loses a line an earlier run recorded. The
  * command reads the ConfigMap the earlier runs saved (`--recorded`) and keeps
- * each of its lines as it stands, old size and all, adding only the lines of
- * products it does not hold yet ({@link mergeList}).
+ * each of its lines as it stands, old size and all, adding only the lines it
+ * does not hold yet ({@link mergeList}). The one change a later run makes to a
+ * recorded line is the review list's `outcome`, from `planned` to `corrected`.
+ *
+ * `planned` means the task meant to correct the product and has no
+ * confirmation that it did: check the product. `corrected` means the
+ * product's wash count was taken off. An update can go through with no answer
+ * that says so (a run stopped after it, or an answer that timed out), so every
+ * run that is given recorded lists confirms their planned lines by reading
+ * the product ({@link reconcileReview}).
  */
 
 /** The chain whose per wash packs are noted and never corrected. */
@@ -86,6 +105,87 @@ export function readWashFormat(text: string | null): WashFormat | null {
   return { count: pack === null ? quantity : pack * quantity, pack };
 }
 
+/** What a note says about a row the task does not correct. */
+export type NoteKind =
+  | 'pack-of-units'
+  | 'short-wash-word'
+  | 'sum'
+  | 'mercadona-per-wash';
+
+/** The kinds in the order `--count` prints them. */
+export const NOTE_KINDS: readonly NoteKind[] = [
+  'pack-of-units',
+  'short-wash-word',
+  'sum',
+  'mercadona-per-wash',
+];
+
+/**
+ * The nouns Carrefour's parser before plan 0270 counted a pack in after a
+ * number (`CONTAINER` of `carrefour/src/lib/listing.ts` at 7b274b091).
+ */
+const CARREFOUR_CONTAINER = String.raw`(?:caja|cajas|lata|latas|bote|botes|botella|botellas|brick|bricks|estuche|estuches|tarrina|tarrinas|bandeja|bandejas|bolsa|bolsas|sobre|sobres|unidad|unidades|ud|uds|pieza|piezas|base|bases|pack|packs|vaso|vasos|tarro|tarros|barra|barras|rollo|rollos|blister|blisters)`;
+
+/**
+ * A printed pack of N units of Q washes, as Carrefour's parser before plan
+ * 0270 split it off a name and stored it as N × Q `UNIT`: one of its three
+ * pack phrases with the count N stated (`pack de 2 unidades de`, `pack 2 de`,
+ * `2 cajas de`, `pack 2 bolsas`), then a plain quantity Q, then `lavado` or
+ * `lavados`, then what that parser left on the stored text after the word (a
+ * full stop, `aprox`, more full stops). A phrase with no N (`caja de 50
+ * lavados`) multiplied nothing, and a quantity joined by `x` or `+` stated no
+ * size, so neither is this shape.
+ */
+const PACK_OF_UNITS = new RegExp(
+  String.raw`^(?:pack\s+(?:de\s+)?(\d+)(?:\s+[A-Za-zÀ-ÿ]{2,12})?\s+de\s+|(\d+)\s*${CARREFOUR_CONTAINER}\s+de\s+|pack\s+(\d+)\s+${CARREFOUR_CONTAINER}\s+)(\d+(?:[.,]\d+)?)\s*lavados?\.?(?:\s+aprox)?\.*$`,
+  'i'
+);
+
+/**
+ * A wash count in El Jamón's short word: a whole number directly followed by
+ * `lav` or `lv`, with at most one space between and at most a full stop after
+ * (`40lav`, `40 lv.`), and nothing else.
+ */
+const SHORT_WASH_WORD = /^(\d+) ?(?:lav|lv)\.?$/i;
+
+/**
+ * A bonus pack printed as a sum of washes: `N+M lavados`, `N+Mlav` or
+ * `N+Mlv`, spaces allowed around the `+`, at most a full stop after. The
+ * short words take at most one space after the number, as
+ * {@link WASH_PREFILTER} admits them; `lavados` takes any.
+ */
+const WASH_SUM = /^(\d+)\s*\+\s*(\d+)(?:\s*lavados?| ?(?:lav|lv))\.?$/i;
+
+/** The kind of note a row's printed text has, and the size it would state. */
+export interface NoteFormat {
+  kind: Exclude<NoteKind, 'mercadona-per-wash'>;
+  /** The `UNIT` count a product made from the row would hold. */
+  count: number;
+}
+
+/**
+ * The note a printed size makes, or null. Disjoint from
+ * {@link readWashFormat}: no text both are corrected and noted.
+ */
+export function readNoteFormat(text: string | null): NoteFormat | null {
+  const trimmed = (text ?? '').trim();
+  const pack = PACK_OF_UNITS.exec(trimmed);
+  if (pack) {
+    const units = Number(pack[1] ?? pack[2] ?? pack[3]);
+    const quantity = Number(pack[4].replace(',', '.'));
+    return { kind: 'pack-of-units', count: units * quantity };
+  }
+  const short = SHORT_WASH_WORD.exec(trimmed);
+  if (short) {
+    return { kind: 'short-wash-word', count: Number(short[1]) };
+  }
+  const sum = WASH_SUM.exec(trimmed);
+  if (sum) {
+    return { kind: 'sum', count: Number(sum[1]) + Number(sum[2]) };
+  }
+  return null;
+}
+
 /**
  * The chain's slug as its adapter key names it: `deza-web` is `deza`. A chain
  * with no source row is named by its id, which names no product.
@@ -96,6 +196,8 @@ export function chainOf(adapterKey: string | null, supermarketId: string) {
 
 /** One ACTIVE bound row of a product the selection may touch. */
 export interface StatedRow {
+  /** The row's own id, which keys a note across runs. */
+  entryId: string;
   itemId: string;
   chain: string;
   adapterKey: string | null;
@@ -108,14 +210,21 @@ export interface StatedRow {
 }
 
 /**
- * Every ACTIVE bound row whose printed size names a wash. The pattern of
- * {@link readWashFormat} decides; this only keeps the read small.
+ * What a printed size must contain for its product to be read at all: the
+ * word `lavado` ({@link readWashFormat}, and the pack and sum notes), or a
+ * digit before `lav` or `lv`, one space allowed (the short word and short sum
+ * notes). The same text in Postgres and in JavaScript, with no backslash.
+ * The patterns of {@link readWashFormat} and {@link readNoteFormat} decide;
+ * this only keeps the read small, so a wider one corrects nothing more.
  */
+export const WASH_PREFILTER = 'lavado|[0-9] ?(lav|lv)';
+
+/** Every ACTIVE bound row whose printed size passes {@link WASH_PREFILTER}. */
 export const SELECT_WASH_ROWS_SQL = `
 SELECT e."itemId"
   FROM source_catalog_entries e
  WHERE e.status = 'ACTIVE' AND e."itemId" IS NOT NULL
-   AND e."sizeFormat" ~* 'lavado'`;
+   AND e."sizeFormat" ~* '${WASH_PREFILTER}'`;
 
 /**
  * Every ACTIVE bound row of the products in `$1`, with the label of its
@@ -200,10 +309,13 @@ export interface Correction {
   content: boolean;
 }
 
-/** One Mercadona row the curator is told about and the task does not touch. */
-export interface PerWashNote {
+/** One row the curator is told about and the task does not touch. */
+export interface Note {
+  kind: NoteKind;
   item: ItemView;
   row: StatedRow;
+  /** Every size text the product's ACTIVE rows state, as in the review list. */
+  statedSizes: string[];
 }
 
 export interface WashSizesPlan {
@@ -214,7 +326,7 @@ export interface WashSizesPlan {
   unread: number;
   /** Products that a qualifying row names and catalog has not or has merged. */
   held: number;
-  notes: PerWashNote[];
+  notes: Note[];
 }
 
 /**
@@ -266,6 +378,7 @@ export async function readRows(db: HarvesterDb): Promise<StatedRow[]> {
   return raw.map((row) => {
     const adapterKey = (row['adapterKey'] as string | null) ?? null;
     return {
+      entryId: String(row['id']),
       itemId: String(row['itemId']),
       chain: chainOf(adapterKey, String(row['supermarketId'])),
       adapterKey,
@@ -370,13 +483,6 @@ export function planWashSizes(
     for (const chain of washFormats.keys()) {
       plan.byChain.set(chain, (plan.byChain.get(chain) ?? 0) + 1);
     }
-    const statedSizes = [
-      ...new Set(
-        onItem
-          .filter((row) => row.sizeFormat !== null && row.sizeFormat.trim())
-          .map((row) => `${row.chain}: ${statedSizeOf(row)}`)
-      ),
-    ].sort();
     plan.corrections.push({
       item,
       count: Number(item.unitSize),
@@ -387,7 +493,7 @@ export function planWashSizes(
           Number(item.packCount) === wash.pack
       ),
       washFormats,
-      statedSizes,
+      statedSizes: statedSizesOf(onItem),
       content: onItem.some(
         (row) =>
           row.unitSize !== null &&
@@ -397,23 +503,56 @@ export function planWashSizes(
     });
   }
 
+  // A product the task corrects is on the review list, so it is not noted.
   const corrected = new Set(plan.corrections.map((c) => c.item.id));
   for (const row of rows) {
-    if (
-      row.adapterKey === MERCADONA_ADAPTER &&
-      row.sizeUnit === UnitOfMeasure.UNIT &&
-      row.unitSize !== null &&
-      row.unitSize > 1 &&
-      row.label === 'lv' &&
-      !corrected.has(row.itemId)
-    ) {
-      const item = items.get(row.itemId);
-      if (item && !item.mergedInto) {
-        plan.notes.push({ item, row });
-      }
+    const item = items.get(row.itemId);
+    if (corrected.has(row.itemId) || !item || item.mergedInto) {
+      continue;
+    }
+    const kind = noteKindOf(row, item);
+    if (kind !== null) {
+      plan.notes.push({
+        kind,
+        item,
+        row,
+        statedSizes: statedSizesOf(byItem.get(row.itemId) ?? []),
+      });
     }
   }
   return plan;
+}
+
+/**
+ * The note one row of a product the task does not correct makes, or null.
+ * Stored fields only: the row's printed size, its stored size and label, and
+ * the product's stored size. Never a name.
+ */
+function noteKindOf(row: StatedRow, item: ItemView): NoteKind | null {
+  if (
+    row.adapterKey === MERCADONA_ADAPTER &&
+    row.sizeUnit === UnitOfMeasure.UNIT &&
+    row.unitSize !== null &&
+    row.unitSize > 1 &&
+    row.label === 'lv'
+  ) {
+    return 'mercadona-per-wash';
+  }
+  const note = readNoteFormat(row.sizeFormat);
+  return note !== null && note.count > 0 && selects(item, note.count)
+    ? note.kind
+    : null;
+}
+
+/** Every size text a product's ACTIVE rows state, as `<chain>: <text>`. */
+function statedSizesOf(onItem: StatedRow[]): string[] {
+  return [
+    ...new Set(
+      onItem
+        .filter((row) => row.sizeFormat !== null && row.sizeFormat.trim())
+        .map((row) => `${row.chain}: ${statedSizeOf(row)}`)
+    ),
+  ].sort();
 }
 
 /**
@@ -442,11 +581,16 @@ export function countLines(plan: WashSizesPlan): string[] {
     `content ${plan.corrections.filter((c) => c.content).length}`,
     `unread ${plan.unread}`,
     `held ${plan.held}`,
-    `mercadona-per-wash ${plan.notes.length}`,
+    ...NOTE_KINDS.map(
+      (kind) => `${kind} ${plan.notes.filter((n) => n.kind === kind).length}`
+    ),
   ];
 }
 
-const REVIEW_HEADER = [
+/** Where a review line stands: saved before its update, or after it. */
+export type Outcome = 'planned' | 'corrected';
+
+export const REVIEW_HEADER = [
   'chain',
   'item_id',
   'item_name',
@@ -455,9 +599,11 @@ const REVIEW_HEADER = [
   'old_pack_count',
   'wash_size_format',
   'stated_sizes',
+  'outcome',
 ];
 
-const NOTE_HEADER = [
+export const NOTES_HEADER = [
+  'kind',
   'chain',
   'item_id',
   'item_name',
@@ -465,16 +611,20 @@ const NOTE_HEADER = [
   'default_unit',
   'pack_count',
   'row_size_format',
-  'row_unit_size',
-  'row_size_unit',
-  'unit_price_label',
+  'stated_sizes',
+  'entry_id',
 ];
 
 /**
- * The review list of section 5: one line per corrected product and chain,
- * grouped by chain, then by Spanish name. Tab separated, with a header.
+ * The review list of section 5: one line per product and chain that
+ * qualified it, grouped by chain, then by Spanish name. Tab separated, with a
+ * header. `outcome` is `corrected` for the products in `corrected`, whose
+ * update went through, and `planned` for every other.
  */
-export function reviewList(corrections: Correction[]): string {
+export function reviewList(
+  corrections: Correction[],
+  corrected: ReadonlySet<string> = new Set()
+): string {
   const lines = corrections.flatMap((c) =>
     [...c.washFormats.entries()].map(([chain, formats]) => ({
       chain,
@@ -488,6 +638,7 @@ export function reviewList(corrections: Correction[]): string {
         c.item.packCount === null ? '' : String(c.item.packCount),
         formats.join('; '),
         c.statedSizes.join('; '),
+        corrected.has(c.item.id) ? 'corrected' : 'planned',
       ],
     }))
   );
@@ -495,42 +646,54 @@ export function reviewList(corrections: Correction[]): string {
 }
 
 /**
- * The Mercadona note: the packs the chain prices per wash and sizes as a
- * count, which the task does not correct. Same order as the review list.
+ * The notes: one line per noted row, which the task does not correct,
+ * grouped by kind, then as the review list. The size columns are the
+ * product's as it stands.
  */
-export function perWashNote(notes: PerWashNote[]): string {
-  const lines = notes.map(({ item, row }) => ({
-    chain: row.chain,
+export function notesList(notes: Note[]): string {
+  const lines = notes.map(({ kind, item, row, statedSizes }) => ({
+    chain: `${kind}\t${row.chain}`,
     name: nameOf(item),
     cells: [
+      kind,
       row.chain,
       item.id,
       nameOf(item),
       item.unitSize === null ? '' : String(item.unitSize),
       item.defaultUnit,
       item.packCount === null ? '' : String(item.packCount),
-      row.sizeFormat ?? '',
-      row.unitSize === null ? '' : String(row.unitSize),
-      row.sizeUnit ?? '',
-      row.label ?? '',
+      String(row.sizeFormat ?? '').trim(),
+      statedSizes.join('; '),
+      row.entryId,
     ],
   }));
-  return table(NOTE_HEADER, sortLines(lines));
+  return table(NOTES_HEADER, sortLines(lines));
 }
 
-/** The file the Mercadona note goes to, beside the review list. */
-export function notePathOf(reviewPath: string): string {
-  return reviewPath.replace(/(\.tsv)?$/, '.mercadona-per-wash.tsv');
+/** The file the notes go to, beside the review list. */
+export function notesPathOf(reviewPath: string): string {
+  return reviewPath.replace(/(\.tsv)?$/, '.notes.tsv');
 }
 
 /** The ConfigMap keys the two lists are saved under (`post.sh`). */
 export const REVIEW_KEY = 'review.tsv';
-export const NOTE_KEY = 'mercadona-per-wash.tsv';
+export const NOTES_KEY = 'notes.tsv';
+
+/** The ConfigMap `post.sh` saves the lists in, as kubectl names it. */
+export const REVIEW_CONFIGMAP = 'configmap/release-task-0007-review';
+
+/** The key an earlier shape of this task kept the Mercadona note under. */
+const OLD_NOTE_KEY = 'mercadona-per-wash.tsv';
+
+/** The words that end every refusal of a recorded list. */
+const RECORDED_REMEDY =
+  `Delete ${REVIEW_CONFIGMAP}, or restore the header of this task as the ` +
+  'first line of each key, and run again.';
 
 /** What earlier runs saved in the ConfigMap, by key. */
 export interface RecordedLists {
   review: string;
-  note: string;
+  notes: string;
 }
 
 /**
@@ -541,7 +704,7 @@ export interface RecordedLists {
  */
 export function readRecorded(text: string): RecordedLists {
   if (text.trim() === '') {
-    return { review: '', note: '' };
+    return { review: '', notes: '' };
   }
   let data: unknown;
   try {
@@ -551,27 +714,79 @@ export function readRecorded(text: string): RecordedLists {
   }
   if (!data || typeof data !== 'object') {
     throw new WashSizesRefusal(
-      'Refused, and nothing was changed: the recorded review ConfigMap ' +
-        'cannot be read.'
+      `Refused, and nothing was changed: ${REVIEW_CONFIGMAP} cannot be ` +
+        `read as a ConfigMap. ${RECORDED_REMEDY}`
+    );
+  }
+  if (OLD_NOTE_KEY in data) {
+    throw new WashSizesRefusal(
+      `Refused, and nothing was changed: ${REVIEW_CONFIGMAP} holds the key ` +
+        `${OLD_NOTE_KEY} of an earlier shape of this task. ${RECORDED_REMEDY}`
     );
   }
   const value = (key: string) => {
     const held = (data as Record<string, unknown>)[key];
     return typeof held === 'string' ? held : '';
   };
-  return { review: value(REVIEW_KEY), note: value(NOTE_KEY) };
+  return { review: value(REVIEW_KEY), notes: value(NOTES_KEY) };
+}
+
+/** How one list is merged across runs. */
+export interface ListShape {
+  header: readonly string[];
+  /** The ConfigMap key it is saved under, which a refusal names. */
+  key: string;
+  /** The cells that name one line across runs. */
+  keyOf(cells: string[]): string;
+  /** The columns {@link sortLines} groups by, then the name's column. */
+  groupOf(cells: string[]): string;
+  nameOf(cells: string[]): string;
+  /**
+   * Whether a later line replaces a line held under the same key. Without
+   * it the first line held stays.
+   */
+  replaces?(held: string[], next: string[]): boolean;
 }
 
 /**
+ * The review list's shape: a line per product and chain (`chain`,
+ * `item_id`). A `planned` line becomes the `corrected` line of a later run,
+ * and a `corrected` line is never replaced.
+ */
+export const REVIEW_SHAPE: ListShape = {
+  header: REVIEW_HEADER,
+  key: REVIEW_KEY,
+  keyOf: (cells) => `${cells[0]}\t${cells[1]}`,
+  groupOf: (cells) => cells[0],
+  nameOf: (cells) => cells[2] ?? '',
+  replaces: (held, next) =>
+    held[REVIEW_HEADER.length - 1] === 'planned' &&
+    next[REVIEW_HEADER.length - 1] === 'corrected',
+};
+
+/**
+ * The notes' shape: a line per row (`kind`, `chain`, `item_id` and the
+ * row's `entry_id`), so two noted rows of one product are two lines.
+ */
+export const NOTES_SHAPE: ListShape = {
+  header: NOTES_HEADER,
+  key: NOTES_KEY,
+  keyOf: (cells) =>
+    [cells[0], cells[1], cells[2], cells[NOTES_HEADER.length - 1]].join('\t'),
+  groupOf: (cells) => `${cells[0]}\t${cells[1]}`,
+  nameOf: (cells) => cells[3] ?? '',
+};
+
+/**
  * One list: every line `recorded` holds, as it stands, and every line of
- * `next` whose product and chain it does not hold yet (keyed on `chain` and
- * `item_id`, the first two columns). An earlier run's line keeps the old
+ * `next` whose key it does not hold yet. An earlier run's line keeps the old
  * size it recorded, so a product corrected by a run that failed later is
  * never dropped by the next one, and merging the same lines twice changes
- * nothing. One header, the same order as {@link reviewList}.
+ * nothing. The one replacement is the shape's own ({@link REVIEW_SHAPE}).
+ * One header, the same order as the list.
  */
 export function mergeList(
-  header: string[],
+  shape: ListShape,
   recorded: string,
   next: string
 ): string {
@@ -584,21 +799,30 @@ export function mergeList(
     if (rows.length === 0) {
       continue;
     }
-    if (rows[0].replace(/\r$/, '') !== header.join('\t')) {
+    if (rows[0].replace(/\r$/, '') !== shape.header.join('\t')) {
       throw new WashSizesRefusal(
-        `Refused, and nothing was changed: the ${source} list does not ` +
-          'start with the header of this task.'
+        source === 'recorded'
+          ? `Refused, and nothing was changed: the key ${shape.key} of ` +
+              `${REVIEW_CONFIGMAP} does not start with the header of this ` +
+              `task. ${RECORDED_REMEDY}`
+          : `Refused, and nothing was changed: the ${shape.key} this run ` +
+              'wrote does not start with the header of this task.'
       );
     }
     for (const row of rows.slice(1)) {
       const cells = row.replace(/\r$/, '').split('\t');
-      const key = `${cells[0]}\t${cells[1]}`;
-      if (!lines.has(key)) {
-        lines.set(key, { chain: cells[0], name: cells[2] ?? '', cells });
+      const key = shape.keyOf(cells);
+      const held = lines.get(key);
+      if (!held || shape.replaces?.(held.cells, cells)) {
+        lines.set(key, {
+          chain: shape.groupOf(cells),
+          name: shape.nameOf(cells),
+          cells,
+        });
       }
     }
   }
-  return table(header, sortLines([...lines.values()]));
+  return table(shape.header, sortLines([...lines.values()]));
 }
 
 /**
@@ -627,15 +851,32 @@ export async function runWashSizes(
     options.recorded === null
       ? readRecorded('')
       : readRecorded(await ports.files.read(options.recorded));
+  // A recorded list of another shape refuses here, before any write, and not
+  // when the lists are written after the updates.
+  mergeList(REVIEW_SHAPE, recorded.review, '');
+  mergeList(NOTES_SHAPE, recorded.notes, '');
+  // Whether there is anything to save is decided on the lists as they were
+  // recorded, before the reconcile reads catalog.
+  const plannedBefore = plannedIdsOf(recorded.review).length;
+  const reconciled: RecordedLists = {
+    ...recorded,
+    review: (await reconcileReview(ports.catalog, recorded.review)).text,
+  };
   if (options.mode === 'review') {
-    await writeLists(
+    // Nothing is written to a database, so every line this run adds is
+    // `planned`. A line an earlier run recorded keeps its outcome, except a
+    // planned line the reconcile confirmed.
+    const written = await writeLists(
       ports,
       options.file,
-      plan.corrections,
+      reviewList(plan.corrections),
       plan.notes,
-      recorded
+      reconciled
     );
     ports.log(`review ${plan.corrections.length}`);
+    ports.log(
+      `save ${listsToSave(plannedBefore, recorded.notes, written.notes) ? 1 : 0}`
+    );
     return 0;
   }
 
@@ -652,7 +893,11 @@ export async function runWashSizes(
     );
   }
 
-  const done: Correction[] = [];
+  // Every product the run meant to correct is listed: `corrected`, with the
+  // values it read just before its update, once that update went through, and
+  // `planned`, as it was counted, when it was skipped or failed.
+  const listed: Correction[] = [];
+  const done = new Set<string>();
   let skipped = 0;
   let failures = 0;
   for (const correction of plan.corrections) {
@@ -660,10 +905,13 @@ export async function runWashSizes(
       const saved = await correct(ports.catalog, correction);
       if (saved === null) {
         skipped += 1;
+        listed.push(correction);
       } else {
-        done.push(saved);
+        done.add(saved.item.id);
+        listed.push(saved);
       }
     } catch (error) {
+      listed.push(correction);
       if (codeOf(error) === EXPECTATION_FAILED) {
         skipped += 1;
         continue;
@@ -673,8 +921,14 @@ export async function runWashSizes(
       ports.log(`failed ${codeOf(error) ?? 'error'}`);
     }
   }
-  await writeLists(ports, options.file, done, plan.notes, recorded);
-  ports.log(`corrected ${done.length}`);
+  await writeLists(
+    ports,
+    options.file,
+    reviewList(listed, done),
+    plan.notes,
+    reconciled
+  );
+  ports.log(`corrected ${done.size}`);
   ports.log(`skipped ${skipped}`);
   ports.log(`failures ${failures}`);
   return failures;
@@ -711,19 +965,109 @@ async function correct(
 async function writeLists(
   ports: WashSizesPorts,
   file: string,
-  corrections: Correction[],
-  notes: PerWashNote[],
+  review: string,
+  notes: Note[],
   recorded: RecordedLists
-): Promise<void> {
+): Promise<RecordedLists> {
   // Both merged before either is written, so a refusal writes neither.
-  const review = mergeList(
-    REVIEW_HEADER,
-    recorded.review,
-    reviewList(corrections)
+  const reviewText = mergeList(REVIEW_SHAPE, recorded.review, review);
+  const notesText = mergeList(NOTES_SHAPE, recorded.notes, notesList(notes));
+  await ports.files.write(file, reviewText);
+  await ports.files.write(notesPathOf(file), notesText);
+  return { review: reviewText, notes: notesText };
+}
+
+/** The column of the review list that holds the outcome. */
+const OUTCOME = REVIEW_HEADER.length - 1;
+
+/** The lines of a list below its header, each split into its cells. */
+function linesOf(text: string): string[][] {
+  return text
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .slice(1)
+    .map((line) => line.replace(/\r$/, '').split('\t'));
+}
+
+/** The product of each `planned` line of a review list. */
+export function plannedIdsOf(review: string): string[] {
+  return linesOf(review)
+    .filter((cells) => cells[OUTCOME] === 'planned')
+    .map((cells) => cells[1]);
+}
+
+/**
+ * Whether the product a `planned` line names now shows that its wash count
+ * was taken off: catalog has it, unmerged, `UNIT`, with no size. A product
+ * that holds any size, or that catalog lacks or merged, confirms nothing.
+ */
+export function confirmsCorrection(item: ItemView | undefined): boolean {
+  return (
+    item !== undefined &&
+    !item.mergedInto &&
+    item.defaultUnit === UnitOfMeasure.UNIT &&
+    (item.unitSize === null || item.unitSize === undefined)
   );
-  const note = mergeList(NOTE_HEADER, recorded.note, perWashNote(notes));
-  await ports.files.write(file, review);
-  await ports.files.write(notePathOf(file), note);
+}
+
+/**
+ * The reconcile: each `planned` line of a recorded review list is read again
+ * from catalog with the same read the selection uses, and becomes
+ * `corrected` when its product confirms it ({@link confirmsCorrection}). The
+ * size the line names is then gone, which is what the curator acts on. Every
+ * other line stays as it stands, and a `corrected` line is never read.
+ * Reads only: it sends no update. Answers the list and how many lines turned.
+ */
+export async function reconcileReview(
+  catalog: CatalogPort,
+  review: string
+): Promise<{ text: string; turned: number }> {
+  const planned = linesOf(review).filter(
+    (cells) => cells[OUTCOME] === 'planned'
+  );
+  if (planned.length === 0) {
+    return { text: review, turned: 0 };
+  }
+  const items = await readItems(
+    catalog,
+    planned.map((cells) => cells[1])
+  );
+  const turned = planned
+    .filter((cells) => confirmsCorrection(items.get(cells[1])))
+    .map((cells) =>
+      cells.map((value, i) => (i === OUTCOME ? 'corrected' : value))
+    );
+  if (turned.length === 0) {
+    return { text: review, turned: 0 };
+  }
+  // The shape's own replacement turns each held `planned` line.
+  const next = table(
+    REVIEW_HEADER,
+    turned.map((cells) => ({
+      chain: REVIEW_SHAPE.groupOf(cells),
+      name: REVIEW_SHAPE.nameOf(cells),
+      cells,
+    }))
+  );
+  return { text: mergeList(REVIEW_SHAPE, review, next), turned: turned.length };
+}
+
+/**
+ * Whether a run with no product to correct must still save the lists
+ * (`post.sh`, on `products 0`): when the recorded review list held a
+ * `planned` line, which the reconcile may have confirmed, or when the notes
+ * of this run hold a line the recorded notes do not. Otherwise nothing is
+ * saved and an earlier ConfigMap stays as it is.
+ */
+export function listsToSave(
+  plannedRecorded: number,
+  recordedNotes: string,
+  mergedNotes: string
+): boolean {
+  return (
+    plannedRecorded > 0 ||
+    linesOf(mergedNotes).length > linesOf(recordedNotes).length
+  );
 }
 
 interface Line {
@@ -737,11 +1081,15 @@ function sortLines(lines: Line[]): Line[] {
     (a, b) =>
       (a.chain < b.chain ? -1 : a.chain > b.chain ? 1 : 0) ||
       a.name.localeCompare(b.name, 'es') ||
-      (a.cells[1] < b.cells[1] ? -1 : a.cells[1] > b.cells[1] ? 1 : 0)
+      compare(a.cells.join('\t'), b.cells.join('\t'))
   );
 }
 
-function table(header: string[], lines: Line[]): string {
+function compare(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function table(header: readonly string[], lines: Line[]): string {
   return [header, ...lines.map((line) => line.cells)]
     .map((cells) => cells.map(cell).join('\t'))
     .join('\n')
@@ -796,6 +1144,55 @@ export function describe(error: unknown): string {
       : null;
   const what = [name, code].filter((part) => part !== null).join(' ');
   return what ? `the command failed: ${what}` : 'the command failed';
+}
+
+/**
+ * The line printed for a process warning: its class name and its code, never
+ * its message, which can quote a value (a deprecation names the call, a
+ * listener leak names the emitter).
+ */
+export function describeWarning(warning: unknown): string {
+  const raw =
+    warning && typeof warning === 'object'
+      ? (warning as { name?: unknown; code?: unknown })
+      : {};
+  const name =
+    typeof raw.name === 'string' && /^[A-Za-z]{1,40}$/.test(raw.name)
+      ? raw.name
+      : 'Warning';
+  return typeof raw.code === 'string' && /^[A-Z0-9_]{1,20}$/.test(raw.code)
+    ? `warning ${name} ${raw.code}`
+    : `warning ${name}`;
+}
+
+/** The part of `process` {@link guardOutput} hooks into. */
+export interface GuardedProcess {
+  on(event: string, listener: (value: unknown) => void): unknown;
+  removeAllListeners(event: string): unknown;
+}
+
+/**
+ * Routes everything Node would print on its own through the words above.
+ * Node prints an uncaught error whole, query parameters and all, and a
+ * warning with its message; after this an uncaught error prints
+ * {@link describe} and exits 1, and a warning prints
+ * {@link describeWarning}. Answers the failure handler, for the command's own
+ * rejection.
+ */
+export function guardOutput(
+  target: GuardedProcess,
+  printError: (line: string) => void,
+  exit: (code: number) => void
+): (error: unknown) => void {
+  const fail = (error: unknown) => {
+    printError(describe(error));
+    exit(1);
+  };
+  target.on('uncaughtException', fail);
+  target.on('unhandledRejection', fail);
+  target.removeAllListeners('warning');
+  target.on('warning', (warning) => printError(describeWarning(warning)));
+  return fail;
 }
 
 /** A Postgres error's SQLSTATE, five letters or digits, which names nothing. */
