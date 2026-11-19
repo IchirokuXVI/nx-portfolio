@@ -17,14 +17,18 @@ import type { LinkableChain, LinkableShop } from './place-linking';
  * gone beside one that was never resolved.
  */
 
-/** Fixed, so that a spec asserting on a row can name it. */
-const MERCADONA = '11111111-1111-4111-8111-111111111111';
-const CARREFOUR = '22222222-2222-4222-8222-222222222222';
-const DEZA = '33333333-3333-4333-8333-333333333333';
+/**
+ * The chains, by the ids of `SUPERMARKET_SEED` in `feature-catalog`, so the
+ * name lookup finds each one with nothing listening and a harvest screen draws
+ * the chain's name where a gateway would.
+ */
+const MERCADONA = 'sm_mercadona';
+const CARREFOUR = 'sm_carrefour';
+const DEZA = 'sm_deza';
 /** A chain with no source row here, for its walk on the run screen alone. */
-const ELJAMON = '88888888-8888-4888-8888-888888888881';
+const ELJAMON = 'sm_eljamon';
 /** A chain with no source row here, for its walk on the run screen alone. */
-const DIA = '44444444-4444-4444-8444-444444444441';
+const DIA = 'sm_dia';
 
 /**
  * The scopes a price belongs to, fixed so a spec can name one.
@@ -983,8 +987,9 @@ export const DISCOVERED_PLACE_SEED: readonly Wire.HarvestDiscoveredPlaceView[] =
       candidates: [],
     },
     {
-      // An OpenStreetMap place with no brand key, whose chain the catalog does
-      // not hold (backend plan 0153). OpenStreetMap prints no language, so an
+      // An OpenStreetMap place with no brand key, whose printed name matches no
+      // chain of the catalog (backend plan 0153): the catalog row of DEZA is
+      // named `Supermercados Deza`. OpenStreetMap prints no language, so an
       // import names the chain with `newChain` or is refused.
       id: 'place-osm-unbranded',
       runId: 'run-store-aborted',
@@ -1132,6 +1137,21 @@ export const PLACE_CHAIN_SEED: readonly LinkableChain[] = [
     id: 'sm_consum',
     name: { en: 'Consum', es: 'Consum' },
     brandKey: 'Q8350308',
+  },
+  {
+    id: 'sm_deza',
+    name: { en: 'Supermercados Deza', es: 'Supermercados Deza' },
+    brandKey: null,
+  },
+  {
+    id: 'sm_dia',
+    name: { en: 'Supermercados Dia', es: 'Supermercados Dia' },
+    brandKey: null,
+  },
+  {
+    id: 'sm_eljamon',
+    name: { en: 'El Jamón', es: 'El Jamón' },
+    brandKey: null,
   },
 ];
 

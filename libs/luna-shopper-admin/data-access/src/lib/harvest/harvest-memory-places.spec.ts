@@ -192,7 +192,8 @@ describe('HarvestMemory, a link', () => {
   });
 
   it('links a place that names no chain to the shop that is named', async () => {
-    // Dia is a chain the memory catalog does not hold.
+    // Neither the key nor the name the place prints resolves to a chain of the
+    // memory catalog.
     const result = await new HarvestMemory().linkPlace(DIA, {
       supermarketLocationId: 'loc_consum_centro',
     });

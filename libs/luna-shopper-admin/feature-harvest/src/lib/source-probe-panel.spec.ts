@@ -19,9 +19,9 @@ import { SOURCES } from './sources';
  * whose source is manual.
  */
 
-const MERCADONA = '11111111-1111-4111-8111-111111111111';
-const CARREFOUR = '22222222-2222-4222-8222-222222222222';
-const DEZA = '33333333-3333-4333-8333-333333333333';
+const MERCADONA = 'sm_mercadona';
+const CARREFOUR = 'sm_carrefour';
+const DEZA = 'sm_deza';
 
 const NAMES: Readonly<Record<string, string>> = {
   [MERCADONA]: 'Mercadona',

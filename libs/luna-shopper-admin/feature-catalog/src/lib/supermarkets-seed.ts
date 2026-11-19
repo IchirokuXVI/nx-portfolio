@@ -69,4 +69,42 @@ export const SUPERMARKET_SEED: readonly Wire.CatalogSupermarketView[] = [
     linkedImagesEnabled: false,
     locationCount: 1,
   },
+  // The three chains the harvest seed walks and the five above do not cover,
+  // so a harvest screen names each of them with nothing listening.
+  //
+  // None of the three carries a brand key, and DEZA and Dia are named as each
+  // trades in full. The places of the harvest seed print `Deza`, `Dia` and
+  // `Maxi Dia` and carry Dia's Wikidata key, and they are there to show places
+  // whose chain the catalog does not resolve. A key or a short name here would
+  // bind them, by key or by printed name, and that case would be gone.
+  {
+    id: 'sm_deza',
+    name: { en: 'Supermercados Deza', es: 'Supermercados Deza' },
+    logoUrl: null,
+    websiteUrl: 'https://www.deza.es',
+    externalBrandKey: null,
+    defaultPriceScopeId: null,
+    linkedImagesEnabled: false,
+    locationCount: 0,
+  },
+  {
+    id: 'sm_dia',
+    name: { en: 'Supermercados Dia', es: 'Supermercados Dia' },
+    logoUrl: null,
+    websiteUrl: 'https://www.dia.es',
+    externalBrandKey: null,
+    defaultPriceScopeId: null,
+    linkedImagesEnabled: false,
+    locationCount: 0,
+  },
+  {
+    id: 'sm_eljamon',
+    name: { en: 'El Jamón', es: 'El Jamón' },
+    logoUrl: null,
+    websiteUrl: 'https://www.supermercadoseljamon.com',
+    externalBrandKey: null,
+    defaultPriceScopeId: null,
+    linkedImagesEnabled: false,
+    locationCount: 0,
+  },
 ];
