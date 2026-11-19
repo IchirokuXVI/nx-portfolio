@@ -5,15 +5,25 @@ import {
   ITEM_PATTERNS,
   type GetItemsResult,
 } from '@portfolio/luna-shopper/contracts';
-import { writeFile } from 'fs/promises';
+import { readFile, writeFile } from 'fs/promises';
 import { firstValueFrom, timeout } from 'rxjs';
 import { DataSource } from 'typeorm';
 import {
   describe,
   parseWashSizesArgs,
   runWashSizes,
+  WashSizesRefusal,
   type CatalogPort,
 } from './app/release-tasks/wash-sizes';
+
+/** All of standard input, as text. */
+async function readStdin(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
 
 /** How long one catalog answer may take. An update is one row. */
 const ASK_TIMEOUT_MS = 30_000;
@@ -41,6 +51,11 @@ const ASK_TIMEOUT_MS = 30_000;
  *       `corrected`, `skipped` and `failures`, and exits 1 when any product
  *       failed.
  *
+ *   ... --recorded <file|->
+ *       with either list: the ConfigMap earlier runs saved, as
+ *       `kubectl get -o json` prints it (`-` reads standard input, empty
+ *       means none). Every line it holds stays in the lists written.
+ *
  * It needs HARVESTER_DB_URL, NATS_URL and HARVESTER_ACTOR_ID, which the pod
  * already has. Catalog knows that actor as a service (`SERVICE_ACTOR_IDS`).
  */
@@ -50,7 +65,7 @@ async function run() {
   const natsUrl = process.env['NATS_URL'];
   const actor = process.env['HARVESTER_ACTOR_ID'];
   if (!url || !natsUrl || !actor) {
-    throw new Error(
+    throw new WashSizesRefusal(
       'HARVESTER_DB_URL, NATS_URL and HARVESTER_ACTOR_ID must all be set. ' +
         'Inside a pod they arrive from the Secret of the environment through ' +
         '_env.tpl, and catalog knows the actor through SERVICE_ACTOR_IDS.'
@@ -84,7 +99,10 @@ async function run() {
       {
         harvester: { query: (sql, params) => dataSource.query(sql, params) },
         catalog,
-        files: { write: (path, text) => writeFile(path, text, 'utf8') },
+        files: {
+          write: (path, text) => writeFile(path, text, 'utf8'),
+          read: (path) => (path === '-' ? readStdin() : readFile(path, 'utf8')),
+        },
         log: (line) => console.log(line),
       },
       options
@@ -98,7 +116,8 @@ async function run() {
 run().then(
   (failures) => process.exit(failures > 0 ? 1 : 0),
   (err) => {
-    // The message, not the stack: the release task prints it as its refusal.
+    // Never the stack, and never the message of an error the command did not
+    // word itself: the release task prints this line into a public log.
     console.error(describe(err));
     process.exit(1);
   }

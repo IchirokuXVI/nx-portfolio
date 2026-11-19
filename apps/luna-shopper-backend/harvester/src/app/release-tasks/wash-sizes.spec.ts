@@ -6,14 +6,19 @@ import {
 import {
   chainOf,
   countLines,
+  describe as describeFailure,
+  mergeList,
   notePathOf,
   parseWashSizesArgs,
   planWashSizes,
+  readRecorded,
   readWashFormat,
   reviewList,
   runWashSizes,
   SELECT_STATED_ROWS_SQL,
   SELECT_WASH_ROWS_SQL,
+  statedSizeOf,
+  WashSizesRefusal,
   type CatalogPort,
   type HarvesterDb,
   type StatedRow,
@@ -226,6 +231,30 @@ describe('wash sizes: the selection', () => {
     expect(p.notes.map((n) => n.item.id)).toEqual(['m']);
     expect(countLines(p)).toContain('mercadona-per-wash 1');
   });
+
+  it.each([
+    ['a count of 1', 1],
+    ['no stated count', null],
+  ])('notes no Mercadona row priced per wash with %s', (_label, unitSize) => {
+    const r = row('m', {
+      chain: 'mercadona',
+      adapterKey: 'mercadona-api',
+      sizeFormat: 'ud',
+      unitSize,
+      sizeUnit: 'UNIT',
+      label: 'lv',
+    });
+    expect(plan([r], [item('m', { unitSize: 1 })]).notes).toEqual([]);
+  });
+
+  it('asks the note only for Mercadona counts above 1', () => {
+    expect(SELECT_STATED_ROWS_SQL).toContain(
+      `e."sizeUnit" = 'UNIT'\n              AND e."unitSize" > 1`
+    );
+    expect(SELECT_STATED_ROWS_SQL).toContain(
+      `r.label = 'lv'\n        AND r."unitSize" > 1`
+    );
+  });
 });
 
 describe('wash sizes: the review list', () => {
@@ -233,10 +262,11 @@ describe('wash sizes: the review list', () => {
     const rows = [
       row('b'),
       row('a'),
+      // Mercadona's real shape: the bare unit as the text, the number apart.
       row('a', {
         chain: 'mercadona',
         adapterKey: 'mercadona-api',
-        sizeFormat: '2 l',
+        sizeFormat: 'l',
         unitSize: 2,
         sizeUnit: 'LITER',
       }),
@@ -265,6 +295,27 @@ describe('wash sizes: the review list', () => {
     ]);
   });
 
+  it.each([
+    [
+      'a bare unit after its stored number',
+      { sizeFormat: 'l', unitSize: 2 },
+      '2 l',
+    ],
+    [
+      'a bare unit with no stored number',
+      { sizeFormat: 'ud', unitSize: null },
+      'ud',
+    ],
+    [
+      'a text that prints its number',
+      { sizeFormat: '40 lavados', unitSize: 40 },
+      '40 lavados',
+    ],
+    ['a decimal number', { sizeFormat: 'kg', unitSize: 1.5 }, '1.5 kg'],
+  ])('states %s', (_label, over, expected) => {
+    expect(statedSizeOf(row('a', over))).toBe(expected);
+  });
+
   it('puts the Mercadona note beside the list', () => {
     expect(notePathOf('/tmp/review.tsv')).toBe(
       '/tmp/review.mercadona-per-wash.tsv'
@@ -278,17 +329,24 @@ describe('wash sizes: the arguments', () => {
     expect(parseWashSizesArgs(['--review', 'r.tsv'])).toEqual({
       mode: 'review',
       file: 'r.tsv',
+      recorded: null,
     });
     expect(parseWashSizesArgs(['--max', '50', '--review', 'r.tsv'])).toEqual({
       mode: 'write',
       max: 50,
       file: 'r.tsv',
+      recorded: null,
     });
+    expect(
+      parseWashSizesArgs(['--max', '5', '--review', 'r.tsv', '--recorded', '-'])
+    ).toEqual({ mode: 'write', max: 5, file: 'r.tsv', recorded: '-' });
   });
 
   it.each([
     [[]],
     [['--max', '50']],
+    [['--recorded', '-']],
+    [['--count', '--recorded', '-']],
     [['--max', 'ten', '--review', 'r.tsv']],
     [['--review', '--max']],
     [['--count', '--max', '5']],
@@ -325,6 +383,11 @@ class FakeCatalog implements CatalogPort {
   readonly updates: UpdateItemInput[] = [];
   /** Runs before the read of each product the write run makes. */
   beforeRead: (ids: string[]) => void = () => undefined;
+  /**
+   * Off, the catalog applies any update, so only the command's own re-read
+   * of section 1.4 can skip a product that changed.
+   */
+  checkExpectations = true;
   reads = 0;
   constructor(public items: Map<string, ItemView>) {}
   async getMany(ids: string[]): Promise<ItemView[]> {
@@ -343,8 +406,11 @@ class FakeCatalog implements CatalogPort {
     }
     const expect = input.expect ?? {};
     if (
-      (expect.unitSize !== undefined && expect.unitSize !== current.unitSize) ||
-      (expect.packCount !== undefined && expect.packCount !== current.packCount)
+      this.checkExpectations &&
+      ((expect.unitSize !== undefined &&
+        expect.unitSize !== current.unitSize) ||
+        (expect.packCount !== undefined &&
+          expect.packCount !== current.packCount))
     ) {
       throw { code: 'item_expectation_failed', details: current.id };
     }
@@ -375,6 +441,13 @@ function stack(rows: StatedRow[], items: ItemView[]) {
         write: async (path: string, text: string) => {
           files.set(path, text);
         },
+        read: async (path: string) => {
+          const text = files.get(path);
+          if (text === undefined) {
+            throw new Error(`no file ${path}`);
+          }
+          return text;
+        },
       },
       log: (line: string) => log.push(line),
     },
@@ -403,7 +476,11 @@ describe('wash sizes: the command', () => {
 
   it('--review writes the list and no database row', async () => {
     const s = stack(rows(), items());
-    await runWashSizes(s.ports, { mode: 'review', file: 'r.tsv' });
+    await runWashSizes(s.ports, {
+      mode: 'review',
+      file: 'r.tsv',
+      recorded: null,
+    });
     expect(s.catalog.updates).toEqual([]);
     expect(s.harvester.other).toEqual([]);
     expect(s.files.get('r.tsv')?.trimEnd().split('\n')).toHaveLength(3);
@@ -416,6 +493,7 @@ describe('wash sizes: the command', () => {
       mode: 'write',
       max: 2,
       file: 'r.tsv',
+      recorded: null,
     });
     expect(failures).toBe(0);
     expect(s.catalog.updates).toEqual([
@@ -450,7 +528,12 @@ describe('wash sizes: the command', () => {
   it('refuses before any write when --max is below the count', async () => {
     const s = stack(rows(), items());
     await expect(
-      runWashSizes(s.ports, { mode: 'write', max: 1, file: 'r.tsv' })
+      runWashSizes(s.ports, {
+        mode: 'write',
+        max: 1,
+        file: 'r.tsv',
+        recorded: null,
+      })
     ).rejects.toThrow(/2 products, above 1/);
     expect(s.catalog.updates).toEqual([]);
     expect(s.files.size).toBe(0);
@@ -462,7 +545,12 @@ describe('wash sizes: the command', () => {
       items()
     );
     await expect(
-      runWashSizes(s.ports, { mode: 'write', max: 9, file: 'r.tsv' })
+      runWashSizes(s.ports, {
+        mode: 'write',
+        max: 9,
+        file: 'r.tsv',
+        recorded: null,
+      })
     ).rejects.toThrow(/not a whole number above 0/);
     expect(s.catalog.updates).toEqual([]);
   });
@@ -475,7 +563,12 @@ describe('wash sizes: the command', () => {
         s.catalog.items.set('a', item('a', { unitSize: 750 }));
       }
     };
-    await runWashSizes(s.ports, { mode: 'write', max: 2, file: 'r.tsv' });
+    await runWashSizes(s.ports, {
+      mode: 'write',
+      max: 2,
+      file: 'r.tsv',
+      recorded: null,
+    });
     expect(s.catalog.updates.map((u) => u.itemId)).toEqual(['b']);
     expect(s.catalog.items.get('a')?.unitSize).toBe(750);
     expect(s.files.get('r.tsv')).not.toContain('\ta\t');
@@ -498,6 +591,7 @@ describe('wash sizes: the command', () => {
       mode: 'write',
       max: 2,
       file: 'r.tsv',
+      recorded: null,
     });
     expect(failures).toBe(1);
     expect(s.log).toEqual(
@@ -509,5 +603,225 @@ describe('wash sizes: the command', () => {
       ])
     );
     expect(s.log.join('\n')).not.toMatch(/Detergente/);
+  });
+
+  it('skips a product that changed by its own re-read, with a catalog that checks nothing', async () => {
+    // Only the re-read of section 1.4 can skip here: this catalog applies any
+    // update, whatever the expect says.
+    const s = stack(rows(), items());
+    s.catalog.checkExpectations = false;
+    s.catalog.beforeRead = (ids) => {
+      if (ids.length === 1 && ids[0] === 'a') {
+        s.catalog.items.set('a', item('a', { unitSize: 750 }));
+      }
+    };
+    await runWashSizes(s.ports, {
+      mode: 'write',
+      max: 2,
+      file: 'r.tsv',
+      recorded: null,
+    });
+    expect(s.catalog.updates.map((u) => u.itemId)).toEqual(['b']);
+    expect(s.catalog.items.get('a')?.unitSize).toBe(750);
+    expect(s.log).toEqual(expect.arrayContaining(['corrected 1', 'skipped 1']));
+  });
+
+  it('writes past a product catalog lacks or merged, counts it held, and lists it not', async () => {
+    const s = stack(
+      [...rows(), row('gone'), row('merged')],
+      [...items(), item('merged', { mergedInto: 'a' })]
+    );
+    const failures = await runWashSizes(s.ports, {
+      mode: 'write',
+      max: 2,
+      file: 'r.tsv',
+      recorded: null,
+    });
+    expect(failures).toBe(0);
+    expect(s.catalog.updates.map((u) => u.itemId)).toEqual(['a', 'b']);
+    expect(s.log).toEqual(
+      expect.arrayContaining(['held 2', 'products 2', 'corrected 2'])
+    );
+    expect(s.files.get('r.tsv')).not.toMatch(/\tgone\t|\tmerged\t/);
+  });
+
+  it('keeps every product an earlier run corrected when a later run finishes the rest', async () => {
+    const s = stack(rows(), items());
+    const update = s.catalog.update.bind(s.catalog);
+    // Run 1 corrects a, then b fails.
+    s.catalog.update = async (input) => {
+      if (input.itemId === 'b') {
+        throw { code: 'timeout' };
+      }
+      return update(input);
+    };
+    expect(
+      await runWashSizes(s.ports, {
+        mode: 'write',
+        max: 2,
+        file: 'r.tsv',
+        recorded: null,
+      })
+    ).toBe(1);
+    const configMap = (file: string) =>
+      JSON.stringify({
+        data: {
+          'review.tsv': s.files.get(file),
+          'mercadona-per-wash.tsv': s.files.get(notePathOf(file)),
+        },
+      });
+    s.files.set('cm1.json', configMap('r.tsv'));
+
+    // Run 2: its own list holds only b, and a stays with its old size.
+    s.catalog.update = update;
+    await runWashSizes(s.ports, {
+      mode: 'review',
+      file: 'before.tsv',
+      recorded: 'cm1.json',
+    });
+    expect(s.files.get('before.tsv')).toContain(
+      '\ta\tNombre secreto\t40\tUNIT\t'
+    );
+    await runWashSizes(s.ports, {
+      mode: 'write',
+      max: 2,
+      file: 'r2.tsv',
+      recorded: 'cm1.json',
+    });
+    const second = (s.files.get('r2.tsv') ?? '').trimEnd().split('\n');
+    expect(second).toHaveLength(3);
+    expect(second.filter((l) => l.startsWith('chain\t'))).toHaveLength(1);
+    expect(second.join('\n')).toContain('\ta\tNombre secreto\t40\tUNIT\t');
+    expect(second.join('\n')).toContain('\tb\tDetergente b\t80\tUNIT\t2\t');
+
+    // Run 3 has nothing to do and changes nothing.
+    s.files.set('cm2.json', configMap('r2.tsv'));
+    await runWashSizes(s.ports, {
+      mode: 'write',
+      max: 2,
+      file: 'r3.tsv',
+      recorded: 'cm2.json',
+    });
+    expect(s.files.get('r3.tsv')).toBe(s.files.get('r2.tsv'));
+    expect(s.files.get(notePathOf('r3.tsv'))).toBe(
+      s.files.get(notePathOf('r2.tsv'))
+    );
+  });
+
+  it('refuses a recorded ConfigMap it cannot read before any write, quoting none of it', async () => {
+    const s = stack(rows(), items());
+    s.files.set('cm.json', '{"data": "Nombre secreto');
+    await expect(
+      runWashSizes(s.ports, {
+        mode: 'write',
+        max: 2,
+        file: 'r.tsv',
+        recorded: 'cm.json',
+      })
+    ).rejects.toThrow(/cannot be read/);
+    expect(s.catalog.updates).toEqual([]);
+    expect(s.files.has('r.tsv')).toBe(false);
+  });
+});
+
+describe('wash sizes: lists across runs', () => {
+  const header = ['chain', 'item_id', 'item_name', 'old_unit_size'];
+  const list = (...lines: string[]) =>
+    [header.join('\t'), ...lines].join('\n') + '\n';
+
+  it('keeps a recorded line as it stands and adds only new products', () => {
+    const merged = mergeList(
+      header,
+      list('deza\ta\tZeta\t40'),
+      list('deza\ta\tZeta\t', 'carrefour\tb\tAlfa\t80', 'deza\tc\tBeta\t30')
+    );
+    expect(merged).toBe(
+      list('carrefour\tb\tAlfa\t80', 'deza\tc\tBeta\t30', 'deza\ta\tZeta\t40')
+    );
+  });
+
+  it('changes nothing when merged twice, and keeps one header', () => {
+    const once = mergeList(header, '', list('deza\ta\tZeta\t40'));
+    expect(mergeList(header, once, once)).toBe(once);
+    expect(mergeList(header, once, list())).toBe(once);
+  });
+
+  it('keys on chain and product, so one product under two chains is two lines', () => {
+    const merged = mergeList(
+      header,
+      list('deza\ta\tZeta\t40'),
+      list('dia\ta\tZeta\t40')
+    );
+    expect(merged.trimEnd().split('\n')).toHaveLength(3);
+  });
+
+  it('refuses a list with another header, quoting none of it', () => {
+    expect(() =>
+      mergeList(header, 'other\theader\nNombre secreto\n', list())
+    ).toThrow(WashSizesRefusal);
+    expect(() =>
+      mergeList(header, 'other\theader\nNombre secreto\n', list())
+    ).not.toThrow(/Nombre/);
+  });
+
+  it('reads no ConfigMap as nothing recorded, and a missing key as empty', () => {
+    expect(readRecorded('')).toEqual({ review: '', note: '' });
+    expect(readRecorded('{"data": {"review.tsv": "x"}}')).toEqual({
+      review: 'x',
+      note: '',
+    });
+    expect(readRecorded('{"kind": "ConfigMap"}')).toEqual({
+      review: '',
+      note: '',
+    });
+  });
+});
+
+describe('wash sizes: what a failure prints', () => {
+  it('prints a refusal the command worded', () => {
+    expect(describeFailure(new WashSizesRefusal('Refused: 3 products'))).toBe(
+      'Refused: 3 products'
+    );
+  });
+
+  it.each([
+    [
+      'a failed query',
+      Object.assign(
+        new Error('invalid input syntax for type uuid: "Detergente a"'),
+        { name: 'QueryFailedError', code: '22P02' }
+      ),
+      'the command failed: QueryFailedError 22P02',
+    ],
+    [
+      'a rejected read',
+      new Error('item Detergente a (0b1c) could not be read'),
+      'the command failed: Error',
+    ],
+    [
+      'a refusal object with a message',
+      { code: 'validation_failed', message: 'Detergente a' },
+      'the command failed: validation_failed',
+    ],
+    ['a bare string', 'Detergente a', 'the command failed'],
+  ])('prints no product for %s', (_label, error, expected) => {
+    const line = describeFailure(error);
+    expect(line).toBe(expected);
+    expect(line).not.toMatch(/Detergente|0b1c/);
+  });
+
+  it('puts nothing of a failed read on stdout or in the line for stderr', async () => {
+    const s = stack(
+      [row('a')],
+      [item('a', { name: { es: 'Nombre secreto' } })]
+    );
+    s.catalog.getMany = async () => {
+      throw new Error('could not read Nombre secreto');
+    };
+    const error = await runWashSizes(s.ports, { mode: 'count' }).catch(
+      (e: unknown) => e
+    );
+    expect(describeFailure(error)).not.toMatch(/Nombre/);
+    expect(s.log.join('\n')).not.toMatch(/Nombre/);
   });
 });

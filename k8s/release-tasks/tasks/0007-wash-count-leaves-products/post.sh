@@ -16,11 +16,22 @@
 # The run writes the review list of what it corrected (plan 0271, section 5)
 # to a file inside the pod, and the Mercadona note beside it. This file copies
 # both into the ConfigMap `release-task-<NNNN>-review` of the namespace, keys
-# `review.tsv` and `mercadona-per-wash.tsv`, through `kubectl apply`, so a
-# second run replaces it. It prints the line counts and the ConfigMap's name,
-# never a line of either list: the deploy log is public. A run that corrected
-# nothing leaves an earlier list in place. Nothing deletes that ConfigMap; the
-# owner does when the curator has worked through it.
+# `review.tsv` and `mercadona-per-wash.tsv`, through `kubectl apply
+# --server-side`, so a second run replaces the object and never stacks a copy.
+# Server side, because a client side apply also copies the whole object into
+# the `last-applied-configuration` annotation, and an annotation is capped at
+# 256 KiB, far below the 1 MiB a ConfigMap holds.
+#
+# A list never loses a line that an earlier run saved. This file reads the
+# ConfigMap as it stands before the run and hands it to the command
+# (`--recorded -`, on standard input), and the command keeps every line it
+# holds, with the old size it recorded, adding only products it does not hold
+# yet (`mergeList` in the harvester, which the specs prove). A run that fails
+# after correcting some products and the run that finishes them thus leave
+# every corrected product on the list, once. It prints the line counts and the
+# ConfigMap's name, never a line of either list: the deploy log is public.
+# Nothing deletes that ConfigMap; the owner does when the curator has worked
+# through it.
 #
 # It refuses where the harvester deployment's pod has no `wash-sizes.js`: the
 # rollout did not happen there. The runner then leaves the task at
@@ -33,16 +44,24 @@
 # Environment overrides:
 #   NAMESPACE     kubernetes namespace (default: luna-shopper)
 #   WASH_SIZES    command that runs wash-sizes.js of the harvester
-#   REVIEW_APPLY  command that receives the ConfigMap's YAML on stdin
-#                 (default: kubectl -n <namespace> apply -f -)
+#   REVIEW_APPLY  command that receives the ConfigMap's JSON on stdin
+#                 (default: kubectl -n <namespace> apply --server-side
+#                 --force-conflicts --field-manager=release-task-<NNNN> -f -)
+#   REVIEW_GET    command that prints the ConfigMap as JSON, or nothing when
+#                 there is none (default: kubectl -n <namespace> get
+#                 configmap <name> -o json, where NotFound prints nothing)
 #
 # The overrides are for a rehearsal against a local stack. Run it only on
 # databases that you made for the rehearsal. With WASH_SIZES set the command
 # runs on this machine, so its lists are written and read here. Its
-# environment must hold HARVESTER_DB_URL, NATS_URL and HARVESTER_ACTOR_ID:
+# environment must hold HARVESTER_DB_URL, NATS_URL and HARVESTER_ACTOR_ID.
+# The ConfigMap is read once, before anything is saved, so one file can stand
+# for it, and a second rehearsal run reads what the first saved:
+#   touch configmap.json
 #   ENVIRONMENT=staging \
 #     WASH_SIZES='node dist/apps/luna-shopper-backend-harvester/wash-sizes.js' \
-#     REVIEW_APPLY='tee configmap.yaml' \
+#     REVIEW_GET='cat configmap.json' \
+#     REVIEW_APPLY='tee configmap.json' \
 #     bash post.sh
 
 set -euo pipefail
@@ -138,6 +157,14 @@ if [ "$cmd" = absent ]; then
   echo "  no harvester deployment, so nothing to correct"
   exit 0
 fi
+# The same command with standard input attached, for the runs that read the
+# recorded lists. Only those get it, so no other run waits on this shell's
+# input.
+if [ -n "${WASH_SIZES:-}" ]; then
+  cmd_in="$cmd"
+else
+  cmd_in="kubectl -n $NAMESPACE exec -i deploy/$SVC -c $SVC -- node wash-sizes.js"
+fi
 
 # shellcheck disable=SC2086
 if ! out="$($cmd --count 2> "$ERR")"; then
@@ -173,16 +200,35 @@ else
 fi
 note="${list%.tsv}.mercadona-per-wash.tsv"
 
-# Saves both lists the command wrote in the ConfigMap, replacing what it held,
-# and prints their line counts. Never a line of either.
+# Prints the ConfigMap as earlier runs left it, as JSON, or nothing when there
+# is none. Anything else it cannot read is a refusal: a list that could not be
+# read must never be replaced by one that forgot it.
+recorded_lists() {
+  if [ -n "${REVIEW_GET:-}" ]; then
+    $REVIEW_GET
+    return
+  fi
+  local answer
+  if answer="$(kubectl -n "$NAMESPACE" get configmap "$CONFIGMAP" -o json 2> "$ERR")"; then
+    printf '%s\n' "$answer"
+    return 0
+  fi
+  case "$(cat "$ERR")" in *NotFound* | *'not found'*) return 0 ;; esac
+  echo "  cannot read the ConfigMap $CONFIGMAP: $(cat "$ERR")" >&2
+  return 1
+}
+
+# Saves both lists the command wrote in the ConfigMap, replacing the object,
+# and prints their line counts. Never a line of either. The command already
+# merged in every line the ConfigMap held before the run.
 save_lists() {
   fetch "$list" "$WORK/review.tsv"
   fetch "$note" "$WORK/mercadona-per-wash.tsv"
   kubectl create configmap "$CONFIGMAP" -n "$NAMESPACE" \
     --from-file=review.tsv="$WORK/review.tsv" \
     --from-file=mercadona-per-wash.tsv="$WORK/mercadona-per-wash.tsv" \
-    --dry-run=client -o yaml \
-    | ${REVIEW_APPLY:-kubectl -n "$NAMESPACE" apply -f -} > /dev/null
+    --dry-run=client -o json \
+    | ${REVIEW_APPLY:-kubectl -n "$NAMESPACE" apply --server-side --force-conflicts --field-manager="release-task-$NUMBER" -f -} > /dev/null
   # Each list has a header line, which is not a product.
   local lines notes
   lines=$(($(wc -l < "$WORK/review.tsv") - 1))
@@ -190,11 +236,19 @@ save_lists() {
   echo "  $1: the review list holds $lines lines and the Mercadona note $notes, in the ConfigMap $CONFIGMAP"
 }
 
+# What earlier runs saved, read once, before this run saves anything. Both
+# runs below merge into this, so the second never keeps the first's guesses.
+recorded="$WORK/recorded.json"
+if ! recorded_lists > "$recorded"; then
+  echo "  Nothing was changed." >&2
+  exit 1
+fi
+
 # The list of what is about to change goes in first. A run that stops after
 # its writes and before the list of what it corrected is saved thus still
 # leaves every product it may have corrected on a list, with its old size.
 # shellcheck disable=SC2086
-if ! out="$($cmd --review "$list" 2> "$ERR")"; then
+if ! out="$($cmd_in --review "$list" --recorded - < "$recorded" 2> "$ERR")"; then
   echo "  the review list could not be written, and nothing was changed: $(cat "$ERR")" >&2
   exit 1
 fi
@@ -202,7 +256,7 @@ save_lists "before the run"
 
 echo "  taking the wash count off $products products"
 # shellcheck disable=SC2086
-if ! out="$($cmd --max "$max" --review "$list" 2> "$ERR")"; then
+if ! out="$($cmd_in --max "$max" --review "$list" --recorded - < "$recorded" 2> "$ERR")"; then
   printf '%s\n' "$out" | tr -d '\r' | sed 's/^/    /'
   echo "  the run failed: $(cat "$ERR")" >&2
   echo "  Each product is its own transaction, so the products before the failure are done" >&2
@@ -213,10 +267,13 @@ else
   failed=0
 fi
 
-# The list of what the run corrected replaces the one above. A run that
-# corrected nothing leaves it in place.
+# A run that printed `corrected` finished its loop and wrote its list: every
+# line earlier runs saved, and the products it corrected. That replaces the
+# list above, whose products it may only have been about to correct. With
+# nothing corrected, it is what earlier runs saved. A run that printed no
+# `corrected` stopped before its list, so the list above stays.
 corrected="$(count_of corrected "$out")"
-if [ -n "$corrected" ] && [ "$corrected" -gt 0 ]; then
+if [ -n "$corrected" ]; then
   save_lists "after the run"
 fi
 

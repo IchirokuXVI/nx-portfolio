@@ -462,10 +462,15 @@ that size.
   products it corrected in the ConfigMap `release-task-0007-review`, key
   `review.tsv`: the chain, the product, the size it took off, the wash text
   that qualified it, and every size text the product's rows state. The key
-  `mercadona-per-wash.tsv` beside it lists the Mercadona packs that the chain
-  prices per wash (label `lv`) and sizes as a count. The task does not correct
-  those. The deploy log shows the line counts only, because it is public. Read
-  the lists over SSH on the host, as the `deploy` user:
+  `mercadona-per-wash.tsv` beside it lists the Mercadona rows that the chain
+  prices per wash (latest label `lv`) and that state a count of units above 1
+  as their size. The task does not correct those. A run never drops a line an
+  earlier run saved: a product corrected by a run that failed later stays on
+  the list with its old size, once. `post.sh` writes the ConfigMap with
+  `kubectl apply --server-side`, because a client side apply copies it into an
+  annotation capped at 256 KiB. The deploy log shows the line counts only,
+  because it is public. Read the lists over SSH on the host, as the `deploy`
+  user:
 
   ```sh
   kubectl -n luna-shopper get configmap release-task-0007-review \
@@ -486,9 +491,11 @@ To rehearse it, point the override at the built bundle and at databases that
 you made for the rehearsal, with a catalog on that NATS that knows the actor:
 
 ```sh
+touch configmap.json
 ENVIRONMENT=staging \
   WASH_SIZES='node dist/apps/luna-shopper-backend-harvester/wash-sizes.js' \
-  REVIEW_APPLY='tee configmap.yaml' \
+  REVIEW_GET='cat configmap.json' \
+  REVIEW_APPLY='tee configmap.json' \
   bash k8s/release-tasks/tasks/0007-wash-count-leaves-products/post.sh
 ```
 
