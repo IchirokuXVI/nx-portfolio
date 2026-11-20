@@ -256,21 +256,16 @@ describe('HarvestHeader', () => {
   /**
    * A walk that does not know its total reads an approximate one from the
    * last completed run of its chain and mode (decision 86 of the harvester
-   * round). The memory back end holds a completed DEZA walk of 2,361.
+   * round). The memory back end holds a completed El Jamón walk of 3,402
+   * under the same config (owner decisions 127b and 130b).
    */
   describe('a run that does not know its total', () => {
-    const DEZA_GOING: HarvestRun = {
-      ...(HARVEST_RUN_SEED.find(
-        (run) => run.id === 'run-deza-aborted'
-      ) as HarvestRun),
-      id: 'run-deza-going',
-      status: 'RUNNING',
-      finishedAt: null,
-      abortRequestedAt: null,
-    };
+    const GOING = HARVEST_RUN_SEED.find(
+      (run) => run.id === 'run-eljamon-running'
+    ) as HarvestRun;
 
     it('says "of about" the earlier run’s count, with a bar', async () => {
-      const { fixture } = await render(HarvestHeader, { running: DEZA_GOING });
+      const { fixture } = await render(HarvestHeader, { running: GOING });
       const run = one(fixture, '[data-running="header"]');
 
       expect(run?.querySelector('.count')?.textContent).toContain(
@@ -281,14 +276,14 @@ describe('HarvestHeader', () => {
 
     /** The screen reader hears "about" too, not the raw count alone. */
     it('labels the link with the estimate line, not the bare count', async () => {
-      const { fixture } = await render(HarvestHeader, { running: DEZA_GOING });
+      const { fixture } = await render(HarvestHeader, { running: GOING });
 
       expect(
         one(fixture, '[data-running="header"]')?.getAttribute('aria-label')
       ).toBe('harvest.running.openAbout');
       expect(fixture.componentInstance.label()).toEqual({
         key: 'harvest.running.openAbout',
-        args: { what: expect.any(String), processed: '824', total: '2,361' },
+        args: { what: expect.any(String), processed: '1,200', total: '3,402' },
       });
     });
 
@@ -303,7 +298,7 @@ describe('HarvestHeader', () => {
 
     it('shows no estimate for a run that has processed nothing', async () => {
       const { fixture } = await render(HarvestHeader, {
-        running: { ...DEZA_GOING, id: 'run-deza-zero', processed: 0 },
+        running: { ...GOING, id: 'run-eljamon-zero', processed: 0 },
       });
       const run = one(fixture, '[data-running="header"]');
 
@@ -316,7 +311,7 @@ describe('HarvestHeader', () => {
 
     it('keeps the unknown form once the run has passed the estimate', async () => {
       const { fixture } = await render(HarvestHeader, {
-        running: { ...DEZA_GOING, id: 'run-deza-past', processed: 2400 },
+        running: { ...GOING, id: 'run-eljamon-past', processed: 3500 },
       });
       const run = one(fixture, '[data-running="header"]');
 
@@ -335,6 +330,25 @@ describe('HarvestHeader', () => {
       expect(
         one(fixture, '[data-running="header"] .count')?.textContent
       ).not.toContain('ofAbout');
+    });
+
+    /**
+     * Owner decision 127b: a DEZA walk's total says nothing about the next,
+     * so its count stands alone although a completed DEZA walk processed
+     * 2,361.
+     */
+    it('shows no estimate for a run whose adapter cannot compare totals', async () => {
+      const deza = HARVEST_RUN_SEED.find(
+        (run) => run.id === 'run-deza-running'
+      ) as HarvestRun;
+      const { fixture } = await render(HarvestHeader, { running: deza });
+      const run = one(fixture, '[data-running="header"]');
+
+      expect(run?.querySelector('.count')?.textContent).toContain(
+        'harvest.run.progress.processed'
+      );
+      expect(run?.getAttribute('aria-label')).toBe('harvest.running.open');
+      expect(run?.querySelector('.bar')).toBeNull();
     });
   });
 

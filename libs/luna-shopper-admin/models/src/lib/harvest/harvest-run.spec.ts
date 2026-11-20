@@ -3,6 +3,7 @@ import {
   canRevert,
   earlierTotal,
   failureBlockReason,
+  hasComparableWalkTotal,
   isReverted,
   isTerminalRun,
   PRICE_WRITING_MODES,
@@ -12,6 +13,7 @@ import {
   runProgressLine,
   spawnBlockReason,
   TERMINAL_RUN_STATUSES,
+  walkedUnderSameConfigAs,
   wantsEarlierTotal,
   type HarvestRun,
 } from './harvest-run';
@@ -48,6 +50,10 @@ function run(over: Partial<HarvestRun> = {}): HarvestRun {
     revertedAt: null,
     revertedByUserId: null,
     revertedPriceCount: null,
+    // A walk of a chain whose totals compare (owner decision 127b), under a
+    // known configuration (owner decision 130b), unless a case says otherwise.
+    adapterKey: 'mercadona-api',
+    configFingerprint: 'fp-1',
     ...over,
   };
 }
@@ -233,6 +239,76 @@ describe('runProgress with an earlier total', () => {
       approximate: false,
     });
   });
+
+  /**
+   * Owner decision 127b: a DEZA walk shows "4,000 processed" and never "of
+   * about 15,115", because its capped queries count different totals for one
+   * assortment. Nor does a run that names no adapter, or one this build does
+   * not know.
+   */
+  it.each([
+    ['deza-web', 'RUNNING'],
+    ['deza-web', 'ABORTED'],
+    [null, 'RUNNING'],
+    [undefined, 'RUNNING'],
+    ['not-an-adapter', 'RUNNING'],
+  ] as const)(
+    'gives a run of adapter %s that is %s its count and no estimate',
+    (adapterKey, status) => {
+      const progress = runProgress(
+        run({
+          status,
+          processed: 4000,
+          totalPlanned: null,
+          adapterKey: adapterKey as HarvestRun['adapterKey'],
+        }),
+        15115
+      );
+      expect(progress).toEqual({ processed: 4000, total: null, percent: null });
+      expect(runProgressLine(progress, 'en').key).toBe(
+        'harvest.run.progress.processed'
+      );
+    }
+  );
+});
+
+describe('hasComparableWalkTotal', () => {
+  it('is true for an adapter whose walk totals compare', () => {
+    expect(hasComparableWalkTotal(run({ adapterKey: 'dia-api' }))).toBe(true);
+  });
+
+  it('is false for deza-web, no adapter, and an unknown one', () => {
+    expect(hasComparableWalkTotal(run({ adapterKey: 'deza-web' }))).toBe(false);
+    expect(hasComparableWalkTotal(run({ adapterKey: null }))).toBe(false);
+    expect(hasComparableWalkTotal(run({ adapterKey: undefined }))).toBe(false);
+    expect(
+      hasComparableWalkTotal(
+        run({ adapterKey: 'not-an-adapter' as HarvestRun['adapterKey'] })
+      )
+    ).toBe(false);
+  });
+});
+
+/** Owner decision 130b: a reference walked under the same configuration. */
+describe('walkedUnderSameConfigAs', () => {
+  it('is true only for the same fingerprint on both runs', () => {
+    expect(walkedUnderSameConfigAs(run(), run({ id: 'before' }))).toBe(true);
+    expect(
+      walkedUnderSameConfigAs(run(), run({ configFingerprint: 'fp-2' }))
+    ).toBe(false);
+  });
+
+  it('is false when either run has no fingerprint', () => {
+    expect(
+      walkedUnderSameConfigAs(run(), run({ configFingerprint: null }))
+    ).toBe(false);
+    expect(
+      walkedUnderSameConfigAs(
+        run({ configFingerprint: undefined }),
+        run({ configFingerprint: undefined })
+      )
+    ).toBe(false);
+  });
 });
 
 describe('runProgressLine', () => {
@@ -394,6 +470,25 @@ describe('wantsEarlierTotal', () => {
     expect(
       wantsEarlierTotal({ ...going, supermarketId: null, presetId: 'p1' })
     ).toBe(true);
+  });
+
+  /** Owner decision 127b: no estimate is drawn, so none is read. */
+  it('is false for a run whose adapter cannot compare its walk totals', () => {
+    expect(wantsEarlierTotal({ ...going, adapterKey: 'deza-web' })).toBe(false);
+    expect(wantsEarlierTotal({ ...going, adapterKey: null })).toBe(false);
+    expect(
+      wantsEarlierTotal({ ...going, adapterKey: 'deza-web', presetId: 'p1' })
+    ).toBe(false);
+  });
+
+  /** Owner decision 130b: no earlier run can match a run with no fingerprint. */
+  it('is false for a run with no fingerprint, from a preset too', () => {
+    expect(wantsEarlierTotal({ ...going, configFingerprint: null })).toBe(
+      false
+    );
+    expect(
+      wantsEarlierTotal({ ...going, configFingerprint: '', presetId: 'p1' })
+    ).toBe(false);
   });
 
   it('is false for a known total, nothing processed, nothing to compare, no run', () => {

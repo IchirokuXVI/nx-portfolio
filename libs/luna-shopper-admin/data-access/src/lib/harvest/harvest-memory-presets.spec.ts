@@ -11,7 +11,8 @@ import { MERCADONA_WEEKLY_PRESET } from './harvest-seed';
 const MERCADONA = 'sm_mercadona';
 const DEZA = 'sm_deza';
 const CARREFOUR = 'sm_carrefour';
-const DIA = 'sm_dia';
+/** A chain with no run going in the seed (El Jamón and DIA each have one). */
+const CONSUM = 'sm_consum';
 
 describe('HarvestMemory, presets', () => {
   it('lists a chain presets by name, each with its latest run', async () => {
@@ -109,11 +110,11 @@ describe('HarvestMemory, presets', () => {
     });
 
     await expect(
-      memory.spawnRun({ supermarketId: DIA, mode: 'STORE_DISCOVERY' })
+      memory.spawnRun({ supermarketId: CONSUM, mode: 'STORE_DISCOVERY' })
     ).rejects.toMatchObject({ status: 409, code: 'conflict' });
     await expect(
-      memory.spawnRun({ supermarketId: DIA, mode: 'CATALOG_DISCOVERY' })
-    ).resolves.toMatchObject({ supermarketId: DIA });
+      memory.spawnRun({ supermarketId: CONSUM, mode: 'CATALOG_DISCOVERY' })
+    ).resolves.toMatchObject({ supermarketId: CONSUM });
   });
 
   /** A store discovery with no chain, as the postal code queue starts, also holds the lock. */
@@ -123,7 +124,7 @@ describe('HarvestMemory, presets', () => {
     await memory.spawnRun({ mode: 'STORE_DISCOVERY' });
 
     await expect(
-      memory.spawnRun({ supermarketId: DIA, mode: 'STORE_DISCOVERY' })
+      memory.spawnRun({ supermarketId: CONSUM, mode: 'STORE_DISCOVERY' })
     ).rejects.toMatchObject({ status: 409, code: 'conflict' });
     await expect(
       memory.spawnRun({ mode: 'STORE_DISCOVERY' })
@@ -142,6 +143,36 @@ describe('HarvestMemory, presets', () => {
 
     expect(second.processed).toBeGreaterThan(first.processed);
     expect(second).toMatchObject({ status: 'RUNNING', totalPlanned: null });
+  });
+
+  /**
+   * Owner decisions 127b and 130b: a spawn records its chain's source row, its
+   * adapter and the fingerprint of its config, the one the seeded runs of the
+   * chain walked under. A store discovery of no chain records none of them.
+   */
+  it('records the source row, adapter and config fingerprint of a spawn', async () => {
+    const memory = new HarvestMemory();
+    await memory.abortRun('run-catalog-running');
+    await memory.abortRun('run-store-postal-running');
+
+    const walk = await memory.spawnRun({
+      supermarketId: MERCADONA,
+      mode: 'CATALOG_DISCOVERY',
+    });
+    const seeded = await memory.readRun('run-catalog-completed');
+    const anywhere = await memory.spawnRun({ mode: 'STORE_DISCOVERY' });
+
+    expect(walk).toMatchObject({
+      sourceId: 'source-mercadona',
+      adapterKey: 'mercadona-api',
+    });
+    expect(walk.configFingerprint).toBeTruthy();
+    expect(walk.configFingerprint).toBe(seeded.configFingerprint);
+    expect(anywhere).toMatchObject({
+      sourceId: null,
+      adapterKey: null,
+      configFingerprint: null,
+    });
   });
 
   it('records the preset on a run started from it', async () => {

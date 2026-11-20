@@ -11,6 +11,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   isReverted,
+  isTerminalRun,
   runPriceCounters,
   runProgressLine,
   type HarvestRun,
@@ -191,12 +192,14 @@ export class RunProgressView {
 
   /**
    * Whether to say that the run does not know yet how much work it has: no
-   * bar, no estimate, and a run that can still learn it. A completed run has
-   * nothing left to learn, so it shows its count alone and no note at all
-   * (owner decision 120b).
+   * bar, no estimate, and a run that is still going and so can still learn
+   * it. An ended run has nothing left to learn, however it ended (owner
+   * decisions 120b and 131b): a completed, failed, aborted or stale run with
+   * no total and no estimate shows its count alone and no note at all.
+   * Ended is `isTerminalRun`, the rule polling stops on.
    */
   readonly unsizedNote = computed(
-    () => !this.progress().percent && this.run().status !== 'COMPLETED'
+    () => !this.progress().percent && !isTerminalRun(this.run())
   );
 
   /**
