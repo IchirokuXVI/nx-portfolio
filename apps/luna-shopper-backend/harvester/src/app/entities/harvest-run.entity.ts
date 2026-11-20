@@ -268,18 +268,21 @@ export class HarvestRun extends BaseEntity {
    * What shaped the walk outside its request (owner decision 130b): sha256,
    * hex, over the canonical JSON of the source row's `adapterKey` and `config`
    * at the spawn (`walkConfigFingerprint`). Never the config itself: a digest
-   * is enough to compare two runs and stays small on every row. Null for a run
-   * that used no source row, for a run the postal code queue started (its
-   * worker stores neither field), and for every run stored before the column
-   * existed.
+   * is enough to compare two runs and stays small on every row. A store
+   * discovery that OpenStreetMap walks, with no source row or with a chain
+   * whose adapter lists no shops, stores the digest of `osm-places` with an
+   * empty config (owner decision 137b, `runWalkConfig`), and so does such a
+   * run of the postal code queue. Null for a file import, which no adapter
+   * walks, and for every run stored before this rule.
    */
   @Column({ type: 'varchar', nullable: true })
   configFingerprint!: string | null;
 
   /**
-   * The adapter of the source row at the spawn (owner decision 127b), so a
-   * run says which adapter walked it after the row changes or goes. Null
-   * where {@link configFingerprint} is.
+   * The adapter that walked the run, read at the spawn (owner decisions 127b
+   * and 137b): the source row's, or `osm-places` for a store discovery
+   * OpenStreetMap walks. A run thus says which adapter walked it after the
+   * row changes or goes. Null where {@link configFingerprint} is.
    */
   @Column({ type: 'varchar', nullable: true })
   adapterKey!: AdapterKey | null;

@@ -157,12 +157,13 @@ export class HarvestRunStore {
     /** The schedule that started the run (plan 0206), null for every other. */
     scheduleId?: string | null;
     /**
-     * The digest of the source row's adapter and config the run walks under
-     * (owner decision 130b), null for a run with no source row. The postal
-     * code queue passes neither field, so its runs store null too.
+     * The digest of the adapter and config the run walks under (owner
+     * decisions 130b and 137b), as `runWalkConfig` gives it to the spawn and
+     * to the postal code queue alike: `osm-places` with an empty config for a
+     * store discovery OpenStreetMap walks, null for a file import.
      */
     configFingerprint?: string | null;
-    /** That row's adapter (owner decision 127b), null where the digest is. */
+    /** That adapter (owner decision 127b), null where the digest is. */
     adapterKey?: AdapterKey | null;
   }): Promise<HarvestRun> {
     try {

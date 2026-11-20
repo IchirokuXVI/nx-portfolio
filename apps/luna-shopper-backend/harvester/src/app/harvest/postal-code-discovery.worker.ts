@@ -25,6 +25,7 @@ import {
 } from './postal-code-discovery.service';
 import { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
 import { RunExecutor } from './run-executor.service';
+import { runWalkConfig } from './walk-fingerprint';
 
 /**
  * The queue's drain (plan 0063, sections 2 and 6). **Serial by construction.**
@@ -278,6 +279,10 @@ export class PostalCodeDiscoveryWorker
         // once, and the chain's own for a source that names its own shops.
         supermarketId: source.supermarketId,
         sourceId: source.sourceId,
+        // The adapter that walks it, by the spawn's own rule (owner decision
+        // 137b): the chain's row for a chain that lists its shops, and
+        // `osm-places` for OpenStreetMap.
+        ...runWalkConfig(HarvestRunMode.STORE_DISCOVERY, source.walkSource),
         priceScopeId: null,
         // Nobody's, and deliberately: the run is the system's, and naming the
         // user whose profile mentioned the code would put an account id on a
