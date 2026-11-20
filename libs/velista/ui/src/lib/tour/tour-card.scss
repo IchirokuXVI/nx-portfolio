@@ -18,6 +18,9 @@
   box-sizing: border-box;
   max-block-size: var(--app-tour-card-max, none);
   overflow-y: auto;
+  // A containing block, so a hidden helper inside it scrolls with it rather than
+  // with the document (scroll-containers-are-positioned.spec.ts).
+  position: relative;
   overscroll-behavior: contain;
 
   @include tokens.app-focus-ring;

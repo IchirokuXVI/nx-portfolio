@@ -67,6 +67,9 @@
   margin: 0;
   padding: 0;
   overflow-y: auto;
+  // A containing block, so a hidden helper inside it scrolls with it rather than
+  // with the document (scroll-containers-are-positioned.spec.ts).
+  position: relative;
   overscroll-behavior: contain;
   list-style: none;
 }

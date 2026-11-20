@@ -38,10 +38,16 @@
   // H1). The empty state is taller than the room a short screen leaves it, and without
   // this it spilled into the layout's own scroller, which carried the header away.
   overflow-y: auto;
+  // A containing block, so a hidden helper inside it scrolls with it rather than
+  // with the document (scroll-containers-are-positioned.spec.ts).
+  position: relative;
 }
 
 .scroller {
   overflow-y: auto;
+  // A containing block, so a hidden helper inside it scrolls with it rather than
+  // with the document (scroll-containers-are-positioned.spec.ts).
+  position: relative;
   // Momentum scrolling on iOS, and it also stops the page behind a bottom sheet from
   // scrolling with it.
   overscroll-behavior: contain;

@@ -26,6 +26,9 @@
   padding: var(--app-space-5);
   padding-block-end: var(--app-space-5);
   overflow-y: auto;
+  // A containing block, so a hidden helper inside it scrolls with it rather than
+  // with the document (scroll-containers-are-positioned.spec.ts).
+  position: relative;
 }
 
 @mixin primary-action {
