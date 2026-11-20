@@ -40,10 +40,21 @@ import type { SourceObservation } from './source-ingest';
  *    map, which the index does not carry. A page that fails costs one product.
  *    A product goes to the sink as soon as its page answers, after the
  *    regions it names that the run has not declared yet (plan 0267). The sink
- *    writes a chunk each time `PRODUCT_CHUNK` products wait, so a walk that
- *    dies part way keeps what it read, less at most the chunk that was not
- *    full.
- * 3. `INGEST`. The sink writes the last chunk when the run drains.
+ *    writes a chunk each time `PRODUCT_CHUNK` (400) products wait. For LIDL,
+ *    whose walk is about a hundred and fifty products, the chunk that is not
+ *    full is the whole walk, so it is written when the run drains. What a
+ *    walk that ends early keeps depends on how it ends:
+ *    - The process dies: the walk keeps the chunks the sink had written, less
+ *      what was still queued or in flight in it.
+ *    - The runner throws with no abort: the executor settles the sink, which
+ *      lets the queued chunks finish and writes no partial chunk. What is
+ *      lost is the chunk that never filled, which for LIDL is the whole walk.
+ *    - A person or a deploy aborts the run: the executor drains the sink,
+ *      which writes the partial chunk too, and every path call goes as `ADD`.
+ *    The paths of the walk are written only by the drain, after the last
+ *    chunk, so only an aborted or completed run writes any.
+ * 3. `INGEST`. Every path of each product read (plan 0268), then the sink
+ *    writes the last chunk when the run drains.
  * 4. `REPORT`.
  *
  * **A price belongs to a region and there are 59 of them** (section 4). The run
@@ -91,7 +102,8 @@ export class LidlCatalogRunner implements CatalogRunner {
     /**
      * Every product whose page answered, in the order it answered. Each one
      * went to the sink at that moment (plan 0267, section 5), so this is kept
-     * only for {@link describeRun}, which reads the whole walk at the end.
+     * only for what reads the whole walk at the end: its category paths (plan
+     * 0268) and {@link describeRun}.
      */
     const products: LidlProduct[] = [];
     /** Every offer region declared so far, by key, with its first name. */
@@ -129,12 +141,15 @@ export class LidlCatalogRunner implements CatalogRunner {
     }
 
     // --- 3. What only the whole walk can say -------------------------------
-    // Every product and every region was reported as its page answered (plan
-    // 0267, section 5). The sink writes what is left of the last chunk when
-    // the run drains.
+    // Every product and every region went to the sink as its page answered
+    // (plan 0267, section 5). The paths of each product follow, once a
+    // product, before the run flushes and the sink drains (plan 0268). The
+    // sink writes what is left of the last chunk when the run drains.
+    reportCategoryPaths(report, products, context.signal);
     await context.setStage(
       'INGEST',
-      `Finishing the walk: ${products.length} product(s) recorded as they were read`
+      `Finishing the walk: ${products.length} product(s) read, each full ` +
+        'chunk written as it filled and the rest written now'
     );
 
     await context.flush();
@@ -220,6 +235,45 @@ function reportProduct(
     }
   }
   report.product(observationOf(product));
+}
+
+/**
+ * Every category path of each product the walk read (plan 0268, section 3),
+ * once a product, at the end of the walk.
+ *
+ * **`REPLACE` when the page stated its paths, else `ADD`.** A product's paths
+ * are read from its own page, all at once: the need world path and the
+ * `wonCategoryBreadcrumbs` list of the online shop tree. A page that states
+ * a need world path and a list that is not empty and is read in full has
+ * said where the chain files the product now, so a stored path it does not
+ * name no longer holds. Anything less has disproved nothing, and says
+ * `ADD`: a path taken from the index row, a page that left the list out, an
+ * empty list (owner decision 95b), or a list with a part that could not be
+ * read. `categoryPathsStated` of the product holds that test.
+ *
+ * **The rolling window does not change that.** What LIDL publishes is a week
+ * of offers, so a run proves nothing about a product it did not meet, and
+ * such a product gets no call: its stored paths stay as they are. The window
+ * decides which products a run reads, not which paths a product it read has.
+ *
+ * A product whose page did not answer was not reported and gets no call. An
+ * aborted run says `ADD`, and the sink would make it so anyway.
+ */
+function reportCategoryPaths(
+  report: RunReport,
+  products: readonly LidlProduct[],
+  signal: AbortSignal
+): void {
+  for (const product of products) {
+    if (product.categoryPaths.length === 0) {
+      continue;
+    }
+    report.categoryPaths(
+      product.externalId,
+      product.categoryPaths,
+      !signal.aborted && product.categoryPathsStated ? 'REPLACE' : 'ADD'
+    );
+  }
 }
 
 /**

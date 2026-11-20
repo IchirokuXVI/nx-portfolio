@@ -52,6 +52,15 @@ export interface LidlListRow {
   siteCategory: string;
   /** The need world path, root first, as the index printed it. */
   categoryPath: string[];
+  /**
+   * `wonCategoryBreadcrumbs` of the row's `meta` (plan 0268): every path of
+   * the online shop tree the chain files the row under, each root first, in
+   * the chain's own names. Null when the row states no such list, or a list
+   * that is not empty and of which no path can be read. That is not the same
+   * as an empty one: an empty list says the chain files it nowhere in that
+   * tree.
+   */
+  categoryBreadcrumbs: string[][] | null;
   /** `canonicalPath`, e.g. `/p/uva-blanca/p11029954`. Relative to the base URL. */
   path: string | null;
   /** The printed size, verbatim: `500 g`, `6x200ml`, `Aprox. 950g`, `Paquete`. */
@@ -124,6 +133,23 @@ export interface LidlProduct {
    * null when the table names no node of it. A slug and never an id.
    */
   categorySlug: string | null;
+  /**
+   * Every category path the chain files the product under (plan 0268): the
+   * need world path {@link categoryPath} first, when there is one, then each
+   * path of `wonCategoryBreadcrumbs`, the page's when the page states that
+   * list and the index row's otherwise, without repeats. Names verbatim.
+   */
+  categoryPaths: string[][];
+  /**
+   * Whether the page itself stated both fields the paths come from: its need
+   * world path and a `wonCategoryBreadcrumbs` list that is not empty, every
+   * breadcrumb of which could be read. Only then are {@link categoryPaths}
+   * every place the chain files the product under that a read can reach. A
+   * path taken from the index row, a list the page left out, an empty list,
+   * or a list with a part the code could not read, proves nothing about a
+   * path stored before (owner decision 95b for the empty list).
+   */
+  categoryPathsStated: boolean;
   /** Null beside an {@link approxWeight}: a weight that varies is no size. */
   unitSize: number | null;
   /** Null beside an {@link approxWeight}, as {@link unitSize} is. */

@@ -202,6 +202,8 @@ function lidlRowOf(entry: SourceCatalogEntry, baseUrl: string): LidlListRow {
     brand: entry.brand,
     siteCategory: '',
     categoryPath: [],
+    // A refresh walks no category and states no path (plan 0268).
+    categoryBreadcrumbs: null,
     path: pathOf(entry.url, baseUrl),
     sizeFormat: entry.sizeFormat,
     listPrice: null,

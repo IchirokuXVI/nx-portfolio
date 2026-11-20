@@ -14,7 +14,11 @@ import type {
 } from '../entities';
 import eljamon from './__fixtures__/eljamon.vision.harvest-document.json';
 import type { CatalogClient } from './catalog-client.service';
-import { FileImportRunner, unpayableForOne } from './file-import.runner';
+import {
+  FileImportPathsFailedError,
+  FileImportRunner,
+  unpayableForOne,
+} from './file-import.runner';
 import { entryKey } from './matching';
 import { PriceScopeResolver } from './price-scope-resolver';
 import type { RunContext } from './run-context';
@@ -150,6 +154,8 @@ function build(options: {
       new PriceScopeResolver(catalog as unknown as CatalogClient)
     ),
     context,
+    ingest,
+    stored,
     saved,
     priceRows,
     catalog,
@@ -752,6 +758,163 @@ describe('FileImportRunner (plan 0086)', () => {
     expect(
       (catalog as unknown as Record<string, unknown>)['setAvailability']
     ).toBeUndefined();
+  });
+
+  describe('the one category path of a product (plan 0268)', () => {
+    const DAIRY = ['Lácteos', 'Leche'];
+
+    it('adds the path of a product that states one, and writes nothing for one with none', async () => {
+      const { runner, context, saved } = build({
+        document: document({
+          products: [
+            {
+              name: 'Leche semidesnatada',
+              size: { label: '1 L' },
+              category_path: DAIRY,
+            },
+            { name: 'Pan de molde', size: { label: '500 g' } },
+            { name: 'Cerveza', size: { label: 'lata' }, category_path: [] },
+          ],
+        }),
+      });
+
+      const counters = await runner.run(context, input);
+
+      const byName = new Map(saved.map((row) => [row.name, row]));
+      expect(byName.get('Leche semidesnatada')?.categoryPaths).toEqual([DAIRY]);
+      // `categoryPath` is what it was, and the one path of the row.
+      expect(byName.get('Leche semidesnatada')?.categoryPath).toEqual(DAIRY);
+      // A product with no path, or an empty one, makes no write.
+      expect(byName.get('Pan de molde')?.categoryPaths).toBeUndefined();
+      expect(byName.get('Cerveza')?.categoryPaths).toBeUndefined();
+      expect(counters.categoryPathsWritten).toBe(1);
+    });
+
+    it('keeps the paths a row holds and adds the document path after them', async () => {
+      const WALKED = ['Alimentación', 'Lácteos', 'Leche entera'];
+      const { runner, context, stored } = build({
+        rows: [
+          {
+            externalId: entryKey('Leche semidesnatada', '1 L'),
+            name: 'Leche semidesnatada',
+            sizeFormat: '1 L',
+            categoryPaths: [WALKED],
+          },
+        ],
+        document: document({
+          products: [
+            {
+              name: 'Leche semidesnatada',
+              size: { label: '1 L' },
+              category_path: DAIRY,
+            },
+          ],
+        }),
+      });
+
+      const counters = await runner.run(context, input);
+
+      // ADD: one document has not shown that the walked path is gone.
+      expect(stored[0].categoryPaths).toEqual([WALKED, DAIRY]);
+      expect(counters.categoryPathsWritten).toBe(1);
+    });
+
+    it('changes nothing for a row that already holds the path', async () => {
+      const { runner, context, stored } = build({
+        rows: [
+          {
+            externalId: entryKey('Leche semidesnatada', '1 L'),
+            name: 'Leche semidesnatada',
+            sizeFormat: '1 L',
+            categoryPaths: [DAIRY],
+          },
+        ],
+        document: document({
+          products: [
+            {
+              name: 'Leche semidesnatada',
+              size: { label: '1 L' },
+              category_path: DAIRY,
+            },
+          ],
+        }),
+      });
+
+      const counters = await runner.run(context, input);
+
+      expect(stored[0].categoryPaths).toEqual([DAIRY]);
+      expect(counters.categoryPathsWritten).toBe(0);
+    });
+
+    it('adds the paths of two products that resolve to one row together', async () => {
+      const { runner, context, saved } = build({
+        document: document({
+          products: [
+            {
+              name: 'Leche semidesnatada',
+              size: { label: '1 L' },
+              category_path: DAIRY,
+            },
+            {
+              name: 'Leche semidesnatada',
+              size: { label: '1 L' },
+              category_path: ['Desayuno'],
+            },
+          ],
+        }),
+      });
+
+      await runner.run(context, input);
+
+      expect(saved).toHaveLength(1);
+      expect(saved[0].categoryPaths).toEqual([DAIRY, ['Desayuno']]);
+    });
+
+    it('carries what the ingest wrote on an error when the path write fails after it (owner decision 96c)', async () => {
+      const { runner, context, ingest, saved, priceRows } = build({
+        document: document({
+          products: [
+            {
+              name: 'Leche semidesnatada',
+              size: { label: '1 L' },
+              price: { amount: 0.89, currency: 'EUR' },
+              category_path: DAIRY,
+            },
+            {
+              name: 'Pan de molde',
+              size: { label: '500 g' },
+              price: { amount: 1.2, currency: 'EUR' },
+              category_path: ['Panadería'],
+            },
+          ],
+        }),
+      });
+      // One row lands, then the database goes away.
+      jest
+        .spyOn(ingest, 'writeCategoryPaths')
+        .mockImplementation(async (_writes, onWritten = () => undefined) => {
+          onWritten();
+          throw new Error('connection terminated');
+        });
+
+      const failure = await runner.run(context, input).then(
+        () => null,
+        (error: unknown) => error
+      );
+
+      expect(failure).toBeInstanceOf(FileImportPathsFailedError);
+      const error = failure as FileImportPathsFailedError;
+      // The run's sentence is the write's own.
+      expect(error.message).toBe('connection terminated');
+      // The ingest wrote both rows and both prices before the paths.
+      expect(saved).toHaveLength(2);
+      expect(priceRows).toHaveLength(2);
+      expect(error.counters).toMatchObject({
+        created: 2,
+        pricesRecorded: 2,
+        categoryPathsWritten: 1,
+      });
+    });
   });
 
   it('imports the regenerated El Jamón reading end to end', async () => {

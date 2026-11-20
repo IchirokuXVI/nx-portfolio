@@ -44,7 +44,11 @@ import {
 } from './delisting';
 import { DelistingService } from './delisting.service';
 import { DiscoveredPlaceService } from './discovered-place.service';
-import { FileImportRunner } from './file-import.runner';
+import {
+  FileImportPathsFailedError,
+  FileImportRunner,
+  type FileImportCounters,
+} from './file-import.runner';
 import { HarvestRunStore } from './harvest-run.store';
 import { PriceScopeResolver } from './price-scope-resolver';
 import { refusalPolicyOf, stopSentence } from './refusal-policy';
@@ -412,6 +416,24 @@ export class RunExecutor implements OnApplicationShutdown {
     let writesReported = false;
     let reportWrites: ((written: RunReportResult) => Promise<void>) | null =
       null;
+    // What a file import wrote, into the run's report: the same fields for an
+    // import that completed and for one whose path write failed after the
+    // ingest (plan 0268, owner decision 96c), as `reportWrites` is for a walk.
+    const reportImport = async (imported: FileImportCounters) => {
+      await this.store.setReport(runId, {
+        ...(await this.store.load(runId)).report,
+        ...describePrices(imported),
+        // Plan 0221: rows proposed by the words of their name in any order.
+        wordOrderProposals: imported.wordOrderProposals,
+        wordOrderRejectedPointers: imported.wordOrderRejectedPointers,
+        // Plan 0249: sizes their own prices disprove, held for a person.
+        sizesDisproved: imported.sizesDisproved,
+        probablePackCounts: imported.probablePackCounts,
+        // Plan 0268, section 3: rows whose category paths this import
+        // changed, under the key a walk's report uses.
+        categoryPathsWritten: imported.categoryPathsWritten,
+      });
+    };
     try {
       await this.store.markRunning(runId, 'START', 'Starting');
       if (source) {
@@ -500,7 +522,7 @@ export class RunExecutor implements OnApplicationShutdown {
 
       // What a file import's ingest counted. A file import has no sink, so this
       // is the one path whose prices the report can learn about no other way.
-      let imported: SourceIngestCounters | null = null;
+      let imported: FileImportCounters | null = null;
 
       // A runner that throws after an abort still reported what it read,
       // and the sink holds the last partial chunk of it (plan 0215,
@@ -648,16 +670,7 @@ export class RunExecutor implements OnApplicationShutdown {
         }
         await reportWrites(written);
       } else if (imported) {
-        await this.store.setReport(runId, {
-          ...(await this.store.load(runId)).report,
-          ...describePrices(imported),
-          // Plan 0221: rows proposed by the words of their name in any order.
-          wordOrderProposals: imported.wordOrderProposals,
-          wordOrderRejectedPointers: imported.wordOrderRejectedPointers,
-          // Plan 0249: sizes their own prices disprove, held for a person.
-          sizesDisproved: imported.sizesDisproved,
-          probablePackCounts: imported.probablePackCounts,
-        });
+        await reportImport(imported);
       }
       if (thrownAfterAbort) {
         throw thrownAfterAbort.error;
@@ -723,6 +736,12 @@ export class RunExecutor implements OnApplicationShutdown {
       // D11). Before the load below, so a stop sentence counts them too.
       if (sink && writesSettled && !writesReported && reportWrites) {
         await reportWrites(sink.writtenSoFar).catch(() => undefined);
+      }
+      // A file import whose path write failed after its ingest wrote rows and
+      // prices states them the same way (plan 0268, owner decision 96c). The
+      // run still ends FAILED below, with the write's own sentence.
+      if (error instanceof FileImportPathsFailedError) {
+        await reportImport(error.counters).catch(() => undefined);
       }
       // A failed write ends FAILED although it aborted the run (plan 0269,
       // section 1), as a stop of the guard does. A runner that threw ends
