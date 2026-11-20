@@ -63,7 +63,6 @@ export {
   canRevert,
   earlierTotal,
   failureBlockReason,
-  hasComparableWalkTotal,
   isNarrowedRun,
   isReverted,
   isTerminalRun,
