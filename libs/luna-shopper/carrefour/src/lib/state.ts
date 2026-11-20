@@ -129,8 +129,8 @@ export function statedTotalResults(
  * it, or null when the page states either figure not at all (plan 0090,
  * section 7).
  *
- * {@link readListing} answers 0 for a missing figure, which a walk bounding
- * its last page by this number must not mistake for a page that serves
+ * {@link readListing} answers 0 for a missing figure, which a walk deciding
+ * whether an empty page is the end must not mistake for a page that serves
  * nothing.
  */
 export function statedPageableResults(

@@ -1879,30 +1879,65 @@ describe('CarrefourCatalogRunner', () => {
           source({ delistCountsCrawl: true })
         );
 
-      it('ends in two pages, read whole, when a page states 49 and serves 48', async () => {
-        const runner = new TestRunner(grown(49, 2));
+      it('asks a third page when a page states 49 and serves 48, and reads whole when it is empty', async () => {
+        // The stated 49 grows the walk to a third page. It answers empty,
+        // stating 49 and two pages served, so its offset is at what paging
+        // serves: the natural end, one request more, and no cut.
+        const pages = grown(49, 2);
+        pages[at(48)] = {
+          ...page({ totalResults: 49 }),
+          pagination: { page_size: 24, total_pages: 2 },
+        };
+        const runner = new TestRunner(pages);
         const runContext = context();
         await run(runner, runContext);
 
         expect(
           runner.asked.filter((path) => path.includes('?offset='))
-        ).toEqual([at(0), at(24)]);
+        ).toEqual([at(0), at(24), at(48)]);
         expect(runContext.warn).not.toHaveBeenCalled();
         expect(report.wholeListings).toHaveLength(1);
         expect(runContext.setReport).toHaveBeenCalledWith(
           expect.objectContaining({ unreadableCategories: [] })
         );
-        // Nothing grew, so the plan stands as the frontier stated it.
-        expect(runContext.setTotalPlanned).toHaveBeenCalledTimes(1);
+        // The bound grew from 48 to 49, so the plan rose by one.
+        expect(runContext.setTotalPlanned).toHaveBeenLastCalledWith(49);
       });
 
       it('raises the planned total to the grown one, so progress never passes it', async () => {
+        // Full pages: 24 distinct cards on each of four pages, where the
+        // frontier saw 48 and the pages state 96. Without the raise the run
+        // would report 96 processed against a plan of 48.
+        const pages = grown(96, 4);
+        for (let offset = 0; offset < 96; offset += 24) {
+          const cards = Array.from({ length: 24 }, (_, i) =>
+            card(`p${offset + i}`, `Agua ${offset + i} 1,5 l.`, '0,39 €')
+          );
+          pages[at(offset)] = {
+            ...page({ totalResults: 96, cards }),
+            pagination: { page_size: 24, total_pages: 4 },
+          };
+        }
         const counting = countingContext();
-        await run(new TestRunner(grown(96, 4)), counting.context);
+        const reported: Array<{ processed: number; planned: number | null }> =
+          [];
+        let processed = 0;
+        const original = counting.context.report.bind(counting.context);
+        counting.context.report = async (counters) => {
+          processed += counters.processed ?? 0;
+          reported.push({ processed, planned: counting.planned() });
+          await original(counters);
+        };
+        await run(new TestRunner(pages), counting.context);
         await counting.context.flush();
 
+        expect(reported.length).toBeGreaterThan(0);
+        for (const { processed: done, planned } of reported) {
+          expect(planned).not.toBeNull();
+          expect(done).toBeLessThanOrEqual(planned as number);
+        }
+        expect(counting.processed()).toBe(96);
         expect(counting.planned()).toBe(96);
-        expect(counting.processed()).toBe(4);
       });
 
       it('names the grown total in the warning of a category it could not finish', async () => {
@@ -1921,6 +1956,31 @@ describe('CarrefourCatalogRunner', () => {
           })
         );
         expect(runContext.setTotalPlanned).toHaveBeenLastCalledWith(96);
+      });
+
+      it('keeps the walk’s own error and its progress when the plan write fails', async () => {
+        // Frontier 48, pages state 96, and a 503 at the third page, twice.
+        // Restating the plan fails after the frontier's write. The 503 is
+        // still what cost the category, so the end pass asks it once more,
+        // and the two listings the walk did page are still reported.
+        const runner = new StatusRunner(grown(96, 4), { [at(48)]: [503, 503] });
+        const runContext = context();
+        (runContext.setTotalPlanned as jest.Mock)
+          .mockResolvedValueOnce(undefined)
+          .mockRejectedValue(new Error('the database is down'));
+        await run(runner, runContext);
+
+        expect(runContext.report).toHaveBeenCalledWith({ processed: 2 });
+        expect(asksOf(runner, at(48))).toBe(2);
+        expect(runContext.warn).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: 'Bebidas',
+            message:
+              'Category cat1 Bebidas: Carrefour answered 503 at offset 48, ' +
+              'once more at the end of the run. The listings from there on, ' +
+              'of 96, were not read.',
+          })
+        );
       });
     });
   });

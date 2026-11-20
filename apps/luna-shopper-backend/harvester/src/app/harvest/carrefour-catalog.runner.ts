@@ -288,27 +288,67 @@ export class CarrefourCatalogRunner implements CatalogRunner {
     let seen = 0;
     const before = cursor.total;
     // The page after the last one that answered is the page that failed, and
-    // the one the end pass starts from (plan 0251). The total is the largest
-    // the walk knows, which bounds its last page (owner decision 104b).
+    // the one the end pass starts from (plan 0251). The total is the one that
+    // bounds the walk's last page (owner decision 104b).
     const walk = client.walkCategory(category, (_listing, page, total) => {
       cursor.page = page + 1;
       cursor.total = Math.max(cursor.total, total);
     });
+    let failure: { error: unknown } | null = null;
     try {
       for await (const product of walk) {
         seen += 1;
         reportFirstSighting(report, products, product);
       }
-    } finally {
-      // Before the progress, so `processed` never passes the plan.
-      await restatePlan(context, plan, before, cursor.total);
-      // **Progress, and a heartbeat with it.** The first crawl reported
-      // nothing between the frontier and the snapshot, so an hour of paging
-      // looked identical to a run that had stopped, and it was a stopped run
-      // that showed it. A category is the smallest unit worth a row: 86 of
-      // them over an hour is a number that moves, without a write per page.
-      // A category that failed part way counts the listings it did page.
-      await context.report({ processed: seen });
+    } catch (error) {
+      failure = { error };
+    }
+    // **Progress, and a heartbeat with it.** The first crawl reported nothing
+    // between the frontier and the snapshot, so an hour of paging looked
+    // identical to a run that had stopped, and it was a stopped run that
+    // showed it. A category is the smallest unit worth a row: 86 of them over
+    // an hour is a number that moves, without a write per page. A category
+    // that failed part way counts the listings it did page.
+    await this.settle(context, plan, before, cursor.total, seen, failure);
+  }
+
+  /**
+   * The end of one walk of a category: the plan restated, then its progress,
+   * then the walk's own error, if it threw.
+   *
+   * The plan is written before the progress, so `processed` never passes it.
+   * **The walk's error wins.** A failed plan write must not replace an error
+   * the walk is already throwing, because a caller tells a block from a cut
+   * by that error's class, and must not skip the progress of the listings the
+   * walk did page. It is logged then. When the walk did not throw, a failed
+   * plan write is thrown, after the progress.
+   */
+  private async settle(
+    context: RunContext,
+    plan: { total: number },
+    before: number,
+    after: number,
+    seen: number,
+    failure: { error: unknown } | null
+  ): Promise<void> {
+    let planFailure: { error: unknown } | null = null;
+    try {
+      await restatePlan(context, plan, before, after);
+    } catch (error) {
+      planFailure = { error };
+    }
+    await context.report({ processed: seen });
+    if (failure !== null) {
+      if (planFailure !== null) {
+        this.logger.warn(
+          `Run ${context.runId}: the planned total was not restated: ` +
+            String(planFailure.error)
+        );
+      }
+      throw failure.error;
+    }
+    if (planFailure !== null) {
+      throw planFailure.error;
     }
   }
 
@@ -345,15 +385,15 @@ export class CarrefourCatalogRunner implements CatalogRunner {
    *
    * So a guard that stops on two or more refusals in a row, as
    * `CARREFOUR_REFUSAL_POLICY` does with three, never stops the run inside
-   * the pass: the pass meets at most one refusal, after a count of none. A guard
-   * with a window rule can still stop on that one refusal, when the walk left
-   * enough refusals inside its window, and then the pass answers the block. A
-   * stop there turns a completed walk into a `FAILED` run, sends the refusal
-   * mail of plan 0218, counts toward the three failures that stop the chain's
-   * schedules, and loses the `LISTING_UNREAD` warnings, which only a run that
-   * was not stopped writes. A category the pass did not ask keeps the warning the walk gave
-   * it, and the one refused again keeps its warning with the offset of the
-   * second refusal.
+   * the pass: the pass meets at most one refusal, after a count of none. A
+   * guard with a window rule can still stop on that one refusal, when the walk
+   * left enough refusals inside its window, and then the pass answers the
+   * block. A stop there turns a completed walk into a `FAILED` run, sends the
+   * refusal mail of plan 0218, counts toward the three failures that stop the
+   * chain's schedules, and loses the `LISTING_UNREAD` warnings, which only a
+   * run that was not stopped writes. A category the pass did not ask keeps
+   * the warning the walk gave it, and the one refused again keeps its warning
+   * with the offset of the second refusal.
    *
    * Only a refusal and a 5xx are asked again ({@link askable}). A browser that
    * stopped answering is a different failure, and a node the frontier walk
@@ -452,15 +492,16 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       },
       { fromPage: entry.page }
     );
+    let failure: { error: unknown } | null = null;
     try {
       for await (const product of walk) {
         seen += 1;
         reportFirstSighting(report, products, product);
       }
-    } finally {
-      await restatePlan(context, plan, before, entry.total);
-      await context.report({ processed: seen });
+    } catch (error) {
+      failure = { error };
     }
+    await this.settle(context, plan, before, entry.total, seen, failure);
   }
 }
 
@@ -591,8 +632,10 @@ interface LostCategory {
   /** The page that failed, from 0. The end pass starts there. */
   page: number;
   /**
-   * The largest total a walk of it knows: the frontier's, or larger when a
-   * page stated that the category grew (owner decision 104b).
+   * The largest total a walk of it was bounded by: the frontier's, or larger
+   * when a page stated that the category grew (owner decision 104b), and
+   * never above the ceiling, so a category whose pages state 1,200 warns "of
+   * 1008".
    */
   total: number;
   /** What it failed with, or null once the end pass read it. */

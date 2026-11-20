@@ -441,15 +441,21 @@ describe('CarrefourClient', () => {
       return state;
     };
 
-    it('grows no further than paging serves when the page states both', async () => {
-      // 49 stated and 48 served: a third page would answer empty while
-      // stating 49, a cut that is not there. Two pages, and no error.
-      const totals: number[] = [];
-      const browser = new FakeBrowser(() => ({
-        status: 200,
-        state: serving(49, 2),
-      }));
+    /** {@link serving} with its cards removed. */
+    const servingEmpty = (total: number, servedPages: number) => {
+      const state = serving(total, servedPages);
+      (
+        (state['productCardList'] as Record<string, unknown>)[
+          'results'
+        ] as Record<string, unknown>
+      )['items'] = [];
+      return state;
+    };
+
+    /** The pages that held cards and the total `onPage` was handed. */
+    async function walkWithTotals(browser: FakeBrowser) {
       const pages: number[] = [];
+      const totals: number[] = [];
       for await (const _product of clientOn(browser).walkCategory(
         category,
         (_listing, page, total) => {
@@ -459,9 +465,44 @@ describe('CarrefourClient', () => {
       )) {
         // Only the pages matter here.
       }
+      return { pages, totals };
+    }
+
+    it('asks one page past what paging serves, and ends clean when it is empty', async () => {
+      // 49 stated and 48 served. The stated total grows the walk to a third
+      // page; it answers empty while stating 49, and its offset is at what
+      // its paging serves, so that is the end and not a cut. One request
+      // more than paging needed, and the category is read whole.
+      const browser = new FakeBrowser((url) => ({
+        status: 200,
+        state: url === at(48) ? servingEmpty(49, 2) : serving(49, 2),
+      }));
+      const { pages, totals } = await walkWithTotals(browser);
       expect(pages).toEqual([0, 1]);
-      expect(browser.asked).toEqual([at(0), at(24)]);
-      expect(totals).toEqual([48, 48]);
+      expect(browser.asked).toEqual([at(0), at(24), at(48)]);
+      expect(totals).toEqual([49, 49]);
+    });
+
+    it('reads every page a stale page count understates', async () => {
+      // The pages state 72 results but `total_pages: 2`, and offset 48 still
+      // serves cards. The page count bounds nothing, so all three are read.
+      const browser = new FakeBrowser(() => ({
+        status: 200,
+        state: serving(72, 2),
+      }));
+      const { pages, totals } = await walkWithTotals(browser);
+      expect(pages).toEqual([0, 1, 2]);
+      expect(browser.asked).toEqual([at(0), at(24), at(48)]);
+      expect(totals).toEqual([72, 72, 72]);
+    });
+
+    it('follows the stated total when a page with cards states no pages served', async () => {
+      const browser = new FakeBrowser(() => ({
+        status: 200,
+        state: serving(72, 0),
+      }));
+      const { pages } = await walkWithTotals(browser);
+      expect(pages).toEqual([0, 1, 2]);
     });
 
     it('pages to its end a category whose served pages grew too', async () => {

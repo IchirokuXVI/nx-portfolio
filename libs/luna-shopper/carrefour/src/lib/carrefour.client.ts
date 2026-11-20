@@ -344,24 +344,31 @@ export class CarrefourClient {
    * still states rows at its own offset. A walk that ended there in silence
    * read as a category read whole, and a crawl of categories read whole may
    * replace paths and delist. The natural ends are the last page, bounded as
-   * the next paragraph says, and an empty page whose own stated total ends at or
-   * before its offset, which is the result set having shrunk since the
-   * frontier was walked. `onPage` is called for every page that held cards.
+   * the next paragraph says, and an empty page whose offset is at or past the
+   * smallest of three figures that page states or implies: its stated total,
+   * what its paging serves (`total_pages * page_size`, plan 0090 section 7)
+   * when it states both, and {@link CARREFOUR_CEILING}. That is the result
+   * set having shrunk since the frontier was walked, or a page past what
+   * paging serves, which answers empty while still stating rows. An empty
+   * page that states no total, or whose smallest figure is still above its
+   * offset, is a gap. `onPage` is called for every page that held cards.
    *
    * **A category that grew since the frontier was walked is paged to its new
    * end** (owner decision 104b). The last page is the larger of the frontier's
    * total and the largest total a page of this walk stated, capped at
-   * {@link CARREFOUR_CEILING} by {@link pagesFor}. A page that also states
-   * what paging serves (`total_pages * page_size`, plan 0090 section 7) grows
-   * the walk by the smaller of the two, because a page past what paging serves
-   * answers empty while still stating rows, and that would be a cut that is
-   * not there. It is evaluated again on every page, so a later page that
-   * states a still larger total adds pages, and a smaller one removes none: a
-   * shrunk set ends on the empty page rule above. The ceiling keeps the loop
-   * bounded at 42 pages however large a page says the set is.
+   * {@link CARREFOUR_CEILING} by {@link pagesFor}. The paging figure never
+   * bounds it: a `total_pages` that lags or rounds down while offset paging
+   * still serves rows would end the walk early and count unread rows as read.
+   * So a page that states one row more than paging serves costs one more
+   * request, which answers empty and ends the walk on the rule above. The
+   * bound is evaluated again on every page, so a later page that states a
+   * still larger total adds pages, and a smaller one removes none: a shrunk
+   * set ends on the empty page rule above. The ceiling keeps the loop bounded
+   * at 42 pages however large a page says the set is.
    *
-   * `onPage` is also handed that figure, the largest total this walk knows
-   * for the category after the page, so a caller can name it and plan by it.
+   * `onPage` is also handed the total that bounds the walk after the page:
+   * the frontier's or the largest a page stated, never above the ceiling, so
+   * a caller can name it and plan by it.
    *
    * `fromPage` starts the walk on a later page, for a caller that read the
    * pages before it already. That page is asked even when the frontier's total
@@ -375,7 +382,7 @@ export class CarrefourClient {
     options: { fromPage?: number } = {}
   ): AsyncIterable<CarrefourProduct> {
     const fromPage = options.fromPage ?? 0;
-    let total = category.totalResults;
+    let total = Math.min(category.totalResults, CARREFOUR_CEILING);
     let pages = pagesFor(total);
     if (options.fromPage !== undefined) {
       pages = Math.max(
@@ -416,8 +423,18 @@ export class CarrefourClient {
       if (listing.cards.length === 0) {
         // Paging past the end answers an empty item list rather than an
         // error, so an empty page is the end when the page itself says the
-        // result set stops at or before this offset.
-        if (stated !== null && offset >= Math.min(stated, CARREFOUR_CEILING)) {
+        // result set stops at or before this offset: its stated total, what
+        // its paging serves when it states that, or the ceiling, whichever
+        // is smallest. A page past what paging serves can still state rows.
+        if (
+          stated !== null &&
+          offset >=
+            Math.min(
+              stated,
+              statedPageableResults(state) ?? stated,
+              CARREFOUR_CEILING
+            )
+        ) {
           return;
         }
         throw new CarrefourShortCategoryError(
@@ -430,12 +447,11 @@ export class CarrefourClient {
         );
       }
       // The category may have grown since the frontier saw it. Only ever
-      // larger, never past what paging serves when the page states that, and
-      // never past the ceiling, so the loop stays bounded.
+      // larger, and never past the ceiling, so the loop stays bounded. The
+      // paging figure plays no part here: a stale or rounded `total_pages`
+      // must never make the walk skip a page that still serves cards.
       if (stated !== null) {
-        const pageable = statedPageableResults(state);
-        const grown = pageable === null ? stated : Math.min(stated, pageable);
-        total = Math.max(total, Math.min(grown, CARREFOUR_CEILING));
+        total = Math.max(total, Math.min(stated, CARREFOUR_CEILING));
         pages = Math.max(pages, pagesFor(total));
       }
       onPage?.(listing, page, total);
