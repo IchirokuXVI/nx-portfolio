@@ -198,7 +198,6 @@ describe('the queue names the brands a printed brand answers to (plan 0178)', ()
   it.each([
     ['true', true],
     ['false', false],
-    ['', true],
   ])(
     'reads delisted=%p strictly and hands the harvester %p (plan 0220)',
     async (spelled, read) => {
@@ -263,6 +262,22 @@ describe('the queue names the brands a printed brand answers to (plan 0178)', ()
     expect(typo.status).toBe(400);
     expect(context.sent).toHaveLength(1);
   });
+
+  it.each(['delisted', 'delisted=', 'sizeDoubt', 'sizeDoubt='])(
+    'refuses a bare ?%s and asks the harvester nothing',
+    async (query) => {
+      context = await boot({
+        [SOURCE_ENTRY_PATTERNS.list]: { items: [], nextCursor: null },
+      });
+
+      const response = await fetch(
+        `${context.origin}/v1/admin/harvest/entries?${query}`
+      );
+
+      expect(response.status).toBe(400);
+      expect(context.sent).toHaveLength(0);
+    }
+  );
 
   it('hands the harvester the entry id the query names, beside the chain (admin plan 0073)', async () => {
     context = await boot({

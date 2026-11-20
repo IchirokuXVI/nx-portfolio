@@ -1612,7 +1612,7 @@
             "name": "verified",
             "required": false,
             "in": "query",
-            "description": "True for confirmed addresses only. False is unconfirmed **and** absent: an account with no address has not confirmed one, and an operator looking for unconfirmed accounts wants it in the answer. Parsed strictly: the string `false` is false.",
+            "description": "True for confirmed addresses only. False is unconfirmed **and** absent: an account with no address has not confirmed one, and an operator looking for unconfirmed accounts wants it in the answer. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.",
             "schema": {
               "type": "boolean"
             }
@@ -2758,7 +2758,7 @@
             "name": "hasPending",
             "required": false,
             "in": "query",
-            "description": "True for the zones with at least one pending join request. False is the same as absent: it narrows nothing.",
+            "description": "True for the zones with at least one pending join request. False is the same as absent: it narrows nothing. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.",
             "schema": {
               "type": "boolean"
             }
@@ -5153,7 +5153,7 @@
             "name": "served",
             "required": false,
             "in": "query",
-            "description": "True for codes with at least one shop, false for those with none. Omitted is every code, which is the default because a listing that hid the empty ones would hide the coverage gap it exists to show. Parsed strictly: the string `false` is false.",
+            "description": "True for codes with at least one shop, false for those with none. Omitted is every code, which is the default because a listing that hid the empty ones would hide the coverage gap it exists to show. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.",
             "schema": {
               "type": "boolean"
             }
@@ -10109,7 +10109,7 @@
             "name": "includeArchived",
             "required": false,
             "in": "query",
-            "description": "Include archived baskets, which the default listing leaves out without deleting them. Parsed strictly: the string `false` is false.",
+            "description": "Include archived baskets, which the default listing leaves out without deleting them. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.",
             "schema": {
               "type": "boolean"
             }
@@ -12339,7 +12339,7 @@
             "name": "revokeParticipants",
             "required": false,
             "in": "query",
-            "description": "Also revoke everybody this link let in. Without it the link stops accepting new people and every existing participant keeps working, which is the common case: stop it spreading, do not throw out the people in the shop. Parsed strictly: the string `false` is false.",
+            "description": "Also revoke everybody this link let in. Without it the link stops accepting new people and every existing participant keeps working, which is the common case: stop it spreading, do not throw out the people in the shop. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.",
             "schema": {
               "type": "boolean"
             }
@@ -14967,7 +14967,7 @@
             "name": "includeExcluded",
             "required": false,
             "in": "query",
-            "description": "Include what you have refused, flagged. The screen that edits those choices is the caller that asks for it; every other caller is offering a shop. Parsed strictly: the string `false` is false.",
+            "description": "Include what you have refused, flagged. The screen that edits those choices is the caller that asks for it; every other caller is offering a shop. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.",
             "schema": {
               "type": "boolean"
             }
@@ -15075,7 +15075,7 @@
             "name": "includeExcluded",
             "required": false,
             "in": "query",
-            "description": "Include what you have refused, flagged. The screen that edits those choices is the caller that asks for it; every other caller is offering a shop. Parsed strictly: the string `false` is false.",
+            "description": "Include what you have refused, flagged. The screen that edits those choices is the caller that asks for it; every other caller is offering a shop. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.",
             "schema": {
               "type": "boolean"
             }
@@ -18425,7 +18425,7 @@
             "name": "merged",
             "required": false,
             "in": "query",
-            "description": "Only the products that were merged into another one, each with its own name, brand and size and with `mergedInto` naming the survivor. Absent or false lists the live products: a merged product is never in a list or a search otherwise. Parsed strictly: the string `false` is false.",
+            "description": "Only the products that were merged into another one, each with its own name, brand and size and with `mergedInto` naming the survivor. Absent or false lists the live products: a merged product is never in a list or a search otherwise. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.",
             "schema": {
               "type": "boolean"
             }
@@ -22176,7 +22176,7 @@
             "name": "stale",
             "required": false,
             "in": "query",
-            "description": "The rows shown on sufferance: nothing eligible prices them, so the newest row of any kind is shown and flagged (plan 0080, section 5). Parsed strictly: the string `false` is false.",
+            "description": "The rows shown on sufferance: nothing eligible prices them, so the newest row of any kind is shown and flagged (plan 0080, section 5). Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.",
             "schema": {
               "type": "boolean"
             }
@@ -22185,7 +22185,7 @@
             "name": "available",
             "required": false,
             "in": "query",
-            "description": "The scope wide flag, not the per store override on a location item. Parsed strictly: the string `false` is false.",
+            "description": "The scope wide flag, not the per store override on a location item. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.",
             "schema": {
               "type": "boolean"
             }
@@ -25531,7 +25531,7 @@
             "name": "reverted",
             "required": false,
             "in": "query",
-            "description": "Reverted runs only, or unreverted runs only (plan 0082). Absent lists both. A filter of its own rather than a status, because a revert does not change how the run ended. Parsed strictly: the string `false` is false.",
+            "description": "Reverted runs only, or unreverted runs only (plan 0082). Absent lists both. A filter of its own rather than a status, because a revert does not change how the run ended. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.",
             "schema": {
               "type": "boolean"
             }
@@ -28149,7 +28149,7 @@
             "name": "dismissed",
             "required": false,
             "in": "query",
-            "description": "Omitted lists the working set, which is the codes nobody has dismissed. True lists the dismissed ones alone, so one can be found and put back. Parsed strictly: the string `false` is false.",
+            "description": "Omitted lists the working set, which is the codes nobody has dismissed. True lists the dismissed ones alone, so one can be found and put back. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.",
             "schema": {
               "type": "boolean"
             }
@@ -28646,7 +28646,7 @@
             "name": "delisted",
             "required": false,
             "in": "query",
-            "description": "True lists only the rows every counted scope lost (`delistedAt` set), false leaves them out, and omitted lists both (plan 0220). Parsed strictly: the string `false` is false.",
+            "description": "True lists only the rows every counted scope lost (`delistedAt` set), false leaves them out, and omitted lists both (plan 0220). Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.",
             "schema": {
               "type": "boolean"
             }
@@ -28655,7 +28655,7 @@
             "name": "sizeDoubt",
             "required": false,
             "in": "query",
-            "description": "True lists only the rows whose size their own price and comparison price disprove (`sizeDoubt` set, plan 0249), false leaves them out, and omitted lists both (admin plan 0072). Parsed strictly: the string `false` is false.",
+            "description": "True lists only the rows whose size their own price and comparison price disprove (`sizeDoubt` set, plan 0249), false leaves them out, and omitted lists both (admin plan 0072). Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.",
             "schema": {
               "type": "boolean"
             }
@@ -29658,7 +29658,7 @@
             "name": "reverted",
             "required": false,
             "in": "query",
-            "description": "Reverted runs only, or unreverted runs only (plan 0082). Absent lists both. A filter of its own rather than a status, because a revert does not change how the run ended. Parsed strictly: the string `false` is false.",
+            "description": "Reverted runs only, or unreverted runs only (plan 0082). Absent lists both. A filter of its own rather than a status, because a revert does not change how the run ended. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.",
             "schema": {
               "type": "boolean"
             }

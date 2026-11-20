@@ -109,4 +109,17 @@ describe('DELETE /v1/baskets/:id/share-link', () => {
     expect(response.status).toBe(400);
     expect(context.sent).toHaveLength(0);
   });
+
+  it.each(['revokeParticipants', 'revokeParticipants='])(
+    'refuses a bare ?%s, and revokes nothing',
+    async (query) => {
+      const response = await fetch(
+        `${context.origin}/v1/baskets/${BASKET}/share-link?${query}`,
+        { method: 'DELETE' }
+      );
+
+      expect(response.status).toBe(400);
+      expect(context.sent).toHaveLength(0);
+    }
+  );
 });

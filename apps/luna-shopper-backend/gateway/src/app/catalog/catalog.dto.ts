@@ -1747,7 +1747,7 @@ export class ShopQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'Include what you have refused, flagged. The screen that edits those choices is the caller that asks for it; every other caller is offering a shop. Parsed strictly: the string `false` is false.',
+      'Include what you have refused, flagged. The screen that edits those choices is the caller that asks for it; every other caller is offering a shop. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.',
   })
   @IsOptional()
   @Transform(asQueryFlag)

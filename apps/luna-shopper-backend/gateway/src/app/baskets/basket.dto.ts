@@ -615,7 +615,7 @@ export class ListBasketsQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'Include archived baskets, which the default listing leaves out without deleting them. Parsed strictly: the string `false` is false.',
+      'Include archived baskets, which the default listing leaves out without deleting them. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.',
   })
   @IsOptional()
   @Transform(asQueryFlag)
