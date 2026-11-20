@@ -23,6 +23,7 @@ import {
   normalized,
   runCli,
   runMode,
+  trackedAndroidFiles,
 } from './native-api.mjs';
 
 const ANDROID_FILES = [
@@ -209,5 +210,13 @@ describe('native-api', () => {
       'node_modules/@capawesome/capacitor-app-update@8.1.1',
       'node_modules/@capgo/capacitor-updater@8.54.2',
     ]);
+  });
+
+  it('reads the list that NATIVE_API_TRACKED_FILES names instead of running git', () => {
+    write('tracked.lst', `${ANDROID_FILES[1]}\0${ANDROID_FILES[0]}\0`);
+    assert.deepEqual(
+      trackedAndroidFiles(root, { NATIVE_API_TRACKED_FILES: 'tracked.lst' }),
+      [...ANDROID_FILES].sort()
+    );
   });
 });

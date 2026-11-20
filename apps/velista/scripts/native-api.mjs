@@ -72,16 +72,36 @@ export function nativePackageVersions(lockText) {
   return lines.sort();
 }
 
-/** The tracked files under the Android directory, relative to the root, sorted. */
-export function trackedAndroidFiles(root) {
+/**
+ * The tracked files under the Android directory, relative to the root, sorted.
+ *
+ * The staging and release pipelines run `nx test` inside `node:24-slim`, which has no git.
+ * There the runner writes the list beforehand with
+ * `git ls-files -z -- apps/velista/android > <file>` and names the file in
+ * NATIVE_API_TRACKED_FILES, which is read instead of running git.
+ */
+export function trackedAndroidFiles(root, env = process.env) {
+  const listFile = env.NATIVE_API_TRACKED_FILES;
+  if (listFile) {
+    return splitList(readFileSync(resolve(root, listFile), 'utf8'));
+  }
   const result = spawnSync('git', ['ls-files', '-z', '--', ANDROID_DIR], {
     cwd: root,
     encoding: 'utf8',
   });
+  if (result.error) {
+    throw new Error(
+      `git ls-files could not run (${result.error.message}). Where there is no git, write the list with \`git ls-files -z -- ${ANDROID_DIR}\` and name the file in NATIVE_API_TRACKED_FILES`
+    );
+  }
   if (result.status !== 0) {
     throw new Error(`git ls-files failed: ${result.stderr}`);
   }
-  return result.stdout
+  return splitList(result.stdout);
+}
+
+function splitList(text) {
+  return text
     .split('\0')
     .filter((path) => path !== '')
     .sort();
