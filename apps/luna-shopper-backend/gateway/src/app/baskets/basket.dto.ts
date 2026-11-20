@@ -10,6 +10,7 @@ import {
   SettlementOutcome,
   type LineUnit,
 } from '@portfolio/luna-shopper/contracts';
+import { asQueryFlag } from '@portfolio/luna-shopper/platform';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -614,10 +615,10 @@ export class ListBasketsQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'Include archived baskets, which the default listing leaves out without deleting them.',
+      'Include archived baskets, which the default listing leaves out without deleting them. Parsed strictly: the string `false` is false.',
   })
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(asQueryFlag)
   @IsBoolean()
   includeArchived?: boolean;
 }
