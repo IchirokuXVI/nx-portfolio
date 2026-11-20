@@ -433,6 +433,48 @@ describe('CarrefourClient', () => {
       expect(browser.asked.at(-1)).toBe(at(984));
     });
 
+    it('hands over a stated total past the ceiling, uncapped, and ends with no error (owner decision 116b)', async () => {
+      // 900 at the frontier, 1,100 stated from the second page on. The walk
+      // pages to the ceiling and ends clean, so only the stated total tells
+      // the caller that rows were left unserved.
+      const browser = totals((offset) => (offset === 0 ? 900 : 1100));
+      const stated: Array<number | null> = [];
+      const totalsSeen: number[] = [];
+      for await (const _product of clientOn(browser).walkCategory(
+        { ...category, totalResults: 900 },
+        (_listing, _page, total, largest) => {
+          totalsSeen.push(total);
+          stated.push(largest);
+        }
+      )) {
+        // Only what onPage was handed matters here.
+      }
+      expect(browser.asked).toHaveLength(42);
+      expect(stated[0]).toBe(900);
+      expect(stated.slice(1).every((value) => value === 1100)).toBe(true);
+      expect(totalsSeen.at(-1)).toBe(1008);
+    });
+
+    it('hands over null as the stated total while no page states one', async () => {
+      const browser = new FakeBrowser(() => {
+        const state = stating(48);
+        delete (
+          (state['productCardList'] as Record<string, unknown>)[
+            'results'
+          ] as Record<string, unknown>
+        )['total_results'];
+        return { status: 200, state };
+      });
+      const stated: Array<number | null> = [];
+      for await (const _product of clientOn(browser).walkCategory(
+        category,
+        (_listing, _page, _total, largest) => stated.push(largest)
+      )) {
+        // Only what onPage was handed matters here.
+      }
+      expect(stated).toEqual([null, null]);
+    });
+
     /** A page stating `total` results and `servedPages` pages of 24. */
     const serving = (total: number, servedPages: number) => {
       const state = stating(total);

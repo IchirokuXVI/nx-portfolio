@@ -371,6 +371,14 @@ export class CarrefourClient {
    * the starting total or the largest a page stated, never above the ceiling,
    * so a caller can name it and plan by it.
    *
+   * **A stated total past the ceiling is handed over too** (owner decision
+   * 116b). `onPage`'s fourth argument is the largest total a page of this walk
+   * stated, before the ceiling caps it, or null while no page stated one. A
+   * category the frontier saw under the ceiling whose pages now state more is
+   * paged to the ceiling and ends with no error, with rows the storefront will
+   * not serve, so only the caller can tell that it was truncated, and this is
+   * how it is told.
+   *
    * `fromPage` starts the walk on a later page, for a caller that read the
    * pages before it already. That page is asked even when the starting total
    * ends before it: the caller names the page a walk was about to ask, which a
@@ -381,10 +389,16 @@ export class CarrefourClient {
    */
   async *walkCategory(
     category: CarrefourCategory,
-    onPage?: (listing: CarrefourListing, page: number, total: number) => void,
+    onPage?: (
+      listing: CarrefourListing,
+      page: number,
+      total: number,
+      stated: number | null
+    ) => void,
     options: { fromPage?: number; knownTotal?: number } = {}
   ): AsyncIterable<CarrefourProduct> {
     const fromPage = options.fromPage ?? 0;
+    let largestStated: number | null = null;
     let total = Math.min(
       Math.max(category.totalResults, options.knownTotal ?? 0),
       CARREFOUR_CEILING
@@ -449,8 +463,9 @@ export class CarrefourClient {
       if (stated !== null) {
         total = Math.max(total, Math.min(stated, CARREFOUR_CEILING));
         pages = Math.max(pages, pagesFor(total));
+        largestStated = Math.max(largestStated ?? 0, stated);
       }
-      onPage?.(listing, page, total);
+      onPage?.(listing, page, total, largestStated);
       for (const product of readCards(listing.cards, category.path)) {
         if (!seen.has(product.externalId)) {
           seen.add(product.externalId);
