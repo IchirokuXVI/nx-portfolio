@@ -121,6 +121,32 @@ export function isNarrowedRun(run: {
   return isNarrowedRunRequest(run.input);
 }
 
+/**
+ * Whether two runs walked under the same configuration (owner decision 130b),
+ * read off their `configFingerprint`, so that the total of the earlier one may
+ * serve as the reference of the other.
+ *
+ * True only when both fingerprints are strings and equal. A null, absent or
+ * empty fingerprint on either side answers false: a run stored before the
+ * column existed, or one that used no source row, says nothing about what it
+ * walked, and drawing no estimate is the safe error. The order of the two
+ * arguments does not matter.
+ *
+ * This answers one of the questions an estimate asks. The request
+ * ({@link isNarrowedRun}) and the adapter (`comparableWalkTotal`) are the
+ * others.
+ */
+export function walkedUnderSameConfig(
+  runFingerprint: string | null | undefined,
+  referenceFingerprint: string | null | undefined
+): boolean {
+  return (
+    typeof runFingerprint === 'string' &&
+    runFingerprint !== '' &&
+    runFingerprint === referenceFingerprint
+  );
+}
+
 /** Whether a list holds a value that is not blank, as the spawn trims it. */
 function namesAny(values: readonly string[] | undefined): boolean {
   return (values ?? []).some((value) => value.trim() !== '');

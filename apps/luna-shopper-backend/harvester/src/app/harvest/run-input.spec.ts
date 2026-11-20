@@ -4,6 +4,7 @@ import {
   HarvestRunStatus,
   HarvestRunTrigger,
   HarvestRunWrites,
+  PriceSourceKind,
 } from '@portfolio/luna-shopper/contracts';
 import type { HarvestRun } from '../entities';
 import { toHarvestRunView } from './harvest.mappers';
@@ -84,6 +85,33 @@ describe('toHarvestRunView input', () => {
   });
 });
 
+describe('toHarvestRunView walk configuration', () => {
+  it('carries the fingerprint and the adapter the spawn stored', () => {
+    const digest = 'e'.repeat(64);
+    const view = toHarvestRunView({
+      ...run(HarvestRunMode.CATALOG_DISCOVERY, {}),
+      configFingerprint: digest,
+      adapterKey: 'carrefour-web',
+    });
+    expect(view.configFingerprint).toBe(digest);
+    expect(view.adapterKey).toBe('carrefour-web');
+  });
+
+  it('answers null for both on a run stored before the columns', () => {
+    // The row of `run()` has neither field, as a row hydrated before them.
+    const view = toHarvestRunView(run(HarvestRunMode.CATALOG_DISCOVERY, {}));
+    expect(view.configFingerprint).toBeNull();
+    expect(view.adapterKey).toBeNull();
+    const stored = toHarvestRunView({
+      ...run(HarvestRunMode.CATALOG_DISCOVERY, {}),
+      configFingerprint: null,
+      adapterKey: null,
+    });
+    expect(stored.configFingerprint).toBeNull();
+    expect(stored.adapterKey).toBeNull();
+  });
+});
+
 describe('readRunInput', () => {
   it('reads a backfill with its single scope', () => {
     expect(
@@ -154,7 +182,8 @@ describe('readRunInput', () => {
     });
   });
 
-  it('leaves the document, the source kind and the window of an import out', () => {
+  it('reads the source kind and the window of an import, and leaves its document out', () => {
+    // What `validateFileImport` stores (owner decision 129b).
     expect(
       readRunInput(HarvestRunMode.FILE_IMPORT, {
         supermarketId: 'chain-1',
@@ -164,7 +193,40 @@ describe('readRunInput', () => {
         validUntil: '2026-11-08T00:00:00.000Z',
         document: { products: [{ name: 'Leche' }] },
       })
-    ).toEqual({ mode: HarvestRunMode.FILE_IMPORT, priceScopeId: 'national' });
+    ).toEqual({
+      mode: HarvestRunMode.FILE_IMPORT,
+      priceScopeId: 'national',
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+      validFrom: '2026-11-01T00:00:00.000Z',
+      validUntil: '2026-11-08T00:00:00.000Z',
+    });
+  });
+
+  it('reads an import stored with no window, and one stored with neither field, as absent fields', () => {
+    // A document that states no window resolves to none, which is what a
+    // walk's export is: the spawn stores no instant then.
+    expect(
+      readRunInput(HarvestRunMode.FILE_IMPORT, {
+        supermarketId: 'chain-1',
+        priceScopeId: null,
+        sourceKind: 'OFFICIAL_API',
+        document: { products: [] },
+      })
+    ).toEqual({
+      mode: HarvestRunMode.FILE_IMPORT,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+    });
+    // An old row with neither field is not unreadable and states no null.
+    const old = readRunInput(HarvestRunMode.FILE_IMPORT, {
+      priceScopeId: 'national',
+    });
+    expect(old).toEqual({
+      mode: HarvestRunMode.FILE_IMPORT,
+      priceScopeId: 'national',
+    });
+    expect(old).not.toHaveProperty('sourceKind');
+    expect(old).not.toHaveProperty('validFrom');
+    expect(old).not.toHaveProperty('validUntil');
   });
 
   it.each([
@@ -199,6 +261,16 @@ describe('readRunInput', () => {
       'postal codes that are numbers',
       HarvestRunMode.STORE_DISCOVERY,
       { postalCodes: [14013] },
+    ],
+    [
+      'a source kind it does not know',
+      HarvestRunMode.FILE_IMPORT,
+      { sourceKind: 'GUESSED' },
+    ],
+    [
+      'a window bound that is a number',
+      HarvestRunMode.FILE_IMPORT,
+      { sourceKind: 'OFFICIAL_LEAFLET', validFrom: 1762000000000 },
     ],
     ['a mode this build does not know', 'REFRESH' as HarvestRunMode, {}],
   ])('answers null for %s', (_case, mode, stored) => {

@@ -62,6 +62,7 @@ import { ESTIMATE_SAMPLES, estimateRun } from './run-estimate';
 import { RunExecutor } from './run-executor.service';
 import { SourceEntryService } from './source-entry.service';
 import { SupermarketSourceService } from './supermarket-source.service';
+import { walkConfigFingerprint } from './walk-fingerprint';
 
 interface RunCursor {
   value: string;
@@ -549,12 +550,20 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
       throw new ValidationException(SOURCE_DISABLED);
     }
 
+    // What the walk runs under outside its request (owner decisions 130b and
+    // 127b), taken from the row the run names and only from it: a file import
+    // and an OpenStreetMap store discovery name none and record neither.
+    const walkSource = needsSource ? source : null;
     try {
       const run = await this.store.create({
         mode: req.mode,
         trigger: origin.trigger,
         supermarketId,
-        sourceId: needsSource ? (source?.id ?? null) : null,
+        sourceId: walkSource?.id ?? null,
+        configFingerprint: walkSource
+          ? walkConfigFingerprint(walkSource)
+          : null,
+        adapterKey: walkSource?.adapterKey ?? null,
         priceScopeId,
         requestedByUserId: origin.userId,
         correlationId: getRequestContext()?.correlationId ?? null,

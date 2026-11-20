@@ -35,8 +35,22 @@ const INPUT = {
   details: 'NEW',
 };
 
-const RUN = { id: 'run-1', mode: 'CATALOG_DISCOVERY', input: INPUT };
-const OLD_RUN = { id: 'run-2', mode: 'CATALOG_DISCOVERY', input: null };
+const FINGERPRINT = 'f'.repeat(64);
+
+const RUN = {
+  id: 'run-1',
+  mode: 'CATALOG_DISCOVERY',
+  input: INPUT,
+  configFingerprint: FINGERPRINT,
+  adapterKey: 'carrefour-web',
+};
+const OLD_RUN = {
+  id: 'run-2',
+  mode: 'CATALOG_DISCOVERY',
+  input: null,
+  configFingerprint: null,
+  adapterKey: null,
+};
 
 async function boot() {
   const sent: SentMessage[] = [];
@@ -121,7 +135,36 @@ describe('the run views carry the run request (owner decision 114a)', () => {
     ]);
   });
 
-  it('documents the field on the run view, as a preset input or null', () => {
+  it('passes the walk configuration digest and the adapter through, null included (owner decisions 130b and 127b)', async () => {
+    context = await boot();
+
+    const one = await (
+      await fetch(
+        `${context.origin}/v1/admin/harvest/runs/0b0c6a52-5a5e-4c2e-9d7e-7a1f2b3c4d5e`
+      )
+    ).json();
+    expect(one).toMatchObject({
+      configFingerprint: FINGERPRINT,
+      adapterKey: 'carrefour-web',
+    });
+
+    const list = await (
+      await fetch(`${context.origin}/v1/admin/harvest/runs`)
+    ).json();
+    expect(
+      list.items.map(
+        (item: { configFingerprint: unknown; adapterKey: unknown }) => [
+          item.configFingerprint,
+          item.adapterKey,
+        ]
+      )
+    ).toEqual([
+      [FINGERPRINT, 'carrefour-web'],
+      [null, null],
+    ]);
+  });
+
+  it('documents the field on the run view, as a run input record or null', () => {
     // The committed document, which openapi-document.spec.ts keeps current.
     const document = JSON.parse(
       readFileSync(join(__dirname, '../../../docs/openapi.json'), 'utf8')
@@ -133,11 +176,33 @@ describe('the run views carry the run request (owner decision 114a)', () => {
 
     expect(view).toBeDefined();
     expect(JSON.stringify(view.properties['input'])).toContain(
-      'HarvestRunPresetInput'
+      'HarvestRunInputRecord'
     );
     expect(JSON.stringify(view.properties['input'])).toContain('null');
-    // Not required, so the back office's typed fixtures stay valid.
+    // Not required, so the back office's typed fixtures stay valid, and a
+    // gateway in front of an older harvester answers a valid view.
     expect(view.required).not.toContain('input');
+    expect(view.required).not.toContain('configFingerprint');
+    expect(view.required).not.toContain('adapterKey');
+    expect(JSON.stringify(view.properties['configFingerprint'])).toContain(
+      'null'
+    );
+    expect(JSON.stringify(view.properties['adapterKey'])).toContain(
+      'AdapterKey'
+    );
+
+    // A file import states its source kind and its window (owner decision
+    // 129b), and a preset still cannot carry them.
+    const record = document.components.schemas[
+      'harvest.HarvestRunInputRecord'
+    ] as { properties: Record<string, unknown> };
+    const preset = document.components.schemas[
+      'harvest.HarvestRunPresetInput'
+    ] as { properties: Record<string, unknown> };
+    for (const field of ['sourceKind', 'validFrom', 'validUntil']) {
+      expect(record.properties).toHaveProperty(field);
+      expect(preset.properties).not.toHaveProperty(field);
+    }
   });
 });
 

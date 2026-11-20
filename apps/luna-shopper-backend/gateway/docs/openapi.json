@@ -43906,7 +43906,7 @@
       },
       "harvest.AdapterCapabilityTable": {
         "type": "object",
-        "description": "What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. `stockIndicator` is how the source tells stock: `per-shop` when it names the shops that carry a product, `per-scope` when each listed row or a scoped answer states it, and null when it says nothing about stock. `provesDelisting` means a walk can read the whole listing of a scope, so a product the listing did not name counts as a miss. A reader that does not know an adapter must answer no to every boolean, null to the language, null to the band and null to the stock indicator rather than throw.",
+        "description": "What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. `stockIndicator` is how the source tells stock: `per-shop` when it names the shops that carry a product, `per-scope` when each listed row or a scoped answer states it, and null when it says nothing about stock. `provesDelisting` means a walk can read the whole listing of a scope, so a product the listing did not name counts as a miss. `comparableWalkTotal` means the count of one finished walk says about how big the next walk of the source is, so an earlier total may be drawn as an estimate; false for `deza-web`, whose capped queries can count different totals for one assortment. A reader that does not know an adapter must answer no to every boolean, null to the language, null to the band and null to the stock indicator rather than throw.",
         "const": {
           "mercadona-api": {
             "writesPrices": true,
@@ -43921,7 +43921,8 @@
             },
             "stockIndicator": "per-scope",
             "provesDelisting": true,
-            "refreshesOneProduct": true
+            "refreshesOneProduct": true,
+            "comparableWalkTotal": true
           },
           "deza-web": {
             "writesPrices": false,
@@ -43933,7 +43934,8 @@
             "walkablePriorities": null,
             "stockIndicator": "per-shop",
             "provesDelisting": false,
-            "refreshesOneProduct": false
+            "refreshesOneProduct": false,
+            "comparableWalkTotal": false
           },
           "carrefour-web": {
             "writesPrices": true,
@@ -43945,7 +43947,8 @@
             "walkablePriorities": null,
             "stockIndicator": null,
             "provesDelisting": false,
-            "refreshesOneProduct": false
+            "refreshesOneProduct": false,
+            "comparableWalkTotal": true
           },
           "lidl-api": {
             "writesPrices": true,
@@ -43957,7 +43960,8 @@
             "walkablePriorities": null,
             "stockIndicator": null,
             "provesDelisting": false,
-            "refreshesOneProduct": true
+            "refreshesOneProduct": true,
+            "comparableWalkTotal": true
           },
           "eljamon-web": {
             "writesPrices": true,
@@ -43969,7 +43973,8 @@
             "walkablePriorities": null,
             "stockIndicator": null,
             "provesDelisting": true,
-            "refreshesOneProduct": false
+            "refreshesOneProduct": false,
+            "comparableWalkTotal": true
           },
           "dia-api": {
             "writesPrices": true,
@@ -43984,7 +43989,8 @@
             },
             "stockIndicator": "per-scope",
             "provesDelisting": true,
-            "refreshesOneProduct": false
+            "refreshesOneProduct": false,
+            "comparableWalkTotal": true
           },
           "osm-places": {
             "writesPrices": false,
@@ -43996,7 +44002,8 @@
             "walkablePriorities": null,
             "stockIndicator": null,
             "provesDelisting": false,
-            "refreshesOneProduct": false
+            "refreshesOneProduct": false,
+            "comparableWalkTotal": true
           },
           "manual": {
             "writesPrices": false,
@@ -44008,7 +44015,8 @@
             "walkablePriorities": null,
             "stockIndicator": null,
             "provesDelisting": false,
-            "refreshesOneProduct": false
+            "refreshesOneProduct": false,
+            "comparableWalkTotal": true
           }
         }
       },
@@ -44404,6 +44412,91 @@
         "type": "object",
         "additionalProperties": true
       },
+      "harvest.HarvestRunInputRecord": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/enums.HarvestRunMode"
+          },
+          "priceScopeId": {
+            "type": "string"
+          },
+          "priceScopeIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "postalCode": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "radiusMetres": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "brandKeys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "postalCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "detailBackfill": {
+            "type": "boolean"
+          },
+          "scopeCopies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "from",
+                "to"
+              ],
+              "properties": {
+                "from": {
+                  "type": "string"
+                },
+                "to": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "writes": {
+            "$ref": "#/components/schemas/enums.HarvestRunWrites"
+          },
+          "details": {
+            "$ref": "#/components/schemas/enums.HarvestDetailFetch"
+          },
+          "sourceKind": {
+            "$ref": "#/components/schemas/enums.PriceSourceKind"
+          },
+          "validFrom": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "validUntil": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "additionalProperties": false
+      },
       "harvest.HarvestRunPage": {
         "type": "object",
         "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
@@ -44760,7 +44853,23 @@
           "input": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/harvest.HarvestRunPresetInput"
+                "$ref": "#/components/schemas/harvest.HarvestRunInputRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "configFingerprint": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "adapterKey": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.AdapterKey"
               },
               {
                 "type": "null"

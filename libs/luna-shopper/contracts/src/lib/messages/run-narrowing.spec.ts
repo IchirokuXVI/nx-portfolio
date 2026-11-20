@@ -1,5 +1,11 @@
+import { PriceSourceKind } from '../enums/catalog.enums';
 import { HarvestRunMode } from '../enums/harvest.enums';
-import { isNarrowedRun, isNarrowedRunRequest } from './run-narrowing';
+import type { HarvestRunInputRecord } from './harvest.messages';
+import {
+  isNarrowedRun,
+  isNarrowedRunRequest,
+  walkedUnderSameConfig,
+} from './run-narrowing';
 
 /**
  * Whether a run reads less than its chain's whole walk (owner decision 114a).
@@ -91,5 +97,41 @@ describe('isNarrowedRun', () => {
       isNarrowedRun({ input: { mode: 'STORE_DISCOVERY', postalCodes: ['1'] } })
     ).toBe(true);
     expect(isNarrowedRun({ input: { mode: 'CATALOG_DISCOVERY' } })).toBe(false);
+  });
+
+  it('answers by the input record of a file import, source kind and window included', () => {
+    const input: HarvestRunInputRecord = {
+      mode: HarvestRunMode.FILE_IMPORT,
+      priceScopeId: 'national',
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+      validFrom: '2026-08-26T22:00:00.000Z',
+      validUntil: '2026-09-23T21:59:59.999Z',
+    };
+    expect(isNarrowedRun({ input })).toBe(false);
+  });
+});
+
+/**
+ * Whether an earlier run may serve as the reference of a run (owner decision
+ * 130b): only when both walked under one configuration that each states.
+ */
+describe('walkedUnderSameConfig', () => {
+  const A = 'a'.repeat(64);
+  const B = 'b'.repeat(64);
+
+  it.each([
+    ['two equal fingerprints', A, A, true],
+    ['two different fingerprints', A, B, false],
+    ['a null on the run', null, A, false],
+    ['a null on the reference', A, null, false],
+    ['a null on both sides', null, null, false],
+    ['an absent fingerprint on the run', undefined, A, false],
+    ['an absent fingerprint on the reference', A, undefined, false],
+    ['an absent fingerprint on both sides', undefined, undefined, false],
+    ['two empty strings', '', '', false],
+  ])('answers %s', (_case, run, reference, expected) => {
+    expect(walkedUnderSameConfig(run, reference)).toBe(expected);
+    // The order of the two runs does not matter.
+    expect(walkedUnderSameConfig(reference, run)).toBe(expected);
   });
 });

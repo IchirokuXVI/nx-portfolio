@@ -1,4 +1,5 @@
 import {
+  type AdapterKey,
   HarvestRunMode,
   HarvestRunStatus,
   HarvestRunStopReason,
@@ -262,4 +263,22 @@ export class HarvestRun extends BaseEntity {
   @Index('ix_harvest_runs_schedule')
   @Column({ type: 'uuid', nullable: true })
   scheduleId!: string | null;
+
+  /**
+   * What shaped the walk outside its request (owner decision 130b): sha256,
+   * hex, over the canonical JSON of the source row's `adapterKey` and `config`
+   * at the spawn (`walkConfigFingerprint`). Never the config itself, which
+   * holds values that stay here. Null for a run that used no source row and
+   * for every run stored before the column existed.
+   */
+  @Column({ type: 'varchar', nullable: true })
+  configFingerprint!: string | null;
+
+  /**
+   * The adapter of the source row at the spawn (owner decision 127b), so a
+   * run says which adapter walked it after the row changes or goes. Null
+   * where {@link configFingerprint} is.
+   */
+  @Column({ type: 'varchar', nullable: true })
+  adapterKey!: AdapterKey | null;
 }
