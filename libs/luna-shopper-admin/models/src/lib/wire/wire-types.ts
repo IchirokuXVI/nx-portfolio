@@ -4855,6 +4855,7 @@ export type HarvestHarvestRunView = {
   revertedByUserId: string | null;
   revertedPriceCount: number | null;
   presetId?: string | null;
+  input?: HarvestHarvestRunPresetInput | null;
   scheduleId?: string | null;
   interrupted?: boolean;
   stopReason?: EnumsHarvestRunStopReason | null;

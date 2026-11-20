@@ -803,6 +803,30 @@ export interface HarvestRunView {
    */
   presetId: string | null;
   /**
+   * The run's own request, as it was started (owner decision 114a): what
+   * `harvest_runs.input` stored, in the shape of a preset's input. **Never the
+   * preset's current input.** A preset can be edited after its runs, and this
+   * field is how a run still says what it read.
+   *
+   * **A record of what ran, not a request.** It has the type of a preset's
+   * input only for its shape. The values are the resolved ones the spawn
+   * stored, so a default is stated (`writes`, `details`, `radiusMetres`,
+   * `country`). A run stored before `writes` or `details` existed states the
+   * value its runner read in their place: both writes, every detail. The spawn
+   * refuses some of those stated values for some chains, so never send this
+   * back as a run request and never save it as a preset. Two things the run
+   * stored are left out. A file import's document is the run's
+   * `documentSha256` here, and its source kind and window are not fields of a
+   * preset's input. The chain is the run's own `supermarketId`.
+   *
+   * **Null when the stored input cannot be read**: not an object, a mode this
+   * build does not know, or a field of the wrong type. Null says the request is
+   * unknown, never that it was empty, and an unknown request counts as
+   * narrowed. {@link isNarrowedRun} reads this field, null included, and
+   * {@link isNarrowedRunRequest} holds that rule.
+   */
+  input: HarvestRunPresetInput | null;
+  /**
    * The schedule that started this run (plan 0206, section 9), null for a run
    * a person or the postal code queue started. A deleted schedule leaves it.
    */
@@ -1461,6 +1485,9 @@ export type HarvestRunPresetInput = Omit<
   | 'validFrom'
   | 'validUntil'
 >;
+
+export { isNarrowedRun, isNarrowedRunRequest } from './run-narrowing';
+export type { NarrowableRunRequest } from './run-narrowing';
 
 /** The latest run started from a preset, for the presets list. */
 export interface HarvestRunPresetLastRun {

@@ -37,6 +37,7 @@ import type {
   SupermarketSource,
 } from '../entities';
 import { declaredScopeKey } from './place-matching';
+import { readRunInput } from './run-input';
 import { dimensionOf, labelAmount } from './size-check';
 
 /**
@@ -142,6 +143,9 @@ export function toHarvestRunView(row: HarvestRun): HarvestRunView {
     revertedPriceCount: row.revertedPriceCount ?? null,
     // Plan 0120. The preset a run came from, which may since have been deleted.
     presetId: row.presetId ?? null,
+    // Owner decision 114a. The run's own request, read back from what it
+    // stored, and null when that cannot be read.
+    input: readRunInput(row.mode, row.input),
     // Plan 0206. The schedule that started it, and whether a shutdown or the
     // reaper ended it rather than a person.
     scheduleId: row.scheduleId ?? null,
