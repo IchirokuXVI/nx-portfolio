@@ -151,7 +151,8 @@ export class CarrefourCatalogRunner implements CatalogRunner {
           // in the report, which is the same shape an unreadable node produces
           // and reads the same way to an operator. A category the walk ended
           // early on a 5xx, a 404 or an empty page that still states rows
-          // lands here too, so it is never counted as read.
+          // lands here too, so it is not counted as read. Only the end pass
+          // can change that, for a refusal or a 5xx it reads the second time.
           this.logger.warn(
             `Run ${context.runId}: category ${category.id} (${category.name}) ` +
               `failed: ${String(error)}`
@@ -167,7 +168,7 @@ export class CarrefourCatalogRunner implements CatalogRunner {
         }
       }
 
-      // --- 2b. Once more, at the end, for a category refused once ----------
+      // --- 2b. Once more, at the end, for a refusal or a 5xx --------------
       if (blocked === null && !context.signal.aborted) {
         blocked = await this.askAgain(
           context,
@@ -180,11 +181,12 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       }
 
       // --- 3. What only the whole walk can say -----------------------------
-      // Every product was reported at its first sighting (plan 0267). The sink
-      // writes what is left of the last chunk when the run drains.
+      // Every product was reported at its first sighting (plan 0267), and the
+      // sink wrote a chunk each time one filled. What is left of the last
+      // chunk is written when the run drains, so the stage says "writing".
       await context.setStage(
         'INGEST',
-        `Finishing the walk: ${products.size} product(s) recorded as they were read`
+        `Finishing the walk: writing the last of ${products.size} product(s) read`
       );
       if (!context.signal.aborted) {
         warnUnread(context, unreadable, lost);
@@ -298,12 +300,22 @@ export class CarrefourCatalogRunner implements CatalogRunner {
   /**
    * The end pass of plan 0251 (D1 a): every category one isolated refusal
    * cost, asked for once more, after every other category, in the order they
-   * failed.
+   * failed. A category a 5xx cut short is asked in the same pass, in the same
+   * order, by the same rules (owner decision 103b): a 5xx is usually a passing
+   * blip, and the guard was never told of a refusal for it, so asking it again
+   * minutes later costs no more than any other page.
+   *
+   * **Each category is asked once in the pass and no more.** `askedAgain` is
+   * set before the ask, the list is fixed before the first one, and a
+   * category the pass cuts short again stays unread. So the pass asks at most
+   * one walk per lost category, each from the page that failed to at most the
+   * ceiling's 42 pages.
    *
    * **This is not the retry plan 0090 section 13 forbids.** That retry asks
    * the refused page again at once, inside the paging loop, which is how a
-   * refusal deepens into a block. This is one request per refused category,
-   * minutes later, through the same guard and pacing as every other page. A
+   * refusal deepens into a block. This is one more walk per category, from
+   * the page that failed, minutes later, through the same guard and pacing as
+   * every other page. A
    * category is paged from the page that failed, and the products it gives
    * are reported as the walk reports them.
    *
@@ -325,9 +337,10 @@ export class CarrefourCatalogRunner implements CatalogRunner {
    * it, and the one refused again keeps its warning with the offset of the
    * second refusal.
    *
-   * Only a refusal is asked again. A browser that stopped answering is a
-   * different failure, and a node the frontier walk could not open was never
-   * paged at all. Answers the block, when one stopped the pass.
+   * Only a refusal and a 5xx are asked again ({@link askable}). A browser that
+   * stopped answering is a different failure, and a node the frontier walk
+   * could not open was never paged at all. Answers the block, when one stopped
+   * the pass.
    */
   private async askAgain(
     context: RunContext,
@@ -337,25 +350,23 @@ export class CarrefourCatalogRunner implements CatalogRunner {
     unreadable: string[],
     lost: ReadonlyMap<string, LostCategory>
   ): Promise<unknown> {
-    const refused = [...lost.values()].filter(
-      (entry) => entry.error instanceof CarrefourHttpError
-    );
-    if (refused.length === 0) {
+    const again = [...lost.values()].filter((entry) => askable(entry.error));
+    if (again.length === 0) {
       return null;
     }
     const inARow = context.guard?.consecutiveRefusals ?? 0;
     if (inARow > 0) {
       this.logger.warn(
         `Run ${context.runId}: the walk ended on ${inARow} refusal(s) in a ` +
-          `row, so ${refused.length} refused category(ies) are not asked again`
+          `row, so ${again.length} category(ies) are not asked again`
       );
       return null;
     }
     await context.setStage(
       'ENUMERATE',
-      `Asking once more for ${refused.length} refused category(ies)`
+      `Asking once more for ${again.length} category(ies) the walk could not finish`
     );
-    for (const entry of refused) {
+    for (const entry of again) {
       if (context.signal.aborted) {
         return null;
       }
@@ -381,6 +392,8 @@ export class CarrefourCatalogRunner implements CatalogRunner {
           // one keeps the warning the walk gave it.
           return null;
         }
+        // Cut short again, by a 5xx or anything else: it stays unread and is
+        // not asked a third time, and the pass goes on to the next one.
         continue;
       }
       // Read this time: it is no longer unread. Its first failure stays
@@ -433,8 +446,8 @@ export class CarrefourCatalogRunner implements CatalogRunner {
  * the walk (plan 0267). A later sighting reports nothing.
  *
  * **17,135 is a count of category memberships and not of distinct products**
- * (plan 0090, section 7). The first sighting is the one kept, which is the
- * category path the walk reported when it reported at the end.
+ * (plan 0090, section 7). The first sighting is the one kept, so its category
+ * path is the one the observation carries.
  *
  * Every sighting keeps the path of its frontier category for the end of the
  * walk (plan 0268), once, so the first path is the one `categoryPath` holds.
@@ -475,7 +488,7 @@ function sameNames(a: readonly string[], b: readonly string[]): boolean {
  * It states no completeness here. A Carrefour crawl walks a frontier of
  * categories, and a product filed nowhere in it is unseen for a reason that
  * says nothing about stock. The crawl is handed over as a whole listing only
- * under the five conditions of {@link declareListing}.
+ * under the six conditions of {@link declareListing}.
  *
  * `observedAt` is the time the card was read (plan 0267). The price writer
  * needs no one value per run: it compares the values, and moves the clock of
@@ -536,6 +549,22 @@ interface LostCategory {
   error: unknown;
   /** Whether the end pass asked for it once more. */
   askedAgain: boolean;
+}
+
+/**
+ * Whether the end pass asks a lost category once more (plan 0251, owner
+ * decision 103b).
+ *
+ * A refusal, a 403 or a 429, and a category a 5xx cut short. A category a 404
+ * or an empty page cut short is not asked: those are answers about the page
+ * rather than a passing failure, and minutes later they are expected to answer
+ * the same. A browser that stopped answering is not asked either.
+ */
+function askable(error: unknown): boolean {
+  return (
+    error instanceof CarrefourHttpError ||
+    (error instanceof CarrefourShortCategoryError && error.transient)
+  );
 }
 
 /**
@@ -666,8 +695,8 @@ function describeRun(
     })),
     unreadableCategories: [...unreadable],
     /**
-     * The categories one refusal cost, asked for once more at the end (plan
-     * 0251), and whether that read them. A category read the second time is
+     * The categories one refusal or one 5xx cost, asked for once more at the
+     * end (plan 0251, owner decision 103b), and whether that read them. A category read the second time is
      * no longer in `unreadableCategories`.
      */
     askedAgain: askedAgain.map((entry) => ({

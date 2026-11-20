@@ -1467,10 +1467,13 @@ describe('CarrefourCatalogRunner', () => {
         super(states);
       }
 
-      protected override createClient(): CarrefourClient {
+      protected override createClient(context: RunContext): CarrefourClient {
         return new CarrefourClient({
           userAgent: 'LunaShopperBot/1.0',
           sleepImpl: async () => undefined,
+          acquire: context.acquire,
+          guard: context.guard,
+          signal: context.signal,
           openSession: async () => ({
             goto: async (url: string) => {
               const path = url.replace('https://www.carrefour.es', '');
@@ -1490,8 +1493,11 @@ describe('CarrefourCatalogRunner', () => {
       }
     }
 
-    async function crawl(runner: TestRunner) {
-      const runContext = context();
+    async function crawl(
+      runner: TestRunner,
+      options: { guarded?: boolean } = {}
+    ) {
+      const runContext = options.guarded ? guardedContext() : context();
       await runner.run(
         runContext,
         report,
@@ -1504,32 +1510,99 @@ describe('CarrefourCatalogRunner', () => {
     const callOf = (externalId: string) =>
       report.categoryPathCalls.find((call) => call.externalId === externalId);
 
-    it('does not declare a crawl whole when a page answered 503 part way, and adds', async () => {
-      const runContext = await crawl(
-        new StatusRunner(states(), {
-          '/supermercado/x/cat1/c?offset=24': [503],
-        })
-      );
+    const asksOf = (runner: TestRunner, path: string) =>
+      runner.asked.filter((asked) => asked === path).length;
 
-      // What the first page held is kept.
+    it('declares a crawl whole once the end pass reads the page a 503 cut, and replaces (owner decision 103b)', async () => {
+      const runner = new StatusRunner(states(), {
+        '/supermercado/x/cat1/c?offset=24': [503],
+      });
+      const runContext = await crawl(runner);
+
+      // Asked on the walk and once more after Ofertas, and never a third time.
+      expect(asksOf(runner, '/supermercado/x/cat1/c?offset=24')).toBe(2);
+      expect(
+        runner.asked.indexOf('/supermercado/x/cat2/c?offset=0')
+      ).toBeLessThan(
+        runner.asked.lastIndexOf('/supermercado/x/cat1/c?offset=24')
+      );
       expect(
         report.products.map((product) => product.externalId).sort()
-      ).toEqual(['p1', 'p3']);
-      // Not whole, so nothing is delisted and no path is replaced: p1 keeps
-      // the Bebidas path the walk never got to see.
+      ).toEqual(['p1', 'p2', 'p3']);
+      expect(report.wholeListings).toEqual([
+        { scopeKey: null, listed: ['p3', 'p1', 'p2'] },
+      ]);
+      expect(report.notWhole).toEqual([]);
+      expect(callOf('p1')).toEqual({
+        externalId: 'p1',
+        paths: [['Ofertas'], ['Bebidas']],
+        mode: 'REPLACE',
+      });
+      expect(runContext.warn).not.toHaveBeenCalled();
+      expect(runContext.setReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          unreadableCategories: [],
+          askedAgain: [{ id: 'cat1', name: 'Bebidas', read: true }],
+        })
+      );
+      // The 503 told the guard of no refusal.
+      expect(runContext.guard?.consecutiveRefusals ?? 0).toBe(0);
+    });
+
+    it('does not declare a crawl whole when the page a 503 cut answers 503 again, and adds', async () => {
+      const runner = new StatusRunner(states(), {
+        '/supermercado/x/cat1/c?offset=24': [503, 503],
+      });
+      const runContext = await crawl(runner);
+
+      expect(asksOf(runner, '/supermercado/x/cat1/c?offset=24')).toBe(2);
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole[0].reason).toBe('unreadable');
+      expect(
+        report.categoryPathCalls.every((call) => call.mode === 'ADD')
+      ).toBe(true);
+      expect(runContext.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Bebidas',
+          message:
+            'Category cat1 Bebidas: Carrefour answered 503 at offset 24, ' +
+            'once more at the end of the run. The listings from there on, ' +
+            'of 30, were not read.',
+        })
+      );
+      expect(runContext.setReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          unreadableCategories: [bebidas.url],
+          askedAgain: [{ id: 'cat1', name: 'Bebidas', read: false }],
+        })
+      );
+    });
+
+    it('does not declare a crawl whole when the pass cannot start after a 503, and adds', async () => {
+      // Ofertas is refused last, so the walk hands the pass a guard counting
+      // one refusal in a row, the pass does not start, and the 503 that cut
+      // Bebidas stands.
+      const runner = new StatusRunner(states(), {
+        '/supermercado/x/cat1/c?offset=24': [503],
+        '/supermercado/x/cat2/c?offset=0': [403],
+      });
+      const runContext = await crawl(runner, { guarded: true });
+
+      expect(asksOf(runner, '/supermercado/x/cat1/c?offset=24')).toBe(1);
+      // What the first page held is kept.
+      expect(report.products.map((product) => product.externalId)).toEqual([
+        'p3',
+      ]);
+      // Not whole, so nothing is delisted and no path is replaced.
       expect(report.wholeListings).toEqual([]);
       expect(report.notWhole).toEqual([
         { scopeKey: null, reason: 'unreadable', detail: [], listed: null },
       ]);
-      expect(callOf('p1')).toEqual({
-        externalId: 'p1',
-        paths: [['Ofertas']],
-        mode: 'ADD',
-      });
       expect(
         report.categoryPathCalls.every((call) => call.mode === 'ADD')
       ).toBe(true);
-      // Named the way an unreadable category is.
+      expect(runContext.guard?.stop).toBeNull();
+      // Named the way an unreadable category is, with no second ask.
       expect(runContext.warn).toHaveBeenCalledWith({
         code: HarvestWarningCode.LISTING_UNREAD,
         name: 'Bebidas',
@@ -1540,16 +1613,26 @@ describe('CarrefourCatalogRunner', () => {
           'listings from there on, of 30, were not read.',
       });
       expect(runContext.setReport).toHaveBeenCalledWith(
-        expect.objectContaining({ unreadableCategories: [bebidas.url] })
+        expect.objectContaining({
+          unreadableCategories: [bebidas.url, ofertas.url],
+          askedAgain: [],
+        })
       );
       expect(runContext.report).toHaveBeenCalledWith({ failed: 1 });
     });
 
-    it('does not declare a crawl whole when a page answered 404 part way', async () => {
-      const pages = states();
-      delete pages['/supermercado/x/cat1/c?offset=24'];
-      const runContext = await crawl(new TestRunner(pages));
+    it('does not declare a crawl whole when a page answered 404 part way, and does not ask it again', async () => {
+      const runner = new StatusRunner(states(), {
+        '/supermercado/x/cat1/c?offset=24': [404],
+      });
+      const runContext = await crawl(runner);
 
+      // A 404 is an answer about the page and not a passing failure, so the
+      // end pass leaves it (owner decision 103b).
+      expect(asksOf(runner, '/supermercado/x/cat1/c?offset=24')).toBe(1);
+      expect(runContext.setReport).toHaveBeenCalledWith(
+        expect.objectContaining({ askedAgain: [] })
+      );
       expect(report.wholeListings).toEqual([]);
       expect(report.notWhole[0].reason).toBe('unreadable');
       expect(callOf('p1')?.mode).toBe('ADD');
@@ -1566,8 +1649,11 @@ describe('CarrefourCatalogRunner', () => {
     it('does not declare a crawl whole when an empty page still states rows', async () => {
       const pages = states();
       pages['/supermercado/x/cat1/c?offset=24'] = page({ totalResults: 30 });
-      const runContext = await crawl(new TestRunner(pages));
+      const runner = new TestRunner(pages);
+      const runContext = await crawl(runner);
 
+      // Not asked again either: the storefront chose to serve it empty.
+      expect(asksOf(runner, '/supermercado/x/cat1/c?offset=24')).toBe(1);
       expect(report.wholeListings).toEqual([]);
       expect(report.notWhole[0].reason).toBe('unreadable');
       expect(runContext.warn).toHaveBeenCalledWith(

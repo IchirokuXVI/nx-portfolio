@@ -62,8 +62,8 @@ export class CarrefourBrowserError extends Error {
  * category as not fully read.
  *
  * **It is not a refusal.** A 403 or a 429 is {@link CarrefourHttpError}, which
- * the guard counts and an end pass may ask again; this is the page saying
- * nothing about a block.
+ * the guard counts; this is the page saying nothing about a block. An end pass
+ * asks a refusal again, and of these only the {@link transient} ones.
  */
 export class CarrefourShortCategoryError extends Error {
   constructor(
@@ -72,12 +72,29 @@ export class CarrefourShortCategoryError extends Error {
     readonly page: number,
     /** What the page answered, for an operator: `Carrefour answered 503`. */
     readonly cost: string,
-    readonly url: string
+    readonly url: string,
+    /**
+     * The status the page answered when it was not a 200, else null: a 200
+     * with no page state or an empty card list carries none.
+     */
+    readonly status: number | null = null
   ) {
     super(
       `${cost} for ${url}, so category ${categoryId} ended at page ${page + 1}`
     );
     this.name = 'CarrefourShortCategoryError';
+  }
+
+  /**
+   * Whether the gap was a 5xx, which is usually a passing blip and worth one
+   * more ask later in the run (owner decision 103b).
+   *
+   * A 404 is an answer about the page, and an empty page or a page with no
+   * state is what the storefront chose to serve. Asking either again minutes
+   * later is expected to answer the same, so neither is transient.
+   */
+  get transient(): boolean {
+    return this.status !== null && this.status >= 500;
   }
 }
 
