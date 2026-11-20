@@ -9,9 +9,9 @@ import type { SupermarketSource } from '../entities';
  * walk, and the request does not state it, so two runs of one preset walked
  * the same thing only when this digest is equal too.
  *
- * **A digest and never the configuration.** `config` holds base URLs and other
- * values that must not leave the harvester, and a digest says "same or not"
- * without saying what.
+ * **A digest and never the configuration.** A digest is enough to say whether
+ * two runs walked under the same configuration, and it stays small on every
+ * run row and in every list answer, however large `config` grows.
  *
  * The rate (`workers`, `maxRequestsPerSecond`) and `enabled` are left out on
  * purpose: they change how fast a walk goes or whether it may start, not what
