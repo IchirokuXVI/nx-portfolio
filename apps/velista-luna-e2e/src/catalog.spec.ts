@@ -217,6 +217,23 @@ test.describe('adding from the catalog', () => {
   /** The line the last step makes and follows the link to, deleted after. */
   let followed = '';
 
+  /**
+   * Alice's household as the seed has it, her live baskets finished. A basket an
+   * earlier file left open holds the lines of its lists, the line step 10 adds
+   * among them, and the list draws a line a live trip holds under that trip and
+   * not in To buy (`composeListGroups`), so the link would land on no row there.
+   * `aisles.spec.ts` runs first in a full run and leaves Groceries and Hardware
+   * in one.
+   */
+  test.beforeAll(async () => {
+    const alice = await login(ALICE_EMAIL);
+    try {
+      await resetAliceWorld(alice);
+    } finally {
+      await alice.dispose();
+    }
+  });
+
   test.afterAll(async () => {
     if (followed === '') return;
     const alice = await login(ALICE_EMAIL);
