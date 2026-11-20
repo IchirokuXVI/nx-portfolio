@@ -86,6 +86,12 @@ export class CarrefourCatalogRunner implements CatalogRunner {
         0
       );
       await context.setTotalPlanned(planned);
+      /**
+       * The plan as the run states it. It starts as the frontier's sum and is
+       * raised when a category is found to have grown (owner decision 104b),
+       * so `processed` never passes `totalPlanned` (plan 0217).
+       */
+      const plan = { total: planned };
       this.logger.log(
         `Run ${context.runId}: ${frontier.categories.length} category(ies) ` +
           `holding ${planned} listing(s), found in ${frontier.loads} load(s)`
@@ -118,7 +124,7 @@ export class CarrefourCatalogRunner implements CatalogRunner {
         if (context.signal.aborted) {
           break;
         }
-        const cursor = { page: 0 };
+        const cursor = { page: 0, total: category.totalResults };
         try {
           await this.pageCategory(
             context,
@@ -126,7 +132,8 @@ export class CarrefourCatalogRunner implements CatalogRunner {
             report,
             category,
             products,
-            cursor
+            cursor,
+            plan
           );
         } catch (error) {
           // **The block is the one failure a category may not swallow** (plan
@@ -161,6 +168,7 @@ export class CarrefourCatalogRunner implements CatalogRunner {
           lost.set(category.url, {
             category,
             page: cursor.page,
+            total: cursor.total,
             error,
             askedAgain: false,
           });
@@ -176,7 +184,8 @@ export class CarrefourCatalogRunner implements CatalogRunner {
           report,
           products,
           unreadable,
-          lost
+          lost,
+          plan
         );
       }
 
@@ -273,13 +282,17 @@ export class CarrefourCatalogRunner implements CatalogRunner {
     report: RunReport,
     category: CarrefourCategory,
     products: Map<string, string[][]>,
-    cursor: { page: number }
+    cursor: { page: number; total: number },
+    plan: { total: number }
   ): Promise<void> {
     let seen = 0;
+    const before = cursor.total;
     // The page after the last one that answered is the page that failed, and
-    // the one the end pass starts from (plan 0251).
-    const walk = client.walkCategory(category, (_listing, page) => {
+    // the one the end pass starts from (plan 0251). The total is the largest
+    // the walk knows, which bounds its last page (owner decision 104b).
+    const walk = client.walkCategory(category, (_listing, page, total) => {
       cursor.page = page + 1;
+      cursor.total = Math.max(cursor.total, total);
     });
     try {
       for await (const product of walk) {
@@ -287,6 +300,8 @@ export class CarrefourCatalogRunner implements CatalogRunner {
         reportFirstSighting(report, products, product);
       }
     } finally {
+      // Before the progress, so `processed` never passes the plan.
+      await restatePlan(context, plan, before, cursor.total);
       // **Progress, and a heartbeat with it.** The first crawl reported
       // nothing between the frontier and the snapshot, so an hour of paging
       // looked identical to a run that had stopped, and it was a stopped run
@@ -315,9 +330,8 @@ export class CarrefourCatalogRunner implements CatalogRunner {
    * the refused page again at once, inside the paging loop, which is how a
    * refusal deepens into a block. This is one more walk per category, from
    * the page that failed, minutes later, through the same guard and pacing as
-   * every other page. A
-   * category is paged from the page that failed, and the products it gives
-   * are reported as the walk reports them.
+   * every other page. A category is paged from the page that failed, and the
+   * products it gives are reported as the walk reports them.
    *
    * **A retry must never deepen a block** (plan 0090, section 13), and the
    * pass keeps two rules so that it cannot:
@@ -329,11 +343,15 @@ export class CarrefourCatalogRunner implements CatalogRunner {
    *   refusal was not isolated after all, and the next ask is the request
    *   that reaches the stop.
    *
-   * So the guard never stops the run inside the pass. A stop there would turn
-   * a completed walk into a `FAILED` run, send the refusal mail of plan 0218,
-   * count toward the three failures that stop the chain's schedules, and lose
-   * the `LISTING_UNREAD` warnings, which only a run that was not stopped
-   * writes. A category the pass did not ask keeps the warning the walk gave
+   * So a guard that stops on two or more refusals in a row, as
+   * `CARREFOUR_REFUSAL_POLICY` does with three, never stops the run inside
+   * the pass: the pass meets at most one refusal, after a count of none. A guard
+   * with a window rule can still stop on that one refusal, when the walk left
+   * enough refusals inside its window, and then the pass answers the block. A
+   * stop there turns a completed walk into a `FAILED` run, sends the refusal
+   * mail of plan 0218, counts toward the three failures that stop the chain's
+   * schedules, and loses the `LISTING_UNREAD` warnings, which only a run that
+   * was not stopped writes. A category the pass did not ask keeps the warning the walk gave
    * it, and the one refused again keeps its warning with the offset of the
    * second refusal.
    *
@@ -348,7 +366,8 @@ export class CarrefourCatalogRunner implements CatalogRunner {
     report: RunReport,
     products: Map<string, string[][]>,
     unreadable: string[],
-    lost: ReadonlyMap<string, LostCategory>
+    lost: ReadonlyMap<string, LostCategory>,
+    plan: { total: number }
   ): Promise<unknown> {
     const again = [...lost.values()].filter((entry) => askable(entry.error));
     if (again.length === 0) {
@@ -372,7 +391,7 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       }
       entry.askedAgain = true;
       try {
-        await this.pageFrom(context, client, report, entry, products);
+        await this.pageFrom(context, client, report, entry, products, plan);
       } catch (error) {
         if (error instanceof SourceBlockedError) {
           this.logger.warn(`Run ${context.runId}: ${String(error)}`);
@@ -418,15 +437,18 @@ export class CarrefourCatalogRunner implements CatalogRunner {
     client: CarrefourClient,
     report: RunReport,
     entry: LostCategory,
-    products: Map<string, string[][]>
+    products: Map<string, string[][]>,
+    plan: { total: number }
   ): Promise<void> {
     const { category } = entry;
     let seen = 0;
+    const before = entry.total;
     // The page after the last one that answered is the page that failed.
     const walk = client.walkCategory(
       category,
-      (_listing, page) => {
+      (_listing, page, total) => {
         entry.page = page + 1;
+        entry.total = Math.max(entry.total, total);
       },
       { fromPage: entry.page }
     );
@@ -436,6 +458,7 @@ export class CarrefourCatalogRunner implements CatalogRunner {
         reportFirstSighting(report, products, product);
       }
     } finally {
+      await restatePlan(context, plan, before, entry.total);
       await context.report({ processed: seen });
     }
   }
@@ -468,6 +491,28 @@ function reportFirstSighting(
   }
   products.set(product.externalId, path.length > 0 ? [[...path]] : []);
   report.product(observationOf(product, new Date()));
+}
+
+/**
+ * Raise the run's planned total by what one category was found to have grown
+ * (owner decision 104b), and write it before the category's progress.
+ *
+ * The plan is the frontier's sum of totals, and a walk now reads past a total
+ * that grew, so without this `processed` could pass `totalPlanned` (plan 0217,
+ * section 4). Only ever raised: a category that shrank keeps its planned
+ * share, as it did before.
+ */
+async function restatePlan(
+  context: RunContext,
+  plan: { total: number },
+  before: number,
+  after: number
+): Promise<void> {
+  if (after <= before) {
+    return;
+  }
+  plan.total += after - before;
+  await context.setTotalPlanned(plan.total);
 }
 
 function sameNames(a: readonly string[], b: readonly string[]): boolean {
@@ -545,6 +590,11 @@ interface LostCategory {
   category: CarrefourCategory;
   /** The page that failed, from 0. The end pass starts there. */
   page: number;
+  /**
+   * The largest total a walk of it knows: the frontier's, or larger when a
+   * page stated that the category grew (owner decision 104b).
+   */
+  total: number;
   /** What it failed with, or null once the end pass read it. */
   error: unknown;
   /** Whether the end pass asked for it once more. */
@@ -609,7 +659,7 @@ function warnUnread(
         category.name,
         `Category ${category.id} ${category.name}: ${cost} at offset ` +
           `${offset}${again}. The listings from there on, of ` +
-          `${category.totalResults}, were not read.`
+          `${entry.total}, were not read.`
       )
     );
   }
@@ -696,8 +746,8 @@ function describeRun(
     unreadableCategories: [...unreadable],
     /**
      * The categories one refusal or one 5xx cost, asked for once more at the
-     * end (plan 0251, owner decision 103b), and whether that read them. A category read the second time is
-     * no longer in `unreadableCategories`.
+     * end (plan 0251, owner decision 103b), and whether that read them. A
+     * category read the second time is no longer in `unreadableCategories`.
      */
     askedAgain: askedAgain.map((entry) => ({
       id: entry.category.id,

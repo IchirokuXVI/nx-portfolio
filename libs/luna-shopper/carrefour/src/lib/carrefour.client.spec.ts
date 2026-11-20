@@ -433,6 +433,67 @@ describe('CarrefourClient', () => {
       expect(browser.asked.at(-1)).toBe(at(984));
     });
 
+    /** A page stating `total` results and `servedPages` pages of 24. */
+    const serving = (total: number, servedPages: number) => {
+      const state = stating(total);
+      (state['pagination'] as Record<string, unknown>)['total_pages'] =
+        servedPages;
+      return state;
+    };
+
+    it('grows no further than paging serves when the page states both', async () => {
+      // 49 stated and 48 served: a third page would answer empty while
+      // stating 49, a cut that is not there. Two pages, and no error.
+      const totals: number[] = [];
+      const browser = new FakeBrowser(() => ({
+        status: 200,
+        state: serving(49, 2),
+      }));
+      const pages: number[] = [];
+      for await (const _product of clientOn(browser).walkCategory(
+        category,
+        (_listing, page, total) => {
+          pages.push(page);
+          totals.push(total);
+        }
+      )) {
+        // Only the pages matter here.
+      }
+      expect(pages).toEqual([0, 1]);
+      expect(browser.asked).toEqual([at(0), at(24)]);
+      expect(totals).toEqual([48, 48]);
+    });
+
+    it('pages to its end a category whose served pages grew too', async () => {
+      // 72 stated and three pages served, where the frontier saw 48.
+      const totals: number[] = [];
+      const browser = new FakeBrowser(() => ({
+        status: 200,
+        state: serving(72, 3),
+      }));
+      const pages: number[] = [];
+      for await (const _product of clientOn(browser).walkCategory(
+        category,
+        (_listing, page, total) => {
+          pages.push(page);
+          totals.push(total);
+        }
+      )) {
+        // Only the pages matter here.
+      }
+      expect(pages).toEqual([0, 1, 2]);
+      expect(totals).toEqual([72, 72, 72]);
+    });
+
+    it('keeps the stated total alone as the bound when the page states no pages', async () => {
+      const browser = new FakeBrowser(() => {
+        const state = stating(60);
+        delete (state['pagination'] as Record<string, unknown>)['total_pages'];
+        return { status: 200, state };
+      });
+      expect(await walk(browser)).toEqual([0, 1, 2]);
+    });
+
     it('follows the same rule from a later page', async () => {
       // The end pass asks from page 2, which only a stated total added: the
       // frontier's two pages end before it, and the pages state 96.

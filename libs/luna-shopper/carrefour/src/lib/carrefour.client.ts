@@ -67,7 +67,12 @@ import {
   CarrefourShortCategoryError,
 } from './errors';
 import { readCards } from './listing';
-import { readDetail, readListing, statedTotalResults } from './state';
+import {
+  readDetail,
+  readListing,
+  statedPageableResults,
+  statedTotalResults,
+} from './state';
 import { parseStoreLocator, type CarrefourStoreList } from './stores';
 import {
   CARREFOUR_CEILING,
@@ -346,11 +351,17 @@ export class CarrefourClient {
    * **A category that grew since the frontier was walked is paged to its new
    * end** (owner decision 104b). The last page is the larger of the frontier's
    * total and the largest total a page of this walk stated, capped at
-   * {@link CARREFOUR_CEILING} by {@link pagesFor}. It is evaluated again on
-   * every page, so a later page that states a still larger total adds pages,
-   * and a smaller one removes none: a shrunk set ends on the empty page rule
-   * above. The ceiling keeps the loop bounded at 42 pages however large a
-   * page says the set is.
+   * {@link CARREFOUR_CEILING} by {@link pagesFor}. A page that also states
+   * what paging serves (`total_pages * page_size`, plan 0090 section 7) grows
+   * the walk by the smaller of the two, because a page past what paging serves
+   * answers empty while still stating rows, and that would be a cut that is
+   * not there. It is evaluated again on every page, so a later page that
+   * states a still larger total adds pages, and a smaller one removes none: a
+   * shrunk set ends on the empty page rule above. The ceiling keeps the loop
+   * bounded at 42 pages however large a page says the set is.
+   *
+   * `onPage` is also handed that figure, the largest total this walk knows
+   * for the category after the page, so a caller can name it and plan by it.
    *
    * `fromPage` starts the walk on a later page, for a caller that read the
    * pages before it already. That page is asked even when the frontier's total
@@ -360,11 +371,12 @@ export class CarrefourClient {
    */
   async *walkCategory(
     category: CarrefourCategory,
-    onPage?: (listing: CarrefourListing, page: number) => void,
+    onPage?: (listing: CarrefourListing, page: number, total: number) => void,
     options: { fromPage?: number } = {}
   ): AsyncIterable<CarrefourProduct> {
     const fromPage = options.fromPage ?? 0;
-    let pages = pagesFor(category.totalResults);
+    let total = category.totalResults;
+    let pages = pagesFor(total);
     if (options.fromPage !== undefined) {
       pages = Math.max(
         pages,
@@ -418,11 +430,15 @@ export class CarrefourClient {
         );
       }
       // The category may have grown since the frontier saw it. Only ever
-      // larger, and never past the ceiling, so the loop stays bounded.
+      // larger, never past what paging serves when the page states that, and
+      // never past the ceiling, so the loop stays bounded.
       if (stated !== null) {
-        pages = Math.max(pages, pagesFor(stated));
+        const pageable = statedPageableResults(state);
+        const grown = pageable === null ? stated : Math.min(stated, pageable);
+        total = Math.max(total, Math.min(grown, CARREFOUR_CEILING));
+        pages = Math.max(pages, pagesFor(total));
       }
-      onPage?.(listing, page);
+      onPage?.(listing, page, total);
       for (const product of readCards(listing.cards, category.path)) {
         if (!seen.has(product.externalId)) {
           seen.add(product.externalId);

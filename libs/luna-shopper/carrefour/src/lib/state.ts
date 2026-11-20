@@ -125,6 +125,32 @@ export function statedTotalResults(
 }
 
 /**
+ * What paging will serve, `total_pages * page_size`, as the page itself states
+ * it, or null when the page states either figure not at all (plan 0090,
+ * section 7).
+ *
+ * {@link readListing} answers 0 for a missing figure, which a walk bounding
+ * its last page by this number must not mistake for a page that serves
+ * nothing.
+ */
+export function statedPageableResults(
+  state: Record<string, unknown>
+): number | null {
+  const pagination = asRecord(state['pagination']);
+  const size = statedNumber(pagination['page_size']);
+  const pages = statedNumber(pagination['total_pages']);
+  return size === null || pages === null ? null : size * pages;
+}
+
+function statedNumber(raw: unknown): number | null {
+  if (typeof raw !== 'number' && typeof raw !== 'string') {
+    return null;
+  }
+  const number = Number(raw);
+  return raw !== '' && Number.isFinite(number) ? number : null;
+}
+
+/**
  * Read a product page for the one field it is loaded for (plan 0090, 12.1).
  *
  * `pdp.product.ean` is a real EAN-13. Everything else the page adds, the

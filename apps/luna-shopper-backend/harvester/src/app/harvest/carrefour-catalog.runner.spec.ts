@@ -1729,5 +1729,199 @@ describe('CarrefourCatalogRunner', () => {
         })
       );
     });
+
+    it('names the second offset when the end pass is cut by a 5xx at a later page', async () => {
+      // A 503 cuts Bebidas at offset 24. The end pass reads that page and
+      // meets a second 503 at offset 48.
+      const pages = states();
+      pages[bebidas.url] = page({ totalResults: 60 });
+      const runner = new StatusRunner(pages, {
+        '/supermercado/x/cat1/c?offset=24': [503],
+        '/supermercado/x/cat1/c?offset=48': [503],
+      });
+      const runContext = await crawl(runner);
+
+      expect(asksOf(runner, '/supermercado/x/cat1/c?offset=24')).toBe(2);
+      expect(asksOf(runner, '/supermercado/x/cat1/c?offset=48')).toBe(1);
+      expect(runContext.warn).toHaveBeenCalledTimes(1);
+      expect(runContext.warn).toHaveBeenCalledWith({
+        code: HarvestWarningCode.LISTING_UNREAD,
+        name: 'Bebidas',
+        offerId: null,
+        page: null,
+        message:
+          'Category cat1 Bebidas: Carrefour answered 503 at offset 48, ' +
+          'once more at the end of the run. The listings from there on, ' +
+          'of 60, were not read.',
+      });
+      expect(runContext.setReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          unreadableCategories: [bebidas.url],
+          askedAgain: [{ id: 'cat1', name: 'Bebidas', read: false }],
+        })
+      );
+    });
+
+    it('goes on to the next entry after a 5xx cuts one again', async () => {
+      const runner = new StatusRunner(states(), {
+        '/supermercado/x/cat1/c?offset=24': [503, 503],
+        '/supermercado/x/cat2/c?offset=0': [503],
+      });
+      const runContext = await crawl(runner);
+
+      // The pass asked Bebidas, was cut again, and still asked Ofertas.
+      expect(
+        runner.asked.filter((path) => path.includes('?offset=')).slice(-2)
+      ).toEqual([
+        '/supermercado/x/cat1/c?offset=24',
+        '/supermercado/x/cat2/c?offset=0',
+      ]);
+      expect(runContext.setReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          unreadableCategories: [bebidas.url],
+          askedAgain: [
+            { id: 'cat1', name: 'Bebidas', read: false },
+            { id: 'cat2', name: 'Ofertas', read: true },
+          ],
+        })
+      );
+      expect(runContext.warn).toHaveBeenCalledTimes(1);
+      expect(runContext.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Bebidas',
+          message: expect.stringContaining(
+            'Carrefour answered 503 at offset 24, once more at the end of the run'
+          ),
+        })
+      );
+    });
+
+    it('ends the pass at a refusal before a waiting 5xx entry, which keeps its first warning', async () => {
+      // Bebidas is refused on the walk and again in the pass. Ofertas was cut
+      // by a 503 after it and is never asked again. Caldos answers last, so
+      // the walk ends on no refusal in a row and the pass starts.
+      const caldos = link('cat3', 'Caldos');
+      const pages = states();
+      pages['/supermercado/la-despensa/cat20001/c'] = page({
+        firstLevel: [bebidas, ofertas, caldos],
+      });
+      pages[caldos.url] = page({ totalResults: 1 });
+      pages['/supermercado/x/cat3/c?offset=0'] = page({
+        totalResults: 1,
+        cards: [card('p5', 'Caldo CARREFOUR 1 l.', '1,09 €')],
+      });
+      const runner = new StatusRunner(pages, {
+        '/supermercado/x/cat1/c?offset=24': [403, 403],
+        '/supermercado/x/cat2/c?offset=0': [503],
+      });
+      const runContext = await crawl(runner, { guarded: true });
+
+      expect(asksOf(runner, '/supermercado/x/cat1/c?offset=24')).toBe(2);
+      expect(asksOf(runner, '/supermercado/x/cat2/c?offset=0')).toBe(1);
+      expect(runContext.guard?.stop).toBeNull();
+      expect(runContext.warn).toHaveBeenCalledTimes(2);
+      expect(runContext.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Bebidas',
+          message: expect.stringContaining(
+            'Carrefour answered 403 at offset 24, once more at the end of the run'
+          ),
+        })
+      );
+      expect(runContext.warn).toHaveBeenCalledWith({
+        code: HarvestWarningCode.LISTING_UNREAD,
+        name: 'Ofertas',
+        offerId: null,
+        page: null,
+        message:
+          'Category cat2 Ofertas: Carrefour answered 503 at offset 0. The ' +
+          'listings from there on, of 1, were not read.',
+      });
+      expect(runContext.setReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          unreadableCategories: [bebidas.url, ofertas.url],
+          askedAgain: [{ id: 'cat1', name: 'Bebidas', read: false }],
+        })
+      );
+    });
+
+    describe('a category that grew since the frontier (owner decision 104b)', () => {
+      const at = (offset: number) => `/supermercado/x/cat1/c?offset=${offset}`;
+
+      /**
+       * Bebidas alone, 48 at the frontier. Its pages state `stated` results
+       * and serve `served` pages of 24, one distinct card each.
+       */
+      const grown = (stated: number, served: number) => {
+        const pages: Record<string, Record<string, unknown>> = {
+          '/supermercado/la-despensa/cat20001/c': page({
+            firstLevel: [bebidas],
+          }),
+          [bebidas.url]: page({ totalResults: 48 }),
+        };
+        for (let offset = 0; offset < served * 24; offset += 24) {
+          pages[at(offset)] = {
+            ...page({
+              totalResults: stated,
+              cards: [card(`p${offset}`, `Agua ${offset} 1,5 l.`, '0,39 €')],
+            }),
+            pagination: { page_size: 24, total_pages: served },
+          };
+        }
+        return pages;
+      };
+
+      const run = (runner: TestRunner, runContext: RunContext) =>
+        runner.run(
+          runContext,
+          report,
+          { supermarketId: CHAIN, priceScopeId: SCOPE },
+          source({ delistCountsCrawl: true })
+        );
+
+      it('ends in two pages, read whole, when a page states 49 and serves 48', async () => {
+        const runner = new TestRunner(grown(49, 2));
+        const runContext = context();
+        await run(runner, runContext);
+
+        expect(
+          runner.asked.filter((path) => path.includes('?offset='))
+        ).toEqual([at(0), at(24)]);
+        expect(runContext.warn).not.toHaveBeenCalled();
+        expect(report.wholeListings).toHaveLength(1);
+        expect(runContext.setReport).toHaveBeenCalledWith(
+          expect.objectContaining({ unreadableCategories: [] })
+        );
+        // Nothing grew, so the plan stands as the frontier stated it.
+        expect(runContext.setTotalPlanned).toHaveBeenCalledTimes(1);
+      });
+
+      it('raises the planned total to the grown one, so progress never passes it', async () => {
+        const counting = countingContext();
+        await run(new TestRunner(grown(96, 4)), counting.context);
+        await counting.context.flush();
+
+        expect(counting.planned()).toBe(96);
+        expect(counting.processed()).toBe(4);
+      });
+
+      it('names the grown total in the warning of a category it could not finish', async () => {
+        // Frontier 48, pages state 96: a 503 at the fourth page, twice.
+        const runner = new StatusRunner(grown(96, 4), { [at(72)]: [503, 503] });
+        const runContext = context();
+        await run(runner, runContext);
+
+        expect(runContext.warn).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: 'Bebidas',
+            message:
+              'Category cat1 Bebidas: Carrefour answered 503 at offset 72, ' +
+              'once more at the end of the run. The listings from there on, ' +
+              'of 96, were not read.',
+          })
+        );
+        expect(runContext.setTotalPlanned).toHaveBeenLastCalledWith(96);
+      });
+    });
   });
 });
