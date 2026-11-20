@@ -461,7 +461,11 @@ describe('RunPage, arriving mid run', () => {
       });
       const fixture = await render(postal, undefined, {
         earlier: [
-          { ...whole, mode: 'STORE_DISCOVERY', input: { mode: 'STORE_DISCOVERY' } },
+          {
+            ...whole,
+            mode: 'STORE_DISCOVERY',
+            input: { mode: 'STORE_DISCOVERY' },
+          },
         ],
         onList: () => (reads += 1),
       });

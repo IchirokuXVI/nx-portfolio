@@ -214,7 +214,12 @@ describe('EarlierRunTotals', () => {
       const totals = setUp(listRuns);
 
       await totals.resolve({ ...ABORTED, presetId: null, input: null });
-      await totals.resolve({ ...ABORTED, id: 'absent', presetId: null, input: undefined });
+      await totals.resolve({
+        ...ABORTED,
+        id: 'absent',
+        presetId: null,
+        input: undefined,
+      });
 
       expect(listRuns).not.toHaveBeenCalled();
     });
@@ -237,7 +242,13 @@ describe('EarlierRunTotals', () => {
       const fromPreset = { ...postal, presetId: PRESET };
       const totals = setUp(
         listing([
-          { ...wholeDiscovery, id: 'preset-run', presetId: PRESET, processed: 40, input: POSTAL_INPUT },
+          {
+            ...wholeDiscovery,
+            id: 'preset-run',
+            presetId: PRESET,
+            processed: 40,
+            input: POSTAL_INPUT,
+          },
         ])
       );
 
@@ -249,7 +260,12 @@ describe('EarlierRunTotals', () => {
     it('passes over a narrowed or unknown earlier run of the chain for a whole one', async () => {
       const totals = setUp(
         listing([
-          { ...COMPLETED, id: 'scopes', processed: 900, input: { mode: 'CATALOG_DISCOVERY', priceScopeIds: ['s1'] } },
+          {
+            ...COMPLETED,
+            id: 'scopes',
+            processed: 900,
+            input: { mode: 'CATALOG_DISCOVERY', priceScopeIds: ['s1'] },
+          },
           { ...COMPLETED, id: 'unknown', processed: 3000, input: null },
           { ...COMPLETED, id: 'whole', processed: 2500 },
         ])
