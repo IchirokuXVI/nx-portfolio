@@ -144,6 +144,8 @@ interface Around {
   readonly words?: (key: string, values?: Record<string, unknown>) => string;
   /** What the runs list answers, which the approximate total is read from. */
   readonly earlier?: readonly HarvestRun[];
+  /** Called on every read of the runs list, to count the lookups. */
+  readonly onList?: () => void;
 }
 
 async function render(
@@ -156,7 +158,10 @@ async function render(
     abortRun: async () => answer,
     revertRun: async () => reverted ?? answer,
     exportRun: async () => exported,
-    listRuns: async () => ({ items: around.earlier ?? [], nextCursor: null }),
+    listRuns: async () => {
+      around.onList?.();
+      return { items: around.earlier ?? [], nextCursor: null };
+    },
   } as unknown as HarvestServiceI;
 
   TestBed.resetTestingModule();
@@ -341,6 +346,87 @@ describe('RunPage, arriving mid run', () => {
       ).toBe('harvest.run.progress.approximateEnded');
       expect(text(fixture)).not.toContain('harvest.run.progress.unsized');
       fixture.componentInstance.watch.stop();
+    });
+
+    /**
+     * Owner decision 111c: a completed walk did the whole walk, so it shows
+     * its count as before the estimate existed, and nothing is read for one.
+     */
+    it('shows a completed walk its count alone and reads nothing for it', async () => {
+      let reads = 0;
+      const fixture = await render(
+        { ...going, status: 'COMPLETED' },
+        undefined,
+        {
+          earlier: [whole],
+          onList: () => (reads += 1),
+        }
+      );
+      await drain();
+      fixture.detectChanges();
+
+      expect(reads).toBe(0);
+      expect(fixture.componentInstance.progress()).toEqual({
+        processed: 824,
+        total: null,
+        percent: null,
+      });
+      expect(count(fixture)).toBe('harvest.run.progress.processed');
+      expect(
+        fixture.nativeElement.querySelector('[data-progress-approximate]')
+      ).toBeNull();
+      expect(
+        fixture.nativeElement.querySelector('[role="progressbar"]')
+      ).toBeNull();
+      fixture.componentInstance.watch.stop();
+    });
+
+    /**
+     * Owner decision 113b: the page reads the estimate again each time it
+     * opens, so a reference run reverted since is not still quoted, while a
+     * poll of the open page reads nothing.
+     */
+    it('reads the estimate again when the page opens again, never on a poll', async () => {
+      let reads = 0;
+      let earlier: readonly HarvestRun[] = [whole];
+      const fixture = await render({ ...going, status: 'RUNNING' }, undefined, {
+        get earlier() {
+          return earlier;
+        },
+        onList: () => (reads += 1),
+      });
+      await drain();
+      fixture.detectChanges();
+      const perOpen = reads;
+      expect(perOpen).toBeGreaterThan(0);
+      expect(count(fixture)).toBe('harvest.run.progress.ofAbout');
+
+      // Two polls: a new run object each, and no new lookup.
+      await fixture.componentInstance.watch.refresh();
+      await fixture.componentInstance.watch.refresh();
+      await drain();
+      fixture.detectChanges();
+      expect(reads).toBe(perOpen);
+
+      // The reference walk is reverted meanwhile, and the page opens again.
+      earlier = [{ ...whole, revertedAt: '2026-09-01T11:20:00.000Z' }];
+      fixture.componentInstance.watch.stop();
+      fixture.destroy();
+      const again = TestBed.createComponent(RunPage);
+      again.detectChanges();
+      await drain();
+      again.detectChanges();
+      await drain();
+      again.detectChanges();
+
+      expect(reads).toBe(perOpen * 2);
+      expect(
+        (
+          again.nativeElement.querySelector('[data-progress-count]')
+            ?.textContent ?? ''
+        ).trim()
+      ).toBe('harvest.run.progress.processed');
+      again.componentInstance.watch.stop();
     });
 
     it('keeps the form it had before for a walk that processed nothing', async () => {

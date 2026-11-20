@@ -198,11 +198,11 @@ describe('runProgress with an earlier total', () => {
   });
 
   /**
-   * Owner decision 97b: an ended run keeps the number, in the past tense, and
-   * gets no bar, because a bar on a run that stopped reads as progress. A run
-   * that completed without a total is one of them.
+   * Owner decision 97b: a run that stopped short keeps the number, in the past
+   * tense, and gets no bar, because a bar on a run that stopped reads as
+   * progress.
    */
-  it.each(['COMPLETED', 'ABORTED', 'FAILED', 'STALE'] as const)(
+  it.each(['ABORTED', 'FAILED', 'STALE'] as const)(
     'gives an ended %s run the estimate with no bar',
     (status) => {
       expect(
@@ -216,6 +216,23 @@ describe('runProgress with an earlier total', () => {
       });
     }
   );
+
+  /**
+   * Owner decision 111c: a completed run did the whole walk, so it shows its
+   * own count and no estimate, even when an earlier run is handed in.
+   */
+  it('gives a completed run with no total its count and no estimate', () => {
+    const progress = runProgress(
+      run({ status: 'COMPLETED', processed: 2100, totalPlanned: null }),
+      2361
+    );
+    expect(progress).toEqual({ processed: 2100, total: null, percent: null });
+    expect(runProgressLine(progress, 'en')).toEqual({
+      key: 'harvest.run.progress.processed',
+      args: { processed: 2100 },
+      approximate: false,
+    });
+  });
 });
 
 describe('runProgressLine', () => {
@@ -334,9 +351,15 @@ describe('wantsEarlierTotal', () => {
     expect(wantsEarlierTotal(going)).toBe(true);
   });
 
-  it('is true for an ended run, which keeps the estimate in the past', () => {
-    expect(wantsEarlierTotal({ ...going, status: 'COMPLETED' })).toBe(true);
-    expect(wantsEarlierTotal({ ...going, status: 'ABORTED' })).toBe(true);
+  it.each(['ABORTED', 'FAILED', 'STALE'] as const)(
+    'is true for a %s run, which keeps the estimate in the past',
+    (status) => {
+      expect(wantsEarlierTotal({ ...going, status })).toBe(true);
+    }
+  );
+
+  it('is false for a completed run, which shows its own count (111c)', () => {
+    expect(wantsEarlierTotal({ ...going, status: 'COMPLETED' })).toBe(false);
   });
 
   it('is true for a run of a preset over every chain', () => {

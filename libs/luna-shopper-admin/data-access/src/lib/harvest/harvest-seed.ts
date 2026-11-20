@@ -509,6 +509,43 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     revertedPriceCount: null,
   },
   {
+    // An older DEZA walk that completed without knowing its total, as every
+    // DEZA walk does since backend plan 0267. Its page reads "2100 processed"
+    // and no estimate, because a completed run did the whole walk (owner
+    // decision 111c of the harvester round). Requested before the walk above,
+    // so that one stays the reference the other DEZA runs read.
+    id: 'run-deza-completed-unsized',
+    supermarketId: DEZA,
+    sourceId: 'source-deza',
+    mode: 'CATALOG_DISCOVERY',
+    trigger: 'MANUAL',
+    status: 'COMPLETED',
+    requestedAt: '2026-08-27T21:00:00.000Z',
+    startedAt: '2026-08-27T21:00:03.000Z',
+    finishedAt: '2026-08-27T21:38:10.000Z',
+    heartbeatAt: '2026-08-27T21:38:10.000Z',
+    totalPlanned: null,
+    processed: 2100,
+    created: 0,
+    updated: 0,
+    unchanged: 2100,
+    notFound: 0,
+    skipped: 0,
+    failed: 0,
+    stage: null,
+    stageLabel: null,
+    warnings: [],
+    documentSha256: null,
+    abortRequestedAt: null,
+    error: null,
+    report: {},
+    correlationId: 'seed-correlation-deza-completed-unsized',
+    requestedByUserId: null,
+    revertedAt: null,
+    revertedByUserId: null,
+    revertedPriceCount: null,
+  },
+  {
     // An El Jamón walk (admin plan 0071; backend plan 0253): one category
     // read short against the count it printed, and the detail stage's counts.
     id: 'run-eljamon-completed',
@@ -1289,7 +1326,7 @@ export const PLACE_CHAIN_SEED: readonly LinkableChain[] = [
   {
     id: 'sm_eljamon',
     name: { en: 'El Jamón', es: 'El Jamón' },
-    brandKey: null,
+    brandKey: 'Q6135982',
   },
 ];
 

@@ -21,6 +21,7 @@ import {
   DeploymentApi,
   DIRECTORY_SERVICE,
   DirectoryApi,
+  earlierRunTotalsFollowSession,
   HARVEST_SERVICE,
   HarvestApi,
   HEALTH_SERVICE,
@@ -163,6 +164,11 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // tab lives, so without this the read went on after a sign out and the next
   // admin on the same tab saw the last one's numbers first.
   provideEnvironmentInitializer(() => dashboardFollowsSession()),
+
+  // Forget the estimates of runs without a total when the session ends (owner
+  // decision 113b of the harvester round), so the next admin on the same tab
+  // reads them under their own session.
+  provideEnvironmentInitializer(() => earlierRunTotalsFollowSession()),
 
   // Put the environment name in the document title (plan 0001, section 6). A
   // listener, not a dependency: nothing injects it, so without this line nothing

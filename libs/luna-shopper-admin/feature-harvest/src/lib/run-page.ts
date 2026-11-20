@@ -1133,9 +1133,9 @@ export class RunPage {
    */
   readonly tab = signal<'overview' | 'prices'>('overview');
 
-  readonly watch = inject(RunWatches).for(
-    this._route.snapshot.paramMap.get('id') ?? ''
-  );
+  private readonly _runId = this._route.snapshot.paramMap.get('id') ?? '';
+
+  readonly watch = inject(RunWatches).for(this._runId);
 
   private readonly _earlier = inject(EarlierRunTotals);
 
@@ -1506,8 +1506,12 @@ export class RunPage {
       }
     });
 
-    // The earlier run, once for a run that does not know its total. The poll
-    // gives a new run object every read, and the lookup asks once per id.
+    // The earlier run, once for a run that does not know its total. Read again
+    // each time this page opens (owner decision 113b), so a reference run
+    // reverted since is not still quoted here; the header and the Runs tab
+    // share what this read holds. The poll gives a new run object every read,
+    // and the lookup asks once per id until the page opens again.
+    this._earlier.reread(this._runId);
     effect(() => {
       const run = this.watch.run();
       untracked(() => void this._earlier.resolve(run));

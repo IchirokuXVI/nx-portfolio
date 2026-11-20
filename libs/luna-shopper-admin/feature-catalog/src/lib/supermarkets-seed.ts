@@ -74,9 +74,8 @@ export const SUPERMARKET_SEED: readonly Wire.CatalogSupermarketView[] = [
   //
   // Each is named as the real catalog names it. Dia carries its Wikidata key,
   // which `Dia Market` and `Maxi Dia` share. Deza has no key in the real
-  // catalog. This seed leaves El Jamón without one too, although the real
-  // chain carries `Q6135982`. A place thus resolves either of them by printed
-  // name only here. The harvest seed shows a place
+  // catalog, so a place resolves it by printed name only. El Jamón carries
+  // `Q6135982`, as the real chain does. The harvest seed shows a place
   // whose chain the catalog does not resolve with ALDI, which is not here.
   {
     id: 'sm_deza',
@@ -103,7 +102,7 @@ export const SUPERMARKET_SEED: readonly Wire.CatalogSupermarketView[] = [
     name: { en: 'El Jamón', es: 'El Jamón' },
     logoUrl: null,
     websiteUrl: 'https://www.supermercadoseljamon.com',
-    externalBrandKey: null,
+    externalBrandKey: 'Q6135982',
     defaultPriceScopeId: null,
     linkedImagesEnabled: false,
     locationCount: 0,

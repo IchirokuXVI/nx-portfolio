@@ -17,8 +17,8 @@ const REFERENCE_PAGE = 5;
  * **The same kind is chosen the way the harvester chooses the reference of a
  * duration estimate** (backend plan 0206, section 8, `estimateRun`): the
  * preset's own runs first, then the runs of the same source and mode. A run
- * with no preset starts at its chain and mode. The run itself never counts, so
- * a completed run never takes its total from itself (owner decision 98b).
+ * with no preset starts at its chain and mode. The run itself never counts
+ * (owner decision 98b).
  *
  * Two differences from the harvester's rule, both because the list route is
  * the read the app already has and no route changes in this PR. The route
@@ -28,13 +28,24 @@ const REFERENCE_PAGE = 5;
  * cost of preferring the preset is a second read when no completed run of the
  * preset gives a usable total but one of the chain does.
  *
- * **One lookup per run.** The answer is held by the id of the run it was asked
- * for, so the header, the Runs tab and the run's own page share it, and the
- * run's polls do not read it again.
+ * A completed run is never read for one (owner decision 111c): it shows its
+ * own count, see `wantsEarlierTotal`.
+ *
+ * **One lookup per run, until its own page opens again.** The answer is held
+ * by the id of the run it was asked for, so the header, the Runs tab and the
+ * run's own page share it, and the run's polls do not read it again. Opening
+ * the run's own page asks again ({@link reread}, owner decision 113b), so a
+ * reference run reverted since is not still quoted there. Lookups that overlap
+ * for one run are one read.
  *
  * **A failed lookup is tried again once, at once** (no timer, no loop). If the
- * second try fails too, nothing is held and the run is not asked again: the
- * screen keeps the form it had before the estimate existed, which is true.
+ * second try fails too, nothing is held and the run is not asked again until
+ * its page opens again: the screen keeps the form it had before the estimate
+ * existed, which is true.
+ *
+ * **Nothing outlives a sign out** (owner decision 113b). The app calls
+ * {@link clear} as the session ends (`earlierRunTotalsFollowSession`), as it
+ * suspends the dashboard store, and an answer on its way then is dropped.
  *
  * Root scoped, like the dashboard store the header reads.
  */
@@ -46,7 +57,12 @@ export class EarlierRunTotals {
   private readonly _held = signal<ReadonlyMap<string, number | null>>(
     new Map()
   );
+  /** The runs asked for and not to be asked again until {@link reread}. */
   private readonly _asked = new Set<string>();
+  /** The lookups on their way, by run id, so overlapping asks share one. */
+  private readonly _inFlight = new Map<string, Promise<void>>();
+  /** Grows on every {@link clear}, so an answer asked before one is dropped. */
+  private _epoch = 0;
 
   /**
    * The approximate total for this run, or null: it needs none, the read has
@@ -60,19 +76,68 @@ export class EarlierRunTotals {
     return this._held().get(run.id) ?? null;
   }
 
-  /** Look up the reference run for this one, once for each run. */
-  async resolve(run: HarvestRun | null): Promise<void> {
-    if (!wantsEarlierTotal(run) || this._asked.has(run.id)) {
-      return;
+  /**
+   * Look up the reference run for this one, once for each run until
+   * {@link reread}. A second ask while the first is on its way waits for it.
+   */
+  resolve(run: HarvestRun | null): Promise<void> {
+    if (!wantsEarlierTotal(run)) {
+      return Promise.resolve();
+    }
+    const pending = this._inFlight.get(run.id);
+    if (pending !== undefined) {
+      return pending;
+    }
+    if (this._asked.has(run.id)) {
+      return Promise.resolve();
     }
     this._asked.add(run.id);
 
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        this._hold(run.id, await this._lookUp(run));
-        return;
-      } catch {
-        // Once more, then silence.
+    const lookup = this._settle(run, this._epoch);
+    this._inFlight.set(run.id, lookup);
+    return lookup;
+  }
+
+  /**
+   * Let the next {@link resolve} for this run read again. The run's own page
+   * calls it once as it opens, never on a poll. The answer held so far stays
+   * drawn until the new one replaces it. A lookup already on its way is the
+   * fresh read, so it is not started twice.
+   */
+  reread(runId: string): void {
+    if (!this._inFlight.has(runId)) {
+      this._asked.delete(runId);
+    }
+  }
+
+  /** Forget every answer and every ask: the session ended. */
+  clear(): void {
+    this._epoch += 1;
+    this._asked.clear();
+    this._inFlight.clear();
+    this._held.set(new Map());
+  }
+
+  private async _settle(run: HarvestRun, epoch: number): Promise<void> {
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const total = await this._lookUp(run);
+          if (epoch === this._epoch) {
+            this._hold(run.id, total);
+          }
+          return;
+        } catch {
+          // Once more, then silence.
+        }
+      }
+      // Twice down: an answer an earlier read held is no longer known true.
+      if (epoch === this._epoch) {
+        this._drop(run.id);
+      }
+    } finally {
+      if (epoch === this._epoch) {
+        this._inFlight.delete(run.id);
       }
     }
   }
@@ -124,5 +189,16 @@ export class EarlierRunTotals {
 
   private _hold(runId: string, total: number | null): void {
     this._held.update((held) => new Map(held).set(runId, total));
+  }
+
+  private _drop(runId: string): void {
+    if (!this._held().has(runId)) {
+      return;
+    }
+    this._held.update((held) => {
+      const next = new Map(held);
+      next.delete(runId);
+      return next;
+    });
   }
 }

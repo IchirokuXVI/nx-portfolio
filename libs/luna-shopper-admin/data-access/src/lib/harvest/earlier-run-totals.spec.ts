@@ -172,21 +172,134 @@ describe('EarlierRunTotals', () => {
     });
   });
 
-  /** A completed run without a total keeps the estimate, never from itself. */
-  it('leaves the run itself out', async () => {
+  /** Owner decision 111c: a completed run shows its count and reads nothing. */
+  it('reads nothing for a completed run and holds nothing for it', async () => {
     const done = {
       ...COMPLETED,
       id: 'done-unsized',
       totalPlanned: null,
       processed: 2200,
     };
-    const totals = setUp(
-      listing([done, { ...COMPLETED, id: 'before', processed: 2361 }])
-    );
+    const listRuns = listing([{ ...COMPLETED, id: 'before', processed: 2361 }]);
+    const totals = setUp(listRuns);
 
     await totals.resolve(done);
 
-    expect(totals.of(done)).toBe(2361);
+    expect(listRuns).not.toHaveBeenCalled();
+    expect(totals.of(done)).toBeNull();
+  });
+
+  /** A run that was running when it was asked for and has completed since. */
+  it('stops giving the estimate once the run completed', async () => {
+    const totals = setUp(listing([COMPLETED]));
+    const running = { ...ABORTED, status: 'RUNNING' as const };
+
+    await totals.resolve(running);
+    expect(totals.of(running)).toBe(2361);
+
+    expect(totals.of({ ...running, status: 'COMPLETED' })).toBeNull();
+  });
+
+  it('leaves the run itself out', async () => {
+    // A listing that answers the run itself, whatever the filter says.
+    const listRuns = jest.fn(async () => ({
+      items: [
+        { ...ABORTED, processed: 3000 },
+        { ...COMPLETED, id: 'before', processed: 2361 },
+      ],
+      nextCursor: null,
+    }));
+    const totals = setUp(listRuns);
+
+    await totals.resolve(ABORTED);
+
+    expect(totals.of(ABORTED)).toBe(2361);
+  });
+
+  describe('reading again (owner decision 113b)', () => {
+    it('reads again after reread, and keeps the old answer until the new one', async () => {
+      let runs: readonly HarvestRun[] = [COMPLETED];
+      const listRuns = jest.fn((query: RunQuery) => listing(runs)(query));
+      const totals = setUp(listRuns);
+      await totals.resolve(ABORTED);
+      expect(totals.of(ABORTED)).toBe(2361);
+
+      // The reference run is reverted, and the run's page opens again.
+      runs = [{ ...COMPLETED, revertedAt: '2026-09-01T00:00:00Z' }];
+      totals.reread(ABORTED.id);
+      const lookup = totals.resolve(ABORTED);
+      expect(totals.of(ABORTED)).toBe(2361);
+      await lookup;
+
+      expect(listRuns).toHaveBeenCalledTimes(2);
+      expect(totals.of(ABORTED)).toBeNull();
+    });
+
+    it('does not read again without a reread', async () => {
+      const listRuns = listing([COMPLETED]);
+      const totals = setUp(listRuns);
+
+      await totals.resolve(ABORTED);
+      await totals.resolve({ ...ABORTED, processed: 900 });
+      await totals.resolve({ ...ABORTED, processed: 950 });
+
+      expect(listRuns).toHaveBeenCalledTimes(1);
+    });
+
+    it('shares a lookup on its way rather than starting a second', async () => {
+      const listRuns = listing([COMPLETED]);
+      const totals = setUp(listRuns);
+
+      const first = totals.resolve(ABORTED);
+      totals.reread(ABORTED.id);
+      const second = totals.resolve(ABORTED);
+      await Promise.all([first, second]);
+
+      expect(listRuns).toHaveBeenCalledTimes(1);
+      expect(totals.of(ABORTED)).toBe(2361);
+    });
+
+    it('keeps the one retry on a reread, and drops the old answer when both fail', async () => {
+      const answer = listing([COMPLETED]);
+      const listRuns = jest
+        .fn()
+        .mockImplementationOnce(answer)
+        .mockRejectedValue(new Error('down'));
+      const totals = setUp(listRuns);
+      await totals.resolve(ABORTED);
+      expect(totals.of(ABORTED)).toBe(2361);
+
+      totals.reread(ABORTED.id);
+      await totals.resolve(ABORTED);
+
+      expect(listRuns).toHaveBeenCalledTimes(3);
+      expect(totals.of(ABORTED)).toBeNull();
+    });
+  });
+
+  describe('clear', () => {
+    it('forgets every answer, and the next ask reads again', async () => {
+      const listRuns = listing([COMPLETED]);
+      const totals = setUp(listRuns);
+      await totals.resolve(ABORTED);
+
+      totals.clear();
+      expect(totals.of(ABORTED)).toBeNull();
+
+      await totals.resolve(ABORTED);
+      expect(listRuns).toHaveBeenCalledTimes(2);
+      expect(totals.of(ABORTED)).toBe(2361);
+    });
+
+    it('drops an answer that was on its way', async () => {
+      const totals = setUp(listing([COMPLETED]));
+
+      const lookup = totals.resolve(ABORTED);
+      totals.clear();
+      await lookup;
+
+      expect(totals.of(ABORTED)).toBeNull();
+    });
   });
 
   it('reads once for each run, however often it is asked', async () => {
@@ -248,8 +361,11 @@ describe('EarlierRunTotals', () => {
     expect(totals.of(ABORTED)).toBe(2361);
   });
 
-  /** Twice down is silence: no loop, no timer, and the page reads as before. */
-  it('gives up silently after the second failure and never asks again', async () => {
+  /**
+   * Twice down is silence: no loop, no timer, and the page reads as before. A
+   * poll does not ask again; only the run's page opening again does.
+   */
+  it('gives up silently after the second failure and does not ask again on a poll', async () => {
     const listRuns = jest.fn(async () => {
       throw new Error('down');
     });
