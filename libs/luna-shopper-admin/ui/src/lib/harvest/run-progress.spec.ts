@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
+  runProgress,
   runProgressLine,
   type HarvestRun,
   type RunProgress,
@@ -264,6 +265,76 @@ describe('RunProgressView with an approximate total', () => {
 });
 
 /**
+ * A known total with nothing done yet is a percent of 0, not an unknown
+ * whole. The Mercadona walk of 2026-11-20 read "0 of 4338" and on the next
+ * line "The run does not know yet how much work it has", because the note
+ * tested the percent for truthiness. Drawn through `runProgress` itself, so
+ * the percent is the one the run page computes.
+ */
+describe('RunProgressView with a known total and nothing processed', () => {
+  async function draw(over: Partial<HarvestRun>) {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [RunProgressView, RokuTranslatorTestingModule.forTesting()],
+    }).compileComponents();
+
+    const view = run(over);
+    const fixture = TestBed.createComponent(RunProgressView);
+    fixture.componentRef.setInput('run', view);
+    fixture.componentRef.setInput('progress', runProgress(view));
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('says "of" with no note on a running run, beside an empty bar', async () => {
+    const page = await draw({
+      status: 'RUNNING',
+      totalPlanned: 4338,
+      processed: 0,
+    });
+
+    expect(
+      (page.querySelector('[data-progress-count]')?.textContent ?? '').trim()
+    ).toBe('harvest.run.progress.of');
+    expect(page.querySelector('.unsized')).toBeNull();
+    expect(
+      page.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')
+    ).toBe('0');
+  });
+
+  it('says no note on a running run whose percent rounds to 0', async () => {
+    const page = await draw({
+      status: 'RUNNING',
+      totalPlanned: 4338,
+      processed: 12,
+    });
+
+    expect(page.querySelector('.unsized')).toBeNull();
+  });
+
+  it('says no note on a pending run that knows its total', async () => {
+    const page = await draw({
+      status: 'PENDING',
+      totalPlanned: 4338,
+      processed: 0,
+    });
+
+    expect(page.querySelector('.unsized')).toBeNull();
+  });
+
+  it('keeps the note on a running run with no total and no estimate', async () => {
+    const page = await draw({
+      status: 'RUNNING',
+      totalPlanned: null,
+      processed: 0,
+    });
+
+    expect(page.querySelector('.unsized')).not.toBeNull();
+    expect(page.querySelector('[role="progressbar"]')).toBeNull();
+  });
+});
+
+/**
  * The words themselves, through a real i18next on `en.json`, because the
  * testing translator answers the key and the wording is the point: every
  * estimate says "about" and "estimate", and a known total reads exactly as it
@@ -332,6 +403,7 @@ describe('the progress words in English', () => {
     expect(say({ processed: 2361, total: null, percent: null })).toBe(
       '2361 processed'
     );
+    expect(say({ processed: 0, total: 4338, percent: 0 })).toBe('0 of 4338');
   });
 
   it('gives the header link a label that says about and estimate', () => {

@@ -55,10 +55,12 @@ import {
       }
     </div>
 
-    @if (progress().percent; as percent) {
+    @let percent = progress().percent;
+    @if (percent !== null) {
       <!-- Against an estimate the bar says so to a screen reader in the words
            of the line, and stops short of full (decision 86). An ended run
-           has no percent against an estimate, so it gets no bar. -->
+           has no percent against an estimate, so it gets no bar. A run at 0
+           percent of a known total draws the empty track, as the header does. -->
       <div
         [attr.aria-label]="'harvest.run.progress.label' | rokuT"
         [attr.aria-valuenow]="percent"
@@ -197,9 +199,14 @@ export class RunProgressView {
    * decisions 120b and 131b): a completed, failed, aborted or stale run with
    * no total and no estimate shows its count alone and no note at all.
    * Ended is `isTerminalRun`, the rule polling stops on.
+   *
+   * "No total and no estimate" is a null percent, which `runProgress` gives
+   * exactly then. A percent of 0 is a known whole with nothing done yet: a
+   * Mercadona walk that read "0 of 4338" must not also say it does not know
+   * how much work it has.
    */
   readonly unsizedNote = computed(
-    () => !this.progress().percent && !isTerminalRun(this.run())
+    () => this.progress().percent === null && !isTerminalRun(this.run())
   );
 
   /**
