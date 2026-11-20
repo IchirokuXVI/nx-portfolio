@@ -1,3 +1,4 @@
+import { isNarrowedRun as isNarrowedRunByContract } from '@portfolio/luna-shopper/contracts/run-narrowing';
 import type * as Wire from '../wire/wire-types';
 
 /**
@@ -322,12 +323,25 @@ export function runProgressLine(
 }
 
 /**
+ * Whether a run read less than its chain's whole walk, by its own request
+ * (owner decision 112b): a store discovery of two postal codes, a catalog walk
+ * of named scopes, a detail backfill. The rule is the contracts' own
+ * `isNarrowedRun`, called and not restated, which also holds that a request
+ * the run cannot state (`input` null, or absent from an older gateway) counts
+ * as narrowed: the direction that draws no estimate rather than a wrong one.
+ */
+export function isNarrowedRun(run: HarvestRun): boolean {
+  return isNarrowedRunByContract(run);
+}
+
+/**
  * Whether a run's progress is drawn against nothing it knows, so that another
  * run is worth reading for an approximate total. A run that has processed
  * nothing shows no estimate, so it is not read for one either; nor is a
  * completed run, which shows its own count and never an estimate (owner
- * decision 111c); nor is a run with neither a preset nor a chain, which has
- * nothing to compare with.
+ * decision 111c); nor is a run with nothing to compare with: no preset, and
+ * no chain, or a chain whose earlier runs say nothing about it because its own
+ * request is narrowed (owner decision 112b).
  */
 export function wantsEarlierTotal(run: HarvestRun | null): run is HarvestRun {
   return (
@@ -335,7 +349,8 @@ export function wantsEarlierTotal(run: HarvestRun | null): run is HarvestRun {
     run.status !== 'COMPLETED' &&
     run.totalPlanned === null &&
     run.processed > 0 &&
-    ((run.presetId ?? '') !== '' || (run.supermarketId ?? '') !== '')
+    ((run.presetId ?? '') !== '' ||
+      ((run.supermarketId ?? '') !== '' && !isNarrowedRun(run)))
   );
 }
 

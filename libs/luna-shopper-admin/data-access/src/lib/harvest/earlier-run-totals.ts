@@ -1,6 +1,7 @@
 import { inject, Injectable, signal } from '@angular/core';
 import {
   earlierTotal,
+  isNarrowedRun,
   wantsEarlierTotal,
   type HarvestRun,
 } from '@portfolio/luna-shopper-admin/models';
@@ -18,7 +19,8 @@ const REFERENCE_PAGE = 5;
  * duration estimate** (backend plan 0206, section 8, `estimateRun`): the
  * preset's own runs first, then the runs of the same source and mode. A run
  * with no preset starts at its chain and mode. The run itself never counts
- * (owner decision 98b).
+ * (owner decision 98b). The chain and mode answer only for a whole walk, and
+ * only from an earlier whole walk (owner decision 112b, {@link isNarrowedRun}).
  *
  * Two differences from the harvester's rule, both because the list route is
  * the read the app already has and no route changes in this PR. The route
@@ -39,9 +41,11 @@ const REFERENCE_PAGE = 5;
  * for one run are one read.
  *
  * **A failed lookup is tried again once, at once** (no timer, no loop). If the
- * second try fails too, nothing is held and the run is not asked again until
- * its page opens again: the screen keeps the form it had before the estimate
- * existed, which is true.
+ * second try fails too, nothing new is held and the run is not asked again
+ * until its page opens again. A first lookup thus leaves the screen in the form
+ * it had before the estimate existed, which is true. A reread that fails keeps
+ * the number an earlier read gave (owner decision 121b): the read failed, not
+ * the reference, so the number shown is still the best one known.
  *
  * **Nothing outlives a sign out** (owner decision 113b). The app calls
  * {@link clear} as the session ends (`earlierRunTotalsFollowSession`), as it
@@ -128,12 +132,9 @@ export class EarlierRunTotals {
           }
           return;
         } catch {
-          // Once more, then silence.
+          // Once more, then silence. Twice down holds nothing new, and an
+          // answer an earlier read held stays drawn (owner decision 121b).
         }
-      }
-      // Twice down: an answer an earlier read held is no longer known true.
-      if (epoch === this._epoch) {
-        this._drop(run.id);
       }
     } finally {
       if (epoch === this._epoch) {
@@ -142,7 +143,15 @@ export class EarlierRunTotals {
     }
   }
 
-  /** The preset first, then the chain and mode, as `estimateRun` does. */
+  /**
+   * The preset first, then the chain and mode, as `estimateRun` does.
+   *
+   * The chain and mode stand in only for a whole walk (owner decision 112b).
+   * A run whose own request is narrowed, or unknown, reads its preset and
+   * nothing else: a store discovery of two postal codes is not "of about
+   * 2,361" because the chain's whole discovery found that many. Its preset's
+   * runs share its request, so they stay a fair reference.
+   */
   private async _lookUp(run: HarvestRun): Promise<number | null> {
     const presetId = run.presetId ?? '';
     if (presetId !== '') {
@@ -152,10 +161,10 @@ export class EarlierRunTotals {
       }
     }
     const supermarketId = run.supermarketId ?? '';
-    if (supermarketId === '') {
+    if (supermarketId === '' || isNarrowedRun(run)) {
       return null;
     }
-    return this._newest(run, { supermarketId, mode: run.mode });
+    return this._newest(run, { supermarketId, mode: run.mode }, true);
   }
 
   /**
@@ -164,10 +173,15 @@ export class EarlierRunTotals {
    * processed something and no less than this run has processed so far, the
    * same bound the progress line applies. One read of a small page, so an
    * older run still answers when the newest one does not.
+   *
+   * `wholeOnly` is the chain and mode read: an earlier run that was itself
+   * narrowed, or whose request is unknown, is no total for a whole walk and is
+   * passed over like a run that processed nothing (owner decision 112b).
    */
   private async _newest(
     run: HarvestRun,
-    filter: Pick<RunQuery, 'presetId' | 'supermarketId' | 'mode'>
+    filter: Pick<RunQuery, 'presetId' | 'supermarketId' | 'mode'>,
+    wholeOnly = false
   ): Promise<number | null> {
     const page = await this._reader.listRuns({
       ...filter,
@@ -176,7 +190,7 @@ export class EarlierRunTotals {
       limit: REFERENCE_PAGE,
     });
     for (const item of page.items) {
-      if (item.id === run.id) {
+      if (item.id === run.id || (wholeOnly && isNarrowedRun(item))) {
         continue;
       }
       const total = earlierTotal(item);
@@ -189,16 +203,5 @@ export class EarlierRunTotals {
 
   private _hold(runId: string, total: number | null): void {
     this._held.update((held) => new Map(held).set(runId, total));
-  }
-
-  private _drop(runId: string): void {
-    if (!this._held().has(runId)) {
-      return;
-    }
-    this._held.update((held) => {
-      const next = new Map(held);
-      next.delete(runId);
-      return next;
-    });
   }
 }

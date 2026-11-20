@@ -101,6 +101,8 @@ describe('HarvestMemory, presets', () => {
    */
   it('refuses a store discovery while a store discovery of another chain is going', async () => {
     const memory = new HarvestMemory();
+    // The seed holds the one store discovery a cluster runs at a time.
+    await memory.abortRun('run-store-postal-running');
     await memory.spawnRun({
       supermarketId: CARREFOUR,
       mode: 'STORE_DISCOVERY',
@@ -117,6 +119,7 @@ describe('HarvestMemory, presets', () => {
   /** A store discovery with no chain, as the postal code queue starts, also holds the lock. */
   it('refuses a store discovery of a chain while one with no chain is going', async () => {
     const memory = new HarvestMemory();
+    await memory.abortRun('run-store-postal-running');
     await memory.spawnRun({ mode: 'STORE_DISCOVERY' });
 
     await expect(

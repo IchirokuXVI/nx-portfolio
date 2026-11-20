@@ -345,10 +345,38 @@ describe('wantsEarlierTotal', () => {
     supermarketId: 'sm_deza',
     totalPlanned: null,
     processed: 824,
+    input: { mode: 'CATALOG_DISCOVERY' },
   });
 
   it('is true for a run of one chain that does not know its total', () => {
     expect(wantsEarlierTotal(going)).toBe(true);
+  });
+
+  /**
+   * Owner decision 112b: a narrowed request, or an unknown one, has nothing
+   * to compare with but its preset.
+   */
+  describe('a run whose own request is narrowed', () => {
+    const postal = run({
+      supermarketId: 'sm_carrefour',
+      mode: 'STORE_DISCOVERY',
+      totalPlanned: null,
+      processed: 14,
+      input: { mode: 'STORE_DISCOVERY', postalCodes: ['15001', '15002'] },
+    });
+
+    it('is false with no preset, the chain and mode saying nothing of it', () => {
+      expect(wantsEarlierTotal(postal)).toBe(false);
+    });
+
+    it('is false for an unknown request, null or absent', () => {
+      expect(wantsEarlierTotal({ ...going, input: null })).toBe(false);
+      expect(wantsEarlierTotal({ ...going, input: undefined })).toBe(false);
+    });
+
+    it('is still true from a preset, whose runs share its request', () => {
+      expect(wantsEarlierTotal({ ...postal, presetId: 'p1' })).toBe(true);
+    });
   });
 
   it.each(['ABORTED', 'FAILED', 'STALE'] as const)(

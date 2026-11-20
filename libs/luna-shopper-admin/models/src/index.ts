@@ -63,6 +63,7 @@ export {
   canRevert,
   earlierTotal,
   failureBlockReason,
+  isNarrowedRun,
   isReverted,
   isTerminalRun,
   runPriceCounters,

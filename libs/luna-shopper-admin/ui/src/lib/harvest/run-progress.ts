@@ -76,7 +76,7 @@ import {
       <p class="unsized" data-progress-approximate>
         {{ approximateNote() | rokuT: line().args }}
       </p>
-    } @else if (!progress().percent) {
+    } @else if (unsizedNote()) {
       <p class="unsized">{{ 'harvest.run.progress.unsized' | rokuT }}</p>
     }
 
@@ -187,6 +187,16 @@ export class RunProgressView {
     this.progress().ended
       ? 'harvest.run.progress.approximateEnded'
       : 'harvest.run.progress.approximate'
+  );
+
+  /**
+   * Whether to say that the run does not know yet how much work it has: no
+   * bar, no estimate, and a run that can still learn it. A completed run has
+   * nothing left to learn, so it shows its count alone and no note at all
+   * (owner decision 120b).
+   */
+  readonly unsizedNote = computed(
+    () => !this.progress().percent && this.run().status !== 'COMPLETED'
   );
 
   /**
