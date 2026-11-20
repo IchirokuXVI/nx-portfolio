@@ -9,6 +9,7 @@ import {
 import type {
   DiscoveredPlaceStatus,
   HarvestDetailFetch,
+  HarvestRunMode,
   HarvestRunStatus,
   HarvestRunStopReason,
   HarvestRunTrigger,
@@ -24,7 +25,6 @@ import type {
   SourceEntryStatus,
   SourceLocationStatus,
 } from '../enums/harvest.enums';
-import { HarvestRunMode } from '../enums/harvest.enums';
 import type { PageQuery, Paginated } from '../pagination';
 import type { SourceSizeUnit } from '../units/source-size';
 import type { AdminCredential } from './admin-auth.messages';
@@ -808,18 +808,22 @@ export interface HarvestRunView {
    * preset's current input.** A preset can be edited after its runs, and this
    * field is how a run still says what it read.
    *
-   * The values are the resolved ones the spawn stored, so a default is stated
-   * (`writes`, `details`, `radiusMetres`, `country`). A run stored before
-   * `writes` or `details` existed states the value its runner read in their
-   * place: both writes, every detail. Two things the run stored are left out.
-   * A file import's document is the run's `documentSha256` here, and its
-   * source kind and window are not fields of a preset's input. The chain is
-   * the run's own `supermarketId`.
+   * **A record of what ran, not a request.** It has the type of a preset's
+   * input only for its shape. The values are the resolved ones the spawn
+   * stored, so a default is stated (`writes`, `details`, `radiusMetres`,
+   * `country`). A run stored before `writes` or `details` existed states the
+   * value its runner read in their place: both writes, every detail. The spawn
+   * refuses some of those stated values for some chains, so never send this
+   * back as a run request and never save it as a preset. Two things the run
+   * stored are left out. A file import's document is the run's
+   * `documentSha256` here, and its source kind and window are not fields of a
+   * preset's input. The chain is the run's own `supermarketId`.
    *
    * **Null when the stored input cannot be read**: not an object, a mode this
    * build does not know, or a field of the wrong type. Null says the request is
-   * unknown, never that it was empty. {@link isNarrowedRunRequest} is the rule
-   * that reads it.
+   * unknown, never that it was empty, and an unknown request counts as
+   * narrowed. {@link isNarrowedRun} reads this field, null included, and
+   * {@link isNarrowedRunRequest} holds that rule.
    */
   input: HarvestRunPresetInput | null;
   /**
@@ -1482,96 +1486,8 @@ export type HarvestRunPresetInput = Omit<
   | 'validUntil'
 >;
 
-/**
- * The fields of a run request that {@link isNarrowedRunRequest} reads, with
- * the mode as a plain string so the back office can pass its wire type.
- */
-export interface NarrowableRunRequest {
-  readonly mode: string;
-  readonly detailBackfill?: boolean;
-  readonly priceScopeIds?: readonly string[];
-  readonly postalCode?: string;
-  readonly postalCodes?: readonly string[];
-}
-
-/**
- * Whether a run request reads less than its chain's whole walk (owner
- * decision 114a), so that the count of an earlier run of the same chain and
- * mode says nothing about how big this run is. The back office then draws no
- * approximate total for the run.
- *
- * **This is the one authority for the rule**, and the back office calls it
- * rather than restating it. Narrowed means the run covers fewer products or
- * shops than a whole walk, which is what makes its `processed` smaller, and
- * not that it sends fewer requests. Each field below was read off the
- * harvester's spawn validation (`HarvestRunService.validate`) and the runner
- * that reads it.
- *
- * `CATALOG_DISCOVERY` is narrowed by:
- *
- * - `detailBackfill: true`. It is not a walk: it reads the product page of
- *   each stored row that has no EAN (`carrefour-detail.runner.ts`, whose
- *   total is those rows), never the listing.
- * - `priceScopeIds` with an id in it. The walk reads the listing of the
- *   scopes it names and nothing else (`mercadona-catalog.runner.ts` walks
- *   the union of the named warehouses, and `dia-catalog.runner.ts` plans the
- *   menu's leaves times the postal codes of the named scopes). A request cannot say the chain's whole by this list,
- *   because the list is required and holds the scopes somebody chose, so a
- *   request that names one is a selection.
- *
- * It is **not** narrowed by:
- *
- * - `details: NEW`. A known product skips its detail request and is still
- *   reported and counted from the listing: Mercadona plans every listed
- *   product and reports the known ones without a request, and El Jamón
- *   counts `walk.rows.size` whatever it skips. The total is the same.
- * - `writes`. It decides what the run writes of what it read, in the sink,
- *   and every runner reads the same listing for it.
- * - `scopeCopies`. A copy fetches nothing (plan 0118).
- * - `priceScopeId`. The one scope a Carrefour or El Jamón walk writes its
- *   prices to, and LIDL's fallback. No runner reads a smaller listing for it.
- *
- * `STORE_DISCOVERY` is narrowed by:
- *
- * - `postalCodes` with a code in it. Every runner of a chain that lists its
- *   own shops keeps only the shops in those codes (plan 0106, section 4).
- *   Empty is every shop.
- * - `postalCode` with a code in it. That is a centre, and only the
- *   OpenStreetMap runner reads it: a radius around one point, never a
- *   chain's whole shop list. The back office sends an empty one for a chain
- *   that lists its shops. A request that names one for such a chain anyway is
- *   answered narrowed, which only draws no estimate.
- *
- * It is **not** narrowed by `radiusMetres` (the spawn stores 3000 on every
- * store discovery, and only a centred run reads it), by `country`, or by
- * `brandKeys`, which the spawn stores and no runner reads.
- *
- * `FILE_IMPORT` is never narrowed by its request. What it reads is its
- * document, whole, and the document is not a request field.
- *
- * A mode this build does not know answers true, the direction that draws no
- * estimate rather than a wrong one.
- */
-export function isNarrowedRunRequest(request: NarrowableRunRequest): boolean {
-  switch (request.mode) {
-    case HarvestRunMode.CATALOG_DISCOVERY:
-      return request.detailBackfill === true || namesAny(request.priceScopeIds);
-    case HarvestRunMode.STORE_DISCOVERY:
-      return (
-        namesAny(request.postalCodes) ||
-        (request.postalCode ?? '').trim() !== ''
-      );
-    case HarvestRunMode.FILE_IMPORT:
-      return false;
-    default:
-      return true;
-  }
-}
-
-/** Whether a list holds a value that is not blank, as the spawn trims it. */
-function namesAny(values: readonly string[] | undefined): boolean {
-  return (values ?? []).some((value) => value.trim() !== '');
-}
+export { isNarrowedRun, isNarrowedRunRequest } from './run-narrowing';
+export type { NarrowableRunRequest } from './run-narrowing';
 
 /** The latest run started from a preset, for the presets list. */
 export interface HarvestRunPresetLastRun {

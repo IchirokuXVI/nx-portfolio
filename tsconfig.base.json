@@ -98,6 +98,9 @@
       "@portfolio/luna-shopper/contracts/line-units": [
         "./libs/luna-shopper/contracts/src/lib/units/line-units.ts"
       ],
+      "@portfolio/luna-shopper/contracts/run-narrowing": [
+        "./libs/luna-shopper/contracts/src/lib/messages/run-narrowing.ts"
+      ],
       "@portfolio/luna-shopper/carrefour": [
         "./libs/luna-shopper/carrefour/src/index.ts"
       ],
