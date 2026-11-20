@@ -17,10 +17,10 @@ import { HARVEST_SERVICE } from './harvest-service';
  */
 describe('earlierRunTotalsFollowSession', () => {
   const ABORTED = HARVEST_RUN_SEED.find(
-    (run) => run.id === 'run-deza-aborted'
+    (run) => run.id === 'run-eljamon-aborted'
   ) as HarvestRun;
   const COMPLETED = HARVEST_RUN_SEED.find(
-    (run) => run.id === 'run-deza-completed'
+    (run) => run.id === 'run-eljamon-completed'
   ) as HarvestRun;
 
   function boot() {
@@ -50,13 +50,13 @@ describe('earlierRunTotalsFollowSession', () => {
     await totals.resolve(ABORTED);
     TestBed.tick();
 
-    expect(totals.of(ABORTED)).toBe(2361);
+    expect(totals.of(ABORTED)).toBe(3402);
   });
 
   it('clears the answers on sign out, and the next admin reads again', async () => {
     const { totals, signedIn, listRuns } = boot();
     await totals.resolve(ABORTED);
-    expect(totals.of(ABORTED)).toBe(2361);
+    expect(totals.of(ABORTED)).toBe(3402);
 
     signedIn.set(false);
     TestBed.tick();
@@ -68,7 +68,7 @@ describe('earlierRunTotalsFollowSession', () => {
     await totals.resolve(ABORTED);
 
     expect(listRuns).toHaveBeenCalledTimes(2);
-    expect(totals.of(ABORTED)).toBe(2361);
+    expect(totals.of(ABORTED)).toBe(3402);
   });
 
   it('drops an answer that was on its way when the session ended', async () => {

@@ -1,5 +1,9 @@
-import { isNarrowedRun as isNarrowedRunByContract } from '@portfolio/luna-shopper/contracts/run-narrowing';
+import {
+  isNarrowedRun as isNarrowedRunByContract,
+  walkedUnderSameConfig,
+} from '@portfolio/luna-shopper/contracts/run-narrowing';
 import type * as Wire from '../wire/wire-types';
+import { HarvestAdapterCapabilityTable } from '../wire/wire-types';
 
 /**
  * A run, as the gateway describes it (plan 0006, section 2).
@@ -168,8 +172,9 @@ export interface RunProgress {
    * A total taken from another run, for a run that does not know its own
    * (decision 86 of the harvester round). Null or absent when the run knows
    * its total, when no other run gives one, when the run processed nothing,
-   * when the run completed, and when the run has already done more than it
-   * says. Never a promise: the
+   * when the run completed, when the run has already done more than it
+   * says, and when the run's adapter counts walks that cannot be compared
+   * (owner decision 127b). Never a promise: the
    * screen says "about" and calls it an estimate.
    */
   readonly about?: number | null;
@@ -205,6 +210,11 @@ export const APPROXIMATE_PERCENT_CAP = 99;
  * it, because "900 of about 824" would print a whole smaller than its part.
  * The screen then says how many, as it does with no earlier run.
  *
+ * Nor is it used for a run whose adapter's walk total says nothing about the
+ * next walk (owner decision 127b, {@link hasComparableWalkTotal}): a DEZA walk
+ * reads "4,000 processed" and never "of about 15,115", whatever number is
+ * handed in.
+ *
  * A run that stopped short (aborted, failed or stale) keeps the estimate,
  * worded in the past, and gets no bar (owner decision 97b): "824 processed of
  * about 2,361" says how far a stopped walk got, and a bar on it would read as
@@ -235,6 +245,7 @@ export function runProgress(
   const about =
     total === null &&
     run.status !== 'COMPLETED' &&
+    hasComparableWalkTotal(run) &&
     run.processed > 0 &&
     earlier !== null &&
     earlier > 0 &&
@@ -335,6 +346,49 @@ export function isNarrowedRun(run: HarvestRun): boolean {
 }
 
 /**
+ * Whether the count of one finished walk of this run's adapter says about how
+ * big the next walk is, so that an earlier total may be drawn as an estimate
+ * (owner decision 127b). Read off the adapter the run itself walked with
+ * (`adapterKey`), through the generated capability table, as `readsTheChain`
+ * reads it.
+ *
+ * False for `deza-web`, whose capped queries can count different totals for
+ * one assortment, and false for an adapter this build does not know. False as
+ * well for a run that names no adapter: one stored before the column existed,
+ * a run that used no source row (a file import, an OpenStreetMap store
+ * discovery), and a run the postal code queue started. All three also
+ * carry no `configFingerprint`, so owner decision 130b gives them no
+ * reference whatever this answers.
+ */
+export function hasComparableWalkTotal(run: HarvestRun): boolean {
+  const adapterKey = run.adapterKey ?? null;
+  if (adapterKey === null) {
+    return false;
+  }
+  const table: Readonly<
+    Record<string, { readonly comparableWalkTotal: boolean } | undefined>
+  > = HarvestAdapterCapabilityTable;
+  return table[adapterKey]?.comparableWalkTotal === true;
+}
+
+/**
+ * Whether an earlier run walked under the same configuration as this one, so
+ * that its total may stand for this run's (owner decision 130b). The rule is
+ * the contracts' own `walkedUnderSameConfig`, called and not restated: true
+ * only when both runs carry the same fingerprint, so a run stored before the
+ * fingerprint existed is no reference and has none.
+ */
+export function walkedUnderSameConfigAs(
+  run: HarvestRun,
+  reference: HarvestRun
+): boolean {
+  return walkedUnderSameConfig(
+    run.configFingerprint,
+    reference.configFingerprint
+  );
+}
+
+/**
  * Whether a run's progress is drawn against nothing it knows, so that another
  * run is worth reading for an approximate total. A run that has processed
  * nothing shows no estimate, so it is not read for one either; nor is a
@@ -342,6 +396,12 @@ export function isNarrowedRun(run: HarvestRun): boolean {
  * decision 111c); nor is a run with nothing to compare with: no preset, and
  * no chain, or a chain whose earlier runs say nothing about it because its own
  * request is narrowed (owner decision 112b).
+ *
+ * Nor is a run whose adapter's walk total cannot be compared between runs
+ * (owner decision 127b, {@link hasComparableWalkTotal}), and nor is a run with
+ * no `configFingerprint`, which no earlier run can match (owner decision 130b,
+ * {@link walkedUnderSameConfigAs}). Both make no read at all, as a narrowed
+ * run with no preset makes none.
  */
 export function wantsEarlierTotal(run: HarvestRun | null): run is HarvestRun {
   return (
@@ -349,6 +409,8 @@ export function wantsEarlierTotal(run: HarvestRun | null): run is HarvestRun {
     run.status !== 'COMPLETED' &&
     run.totalPlanned === null &&
     run.processed > 0 &&
+    hasComparableWalkTotal(run) &&
+    (run.configFingerprint ?? '') !== '' &&
     ((run.presetId ?? '') !== '' ||
       ((run.supermarketId ?? '') !== '' && !isNarrowedRun(run)))
   );

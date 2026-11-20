@@ -155,12 +155,16 @@
   white-space: nowrap;
 }
 
-// Both sheets pad their cell by 6 (section 3.2). Since the ceiling of 99 999 (the
-// owner, 2026-11-17) the longest exact figure is "99,999", which fits the narrow
-// sheet's 72 less 6 on each side; "999,999" did not, and kept it at 4.
-:host(.variant-sheet) .cell,
-:host(.variant-sheet-narrow) .cell {
+// The wide sheet pads its cell by 6 (section 3.2). The narrow one keeps the row's 4
+// and draws a figure with a symbol at 16 px, the least a field takes: "99,999" in a
+// wide system font (DejaVu Sans, 65.6 px at 17 px) does not fit 72 less 6 on each
+// side, and at 16 px in 72 less 4 it does.
+:host(.variant-sheet) .cell {
   padding-inline: var(--app-stepper-cell-pad-sheet);
+}
+
+:host(.variant-sheet-narrow) .field-cell:not(.is-bare) .field {
+  font-size: var(--app-stepper-figure-least);
 }
 
 // The amber edge of an amount an add just raised (velista 0170, decision J).

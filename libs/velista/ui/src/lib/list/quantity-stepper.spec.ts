@@ -1550,15 +1550,19 @@ describe('QuantityStepper (velista 0188)', () => {
   });
 
   describe('the look (section 3.2)', () => {
-    it('pads both sheets by 6, now that the longest exact figure is "99,999"', () => {
-      // The fit test of velista-luna-e2e measures the narrow field: "99,999" fits
-      // 72 less 6 on each side (the owner's ceiling of 99 999, 2026-11-17).
+    it('pads the wide sheet by 6, and the narrow one keeps 4 and draws a figure with a symbol at 16 px', () => {
+      // The fit test of velista-luna-e2e measures the narrow field: "99,999" in
+      // DejaVu Sans, the system font of the CI runner, is 65.6 px at 17 px, more
+      // than 72 less 6 on each side (2026-11-20).
       const scss = readFileSync(join(__dirname, 'quantity-stepper.scss'), 'utf8');
       const rule = /([^{}]*)\{[^}]*padding-inline:\s*var\(--app-stepper-cell-pad-sheet\)/.exec(
         scss
       );
       expect(rule?.[1]).toContain(':host(.variant-sheet) .cell');
-      expect(rule?.[1]).toContain(':host(.variant-sheet-narrow) .cell');
+      expect(rule?.[1]).not.toContain('variant-sheet-narrow');
+      expect(scss).toMatch(
+        /:host\(\.variant-sheet-narrow\) \.field-cell:not\(\.is-bare\) \.field \{\s*font-size: var\(--app-stepper-figure-least\);/
+      );
     });
   });
 });

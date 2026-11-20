@@ -1,4 +1,4 @@
-> **PR:** [#1014](https://github.com/IchirokuXVI/nx-portfolio/pull/1014), [#1039](https://github.com/IchirokuXVI/nx-portfolio/pull/1039) (a run's own request and the narrowing rule), [#1040](https://github.com/IchirokuXVI/nx-portfolio/pull/1040) (the estimate reads only a whole walk)
+> **PR:** [#1014](https://github.com/IchirokuXVI/nx-portfolio/pull/1014), [#1039](https://github.com/IchirokuXVI/nx-portfolio/pull/1039) (a run's own request and the narrowing rule), [#1040](https://github.com/IchirokuXVI/nx-portfolio/pull/1040) (the estimate reads only a whole walk), [#1043](https://github.com/IchirokuXVI/nx-portfolio/pull/1043) (a run states its import window, its walk config digest and its adapter), [#1047](https://github.com/IchirokuXVI/nx-portfolio/pull/1047) (no estimate across adapters or configs, no note once ended)
 
 # 0074: the run page fits a phone and names who reverted a run
 
@@ -309,11 +309,66 @@ the sections above.
   chain and mode only when the run's own request is not narrowed, and from those it takes only a
   run whose request is not narrowed either (`EarlierRunTotals`,
   `libs/luna-shopper-admin/data-access/src/lib/harvest/earlier-run-totals.ts`). A narrowed run
-  with no preset thus shows no estimate.
+  with no preset thus shows no estimate. Since PR #1047, both reads also pass over a run that
+  walked under another configuration (owner decision 130b), and no read is made at all for a
+  run whose adapter's walk total cannot be compared (owner decision 127b). Both are below.
 - **A completed run with no total shows its count alone (owner decision 120b, PR #1040).** The
   note that the run does not know yet how much work it has is not drawn for a `COMPLETED` run
-  (`unsizedNote`, `libs/luna-shopper-admin/ui/src/lib/harvest/run-progress.ts`). A running,
-  failed, aborted or stale run keeps it.
+  (`unsizedNote`, `libs/luna-shopper-admin/ui/src/lib/harvest/run-progress.ts`). Owner decision
+  131b (PR #1047) widened this: only a run that is still going keeps the note. A failed,
+  aborted or stale run no longer does.
 - **A failed reread keeps the number shown (owner decision 121b, PR #1040).** When a reread of
   the earlier total fails twice, the number from the earlier read stays. A reread that succeeds
   and finds no reference clears it.
+- **A file import's record states its source kind and window (owner decision 129b, PR
+  #1043).** The run view's `input` is now a `HarvestRunInputRecord`: a preset's input plus
+  `sourceKind`, `validFrom` and `validUntil`, read off a `FILE_IMPORT` run (`readRunInput`,
+  `apps/luna-shopper-backend/harvester/src/app/harvest/run-input.ts`). The window is ISO 8601
+  instants as the spawn resolved them, not the local days a spawn request takes. Each added
+  field is absent on a run of another mode. A preset is still `HarvestRunPresetInput` and cannot
+  carry them.
+- **A run stores the configuration and the adapter it walked under (owner decisions 130b and
+  127b, PR #1043).** The spawn (`HarvestRunService.start`) stores two values from the source row
+  the run names. `configFingerprint` is a sha256, hex, over the canonical JSON (keys sorted at
+  every depth) of the row's `adapterKey` and `config` (`walkConfigFingerprint`,
+  `apps/luna-shopper-backend/harvester/src/app/harvest/walk-fingerprint.ts`). The rate fields
+  and `enabled` are not in it. `adapterKey` is the row's adapter. Migration
+  `RunWalkConfig1760720000000` adds both as nullable columns of `harvest_runs`, with no
+  backfill. The run view states both.
+- **One rule compares two configurations (owner decision 130b, PR #1043).**
+  `walkedUnderSameConfig` in `@portfolio/luna-shopper/contracts/run-narrowing` is true only when
+  both fingerprints are non empty strings and equal.
+- **An adapter says whether its walk total can be compared (owner decision 127b, PR #1043).**
+  `AdapterCapabilities.comparableWalkTotal` is false for `deza-web`, whose capped queries can
+  count different totals for one assortment, and false for an adapter the build does not know.
+  It is true for every other adapter.
+- **No estimate for a walk total that cannot be compared (owner decision 127b, PR #1047).**
+  `hasComparableWalkTotal` (`libs/luna-shopper-admin/models/src/lib/harvest/harvest-run.ts`)
+  reads the run's own `adapterKey` through the capability table. It is false for `deza-web`,
+  for a null or absent adapter and for an unknown one. For such a run `runProgress` draws no
+  estimate whatever total it is handed, and `wantsEarlierTotal` is false, so no reference is
+  read, on the preset read or on the chain and mode read.
+- **A reference ran under the same configuration (owner decision 130b, PR #1047).** On the
+  preset read and on the chain and mode read, `EarlierRunTotals` passes over an earlier run
+  whose `configFingerprint` does not match this run's (`walkedUnderSameConfigAs`). A run with
+  no fingerprint of its own makes no read.
+- **The unsized note is drawn only for a run still going (owner decision 131b, PR #1047).**
+  `unsizedNote` is true only while `isTerminalRun` is false, the rule polling stops on: a
+  pending or running run. A completed, failed, aborted or stale run with no total and no
+  estimate shows its count alone.
+- **Decisions that keep what is built.** No code changed for these.
+  - 126a: a Mercadona or DIA walk always counts as narrowed, because its request must name
+    price scopes.
+  - 128a: the paged routes document no parameters in the OpenAPI document.
+  - 132a: the seeded running store discovery of the memory back end stays.
+  - 133a, recorded on backend plan `0268`, and 134a, recorded on backend plan `0251`.
+- **Known effects of PRs #1043 and #1047.**
+  - After the deploy, no estimate shows for a chain until one new run of it completes, because
+    older runs have no fingerprint.
+  - A DEZA run never shows an estimate.
+  - A run with no source row (a file import, an OpenStreetMap store discovery) stores no
+    fingerprint and no adapter, so it never shows an estimate. This is open owner decision 137.
+  - A run that the postal code queue starts stores neither value either, because that worker
+    calls the run store directly (`postal-code-discovery.worker.ts`). It shows no estimate.
+  - The reference search reads only the newest 5 completed, unreverted runs of each read
+    (`REFERENCE_PAGE`). A matching run older than those is not found.

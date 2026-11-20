@@ -1,4 +1,4 @@
-> **PR:** [#938](https://github.com/IchirokuXVI/nx-portfolio/pull/938), [#1038](https://github.com/IchirokuXVI/nx-portfolio/pull/1038) (a total past the ceiling, the end pass stop, the plan write)
+> **PR:** [#938](https://github.com/IchirokuXVI/nx-portfolio/pull/938), [#1038](https://github.com/IchirokuXVI/nx-portfolio/pull/1038) (a total past the ceiling, the end pass stop, the plan write), [#1042](https://github.com/IchirokuXVI/nx-portfolio/pull/1042) (a category counts in `failed` only if it stays unread)
 
 # 0251: a completed run names what it could not read
 
@@ -204,3 +204,17 @@ above is left as it was written.
   - A truncated category writes no run warning, as a capped frontier node writes none. The run
     report entry and one log line are the only record.
   - The stop of the end pass after three failures is only logged.
+- **A Carrefour category counts in `failed` only if it stays unread (PR #1042).** Found by the
+  shared run of 2026-11-20: the end pass read two refused categories whole, but the run kept
+  them in `failed`. Now a category that the end pass will never ask (a 404, an empty page that
+  still states rows, the category that blocked the run) is counted when it fails, as before. A
+  category that the pass may ask (a refusal or a 5xx, `askable`) is not counted then.
+  `countUnread` counts it after the pass, once, only if it is still unread. It does the same
+  when a block, an abort or a refusal kept the pass from starting, and for a category the pass
+  did not reach because it stopped early. A category the pass read is never counted. So the
+  counters only add, and the run page never shows `failed` go down. A category that an abort
+  cut part way is still not counted. `processed` does not change
+  (`carrefour-catalog.runner.ts`).
+- **`failed` counts categories, the failure ratio divides by listings (owner decision 134a).**
+  The executor compares `failed / totalPlanned` with `HARVEST_FAILURE_RATIO`, and the Carrefour
+  `totalPlanned` counts listings. The owner keeps this. No code changed.

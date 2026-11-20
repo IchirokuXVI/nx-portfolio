@@ -571,6 +571,14 @@ duplicates can accumulate over runs.
 level category of the listing name one shelf in different words (`La despensa` and `DESPENSA`),
 and neither is a prefix of the other, so the entry holds both.
 
+**A known El Jamón row on a `NEW` walk (owner decision 133a).** A walk with `details: NEW` does
+not read the page of a product the chain already holds, so the walk knows only the top level
+categories that listed it, and its call names only those paths. The call is `ADD`, because a
+call is `REPLACE` only when the crawl is whole and the walk read the product's page
+(`walk.pathsOf` and the `categoryPaths` call in `eljamon-catalog.runner.ts`). The paths
+already stored thus stay. The row gains the breadcrumb of its page only when a walk reads that
+page. The owner keeps this. No code changed.
+
 **The file import.** The row "Leaflet and file import" of section 3 is not quite true. One run
 mode does it, `FILE_IMPORT`, which was `LEAFLET_IMPORT` before plan `0086`. A leaflet is one of
 the producers of its document. The runner makes no `RunReport` call: after the ingest, it writes

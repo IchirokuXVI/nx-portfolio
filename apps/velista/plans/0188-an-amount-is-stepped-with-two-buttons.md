@@ -706,6 +706,13 @@ From the mock's `.mk-D3`, `.mk-D`, `.mk-btn`, `.mk-val` and `.mk-u` rules:
   > letter symbol in the 72 px cell less 6 on each side, and the field does not scroll. The
   > row is measured for "99,99" at the full size too, because the six character figures that
   > drew one step smaller are no longer reachable.
+
+  > Note of 2026-11-20, from the staging gate: the note above held on Windows only. The CI
+  > runner draws the system stack as DejaVu Sans, where "99,999" at 17 px 700 is 65.6 px, and
+  > 72 less 6 on each side leaves 60, so the field scrolled. The narrow sheet keeps the row's
+  > 4 px again and draws a figure with a symbol at 16 px (`--app-stepper-figure-least`), the
+  > least the field takes: 61.8 px in 64. A bare count stays at 18 px. The wide sheet is
+  > unchanged (65.6 px in 83).
 - The sheets' field: the number is an `<input>` laid over a hidden copy of its text, so the
   field takes the width of what it holds, 17 px when focused (never under 16), its focus ring
   around the whole cell.

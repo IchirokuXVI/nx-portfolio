@@ -71,6 +71,7 @@ export {
   runProgress,
   runProgressLine,
   spawnBlockReason,
+  walkedUnderSameConfigAs,
   wantsEarlierTotal,
   type HarvestRun,
   type HarvestRunMode,

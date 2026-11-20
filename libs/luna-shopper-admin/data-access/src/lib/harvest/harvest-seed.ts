@@ -78,6 +78,76 @@ const DEZA_WHOLE_WALK: Wire.HarvestHarvestRunPresetInput = {
   details: 'ALL',
 };
 
+/** A whole El Jamón walk, a chain whose walk totals compare (127b). */
+const ELJAMON_WHOLE_WALK: Wire.HarvestHarvestRunPresetInput = {
+  mode: 'CATALOG_DISCOVERY',
+  writes: 'PRICES_AND_AVAILABILITY',
+  details: 'NEW',
+};
+
+/** A whole DIA walk. */
+const DIA_WHOLE_WALK: Wire.HarvestHarvestRunPresetInput = {
+  mode: 'CATALOG_DISCOVERY',
+  writes: 'PRICES_AND_AVAILABILITY',
+  details: 'ALL',
+};
+
+/**
+ * What the memory back end stores as a run's `configFingerprint` (owner
+ * decision 130b): one string per adapter and config, the same for the same
+ * pair. The harvester stores a sha256 of the canonical JSON of the pair; this
+ * keeps the canonical JSON itself, because the value is opaque to every
+ * reader and a digest here would need an asynchronous API. Keys are sorted at
+ * every depth, as the harvester sorts them, so the order a config was written
+ * in does not change it.
+ */
+export function memoryWalkFingerprint(
+  adapterKey: string,
+  config: Readonly<Record<string, unknown>>
+): string {
+  return `memory:${canonicalJson({ adapterKey, config })}`;
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(',')}]`;
+  }
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, each]) => each !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries
+      .map(([key, each]) => `${JSON.stringify(key)}:${canonicalJson(each)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/**
+ * The fingerprints the seeded runs walked under. Mercadona's and DEZA's are
+ * those of their source rows below, so a run the memory back end spawns for
+ * either matches the seeded ones. El Jamón and DIA have no row here: their
+ * runs name one the seed does not hold, as a run whose row was deleted since
+ * does, and keep the adapter and fingerprint they walked with.
+ *
+ * DIA has two: its completed walk ran before the row's config changed, so the
+ * DIA walk still going has no reference and shows no estimate (130b).
+ */
+const MERCADONA_WALK = memoryWalkFingerprint('mercadona-api', {
+  postalCode: '28013',
+});
+const DEZA_WALK = memoryWalkFingerprint('deza-web', {});
+const CARREFOUR_WALK = memoryWalkFingerprint('carrefour-web', {});
+const ELJAMON_WALK = memoryWalkFingerprint('eljamon-web', {
+  postalCode: '41001',
+});
+const DIA_WALK_BEFORE = memoryWalkFingerprint('dia-api', {
+  postalCodes: ['28013'],
+});
+const DIA_WALK_NOW = memoryWalkFingerprint('dia-api', {
+  postalCodes: ['28013', '41001'],
+});
+
 /** A Carrefour store discovery of every shop the chain lists. */
 const CARREFOUR_EVERY_SHOP: Wire.HarvestHarvestRunPresetInput = {
   mode: 'STORE_DISCOVERY',
@@ -92,6 +162,8 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     id: 'run-catalog-running',
     supermarketId: MERCADONA,
     sourceId: 'source-mercadona',
+    adapterKey: 'mercadona-api',
+    configFingerprint: MERCADONA_WALK,
     mode: 'CATALOG_DISCOVERY',
     trigger: 'MANUAL',
     status: 'RUNNING',
@@ -129,6 +201,8 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     id: 'run-catalog-failed',
     supermarketId: MERCADONA,
     sourceId: 'source-mercadona',
+    adapterKey: 'mercadona-api',
+    configFingerprint: MERCADONA_WALK,
     mode: 'CATALOG_DISCOVERY',
     trigger: 'MANUAL',
     status: 'FAILED',
@@ -168,6 +242,8 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     id: 'run-catalog-reverted',
     supermarketId: CARREFOUR,
     sourceId: 'source-carrefour',
+    adapterKey: 'carrefour-web',
+    configFingerprint: CARREFOUR_WALK,
     mode: 'CATALOG_DISCOVERY',
     trigger: 'MANUAL',
     status: 'COMPLETED',
@@ -194,6 +270,17 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
         message:
           'Category cat21449123 Congelados was refused twice and was not read.',
       },
+      {
+        // A category past the paging ceiling (owner decision 124b), so the
+        // run screen draws the truncation with nothing listening.
+        code: 'LISTING_TRUNCATED',
+        offerId: null,
+        page: null,
+        name: 'Bebidas',
+        message:
+          'Category cat20003 Bebidas: Carrefour states 1,100 products in ' +
+          'Bebidas and serves only the first 1,008. The rest were not read.',
+      },
     ],
     documentSha256: null,
     abortRequestedAt: null,
@@ -202,6 +289,17 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     // backend plans 0249 and 0251), so the run screen draws the Carrefour
     // part of its report with nothing listening.
     report: {
+      // Mirrors the report a real truncated run writes. Nothing in the back
+      // office reads it: the run screen draws the truncation only as the
+      // `LISTING_TRUNCATED` warning above.
+      truncatedCategories: [
+        {
+          id: 'cat20003',
+          name: 'Bebidas',
+          totalResults: 1100,
+          path: ['Bebidas'],
+        },
+      ],
       unreadableCategories: ['/supermercado/congelados/cat21449123/c'],
       askedAgain: [
         { id: 'cat20002', name: 'Lácteos', read: true },
@@ -253,6 +351,8 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     id: 'run-catalog-completed',
     supermarketId: MERCADONA,
     sourceId: 'source-mercadona',
+    adapterKey: 'mercadona-api',
+    configFingerprint: MERCADONA_WALK,
     mode: 'CATALOG_DISCOVERY',
     // A schedule started it (admin plan 0067), so the runs list has a run to
     // mark "Scheduled" and a schedule a last run to link to.
@@ -311,6 +411,8 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     id: 'run-store-aborted',
     supermarketId: null,
     sourceId: null,
+    adapterKey: null,
+    configFingerprint: null,
     mode: 'STORE_DISCOVERY',
     trigger: 'MANUAL',
     status: 'ABORTED',
@@ -342,14 +444,18 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
   {
     // A DEZA walk somebody stopped (decision 86 of the harvester round). DEZA
     // reports products section by section and never knows its total while it
-    // runs (backend plan 0267), so `totalPlanned` is null. The completed DEZA
-    // walk below is the earlier run its screen takes an approximate total
-    // from: "824 of about 2,361". After the first five, so the dashboard's
+    // runs (backend plan 0267), so `totalPlanned` is null. A DEZA walk's
+    // total says nothing about the next one (owner decision 127b), so its
+    // page reads "824 processed" with no estimate and, as it has ended, no
+    // note (owner decision 131b), although a completed DEZA walk of the same
+    // config below processed 2,361. After the first five, so the dashboard's
     // recent runs stay as they were.
     id: 'run-deza-aborted',
     input: { ...DEZA_WHOLE_WALK },
     supermarketId: DEZA,
     sourceId: 'source-deza',
+    adapterKey: 'deza-web',
+    configFingerprint: DEZA_WALK,
     mode: 'CATALOG_DISCOVERY',
     trigger: 'MANUAL',
     status: 'ABORTED',
@@ -381,16 +487,18 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
   {
     // A DEZA walk still going, beside the Mercadona one: the harvester holds
     // one active run per chain, not one in all (`uq_harvest_run_active`). It
-    // does not know its total, so its page reads "1,200 of about 2,361" with
-    // a bar, from the completed DEZA walk below (decision 86 of the harvester
-    // round). Started from the DEZA preset, which has no completed run of its
-    // own, so the estimate falls back to the chain and mode (owner decision
-    // 98b). After the first five, and after the Mercadona run, so the
-    // dashboard's running and recent runs stay as they were.
+    // does not know its total, and its adapter's totals do not compare (owner
+    // decision 127b), so its page reads "1200 processed" and the note that it
+    // does not know yet how much work it has, never "of about 2,361", and no
+    // earlier run is read for it. Started from the DEZA preset. After the
+    // first five, and after the Mercadona run, so the dashboard's running and
+    // recent runs stay as they were.
     id: 'run-deza-running',
     input: { ...DEZA_WHOLE_WALK },
     supermarketId: DEZA,
     sourceId: 'source-deza',
+    adapterKey: 'deza-web',
+    configFingerprint: DEZA_WALK,
     presetId: DEZA_CATALOG_PRESET,
     mode: 'CATALOG_DISCOVERY',
     trigger: 'MANUAL',
@@ -428,6 +536,8 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     input: { ...DEZA_WHOLE_WALK },
     supermarketId: DEZA,
     sourceId: 'source-deza',
+    adapterKey: 'deza-web',
+    configFingerprint: DEZA_WALK,
     mode: 'CATALOG_DISCOVERY',
     trigger: 'MANUAL',
     status: 'COMPLETED',
@@ -536,11 +646,13 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     // DEZA walk does since backend plan 0267. Its page reads "2100 processed"
     // and no estimate, because a completed run did the whole walk (owner
     // decision 111c of the harvester round). Requested before the walk above,
-    // so that one stays the reference the other DEZA runs read.
+    // so that one stays the newest completed DEZA walk.
     id: 'run-deza-completed-unsized',
     input: { ...DEZA_WHOLE_WALK },
     supermarketId: DEZA,
     sourceId: 'source-deza',
+    adapterKey: 'deza-web',
+    configFingerprint: DEZA_WALK,
     mode: 'CATALOG_DISCOVERY',
     trigger: 'MANUAL',
     status: 'COMPLETED',
@@ -572,9 +684,14 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
   {
     // An El Jamón walk (admin plan 0071; backend plan 0253): one category
     // read short against the count it printed, and the detail stage's counts.
+    // A whole walk, and the reference the El Jamón runs below read their
+    // estimate from (owner decisions 127b and 130b).
     id: 'run-eljamon-completed',
+    input: { ...ELJAMON_WHOLE_WALK },
     supermarketId: ELJAMON,
-    sourceId: null,
+    sourceId: 'source-eljamon',
+    adapterKey: 'eljamon-web',
+    configFingerprint: ELJAMON_WALK,
     mode: 'CATALOG_DISCOVERY',
     trigger: 'MANUAL',
     status: 'COMPLETED',
@@ -633,9 +750,14 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
   {
     // A DIA walk (backend plan 0268, section 5): the products whose every leaf
     // has no category of ours, by leaf, the first five of each as examples.
+    // Walked under the config DIA's row had before (owner decision 130b), so
+    // it is no reference for the DIA walk still going below.
     id: 'run-dia-completed',
+    input: { ...DIA_WHOLE_WALK },
     supermarketId: DIA,
-    sourceId: null,
+    sourceId: 'source-dia',
+    adapterKey: 'dia-api',
+    configFingerprint: DIA_WALK_BEFORE,
     mode: 'CATALOG_DISCOVERY',
     trigger: 'MANUAL',
     status: 'COMPLETED',
@@ -718,6 +840,8 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     id: 'run-import-completed',
     supermarketId: DEZA,
     sourceId: null,
+    adapterKey: null,
+    configFingerprint: null,
     mode: 'FILE_IMPORT',
     trigger: 'MANUAL',
     status: 'COMPLETED',
@@ -791,6 +915,8 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     },
     supermarketId: CARREFOUR,
     sourceId: 'source-carrefour',
+    adapterKey: 'carrefour-web',
+    configFingerprint: CARREFOUR_WALK,
     mode: 'STORE_DISCOVERY',
     trigger: 'MANUAL',
     status: 'RUNNING',
@@ -826,6 +952,8 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     input: { ...CARREFOUR_EVERY_SHOP },
     supermarketId: CARREFOUR,
     sourceId: 'source-carrefour',
+    adapterKey: 'carrefour-web',
+    configFingerprint: CARREFOUR_WALK,
     mode: 'STORE_DISCOVERY',
     trigger: 'MANUAL',
     status: 'COMPLETED',
@@ -849,6 +977,124 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     error: null,
     report: {},
     correlationId: 'seed-correlation-store-carrefour',
+    requestedByUserId: null,
+    revertedAt: null,
+    revertedByUserId: null,
+    revertedPriceCount: null,
+  },
+  {
+    // The estimate on a chain whose walk totals compare (owner decision 127b).
+    // An El Jamón walk before its tree walk has counted, so `totalPlanned` is
+    // still null, under the config of the completed El Jamón walk above (owner
+    // decision 130b): its page reads "1,200 of about 3,402" with a bar. The
+    // one active run of El Jamón. Last, so the dashboard's running and recent
+    // runs stay as they were.
+    id: 'run-eljamon-running',
+    input: { ...ELJAMON_WHOLE_WALK },
+    supermarketId: ELJAMON,
+    sourceId: 'source-eljamon',
+    adapterKey: 'eljamon-web',
+    configFingerprint: ELJAMON_WALK,
+    mode: 'CATALOG_DISCOVERY',
+    trigger: 'MANUAL',
+    status: 'RUNNING',
+    requestedAt: '2026-09-03T09:30:00.000Z',
+    startedAt: '2026-09-03T09:30:02.000Z',
+    finishedAt: null,
+    heartbeatAt: NOW,
+    totalPlanned: null,
+    processed: 1200,
+    created: 0,
+    updated: 0,
+    unchanged: 1200,
+    notFound: 0,
+    skipped: 0,
+    failed: 0,
+    stage: 'list-categories',
+    stageLabel: 'Reading category 03 FRESCOS',
+    warnings: [],
+    documentSha256: null,
+    abortRequestedAt: null,
+    error: null,
+    report: {},
+    correlationId: 'seed-correlation-eljamon-running',
+    requestedByUserId: null,
+    revertedAt: null,
+    revertedByUserId: null,
+    revertedPriceCount: null,
+  },
+  {
+    // An El Jamón walk somebody stopped, under the same config: it keeps the
+    // estimate in the past and no bar, "824 processed of about 3,402" (owner
+    // decision 97b).
+    id: 'run-eljamon-aborted',
+    input: { ...ELJAMON_WHOLE_WALK },
+    supermarketId: ELJAMON,
+    sourceId: 'source-eljamon',
+    adapterKey: 'eljamon-web',
+    configFingerprint: ELJAMON_WALK,
+    mode: 'CATALOG_DISCOVERY',
+    trigger: 'MANUAL',
+    status: 'ABORTED',
+    requestedAt: '2026-09-01T20:00:00.000Z',
+    startedAt: '2026-09-01T20:00:02.000Z',
+    finishedAt: '2026-09-01T20:13:30.000Z',
+    heartbeatAt: '2026-09-01T20:13:30.000Z',
+    totalPlanned: null,
+    processed: 824,
+    created: 0,
+    updated: 0,
+    unchanged: 824,
+    notFound: 0,
+    skipped: 0,
+    failed: 0,
+    stage: 'list-categories',
+    stageLabel: 'Reading category 02 BEBIDAS',
+    warnings: [],
+    documentSha256: null,
+    abortRequestedAt: '2026-09-01T20:13:21.000Z',
+    error: null,
+    report: {},
+    correlationId: 'seed-correlation-eljamon-aborted',
+    requestedByUserId: null,
+    revertedAt: null,
+    revertedByUserId: null,
+    revertedPriceCount: null,
+  },
+  {
+    // A DIA walk still going whose only earlier walk ran under another config
+    // (owner decision 130b): the completed DIA walk above processed 5,738, but
+    // its fingerprint differs, so this page reads "2000 processed" and the
+    // note, never "of about 5,738". The one active run of DIA.
+    id: 'run-dia-running',
+    input: { ...DIA_WHOLE_WALK },
+    supermarketId: DIA,
+    sourceId: 'source-dia',
+    adapterKey: 'dia-api',
+    configFingerprint: DIA_WALK_NOW,
+    mode: 'CATALOG_DISCOVERY',
+    trigger: 'MANUAL',
+    status: 'RUNNING',
+    requestedAt: '2026-09-03T09:35:00.000Z',
+    startedAt: '2026-09-03T09:35:02.000Z',
+    finishedAt: null,
+    heartbeatAt: NOW,
+    totalPlanned: null,
+    processed: 2000,
+    created: 1990,
+    updated: 0,
+    unchanged: 10,
+    notFound: 0,
+    skipped: 0,
+    failed: 0,
+    stage: 'list-products',
+    stageLabel: 'Reading the menu leaves',
+    warnings: [],
+    documentSha256: null,
+    abortRequestedAt: null,
+    error: null,
+    report: {},
+    correlationId: 'seed-correlation-dia-running',
     requestedByUserId: null,
     revertedAt: null,
     revertedByUserId: null,

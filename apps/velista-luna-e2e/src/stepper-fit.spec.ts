@@ -28,11 +28,13 @@ import { generateBasket, openSettleSheet, signIn } from './support/app';
  * figures drawn one step smaller, and "100", a line stored above the ceiling. The
  * sheet is given "99,999" and "125,25". Velista 0190 adds the shopping list
  * sheet's `sheet-narrow` variant, 168 by 48, with the same exact forms, on a settle
- * sheet of a generated basket; its cell is padded by 6 since the ceiling, as the
- * wide sheet's is (0188, section 3.2).
+ * sheet of a generated basket; its cell keeps the row's 4 px and draws a figure
+ * with a symbol at 16 px (0188, section 3.2, note of 2026-11-20). The CI runner
+ * draws the system font as DejaVu Sans, the widest a device is likely to have:
+ * "99,999" is 65.6 px there at 17 px, which 72 less 6 on each side did not hold.
  *
  * A sheet's "99,999" always carries a symbol: 99 999 g reads "99,999 kg", so it is
- * drawn at the 17 px figure and never at the 18 px a bare count takes (0188,
+ * drawn at the figure size and never at the 18 px a bare count takes (0188,
  * section 3.2). The sheet cases therefore measure a field in that state, not the
  * bare count the seed's lines start in.
  */

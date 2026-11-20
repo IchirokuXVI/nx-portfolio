@@ -25,6 +25,7 @@ import {
   HARVEST_RUN_SEED,
   HARVEST_SCHEDULE_SEED,
   ITEM_SOURCE_ENTRY_SEED,
+  memoryWalkFingerprint,
   PLACE_CHAIN_SEED,
   PLACE_FOOTPRINT_SEED,
   PLACE_SHOP_SEED,
@@ -154,11 +155,24 @@ export class HarvestMemory implements HarvestServiceI {
     // The run keeps its own request, as the harvester stores it: the spawn's
     // fields without the chain, which the run carries as `supermarketId`.
     const { supermarketId: _chain, ...request } = copyInput(input);
+    // What the walk runs under outside its request (owner decisions 130b and
+    // 127b), as the harvester's spawn records it: from the chain's source row
+    // and only from it. A file import, a store discovery of no chain and a
+    // chain with no row name none and record neither.
+    const source =
+      input.mode === 'FILE_IMPORT' || chain === null
+        ? undefined
+        : this._sources.find((row) => row.supermarketId === chain);
     const run: Wire.HarvestHarvestRunView = {
       id: mintRunId(this._nextId++),
       input: request,
       supermarketId: input.supermarketId ?? null,
-      sourceId: null,
+      sourceId: source?.id ?? null,
+      adapterKey: source?.adapterKey ?? null,
+      configFingerprint:
+        source === undefined
+          ? null
+          : memoryWalkFingerprint(source.adapterKey, source.config),
       mode: input.mode,
       trigger: 'MANUAL',
       status: 'PENDING',
@@ -979,8 +993,11 @@ export class HarvestMemory implements HarvestServiceI {
       id: mintRunId(this._nextId++),
       supermarketId: input.supermarketId,
       // Never a source. An upload fetches nothing, so a chain that publishes
-      // only leaflets needs no source row at all.
+      // only leaflets needs no source row at all. So it records no adapter
+      // and no config either (owner decisions 127b and 130b).
       sourceId: null,
+      adapterKey: null,
+      configFingerprint: null,
       mode: 'FILE_IMPORT',
       trigger: 'MANUAL',
       status: 'PENDING',

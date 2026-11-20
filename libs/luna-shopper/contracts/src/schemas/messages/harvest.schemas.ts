@@ -334,8 +334,8 @@ const harvestRunView = object(
     },
     // Owner decision 130b, not required for the same reason: a digest of the
     // source row's adapter and config the run was spawned under, never the
-    // config itself. Null for a run with no source row and for every run
-    // stored before the column existed.
+    // config itself. Null for a run with no source row, for a run the postal
+    // code queue started, and for every run stored before the column existed.
     configFingerprint: nullableString(),
     // Owner decision 127b, not required for the same reason: the adapter of
     // the run's source row at its spawn. A reader treats null, absent or an

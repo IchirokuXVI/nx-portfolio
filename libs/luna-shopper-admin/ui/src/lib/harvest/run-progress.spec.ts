@@ -216,7 +216,7 @@ describe('RunProgressView with an approximate total', () => {
     expect(page.querySelector('[role="progressbar"]')).toBeNull();
   });
 
-  it.each(['RUNNING', 'ABORTED', 'FAILED', 'STALE'] as const)(
+  it.each(['RUNNING', 'PENDING'] as const)(
     'keeps the note on a %s run with no total and no estimate',
     async (status) => {
       const page = await draw(
@@ -225,6 +225,27 @@ describe('RunProgressView with an approximate total', () => {
       );
 
       expect(page.textContent).toContain('harvest.run.progress.unsized');
+    }
+  );
+
+  /**
+   * Owner decision 131b: the note is for a run that can still learn its
+   * size. Every ended run with no total and no estimate shows its count
+   * alone, however it ended.
+   */
+  it.each(['ABORTED', 'FAILED', 'STALE'] as const)(
+    'draws an ended %s run with no total and no estimate as its count alone',
+    async (status) => {
+      const page = await draw(
+        { processed: 824, total: null, percent: null },
+        { status }
+      );
+
+      expect(text(page, '[data-progress-count]')).toBe(
+        'harvest.run.progress.processed'
+      );
+      expect(page.querySelector('.unsized')).toBeNull();
+      expect(page.querySelector('[role="progressbar"]')).toBeNull();
     }
   );
 

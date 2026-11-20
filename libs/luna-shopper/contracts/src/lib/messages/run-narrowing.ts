@@ -128,8 +128,8 @@ export function isNarrowedRun(run: {
  *
  * True only when both fingerprints are strings and equal. A null, absent or
  * empty fingerprint on either side answers false: a run stored before the
- * column existed, or one that used no source row, says nothing about what it
- * walked, and drawing no estimate is the safe error. The order of the two
+ * column existed, one that used no source row, or one the postal code queue
+ * started says nothing about what it walked, and drawing no estimate is the safe error. The order of the two
  * arguments does not matter.
  *
  * This answers one of the questions an estimate asks. The request
