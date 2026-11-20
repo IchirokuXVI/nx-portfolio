@@ -1010,11 +1010,16 @@ export class AdminHarvestShopsController {
 export class AdminHarvestSourcesController {
   constructor(private readonly nats: NatsClient) {}
 
+  /**
+   * Every chain's source row, a page at a time. A plain page query (owner
+   * decision 119b): the route reads the cursor and the size and nothing else,
+   * so the run filters it once accepted and ignored are refused now.
+   */
   @Get()
   @ApiContractResponse(SUPERMARKET_SOURCE_PATTERNS.list)
   list(
     @ActingAdmin() admin: CurrentAdmin,
-    @Query() query: HarvestRunListQueryDto
+    @Query() query: PageQueryDto
   ): Promise<SupermarketSourcePage> {
     return this.nats.send<SupermarketSourcePage>(
       SUPERMARKET_SOURCE_PATTERNS.list,

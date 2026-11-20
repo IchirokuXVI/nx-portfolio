@@ -323,6 +323,12 @@ const harvestRunView = object(
     // office types its fixtures with the generated wire types, and every run
     // this service answers carries it anyway.
     presetId: nullableString(),
+    // Owner decision 114a, not required for the same reason. The run's own
+    // request as it was started, in a preset's input shape, and never the
+    // preset's current one. Null when the stored input cannot be read.
+    input: {
+      anyOf: [ref(HARVEST_SCHEMA_IDS.harvestRunPresetInput), { type: 'null' }],
+    },
     // Plan 0206, not required for the same reason. `estimate` is absent on the
     // dashboard's runs, which do not compute it.
     scheduleId: nullableString(),
