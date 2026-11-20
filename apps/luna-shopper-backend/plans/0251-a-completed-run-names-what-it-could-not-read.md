@@ -159,11 +159,15 @@ above is left as it was written.
   category is asked once in the pass and no more, and one that is cut short again stays unread
   with its warning. A category that the pass reads in full is no longer unread.
 - **A category that grew is paged to its new end (owner decision 104b, PR #1034).** The walk
-  reads up to the larger of the frontier's total and the largest total a page of the walk
-  states, capped at the ceiling (`CARREFOUR_CEILING`, 1008 rows). The figure of what paging
-  serves (`total_pages * page_size`) is used only to tell that an empty page is a natural end,
-  and never to skip a page. The run raises its `totalPlanned` by what a category grew, so
-  `processed` does not pass it.
+  reads up to the larger of the total the first pass saw and the largest total a page of the
+  walk states, capped at the storefront ceiling (`CARREFOUR_CEILING`, 1008 rows). The figure of
+  what paging serves (`total_pages * page_size`) is not used. An empty page is a natural end
+  only when the page itself states a total at or below its offset. Any other empty page is a
+  cut. The end pass starts from the total the first walk learned. The run raises its
+  `totalPlanned` by what a category grew, so `processed` does not pass it. One case is known
+  and accepted. If a page ever states more results than paging serves, the category counts as
+  cut. It gets a warning and the crawl is not whole. That is the safe error. The case has
+  never been recorded, and the shared live run of the round will show whether it occurs.
 - **A page past a shrunk end keeps the safe reading (owner decision 105a).** Such a page keeps
   the reading the code gives it today, which never declares a category read whole that may not
   be, until a captured Carrefour page settles what the chain serves there. No code changes for
