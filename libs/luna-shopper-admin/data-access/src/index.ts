@@ -84,6 +84,7 @@ export {
 } from './lib/gateway-error';
 export { ADMIN_NAME_SEED, AdminNames } from './lib/harvest/admin-names';
 export { EarlierRunTotals } from './lib/harvest/earlier-run-totals';
+export { earlierRunTotalsFollowSession } from './lib/harvest/earlier-run-totals-follow-session';
 export {
   type ApplyEntryDecisionsInput,
   type EntryDecisionOperation,

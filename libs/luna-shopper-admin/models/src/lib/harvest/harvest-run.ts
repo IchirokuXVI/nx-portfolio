@@ -167,7 +167,8 @@ export interface RunProgress {
    * A total taken from another run, for a run that does not know its own
    * (decision 86 of the harvester round). Null or absent when the run knows
    * its total, when no other run gives one, when the run processed nothing,
-   * and when the run has already done more than it says. Never a promise: the
+   * when the run completed, and when the run has already done more than it
+   * says. Never a promise: the
    * screen says "about" and calls it an estimate.
    */
   readonly about?: number | null;
@@ -203,9 +204,12 @@ export const APPROXIMATE_PERCENT_CAP = 99;
  * it, because "900 of about 824" would print a whole smaller than its part.
  * The screen then says how many, as it does with no earlier run.
  *
- * An ended run keeps the estimate, worded in the past, and gets no bar
- * (owner decision 97b): "824 of about 2,361" says how far a stopped walk got,
- * and a bar on it would read as progress.
+ * A run that stopped short (aborted, failed or stale) keeps the estimate,
+ * worded in the past, and gets no bar (owner decision 97b): "824 processed of
+ * about 2,361" says how far a stopped walk got, and a bar on it would read as
+ * progress. A completed run gets no estimate at all (owner decision 111c): it
+ * did the whole walk, and "2,100 processed of about 2,361" would read as a run
+ * that fell short. It reads "2,100 processed", as it did before the estimate.
  *
  * The percentage stops at 100. A Carrefour catalog, DIA catalog or DIA store
  * discovery run from before backend plan 0217 counted two units in `processed`
@@ -229,6 +233,7 @@ export function runProgress(
 
   const about =
     total === null &&
+    run.status !== 'COMPLETED' &&
     run.processed > 0 &&
     earlier !== null &&
     earlier > 0 &&
@@ -319,12 +324,15 @@ export function runProgressLine(
 /**
  * Whether a run's progress is drawn against nothing it knows, so that another
  * run is worth reading for an approximate total. A run that has processed
- * nothing shows no estimate, so it is not read for one either; nor is a run
- * with neither a preset nor a chain, which has nothing to compare with.
+ * nothing shows no estimate, so it is not read for one either; nor is a
+ * completed run, which shows its own count and never an estimate (owner
+ * decision 111c); nor is a run with neither a preset nor a chain, which has
+ * nothing to compare with.
  */
 export function wantsEarlierTotal(run: HarvestRun | null): run is HarvestRun {
   return (
     run !== null &&
+    run.status !== 'COMPLETED' &&
     run.totalPlanned === null &&
     run.processed > 0 &&
     ((run.presetId ?? '') !== '' || (run.supermarketId ?? '') !== '')
