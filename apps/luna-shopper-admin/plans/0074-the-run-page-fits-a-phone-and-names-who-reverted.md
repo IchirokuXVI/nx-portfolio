@@ -1,4 +1,4 @@
-> **PR:** [#1014](https://github.com/IchirokuXVI/nx-portfolio/pull/1014), [#1039](https://github.com/IchirokuXVI/nx-portfolio/pull/1039) (a run's own request and the narrowing rule), [#1040](https://github.com/IchirokuXVI/nx-portfolio/pull/1040) (the estimate reads only a whole walk), [#1043](https://github.com/IchirokuXVI/nx-portfolio/pull/1043) (a run states its import window, its walk config digest and its adapter), [#1047](https://github.com/IchirokuXVI/nx-portfolio/pull/1047) (no estimate across adapters or configs, no note once ended)
+> **PR:** [#1014](https://github.com/IchirokuXVI/nx-portfolio/pull/1014), [#1039](https://github.com/IchirokuXVI/nx-portfolio/pull/1039) (a run's own request and the narrowing rule), [#1040](https://github.com/IchirokuXVI/nx-portfolio/pull/1040) (the estimate reads only a whole walk), [#1043](https://github.com/IchirokuXVI/nx-portfolio/pull/1043) (a run states its import window, its walk config digest and its adapter), [#1047](https://github.com/IchirokuXVI/nx-portfolio/pull/1047) (no estimate across adapters or configs, no note once ended), [#1050](https://github.com/IchirokuXVI/nx-portfolio/pull/1050) (a store discovery stores the adapter that walked it)
 
 # 0074: the run page fits a phone and names who reverted a run
 
@@ -334,7 +334,8 @@ the sections above.
   `apps/luna-shopper-backend/harvester/src/app/harvest/walk-fingerprint.ts`). The rate fields
   and `enabled` are not in it. `adapterKey` is the row's adapter. Migration
   `RunWalkConfig1760720000000` adds both as nullable columns of `harvest_runs`, with no
-  backfill. The run view states both.
+  backfill. The run view states both. Since PR #1050, a store discovery and a file import store
+  what `runWalkConfig` gives (owner decision 137b, below).
 - **One rule compares two configurations (owner decision 130b, PR #1043).**
   `walkedUnderSameConfig` in `@portfolio/luna-shopper/contracts/run-narrowing` is true only when
   both fingerprints are non empty strings and equal.
@@ -362,13 +363,37 @@ the sections above.
   - 128a: the paged routes document no parameters in the OpenAPI document.
   - 132a: the seeded running store discovery of the memory back end stays.
   - 133a, recorded on backend plan `0268`, and 134a, recorded on backend plan `0251`.
+  - 135a: `comparableWalkTotal` stays true for `osm-places` and `manual`.
+  - 138a: the run page draws a Carrefour category past the paging ceiling as its
+    `LISTING_TRUNCATED` warning (backend plan `0251`, PR #1051), and it does not draw the
+    report's `truncatedCategories` list.
 - **Known effects of PRs #1043 and #1047.**
   - After the deploy, no estimate shows for a chain until one new run of it completes, because
     older runs have no fingerprint.
   - A DEZA run never shows an estimate.
   - A run with no source row (a file import, an OpenStreetMap store discovery) stores no
     fingerprint and no adapter, so it never shows an estimate. This is open owner decision 137.
+    PR #1050 changed this for a store discovery (owner decision 137b, below). A file import
+    still stores neither.
   - A run that the postal code queue starts stores neither value either, because that worker
     calls the run store directly (`postal-code-discovery.worker.ts`). It shows no estimate.
+    PR #1050 changed this: the queue now stores both, by the same rule as the spawn.
   - The reference search reads only the newest 5 completed, unreverted runs of each read
     (`REFERENCE_PAGE`). A matching run older than those is not found.
+- **A store discovery stores the adapter that walked it (owner decision 137b, PR #1050).** One
+  function, `runWalkConfig`
+  (`apps/luna-shopper-backend/harvester/src/app/harvest/walk-fingerprint.ts`), decides the
+  `adapterKey` and `configFingerprint` of a run. The spawn (`HarvestRunService.start`) and the
+  postal code queue (`PostalCodeDiscoveryWorker`) both call it. A file import stores neither.
+  A store discovery of a chain whose adapter lists its own shops stores the chain row's values.
+  Every other store discovery is walked by OpenStreetMap and stores `osm-places` with the
+  fingerprint of an empty config. Every other run stores its source row's values, as before.
+  - **It restores no estimate on any real path.** A review found this, and the owner knew it
+    when he chose to merge. A store discovery with no chain cannot be saved as a preset
+    (`harvest-run-preset.service.ts` refuses it: "A store discovery around a postal code
+    belongs to no chain, so it cannot be saved as a preset."). Such a run has no chain for the
+    chain and mode read. Its centre always makes its request narrowed. Its value is that the
+    stored adapter is the one that walked.
+  - **A latent hazard.** Every OpenStreetMap run shares one fingerprint, whatever its centre or
+    radius. If presets for OpenStreetMap store discoveries are ever allowed, the centre and
+    radius must first enter the fingerprint or the reference rule.
