@@ -387,4 +387,6 @@ It sets the total when the crawl ends (`setTotalPlanned(crawl.products.size)` in
 such a run an approximate total, taken from the latest completed run of the same kind (PR
 #1028). PR #1036 narrows that: a completed run shows only its count, an aborted, failed or stale
 run keeps the approximate line, and the estimates are dropped at sign out and read again when a
-run page opens.
+run page opens. PR #1040 narrows it again: the runs of the same chain and mode are a reference
+only when the run's own request and the reference run's request are both a whole walk (admin
+plan `0074`, owner decision 112b).
