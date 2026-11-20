@@ -50,7 +50,7 @@ export function isFileImportRun(run: HarvestRun | null): boolean {
  * same rule the run's own facts follow.
  *
  * The name is decided by code, never by reading the sentence (admin plan
- * 0071, D7). The two walk warnings in `CODES_WHOSE_SENTENCE_NAMES_THE_PART`
+ * 0071, D7). The three walk warnings in `CODES_WHOSE_SENTENCE_NAMES_THE_PART`
  * always state their subject in the sentence ("Section 07 Mascotas failed"),
  * and a runner may or may not also set `name`, so their name is `''` either
  * way and the row reads the same on every run. Every other warning keeps its

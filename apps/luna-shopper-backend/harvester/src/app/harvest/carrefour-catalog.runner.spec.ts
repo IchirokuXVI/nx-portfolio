@@ -2376,8 +2376,8 @@ describe('CarrefourCatalogRunner', () => {
             page: null,
             message:
               'Category cat9 Limpieza: Carrefour states 2,000 products in ' +
-              'Limpieza and serves only the first 1,008. The rest were not ' +
-              'read. It has no smaller category to page instead.',
+              'Limpieza, more than the 1,008 it serves, and it has no ' +
+              'smaller category to page, so none of them were read.',
           },
         ]);
       });
@@ -2459,6 +2459,17 @@ describe('CarrefourCatalogRunner', () => {
             ],
           })
         );
+        // Each case keeps its own sentence: the capped node read nothing, the
+        // paged category read its first 1,008.
+        expect(
+          truncatedWarnings(runContext).map((warning) => warning.message)
+        ).toEqual([
+          'Category cat9 Limpieza: Carrefour states 2,000 products in ' +
+            'Limpieza, more than the 1,008 it serves, and it has no smaller ' +
+            'category to page, so none of them were read.',
+          'Category cat1 Bebidas: Carrefour states 1,100 products in ' +
+            'Bebidas and serves only the first 1,008. The rest were not read.',
+        ]);
       });
 
       it('names a category truncated while the end pass pages it', async () => {

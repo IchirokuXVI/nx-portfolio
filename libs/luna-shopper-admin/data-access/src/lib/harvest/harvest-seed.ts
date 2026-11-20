@@ -289,6 +289,9 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     // backend plans 0249 and 0251), so the run screen draws the Carrefour
     // part of its report with nothing listening.
     report: {
+      // Mirrors the report a real truncated run writes. Nothing in the back
+      // office reads it: the run screen draws the truncation only as the
+      // `LISTING_TRUNCATED` warning above.
       truncatedCategories: [
         {
           id: 'cat20003',

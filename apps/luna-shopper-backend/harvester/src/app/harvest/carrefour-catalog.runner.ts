@@ -918,7 +918,8 @@ function warnUnread(
  * Written once, at the end, with the largest total the category stated: a
  * category the end pass sees again raises its total in `truncated` and adds
  * no entry, so it warns once with the better number. A capped frontier node
- * was never paged, and its sentence says no smaller category splits it.
+ * was never paged, so its sentence says none of its rows were read and no
+ * smaller category splits it.
  *
  * A category both truncated and unreadable gets this warning beside its
  * `LISTING_UNREAD`: the two say different things, rows the storefront will
@@ -932,19 +933,23 @@ function warnTruncated(
   for (const category of truncated) {
     const where =
       category.path.length > 0 ? category.path.join(' > ') : category.name;
-    const split = cappedIds.has(category.id)
-      ? ' It has no smaller category to page instead.'
-      : '';
+    const stated =
+      `Category ${category.id} ${where}: Carrefour states ` +
+      `${count(category.totalResults)} products in ${category.name}`;
+    // A capped node is never paged (`walkFrontier` keeps it out of the
+    // categories), so none of its rows were read; a category truncated while
+    // paged had its first rows read.
+    const message = cappedIds.has(category.id)
+      ? `${stated}, more than the ${count(CARREFOUR_CEILING)} it serves, ` +
+        `and it has no smaller category to page, so none of them were read.`
+      : `${stated} and serves only the first ${count(CARREFOUR_CEILING)}. ` +
+        `The rest were not read.`;
     context.warn({
       code: HarvestWarningCode.LISTING_TRUNCATED,
       offerId: null,
       page: null,
       name: category.name,
-      message:
-        `Category ${category.id} ${where}: Carrefour states ` +
-        `${count(category.totalResults)} products in ${category.name} and ` +
-        `serves only the first ${count(CARREFOUR_CEILING)}. The rest were ` +
-        `not read.${split}`,
+      message,
     });
   }
 }
