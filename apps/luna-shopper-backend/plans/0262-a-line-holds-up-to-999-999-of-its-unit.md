@@ -1,4 +1,30 @@
+> **PR:** [#975](https://github.com/IchirokuXVI/nx-portfolio/pull/975)
+> **PR (amendment of 2026-11-17):** [#1002](https://github.com/IchirokuXVI/nx-portfolio/pull/1002)
+
 # 0262: a line holds up to 999 999 of its unit
+
+> **Amended on 2026-11-17 from the owner's ruling of that day: the ceiling is 99 999 base
+> units, for the server and for velista alike.** "One ceiling of 99 999 for every line
+> quantity, in every unit": 99,999 kg, 99,999 l or 99 999 pieces. 999 999 is gone. It was
+> chosen on 2026-11-11 so that the stepper's six digit forms ("999,99", "999,999 kg") had a
+> number to reach; on 2026-11-17 the owner ruled that velista stops a weight or a volume at
+> 99 kg or 99 l and that one number below 100 000 holds for every unit, so a ceiling the
+> server accepts and no screen reaches had no case left. `LINE_QUANTITY_MAX` is 99999 in the
+> contracts, and the back office's `QUANTITY_MAX` follows; velista's own copy is velista's
+> (velista `0188`). Every schema, DTO and core check of section 1 reads the constant, so they
+> moved with it, and the two generated files were regenerated. N1 to N3 stand with the new
+> number; section 2 holds with a tenth of every figure. The title and the file name keep the
+> old number, and the sections below are as written on 2026-11-11.
+>
+> **No migration.** Before this plan was deployed the ceiling was 100 000, so a stored line
+> can hold exactly 100 000, one above the new ceiling, and nothing more. Such a line is read
+> as it is, and its next write must end at or below 99 999: a minus of one step, a `PATCH` to
+> 99 999 or less, a basket demand down. A plus is refused like any write past the ceiling.
+> For that to work, a field that states what the line holds rather than what a write makes
+> it has no ceiling: `from` of `line.update` and of the basket's settle, revert and demand
+> bodies, and `expect` of `line.addQuantity`. Their schemas and DTOs carried
+> `LINE_QUANTITY_MAX` before (the basket schemas already had none), and a line at 100 000
+> could not have been stepped down from a client that names its amount.
 
 > Written on 2026-11-11 from the owner's decision of that day (section 1 of the batch
 > decisions): "The most is 999 999 base units for the three units (999,999 kg, l or K)". A
@@ -291,3 +317,10 @@ endings; regenerate, never format.
    minus there moves a line above 100 000 down to 100 000. Raise `MIN_CLIENT_VERSION` to the
    first build with the stepper, or accept it, since such a line needs a newer device to write
    it first?
+
+   Answered by the owner on 2026-11-12 (noted 2026-11-17): no raise of `MIN_CLIENT_VERSION`; N4
+   stands. Velista itself stops a weight or a volume line at 99 000 (99 kg, 99 l) since the
+   owner's ruling of 2026-11-17 (velista `0188`, S6, S10 and decision K,
+   `LINE_MEASURED_QUANTITY_MAX`), below the backend's 999 999, which stays the ceiling the server
+   accepts; a count keeps 999 999, and a line the server already holds above 99 000 draws as it
+   is and steps down.

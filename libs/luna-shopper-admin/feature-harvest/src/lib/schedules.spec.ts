@@ -26,7 +26,7 @@ import { SchedulesGateway, type Schedule } from './schedules-gateway';
  * and what its gateway sends to `HARVEST_SERVICE`. The harvester is the
  * in-memory one, with each write recorded on its way through.
  */
-const MERCADONA = '11111111-1111-4111-8111-111111111111';
+const MERCADONA = 'sm_mercadona';
 
 function setup() {
   const harvest = new HarvestMemory();

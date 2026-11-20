@@ -67,6 +67,9 @@
   margin: 0;
   padding: 0;
   overflow-y: auto;
+  // A containing block, so a hidden helper inside it scrolls with it rather than
+  // with the document (scroll-containers-are-positioned.spec.ts).
+  position: relative;
   overscroll-behavior: contain;
   list-style: none;
 }
@@ -152,6 +155,15 @@
 .product {
   color: var(--app-text-secondary);
   font-size: var(--app-text-xs);
+  line-height: 1.35;
+}
+
+// A line already on the list: choosing it only shows it. Words under the name, so
+// the row reads differently without its colour.
+.state {
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-xs);
+  font-style: italic;
   line-height: 1.35;
 }
 

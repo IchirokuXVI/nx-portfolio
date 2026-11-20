@@ -1,6 +1,6 @@
 import { GatewayError } from '../gateway-error';
 import { HarvestMemory } from './harvest-memory';
-import { MERCADONA_WEEKLY_PRESET } from './harvest-seed';
+import { memoryWalkFingerprint, MERCADONA_WEEKLY_PRESET } from './harvest-seed';
 
 /**
  * Presets out of memory (admin plan 0030, section 6).
@@ -8,8 +8,11 @@ import { MERCADONA_WEEKLY_PRESET } from './harvest-seed';
  * The screens draw the duplicate name refusal and the preset a run came from,
  * so both have to be reachable with nothing listening.
  */
-const MERCADONA = '11111111-1111-4111-8111-111111111111';
-const DEZA = '33333333-3333-4333-8333-333333333333';
+const MERCADONA = 'sm_mercadona';
+const DEZA = 'sm_deza';
+const CARREFOUR = 'sm_carrefour';
+/** A chain with no run going in the seed (El Jamón and DIA each have one). */
+const CONSUM = 'sm_consum';
 
 describe('HarvestMemory, presets', () => {
   it('lists a chain presets by name, each with its latest run', async () => {
@@ -70,9 +73,113 @@ describe('HarvestMemory, presets', () => {
     ).resolves.toMatchObject({ name: 'Weekly Warehouses' });
   });
 
+  /**
+   * One active run per chain, as `uq_harvest_run_active` holds it: the seed's
+   * running DEZA walk does not stop a Mercadona start, and the running
+   * Mercadona walk does.
+   */
+  it('refuses a start only while the same chain has a run going', async () => {
+    const memory = new HarvestMemory();
+
+    await expect(
+      memory.spawnRun({ supermarketId: MERCADONA, mode: 'CATALOG_DISCOVERY' })
+    ).rejects.toMatchObject({ status: 409, code: 'conflict' });
+    await expect(
+      memory.spawnRun({ supermarketId: DEZA, mode: 'CATALOG_DISCOVERY' })
+    ).rejects.toMatchObject({ status: 409, code: 'conflict' });
+
+    await memory.abortRun('run-catalog-running');
+
+    await expect(
+      memory.spawnRun({ supermarketId: MERCADONA, mode: 'CATALOG_DISCOVERY' })
+    ).resolves.toMatchObject({ supermarketId: MERCADONA });
+  });
+
+  /**
+   * One active store discovery in the whole database, as
+   * `uq_harvest_run_active_store_discovery` holds it: a store discovery of
+   * another chain is in the way, a catalog run of another chain is not.
+   */
+  it('refuses a store discovery while a store discovery of another chain is going', async () => {
+    const memory = new HarvestMemory();
+    // The seed holds the one store discovery a cluster runs at a time.
+    await memory.abortRun('run-store-postal-running');
+    await memory.spawnRun({
+      supermarketId: CARREFOUR,
+      mode: 'STORE_DISCOVERY',
+    });
+
+    await expect(
+      memory.spawnRun({ supermarketId: CONSUM, mode: 'STORE_DISCOVERY' })
+    ).rejects.toMatchObject({ status: 409, code: 'conflict' });
+    await expect(
+      memory.spawnRun({ supermarketId: CONSUM, mode: 'CATALOG_DISCOVERY' })
+    ).resolves.toMatchObject({ supermarketId: CONSUM });
+  });
+
+  /** A store discovery with no chain, as the postal code queue starts, also holds the lock. */
+  it('refuses a store discovery of a chain while one with no chain is going', async () => {
+    const memory = new HarvestMemory();
+    await memory.abortRun('run-store-postal-running');
+    await memory.spawnRun({ mode: 'STORE_DISCOVERY' });
+
+    await expect(
+      memory.spawnRun({ supermarketId: CONSUM, mode: 'STORE_DISCOVERY' })
+    ).rejects.toMatchObject({ status: 409, code: 'conflict' });
+    await expect(
+      memory.spawnRun({ mode: 'STORE_DISCOVERY' })
+    ).rejects.toMatchObject({ status: 409, code: 'conflict' });
+    await expect(
+      memory.spawnRun({ supermarketId: CARREFOUR, mode: 'CATALOG_DISCOVERY' })
+    ).resolves.toMatchObject({ supermarketId: CARREFOUR });
+  });
+
+  /** The seeded DEZA walk counts up on each read, with no total to stop at. */
+  it('moves a running walk that does not know its total', async () => {
+    const memory = new HarvestMemory();
+
+    const first = await memory.readRun('run-deza-running');
+    const second = await memory.readRun('run-deza-running');
+
+    expect(second.processed).toBeGreaterThan(first.processed);
+    expect(second).toMatchObject({ status: 'RUNNING', totalPlanned: null });
+  });
+
+  /**
+   * Owner decisions 127b and 130b: a spawn records its chain's source row, its
+   * adapter and the fingerprint of its config, the one the seeded runs of the
+   * chain walked under. A store discovery of no chain records no row, and
+   * `osm-places`, the adapter that walks it (owner decision 137b).
+   */
+  it('records the source row, adapter and config fingerprint of a spawn', async () => {
+    const memory = new HarvestMemory();
+    await memory.abortRun('run-catalog-running');
+    await memory.abortRun('run-store-postal-running');
+
+    const walk = await memory.spawnRun({
+      supermarketId: MERCADONA,
+      mode: 'CATALOG_DISCOVERY',
+    });
+    const seeded = await memory.readRun('run-catalog-completed');
+    const anywhere = await memory.spawnRun({ mode: 'STORE_DISCOVERY' });
+
+    expect(walk).toMatchObject({
+      sourceId: 'source-mercadona',
+      adapterKey: 'mercadona-api',
+    });
+    expect(walk.configFingerprint).toBeTruthy();
+    expect(walk.configFingerprint).toBe(seeded.configFingerprint);
+    expect(anywhere).toMatchObject({
+      sourceId: null,
+      adapterKey: 'osm-places',
+      configFingerprint: memoryWalkFingerprint('osm-places', {}),
+    });
+  });
+
   it('records the preset on a run started from it', async () => {
     const memory = new HarvestMemory();
-    // The seed holds a running walk, and one harvester runs one thing.
+    // The seed holds a running Mercadona walk, and a chain runs one run at a
+    // time.
     await memory.abortRun('run-catalog-running');
 
     const run = await memory.startPreset(MERCADONA_WEEKLY_PRESET);

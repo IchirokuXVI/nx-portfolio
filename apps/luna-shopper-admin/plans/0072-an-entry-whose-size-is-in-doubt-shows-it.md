@@ -1,3 +1,5 @@
+> **PR:** [#1017](https://github.com/IchirokuXVI/nx-portfolio/pull/1017)
+
 # 0072: an entry whose size is in doubt shows it
 
 > Follow up of backend plan `0249` (PR #942, merged), and checked against `origin/dev` on

@@ -432,6 +432,242 @@ ENVIRONMENT=staging \
   bash k8s/release-tasks/tasks/0005-unlink-deleted-accounts/check.sh
 ```
 
+## Task 0006
+
+`0006-kilo-pieces-state-their-weight` corrects the products that hold the
+weight of a piece as a fixed size (backend plan 0244, section 7).
+
+- **It runs a command inside the harvester pod.** `post.sh` runs
+  `node kilo-pieces.js`. A sized Mercadona piece sold by the kilo becomes
+  `KILOGRAM` with no size, and its old size becomes its approximate weight. A
+  sized piece priced as one (Mercadona label `ud`, LIDL "Aprox.") becomes
+  `UNIT` with no size and keeps its old size as its weight. A product with two
+  or more Mercadona rows sold by weight keeps the row with the lowest price per
+  kilo, and each other row gets a new product of its own. Each change is one
+  `item.update` or create with the harvester's actor. No price changes.
+- **It is armed for staging and for production.** The staging window ends on
+  2026-11-26 and the production one on 2026-12-03, and `PRODUCTION_RELEASE` is
+  `0.20.0`. A release published after that date needs the dates moved in a
+  commit before it.
+- **It states three ceilings per environment**, `MAX_KILO_<ENVIRONMENT>`,
+  `MAX_PIECE_<ENVIRONMENT>` and `MAX_SPLIT_<ENVIRONMENT>`: 200, 20 and 10. The
+  production data held 131, 12 and 6 on 2026-11-19. `check.sh` counts with
+  `--count` and refuses above them. `post.sh` counts again and passes them to
+  the command, so the command refuses too.
+- **Its `check.sh` passes where the pod has no `kilo-pieces.js` yet**, because
+  this release adds the command. `post.sh` refuses there.
+- **It leaves no marker, and it does not need one.** A converted product no
+  longer matches its selection, and a split product holds one Mercadona row. A
+  split that created a product and failed before it moved the row is finished
+  by the next run, which binds the row to that product.
+- **The next Mercadona run finishes the work.** A product that a split created
+  has no price until that run writes one, and the run rewrites the weight of
+  each piece from the live value. `post.sh` prints how many kilo pieces still
+  wait for a weight.
+
+## Task 0007
+
+`0007-wash-count-leaves-products` takes the wash count off the products that
+were made from a row printing one (backend plan `0271`). Before plan `0270`,
+`40 lavados` was read as 40 `UNIT`, and a product created from such a row kept
+that size.
+
+- **It runs a command inside the harvester pod.** `post.sh` runs
+  `node wash-sizes.js`. The command selects every ACTIVE bound row whose
+  printed size is a wash count (`40 lavados`, `2x40 lavados`, `44 Lavados.`,
+  and not `23+12 lavados`), and every product of such a row that is `UNIT` and
+  holds that count as its size. Each product loses its size, and its pack count
+  when that is the pack the row printed, through one `item.update` with the
+  harvester's actor. No size is set, no price changes, and nothing is deleted.
+- **It is armed for staging and for production.** The staging window ends on
+  2026-11-26 and the production one on 2026-12-03, and `PRODUCTION_RELEASE` is
+  `0.20.0`. A release published after that date needs the dates moved in a
+  commit before it.
+- **It states one ceiling per environment**, `MAX_PRODUCTS_<ENVIRONMENT>`.
+  `check.sh` counts with `--count` and refuses above it, and so does a row
+  whose wash count is not a whole number above 0. `post.sh` counts again and
+  passes the ceiling as `--max`, so the command refuses too.
+- **Its `check.sh` passes where the pod has no `wash-sizes.js` yet**, because
+  this release adds the command. `post.sh` refuses there.
+- **It leaves no marker, and it does not need one.** A corrected product has
+  no size, so a second run counts 0 and corrects nothing. With nothing to
+  correct it still saves the lists below when a recorded line is `planned`
+  (to confirm it) or it found a note the ConfigMap does not hold yet, and
+  otherwise writes nothing.
+- **It leaves a review list for the curator.** `post.sh` saves it in the
+  ConfigMap `release-task-0007-review`, key `review.tsv`: the chain, the
+  product, the size it took off, the wash text that qualified it, every size
+  text the product's rows state, and last the `outcome`. **The curator fixes
+  the `corrected` lines**: the product's wash count was taken off. A
+  `planned` line names a product the task meant to correct and has no
+  confirmation that it did, so check the product. An update can go through
+  with no answer that says so: the run stopped before it wrote its lists, the
+  save after it failed, or the answer timed out. So a later run confirms each
+  `planned` line by reading its product: when catalog now holds it as `UNIT`
+  with no size, the line turns `corrected`. A planned line whose product holds
+  any size, or that catalog lacks or merged, stays `planned`. A `corrected`
+  line never goes back. A run never drops a line an earlier run saved.
+- **It notes what it does not correct.** The key `notes.tsv` beside it lists,
+  one line per row, the ACTIVE bound rows that look like a wash count and that
+  the task leaves alone. The first column names the kind:
+  - `pack-of-units`: Carrefour's `pack de 2 unidades de 50 lavados.`, on a
+    product that holds 2 × 50 `UNIT`. The Carrefour parser before plan `0270`
+    multiplied it into that size.
+  - `short-wash-word`: El Jamón's `40lav` or `40lv`, on a product that holds
+    40 `UNIT`. No old parser read that as a size, so where the size came from
+    is not known.
+  - `sum`: `23+12 lavados`, `23+12lav`, on a product that holds 35 `UNIT`.
+  - `mercadona-per-wash`: a Mercadona row that the chain prices per wash
+    (latest label `lv`) and that states a count of units above 1 as its size.
+
+  Then the chain, the product, its size as it stands, the row's printed size,
+  every size text the product's rows state, and the row's id. A note is chosen
+  from stored fields only, never from a product name, and a product the task
+  corrects is not also noted. The task writes nothing for a note: the curator
+  decides each one.
+
+  `post.sh` writes the ConfigMap with `kubectl apply --server-side`, because a
+  client side apply copies it into an annotation capped at 256 KiB. The deploy
+  log shows counts only (lines per outcome and per kind), because it is
+  public. Read the lists over SSH on the host, as the `deploy` user:
+
+  ```sh
+  kubectl -n luna-shopper get configmap release-task-0007-review \
+    -o jsonpath='{.data.review\.tsv}'
+  kubectl -n luna-shopper get configmap release-task-0007-review \
+    -o jsonpath='{.data.notes\.tsv}'
+  ```
+
+  Nothing deletes the ConfigMap. Delete it when the curator has worked through
+  it. `node wash-sizes.js --review <file>` writes the same lists again for the
+  products that still qualify, each of its own lines `planned`.
+
+- **A ConfigMap of another shape is refused before any write.** When a key of
+  `configmap/release-task-0007-review` does not start with this task's header
+  (a ConfigMap of an earlier shape of the task, or the file of an earlier
+  rehearsal), the command refuses, names that ConfigMap, and changes nothing.
+  Delete it, or restore the header of this task as the first line of each
+  key, and deploy again. Deleting it also deletes the record of what earlier
+  runs corrected, so read it first. A rehearsal starts again from an empty
+  `configmap.json`.
+
+- **To undo one product, send one item update** with the old size the list
+  names. A restore of the dump also removes everything written to catalog
+  after the task.
+
+To rehearse it, point the override at the built bundle and at databases that
+you made for the rehearsal, with a catalog on that NATS that knows the actor:
+
+```sh
+touch configmap.json
+ENVIRONMENT=staging \
+  WASH_SIZES='node dist/apps/luna-shopper-backend-harvester/wash-sizes.js' \
+  REVIEW_GET='cat configmap.json' \
+  REVIEW_APPLY='tee configmap.json' \
+  bash k8s/release-tasks/tasks/0007-wash-count-leaves-products/post.sh
+```
+
+## Task 0008
+
+`0008-deza-keys-follow-the-split` re-keys the stored DEZA walk rows whose key
+the deployed size split no longer builds (backend plan `0272`). A DEZA row is
+keyed on `entryKey(name, sizeFormat)`, and `name` and `sizeFormat` come from
+`splitSize`. Plans `0266` and `0270` changed that split, so the next walk would
+not find a row stored under the old split, and the row a person linked to a
+product would no longer be seen.
+
+- **It runs a command inside the harvester pod.** `post.sh` runs
+  `node deza-keys.js` after the rollout, so the image that computes the new
+  keys is the image that walks next. For every `OFFICIAL_WEB` row of the
+  `deza-web` chain whose stored key is `entryKey` of its stored text, the
+  command rebuilds the description, splits it, and rewrites the key, the name
+  and the size text of each row whose key moved. Every write is an `UPDATE` of
+  those three columns, in one transaction under a table lock. Nothing is
+  deleted or inserted, and no decision, price, availability or presence row
+  changes. A leaflet row and a row whose key its text does not build are never
+  touched.
+- **It is armed for staging and for production.** The staging window ends on
+  2026-11-26 and the production one on 2026-12-03, and `PRODUCTION_RELEASE` is
+  `0.20.0`, the release of task 0007. A release published after that date
+  needs the dates moved in a commit before it.
+- **It states three ceilings per environment**: `MAX_MOVES`, `MAX_UNKEYED`
+  and `MAX_COLLISIONS`. `check.sh` counts with `--count` and refuses above any
+  of them. `post.sh` counts again, waits while a run of the chain is in flight
+  (every 30 seconds, for at most 15 minutes), and passes `MAX_MOVES` as
+  `--max`, so the command refuses too. The command also refuses to commit when
+  the count of rows, the counts by status and match, any row's decision, or
+  the count of the prices, claims and presence rows of the chain differ before
+  and after.
+- **A chain of moves is not a collision.** When a moved row's new key is the
+  key of another row that moves too, the command moves the holder first, in
+  the same transaction, so a chain of any length is re-keyed in one run. A key
+  counts as held only by a row that keeps it after every move that can be
+  made.
+- **A collision is skipped.** A moved row whose new key is held by a row that
+  keeps it after every possible move, two moved rows that give one new key, and a swap or a longer
+  ring of rows that each want the next one's key are left as they are and
+  counted under `collisions`, and so is every row whose chain ends on one of
+  them. `--count`, the write run and the guard read the same selection, so
+  they agree on each of these. Both ceilings are 0, so one collision makes
+  the task refuse, the moves stay, and the guard below refuses every DEZA
+  catalog walk until the owner raises the ceiling in a commit and links that
+  row by hand.
+- **No DEZA walk runs before it.** The harvester refuses a `CATALOG_DISCOVERY`
+  of a `deza-web` source while a row the task would re-key exists, in the
+  spawn and again at the start of the runner. A scheduled slot in that gap is
+  recorded `REFUSED`. Collisions and unkeyed rows do not hold the walk.
+- **Its `check.sh` passes where the pod has no `deza-keys.js` yet**, because
+  this release adds the command. `post.sh` refuses there.
+- **It leaves no marker, and it does not need one.** A re-keyed row holds the
+  key its text builds, so a second run counts `moves 0` and writes nothing.
+  The command and the guard stay after the task: a later change of the split
+  ships a new task directory that runs the same command.
+- **It leaves a record.** `post.sh` saves one line per re-keyed or skipped row
+  in the ConfigMap `release-task-0008-record`, key `record.tsv`: the row's id,
+  its old key, its new key, the outcome, and for a collision the id of the row
+  that holds the key. No name. The write run streams the record in the same
+  `kubectl exec` that commits, and `post.sh` applies it server side, so no
+  annotation cap limits its size. A run that only skipped collisions saves
+  its record too. Until the ConfigMap holds it, the record is kept on the
+  host in `~/release-task-records/`. That file holds the same lines as the
+  ConfigMap: entry ids and keys, no names. When the apply fails, `post.sh`
+  exits 1, prints only the exit code, and keeps the apply's error in a file
+  beside the record (`.apply-error.txt` added to its name, mode 600). The
+  next successful run writes the kept record into the ConfigMap first and
+  removes both files. The `~` is the home of the user that runs `post.sh`:
+  the deploy runs it as `deploy`, and a run by hand as another user keeps its
+  file in that user's home. The deploy log shows the line count only. Read
+  the record over SSH on the host, as the `deploy` user:
+
+  ```sh
+  kubectl -n luna-shopper get configmap release-task-0008-record \
+    -o jsonpath='{.data.record\.tsv}'
+  ```
+
+  Nothing deletes the ConfigMap. Delete it when it is no longer needed.
+
+- **To undo one row, prefer an update to a restore.** Put its `old_key` back
+  from the record, with the whole description as the name and no size text:
+  that was the stored shape of every row counted on 2026-11-18. A row of
+  another shape is read from the dump while it exists. A row whose `old_key`
+  another re-keyed row now holds (a chain) goes back after that row. A
+  restore of the dump also removes everything walks wrote to the harvester
+  after the task.
+
+To rehearse it, point the override at the built bundle and at a database that
+you made for the rehearsal. A rehearsal with `RECORD_APPLY` still needs
+`kubectl` on the PATH: `post.sh` builds the ConfigMap's JSON with
+`kubectl create configmap --dry-run=client`, which reaches no cluster.
+
+```sh
+ENVIRONMENT=staging \
+  HARVESTER_DB_URL=postgres://... \
+  DEZA_KEYS='node dist/apps/luna-shopper-backend-harvester/deza-keys.js' \
+  RECORD_APPLY='tee configmap.json' \
+  RECORD_KEEP="$PWD/kept-record.tsv" \
+  bash k8s/release-tasks/tasks/0008-deza-keys-follow-the-split/post.sh
+```
+
 ## Reverting a task
 
 Restore each dump that the ledger names into a scratch database, then promote

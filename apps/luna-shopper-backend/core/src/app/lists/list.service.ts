@@ -10,6 +10,7 @@ import {
   type GetListAccessRequest,
   type ItemLineView,
   type LineApprovalStatus,
+  type LineUnit,
   type ListAccessView,
   type ListCounts,
   type ListIdRequest,
@@ -841,6 +842,7 @@ export class ListService {
           id: row.id,
           content: row.content,
           quantity: row.quantity,
+          unit: row.unit as LineUnit,
           approvalStatus: row.approvalStatus as LineApprovalStatus,
         };
         const held = linesByList.get(row.listId);

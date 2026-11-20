@@ -18,7 +18,7 @@ import { CheckIcon, XCircleIcon } from '../icons/icons';
  * One line as one trip left it (velista `0088`, section 5). **Read only.**
  *
  * A trip row is a fact about a trip, so its numbers never follow the line: the one
- * place the live quantity changes is To buy. Where a line row carries its reel, this
+ * place the live quantity changes is To buy. Where a line row carries its stepper, this
  * carries what the trip left, and under it what the trip bought.
  *
  * The row is a button, because a tap opens the line detail sheet exactly as a line row

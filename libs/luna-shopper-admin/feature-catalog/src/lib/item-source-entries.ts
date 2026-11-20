@@ -8,8 +8,12 @@ import {
   signal,
   untracked,
 } from '@angular/core';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
+  RokuTranslatorPipe,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
+import {
+  ContentLocaleStore,
   GatewayError,
   HARVEST_SERVICE,
 } from '@portfolio/luna-shopper-admin/data-access';
@@ -18,10 +22,13 @@ import {
   ResourceReferences,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
+  toSizeDoubt,
   toSourceEntryStatus,
+  type SizeDoubt,
   type SourceEntryStatus,
 } from '@portfolio/luna-shopper-admin/models';
 import { ItemLinkedImages, type ItemSourcePhoto } from './item-linked-images';
+import { formatSizeDoubt } from './products/product-format';
 
 /** How many source rows one page asks for. */
 const ENTRY_PAGE_SIZE = 50;
@@ -49,6 +56,12 @@ export interface ItemSourceEntryRow {
    * this one. `0` means the barcode is this row's alone, or there is none.
    */
   readonly sharedBy: number;
+  /**
+   * The size its own price and comparison price disprove, or `null` (admin
+   * plan 0072). A bound row can carry one too, since a walk checks every row
+   * it observes (backend plan 0249).
+   */
+  readonly sizeDoubt: SizeDoubt | null;
 }
 
 /**
@@ -89,6 +102,7 @@ export function toItemSourceEntryRow(
       typeof shared === 'number' && Number.isInteger(shared) && shared > 1
         ? shared
         : 0,
+    sizeDoubt: toSizeDoubt(row),
   };
 }
 
@@ -208,7 +222,29 @@ function text(value: unknown): string {
                     </td>
                   }
                   <td class="mono">{{ row.externalId }}</td>
-                  <td>{{ row.name }}</td>
+                  <td class="name">
+                    {{ row.name }}
+                    <!-- Its own prices disprove its size (admin plan 0072):
+                         the chip, and the two sizes under it. -->
+                    @if (doubtWords(row); as words) {
+                      <span class="chip doubt" data-size-doubt>{{
+                        'harvest.entries.sizeDoubt.chip' | rokuT
+                      }}</span>
+                      <span class="doubt-note" data-size-doubt-sentence>
+                        {{
+                          (words.label === ''
+                            ? 'harvest.entries.sizeDoubt.sentenceNoLabel'
+                            : 'harvest.entries.sizeDoubt.sentence'
+                          ) | rokuT: words
+                        }}
+                        @if (row.sizeDoubt?.packGuess; as count) {
+                          {{
+                            'harvest.entries.sizeDoubt.pack' | rokuT: { count }
+                          }}
+                        }
+                      </span>
+                    }
+                  </td>
                   <td>
                     <span class="mono">{{ row.ean }}</span>
                     @if (row.sharedBy > 0) {
@@ -343,10 +379,21 @@ function text(value: unknown): string {
       object-fit: cover;
     }
 
-    .chip.shared {
+    .chip.shared,
+    .chip.doubt {
       margin-inline-start: var(--admin-space-2);
       background: var(--admin-waiting-wash);
       color: var(--admin-waiting-on-wash);
+    }
+
+    /* The two sizes under the name, in the muted ink of a note, and wide
+       enough to read as a sentence rather than a column of words. */
+    .doubt-note {
+      display: block;
+      min-inline-size: 14rem;
+      margin-block-start: var(--admin-space-1);
+      font-size: 0.8125rem;
+      color: var(--admin-ink-muted);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -355,6 +402,8 @@ export class ItemSourceEntries {
   private readonly _service = inject(HARVEST_SERVICE);
   private readonly _references = inject(ResourceReferences);
   private readonly _photos = inject(ItemLinkedImages);
+  private readonly _content = inject(ContentLocaleStore);
+  private readonly _translate = inject(RokuTranslatorService);
 
   /** The product whose source rows are drawn. */
   readonly itemId = input.required<string>();
@@ -390,6 +439,33 @@ export class ItemSourceEntries {
         void this._readPhotos(itemId);
       });
     });
+  }
+
+  /**
+   * The two sizes of a doubted row as its sentence reads them, or `null` for
+   * a row whose size nobody doubts (admin plan 0072).
+   */
+  doubtWords(
+    row: ItemSourceEntryRow
+  ): ReturnType<typeof formatSizeDoubt> | null {
+    // Read so a row drawn before the strings arrive is worded again after.
+    this._translate.loaded();
+    return row.sizeDoubt === null
+      ? null
+      : formatSizeDoubt(
+          row.sizeDoubt,
+          this._content.locale(),
+          (count, figure) =>
+            this._translate.t(
+              'harvest.entries.sizeDoubt.units',
+              undefined,
+              undefined,
+              {
+                count,
+                figure,
+              }
+            )
+        );
   }
 
   /** The saved photo of one source row, or `null`. */

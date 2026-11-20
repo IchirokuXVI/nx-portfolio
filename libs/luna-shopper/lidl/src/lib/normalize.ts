@@ -57,8 +57,10 @@ export function normalizeListPage(payload: Json): LidlListPage {
     // Every row is wrapped in the component the storefront renders it with, so
     // a row of any other kind carries no `gridbox` and is skipped rather than
     // read as an empty product.
-    const data = readRecord(readRecord(item, 'gridbox'), 'data');
-    const row = normalizeListRow(data);
+    const gridbox = readRecord(item, 'gridbox');
+    const data = readRecord(gridbox, 'data');
+    // The online shop breadcrumbs sit beside the row's data, not in it.
+    const row = normalizeListRow(data, readRecord(gridbox, 'meta'));
     if (row) {
       rows.push(row);
     }
@@ -97,8 +99,17 @@ export function nextListOffset(
   return offset + pageSize;
 }
 
-/** One row of the index, or null when it carries no id to join on. */
-export function normalizeListRow(data: Json): LidlListRow | null {
+/**
+ * One row of the index, or null when it carries no id to join on.
+ *
+ * `meta` is the record the index prints beside `data`, which is where the
+ * row's `wonCategoryBreadcrumbs` live (plan 0268). A caller that has none
+ * gets a row that states no breadcrumbs.
+ */
+export function normalizeListRow(
+  data: Json,
+  meta: Json = null
+): LidlListRow | null {
   const externalId =
     readString(data, 'productId') ?? readString(data, 'itemId');
   if (!externalId) {
@@ -117,6 +128,7 @@ export function normalizeListRow(data: Json): LidlListRow | null {
     brand: brandOf(readString(readRecord(data, 'brand'), 'name')),
     siteCategory: readString(data, 'category') ?? '',
     categoryPath: categoryPathOf(readString(keyfacts, 'wonCategoryPrimary')),
+    categoryBreadcrumbs: readCategoryBreadcrumbs(meta)?.paths ?? null,
     path: readString(data, 'canonicalPath'),
     sizeFormat: readString(readRecord(price, 'packaging'), 'text'),
     listPrice: readNumber(price, 'price'),
@@ -155,10 +167,25 @@ export function normalizeProduct(
   const keyfacts = readRecord(state, 'keyfacts');
   const storeFacts = readRecord(state, 'storeFacts');
   const path = readString(state, 'canonicalPath') ?? row.path;
-  const categoryPath = pickPath(
-    categoryPathOf(readString(keyfacts, 'wonCategoryPrimary')),
-    row.categoryPath
+  const pagePrimary = categoryPathOf(
+    readString(keyfacts, 'wonCategoryPrimary')
   );
+  const categoryPath = pickPath(pagePrimary, row.categoryPath);
+  // The product's own breadcrumbs are on its page; the row's are the fall
+  // back, as the row's need world path is (plan 0268). A page list that yields
+  // no path, the empty `[]` included, is read as no list at all, so the row's
+  // list is used (owner decision 101b). A page list read only in part may hide
+  // a path the row names, so the row's list is added to its readable paths
+  // (owner decision 115b). Only a page list read in full stands alone.
+  const readBreadcrumbs = readCategoryBreadcrumbs(state);
+  const pageBreadcrumbs =
+    readBreadcrumbs !== null && readBreadcrumbs.paths.length > 0
+      ? readBreadcrumbs
+      : null;
+  const breadcrumbs =
+    pageBreadcrumbs?.wholly === true
+      ? pageBreadcrumbs.paths
+      : [...(pageBreadcrumbs?.paths ?? []), ...(row.categoryBreadcrumbs ?? [])];
   const identifiers = readIdentifiers(readArray(state, 'eans'));
   const sizeFormat =
     readString(readRecord(readRecord(state, 'price'), 'packaging'), 'text') ??
@@ -182,6 +209,14 @@ export function normalizeProduct(
     siteCategory: readString(state, 'category') ?? row.siteCategory,
     categoryPath,
     categorySlug: resolveCategory(categoryPath),
+    categoryPaths: categoryPathsOf(categoryPath, breadcrumbs),
+    // Only a page list that is not empty and was read in full states every
+    // path (plan 0268): a part the code could not read may name a path a
+    // REPLACE would drop, and an empty list states nothing (owner decision
+    // 95b). This is the same test that keeps the row's list out of
+    // `breadcrumbs` above, so the row's list never meets a stated list.
+    categoryPathsStated:
+      pagePrimary.length > 0 && pageBreadcrumbs?.wholly === true,
     // A weight the chain does not promise is no size (plan 0244, section
     // 5.2): it travels as `approxWeight`, and the row has neither a size nor
     // a unit.
@@ -423,6 +458,87 @@ function readIdentifiers(eans: readonly Json[]): {
 /** A path the product page states, else the one the index stated. */
 function pickPath(fromPage: string[], fromRow: string[]): string[] {
   return fromPage.length > 0 ? fromPage : fromRow;
+}
+
+/**
+ * `wonCategoryBreadcrumbs` as paths of names (plan 0268), or null when the
+ * holder states no list this code can read.
+ *
+ * Each breadcrumb is a list of nodes, root first, each `{ id, name, url,
+ * hiddenCategory }`. A node with no name is skipped and a path left with none
+ * is dropped. A hidden node is kept: it is still a category the chain files
+ * the product under, and the name is the chain's.
+ *
+ * **A list read only in part is not a stated list.** `wholly` is false when
+ * any breadcrumb is not a list of nodes, is empty, or holds a node with no
+ * name: a renamed field or a node of another shape. The readable paths are
+ * still returned, but they are not every path the page names, so they cannot
+ * disprove a path stored before. A list that is not empty and of which no
+ * path can be read is null, as an absent list is: it proves nothing. The
+ * empty list `[]` is read wholly and stays a list of no path. For an index
+ * row that is kept as it is. {@link normalizeProduct} reads a page list of no
+ * path as no list at all: it does not hide the row's list (owner decision
+ * 101b) and it is no statement (owner decision 95b). A page list that is not
+ * read wholly adds the row's list to its readable paths (owner decision 115b).
+ */
+function readCategoryBreadcrumbs(
+  holder: Json
+): { paths: string[][]; wholly: boolean } | null {
+  if (!isRecord(holder)) {
+    return null;
+  }
+  const crumbs = holder['wonCategoryBreadcrumbs'];
+  if (!Array.isArray(crumbs)) {
+    return null;
+  }
+  const paths: string[][] = [];
+  let wholly = true;
+  for (const crumb of crumbs) {
+    if (!Array.isArray(crumb) || crumb.length === 0) {
+      wholly = false;
+      continue;
+    }
+    const names = crumb
+      .map((node) => readString(node, 'name'))
+      .filter((name): name is string => name !== null);
+    if (names.length < crumb.length) {
+      wholly = false;
+    }
+    if (names.length > 0) {
+      paths.push(names);
+    }
+  }
+  if (crumbs.length > 0 && paths.length === 0) {
+    return null;
+  }
+  return { paths, wholly };
+}
+
+/**
+ * The need world path first, when there is one, then each breadcrumb path,
+ * without repeats (plan 0268). The two come from two trees of the chain, so
+ * neither is a prefix of the other in practice; the sink drops a prefix
+ * anyway.
+ */
+function categoryPathsOf(
+  primary: readonly string[],
+  breadcrumbs: readonly (readonly string[])[]
+): string[][] {
+  const paths: string[][] = [];
+  for (const path of [primary, ...breadcrumbs]) {
+    if (path.length === 0) {
+      continue;
+    }
+    const repeated = paths.some(
+      (other) =>
+        other.length === path.length &&
+        other.every((name, i) => name === path[i])
+    );
+    if (!repeated) {
+      paths.push([...path]);
+    }
+  }
+  return paths;
 }
 
 /**

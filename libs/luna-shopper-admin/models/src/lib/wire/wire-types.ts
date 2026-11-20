@@ -330,6 +330,7 @@ export type CreateItemDto = {
   ean?: string | null;
   unitSize?: number | null;
   approxWeight?: number | null;
+  quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount?: number | null;
   categoryIds?: string[];
   categorySlugs?: string[];
@@ -527,6 +528,7 @@ export type ItemExpectationDto = {
   brand?: string | null;
   unitSize?: number | null;
   approxWeight?: number | null;
+  quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
   packCount?: number | null;
   categorySlugs?: string[];
@@ -727,6 +729,7 @@ export type ProblemDetails = {
     | 'item_unit_not_base'
     | 'item_kilogram_has_size'
     | 'item_approx_weight_beside_size'
+    | 'item_quantity_step_not_allowed'
     | 'item_merged'
     | 'item_merge_two_articles_one_chain'
     | 'item_merge_format_differs'
@@ -1282,6 +1285,7 @@ export type UpdateItemBatchEntryDto = {
   ean?: string | null;
   unitSize?: number | null;
   approxWeight?: number | null;
+  quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount?: number | null;
   categoryIds?: string[];
   categorySlugs?: string[];
@@ -1302,6 +1306,7 @@ export type UpdateItemDto = {
   ean?: string | null;
   unitSize?: number | null;
   approxWeight?: number | null;
+  quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount?: number | null;
   categoryIds?: string[];
   categorySlugs?: string[];
@@ -2447,6 +2452,7 @@ export type BasketBasketProductView = {
   unitSize: number | null;
   approxWeight?: number | null;
   approxWeightSetBy?: 'SOURCE' | 'ADMIN' | null;
+  quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount: number | null;
   categories: CatalogItemCategoryView[];
   defaultUnit: EnumsUnitOfMeasure;
@@ -2523,6 +2529,7 @@ export type BasketBasketRowResult = {
   entries: BasketBasketRowEntryView[];
   progress: BasketBasketProgress;
   skippedCount?: number;
+  addOutcome?: EnumsAddLineOutcome;
 };
 
 /**
@@ -2701,7 +2708,7 @@ export type CatalogAdminSupermarketItemView = {
   currency: string | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;
-  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
+  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | null;
   comparablePrice?: number | null;
   comparableBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | null;
   observedAt: string | null;
@@ -2918,7 +2925,7 @@ export type CatalogItemOfferView = {
   currency: string | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;
-  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
+  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | null;
   comparablePrice?: number | null;
   comparableBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | null;
   observedAt: string | null;
@@ -2999,7 +3006,7 @@ export type CatalogItemPricePointView = {
   currency: string | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;
-  unitBasis: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
+  unitBasis: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | null;
 };
 
 /**
@@ -3023,7 +3030,7 @@ export type CatalogItemPriceView = {
   currency: string | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;
-  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
+  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | null;
   observedAt: string;
   lastObservedAt: string;
   validFrom: string | null;
@@ -3111,6 +3118,7 @@ export type CatalogItemView = {
   unitSize: number | null;
   approxWeight?: number | null;
   approxWeightSetBy?: 'SOURCE' | 'ADMIN' | null;
+  quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount: number | null;
   categories: CatalogItemCategoryView[];
   defaultUnit: EnumsUnitOfMeasure;
@@ -3746,7 +3754,7 @@ export type CatalogSupermarketItemView = {
   currency: string | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;
-  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
+  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | null;
   comparablePrice?: number | null;
   comparableBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | null;
   observedAt: string | null;
@@ -3916,6 +3924,11 @@ export type EnumsAdapterKey =
   | 'dia-api'
   | 'osm-places'
   | 'manual';
+
+/**
+ * `enums.AddLineOutcome` in the gateway's OpenAPI document.
+ */
+export type EnumsAddLineOutcome = 'CREATED' | 'RAISED' | 'ALREADY_ON_LIST';
 
 /**
  * `enums.AiTextProvider` in the gateway's OpenAPI document.
@@ -4099,6 +4112,7 @@ export type EnumsHarvestWarningCode =
   | 'APPROX_WEIGHT_ROWS_DISAGREE'
   | 'LISTING_UNREAD'
   | 'LISTING_SHORT'
+  | 'LISTING_TRUNCATED'
   | 'DETAIL_UNREAD';
 
 /**
@@ -4501,7 +4515,7 @@ export type GatewayLegalSettingsView = {
 /**
  * `harvest.AdapterCapabilityTable` in the gateway's OpenAPI document.
  *
- * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. `stockIndicator` is how the source tells stock: `per-shop` when it names the shops that carry a product, `per-scope` when each listed row or a scoped answer states it, and null when it says nothing about stock. `provesDelisting` means a walk can read the whole listing of a scope, so a product the listing did not name counts as a miss. A reader that does not know an adapter must answer no to every boolean, null to the language, null to the band and null to the stock indicator rather than throw.
+ * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. `stockIndicator` is how the source tells stock: `per-shop` when it names the shops that carry a product, `per-scope` when each listed row or a scoped answer states it, and null when it says nothing about stock. `provesDelisting` means a walk can read the whole listing of a scope, so a product the listing did not name counts as a miss. `comparableWalkTotal` means the count of one finished walk says about how big the next walk of the source is, so an earlier total may be drawn as an estimate; false for `deza-web`, whose capped queries can count different totals for one assortment. A reader that does not know an adapter must answer no to every boolean, null to the language, null to the band and null to the stock indicator rather than throw.
  */
 export const HarvestAdapterCapabilityTable = {
   'mercadona-api': {
@@ -4518,6 +4532,7 @@ export const HarvestAdapterCapabilityTable = {
     stockIndicator: 'per-scope',
     provesDelisting: true,
     refreshesOneProduct: true,
+    comparableWalkTotal: true,
   },
   'deza-web': {
     writesPrices: false,
@@ -4530,6 +4545,7 @@ export const HarvestAdapterCapabilityTable = {
     stockIndicator: 'per-shop',
     provesDelisting: false,
     refreshesOneProduct: false,
+    comparableWalkTotal: false,
   },
   'carrefour-web': {
     writesPrices: true,
@@ -4542,6 +4558,7 @@ export const HarvestAdapterCapabilityTable = {
     stockIndicator: null,
     provesDelisting: false,
     refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
   'lidl-api': {
     writesPrices: true,
@@ -4554,6 +4571,7 @@ export const HarvestAdapterCapabilityTable = {
     stockIndicator: null,
     provesDelisting: false,
     refreshesOneProduct: true,
+    comparableWalkTotal: true,
   },
   'eljamon-web': {
     writesPrices: true,
@@ -4566,6 +4584,7 @@ export const HarvestAdapterCapabilityTable = {
     stockIndicator: null,
     provesDelisting: true,
     refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
   'dia-api': {
     writesPrices: true,
@@ -4581,6 +4600,7 @@ export const HarvestAdapterCapabilityTable = {
     stockIndicator: 'per-scope',
     provesDelisting: true,
     refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
   'osm-places': {
     writesPrices: false,
@@ -4593,6 +4613,7 @@ export const HarvestAdapterCapabilityTable = {
     stockIndicator: null,
     provesDelisting: false,
     refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
   manual: {
     writesPrices: false,
@@ -4605,13 +4626,14 @@ export const HarvestAdapterCapabilityTable = {
     stockIndicator: null,
     provesDelisting: false,
     refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
 } as const;
 
 /**
  * `harvest.AdapterCapabilityTable` in the gateway's OpenAPI document.
  *
- * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. `stockIndicator` is how the source tells stock: `per-shop` when it names the shops that carry a product, `per-scope` when each listed row or a scoped answer states it, and null when it says nothing about stock. `provesDelisting` means a walk can read the whole listing of a scope, so a product the listing did not name counts as a miss. A reader that does not know an adapter must answer no to every boolean, null to the language, null to the band and null to the stock indicator rather than throw.
+ * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. `stockIndicator` is how the source tells stock: `per-shop` when it names the shops that carry a product, `per-scope` when each listed row or a scoped answer states it, and null when it says nothing about stock. `provesDelisting` means a walk can read the whole listing of a scope, so a product the listing did not name counts as a miss. `comparableWalkTotal` means the count of one finished walk says about how big the next walk of the source is, so an earlier total may be drawn as an estimate; false for `deza-web`, whose capped queries can count different totals for one assortment. A reader that does not know an adapter must answer no to every boolean, null to the language, null to the band and null to the stock indicator rather than throw.
  */
 export type HarvestAdapterCapabilityTable =
   typeof HarvestAdapterCapabilityTable;
@@ -4742,6 +4764,30 @@ export type HarvestHarvestDocument = {
 };
 
 /**
+ * `harvest.HarvestRunInputRecord` in the gateway's OpenAPI document.
+ */
+export type HarvestHarvestRunInputRecord = {
+  mode: EnumsHarvestRunMode;
+  priceScopeId?: string;
+  priceScopeIds?: string[];
+  postalCode?: string;
+  country?: string;
+  radiusMetres?: number;
+  brandKeys?: string[];
+  postalCodes?: string[];
+  detailBackfill?: boolean;
+  scopeCopies?: {
+    from: string;
+    to: string[];
+  }[];
+  writes?: EnumsHarvestRunWrites;
+  details?: EnumsHarvestDetailFetch;
+  sourceKind?: EnumsPriceSourceKind;
+  validFrom?: string;
+  validUntil?: string;
+};
+
+/**
  * `harvest.HarvestRunPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -4842,6 +4888,9 @@ export type HarvestHarvestRunView = {
   revertedByUserId: string | null;
   revertedPriceCount: number | null;
   presetId?: string | null;
+  input?: HarvestHarvestRunInputRecord | null;
+  configFingerprint?: string | null;
+  adapterKey?: EnumsAdapterKey | null;
   scheduleId?: string | null;
   interrupted?: boolean;
   stopReason?: EnumsHarvestRunStopReason | null;
@@ -4941,6 +4990,7 @@ export type HarvestItemSourceEntryView = {
   packaging?: string | null;
   packCount: number | null;
   categoryPath: string[];
+  categoryPaths?: string[][];
   url: string | null;
   imageUrl: string | null;
   extra: {
@@ -5130,6 +5180,7 @@ export type HarvestQueuedSourceEntryView = {
   packaging?: string | null;
   packCount: number | null;
   categoryPath: string[];
+  categoryPaths?: string[][];
   url: string | null;
   imageUrl: string | null;
   extra: {
@@ -5230,6 +5281,7 @@ export type HarvestSourceCatalogEntryView = {
   packaging?: string | null;
   packCount: number | null;
   categoryPath: string[];
+  categoryPaths?: string[][];
   url: string | null;
   imageUrl: string | null;
   extra: {
@@ -5301,7 +5353,7 @@ export type HarvestSourceEntryPriceView = {
   currency: string;
   unitPrice: number | null;
   unitPriceLabel: string | null;
-  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
+  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | null;
   validFrom: string | null;
   validUntil: string | null;
   details: {
@@ -5476,6 +5528,8 @@ export type ImpersonationStartImpersonationView = {
 export type ListAddLineResult = {
   line: ListLineView;
   merged: boolean;
+  outcome: EnumsAddLineOutcome;
+  alreadyOnList: ListLineView[];
 };
 
 /**
@@ -5522,6 +5576,7 @@ export type ListItemLineView = {
   id: string;
   content: string;
   quantity: number;
+  unit: EnumsLineUnit;
   approvalStatus: EnumsLineApprovalStatus;
 };
 

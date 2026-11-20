@@ -406,6 +406,16 @@ export enum HarvestWarningCode {
    */
   LISTING_SHORT = 'LISTING_SHORT',
   /**
+   * A part of a chain's listing stated more rows than the storefront serves
+   * (owner decision 124b). One per part: a Carrefour category whose pages, or
+   * whose frontier node, stated a total past 1,008. A category truncated while
+   * it was paged had its first 1,008 rows read and the rows past the ceiling
+   * not read. A capped frontier node, which no smaller category splits, is
+   * never paged, so none of its rows were read. The message names the category, the total it
+   * stated and the ceiling. `name` is the part, as the chain printed it.
+   */
+  LISTING_TRUNCATED = 'LISTING_TRUNCATED',
+  /**
    * A detail stage stopped because the chain stopped answering product pages,
    * and the run went on with what its listing read and still ended
    * `COMPLETED` (plan 0253). One per stage, with the counts in the message:

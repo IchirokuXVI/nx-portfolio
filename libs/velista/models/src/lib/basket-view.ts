@@ -1,3 +1,4 @@
+import type { AddOutcome } from './add-choice';
 import type { ProductOffer } from './domain';
 import type {
   BasketChangeMark,
@@ -348,6 +349,12 @@ export interface BasketProduct {
    * the kilo with no stated weight.
    */
   readonly approxWeight: number | null;
+  /**
+   * The step a curator set, in base units (backend `0261`), or null for the
+   * default. Required, so a conversion to another product shape cannot drop it
+   * unseen.
+   */
+  readonly quantityStep: number | null;
   /** The cheapest price at the run's scopes, or null where there is none. */
   readonly offer: ProductOffer | null;
   /**
@@ -938,8 +945,8 @@ export function shownPriceScope(
 /**
  * Where a settle says it happened, as a body fragment to spread (velista `0102`).
  *
- * **The one place a settle body learns about a shop**, used by the row, its reel and
- * the settle sheet alike, so the three cannot disagree.
+ * **The one place a settle body learns about a shop**, used by the row and
+ * the settle sheet alike, so the two cannot disagree.
  *
  * - With a shop chosen, the shop and the scope of the price the row drew, which is
  *   the product's `atShop.priceScopeId`. The server copies the chain beside them.
@@ -1279,8 +1286,8 @@ export interface BasketSettleRequest {
  * What a write on a row addresses (backend `0201`, section 4): the row's key for
  * the path, and the lines the write acts on.
  *
- * `BasketStore` builds it from the row it holds, so the page, the sheet and the
- * reel cannot name different lines for one row. The key is one of the lines.
+ * `BasketStore` builds it from the row it holds, so the page and the sheet
+ * cannot name different lines for one row. The key is one of the lines.
  */
 export interface BasketRowTarget {
   readonly rowKey: string;
@@ -1387,12 +1394,17 @@ export interface BasketAddLineRequest {
   /** A list from {@link Basket.lists}, which is one this reader holds `WRITE` on. */
   readonly targetListId: string;
   readonly content: string;
-  readonly quantity: number;
   /**
-   * What {@link quantity} counts (velista `0182`): the unit of the product added,
-   * and `UNIT` for typed text. Sent only when it is not `UNIT`.
+   * One step of the product's unit for a product add (velista `0185`). Absent for
+   * typed text, which states no amount: the server then makes a line of one piece,
+   * or shows the line of that name as it stands.
    */
-  readonly unit: LineUnit;
+  readonly quantity?: number;
+  /**
+   * What {@link quantity} counts (velista `0182`): the unit of the product added.
+   * Absent for typed text. Sent only when it is not `UNIT`.
+   */
+  readonly unit?: LineUnit;
   /** The product set a suggestion carried, as the list's own add takes it. */
   readonly itemIds?: readonly string[];
   /**
@@ -1432,6 +1444,13 @@ export interface BasketRowResult {
   readonly entries: readonly BasketRowEntry[];
   /** Set by a revert: entries whose line was deleted since, so no units went back. */
   readonly skippedCount: number;
+  /**
+   * What a line add did (backend `0260`, section 2), set by the add only. With
+   * `alreadyOnList` the entries are the lines the add met, unchanged, so the page
+   * finds their rows and shows them. Absent on every other write, and on an add
+   * answered by a gateway of before backend `0260`.
+   */
+  readonly addOutcome?: AddOutcome;
 }
 
 /**

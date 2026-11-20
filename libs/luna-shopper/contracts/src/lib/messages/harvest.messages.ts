@@ -427,6 +427,18 @@ export interface AdapterCapabilities {
    * price.
    */
   refreshesOneProduct: boolean;
+  /**
+   * The count of one finished walk of this source says about how big the next
+   * walk of it is (owner decision 127b), so the back office may draw "about M"
+   * beside a run in flight from an earlier run's total.
+   *
+   * False for `deza-web` alone. Its walk is capped queries split by search term
+   * until a pass adds nothing new or a budget ends (plan 0085), so two walks of
+   * one assortment can count different totals, and an earlier total is not a
+   * fair estimate. True for every other adapter. An adapter this build does
+   * not know answers false, which draws no estimate.
+   */
+  comparableWalkTotal: boolean;
 }
 
 /**
@@ -476,6 +488,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     provesDelisting: true,
     // One JSON request by product id and warehouse, no session (plan 0216).
     refreshesOneProduct: true,
+    comparableWalkTotal: true,
   },
   // The site prints no price at all, so a scope would be a required field that
   // does nothing (plan 0085).
@@ -496,6 +509,9 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     stockIndicator: 'per-shop',
     provesDelisting: false,
     refreshesOneProduct: false,
+    // Capped queries split by search term (plan 0085): two walks of one
+    // assortment can count different totals (owner decision 127b).
+    comparableWalkTotal: false,
   },
   'carrefour-web': {
     writesPrices: true,
@@ -514,6 +530,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     stockIndicator: null,
     provesDelisting: false,
     refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
   // The one source that states the region of every price it publishes and names
   // its own 730 shops (plan 0089).
@@ -533,6 +550,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     provesDelisting: false,
     // One page request by path, no session: the page a walk reads (plan 0216).
     refreshesOneProduct: true,
+    comparableWalkTotal: true,
   },
   'eljamon-web': {
     writesPrices: true,
@@ -552,6 +570,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     stockIndicator: null,
     provesDelisting: true,
     refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
   'dia-api': {
     writesPrices: true,
@@ -578,6 +597,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     stockIndicator: 'per-scope',
     provesDelisting: true,
     refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
   // OpenStreetMap carries a place's name and never a language for it, and a
   // shop name is a proper noun in any case, so there is nothing to claim here.
@@ -592,6 +612,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     stockIndicator: null,
     provesDelisting: false,
     refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
   // Nothing is printed: whatever a manual row holds, an operator typed, and the
   // operator says which language they typed it in.
@@ -606,6 +627,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     stockIndicator: null,
     provesDelisting: false,
     refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
 };
 
@@ -638,6 +660,7 @@ export function adapterCapabilities(
       stockIndicator: null,
       provesDelisting: false,
       refreshesOneProduct: false,
+      comparableWalkTotal: false,
     }
   );
 }
@@ -802,6 +825,66 @@ export interface HarvestRunView {
    * preset.
    */
   presetId: string | null;
+  /**
+   * The run's own request, as it was started (owner decision 114a): what
+   * `harvest_runs.input` stored, in the shape of a preset's input. **Never the
+   * preset's current input.** A preset can be edited after its runs, and this
+   * field is how a run still says what it read.
+   *
+   * **A record of what ran, not a request.** It has the type of a preset's
+   * input only for its shape. The values are the resolved ones the spawn
+   * stored, so a default is stated (`writes`, `details`, `radiusMetres`,
+   * `country`). A run stored before `writes` or `details` existed states the
+   * value its runner read in their place: both writes, every detail. The spawn
+   * refuses some of those stated values for some chains, so never send this
+   * back as a run request and never save it as a preset. A file import states
+   * its source kind and its window too (owner decision 129b), which is why the
+   * type is {@link HarvestRunInputRecord} and not a preset's input. Two things
+   * the run stored are left out. A file import's document is the run's
+   * `documentSha256` here, and the chain is the run's own `supermarketId`.
+   *
+   * **Null when the stored input cannot be read**: not an object, a mode this
+   * build does not know, or a field of the wrong type. Null says the request is
+   * unknown, never that it was empty, and an unknown request counts as
+   * narrowed. {@link isNarrowedRun} reads this field, null included, and
+   * {@link isNarrowedRunRequest} holds that rule.
+   */
+  input: HarvestRunInputRecord | null;
+  /**
+   * What shaped the walk outside its request, as a digest (owner decision
+   * 130b): sha256, hex, over a canonical JSON of the source row's `adapterKey`
+   * and its whole `config`, taken when the run was spawned. A Carrefour seed
+   * path is the example: it lives in `config`, it can shrink a walk, and the
+   * request does not state it.
+   *
+   * **A digest and never the configuration**, because a digest is enough to
+   * compare two runs and it stays small on every run row and list answer. Two
+   * runs whose digests are equal walked under the same configuration. The rate
+   * (`workers`, `maxRequestsPerSecond`) and `enabled` are not in it: they change
+   * how fast a walk goes, not what it walks.
+   *
+   * A store discovery that OpenStreetMap walks (no chain, or a chain whose
+   * adapter lists no shops) carries the digest of `osm-places` with an empty
+   * config instead (owner decision 137b), so two such runs carry one digest.
+   * The postal code queue stores both fields by the same rule as a person's
+   * spawn. Null for a file import, which no adapter walks, and for every run
+   * stored before that rule.
+   * {@link walkedUnderSameConfig} is the one rule that compares two of them,
+   * and a null on either side answers no.
+   */
+  configFingerprint: string | null;
+  /**
+   * The adapter that walked the run, as it was when the run was spawned
+   * (owner decisions 127b and 137b): the source row's, or `osm-places` for a
+   * store discovery OpenStreetMap walks. A reader can thus ask
+   * {@link adapterCapabilities} about the run without the sources list.
+   *
+   * Null where {@link configFingerprint} is: a file import, and every run
+   * stored before that rule. **A reader must treat a null, absent or unknown key as
+   * an adapter whose walk total is not comparable**: `adapterCapabilities`
+   * answers `comparableWalkTotal: false` for it, so no estimate is drawn.
+   */
+  adapterKey: AdapterKey | null;
   /**
    * The schedule that started this run (plan 0206, section 9), null for a run
    * a person or the postal code queue started. A deleted schedule leaves it.
@@ -1027,6 +1110,16 @@ export interface SourceCatalogEntryView {
    */
   packCount: number | null;
   categoryPath: string[];
+  /**
+   * Every category path the chain files the product under, each root first,
+   * in walk order, in the chain's own words (plan 0268). Context for the
+   * curator and the queue, never a category of ours. After a run that
+   * replaced the list, the first path is the one `categoryPath` holds. A run
+   * that added to it keeps the stored paths in their order and appends, so
+   * the first path can then differ from `categoryPath`. Empty for a row no
+   * walk of its chain has stated paths for since that plan.
+   */
+  categoryPaths: string[][];
   url: string | null;
   /**
    * The address of the photo the chain prints for the product, verbatim, or
@@ -1452,6 +1545,42 @@ export type HarvestRunPresetInput = Omit<
   | 'validUntil'
 >;
 
+/**
+ * A run's own request as the run view states it (owner decision 129b): a
+ * preset's input, and for a `FILE_IMPORT` the source kind and the window the
+ * spawn stored beside it.
+ *
+ * **A type of its own so a preset still cannot carry them.** A preset is
+ * {@link HarvestRunPresetInput}, which leaves the file import fields out, and
+ * this type is only ever read off a run.
+ *
+ * Every field it adds is absent on a run of another mode, and on a file import
+ * stored before the run view read them, never null.
+ */
+export interface HarvestRunInputRecord extends HarvestRunPresetInput {
+  /**
+   * What the prices of a `FILE_IMPORT` are stamped with: what observed them,
+   * not what uploaded them. The spawn stores one of the three official kinds,
+   * but the schema and the reader accept any `PriceSourceKind`.
+   */
+  sourceKind?: PriceSourceKind;
+  /**
+   * The window of a `FILE_IMPORT`'s prices as the spawn resolved it: ISO 8601
+   * instants, **not** the local days a spawn request takes. Both or neither:
+   * absent when the document stated no window and none was given, which is
+   * what a walk's export is.
+   */
+  validFrom?: string;
+  validUntil?: string;
+}
+
+export {
+  isNarrowedRun,
+  isNarrowedRunRequest,
+  walkedUnderSameConfig,
+} from './run-narrowing';
+export type { NarrowableRunRequest } from './run-narrowing';
+
 /** The latest run started from a preset, for the presets list. */
 export interface HarvestRunPresetLastRun {
   id: string;
@@ -1805,6 +1934,19 @@ export interface ListSourceEntriesRequest extends PageQuery, AdminCredential {
    * false leaves them out, and absent lists both (plan 0220, section 12).
    */
   delisted?: boolean;
+  /**
+   * True lists only the rows whose size their own price and comparison price
+   * disprove (`sizeDoubtImplied` set, plan 0249), false leaves them out, and
+   * absent lists both (admin plan 0072).
+   */
+  sizeDoubt?: boolean;
+  /**
+   * The one row with this id, whatever its status (admin plan 0073). Every
+   * other filter given still applies, and with no `status` the default
+   * `CANDIDATE` and `UNRESOLVED` clause is not added, because the row a link
+   * names can be decided already.
+   */
+  entryId?: string;
 }
 
 export interface SourceEntryIdRequest extends AdminCredential {

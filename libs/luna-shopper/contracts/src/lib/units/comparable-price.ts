@@ -6,8 +6,8 @@ import { toBaseUnit } from './source-size';
  *
  * Three values, read from the product's base unit alone: grams give a price
  * per kilo, millilitres a price per litre, a count a price per unit. The
- * chain's own `DOZEN` and `WASH` describe its `unitPrice` and are never a
- * comparable basis. Browser reachable: it names no `process`.
+ * chain's own `DOZEN` describes its `unitPrice` and is never a comparable
+ * basis. Browser reachable: it names no `process`.
  */
 export const COMPARABLE_BASES = ['KILOGRAM', 'LITER', 'UNIT'] as const;
 export type ComparableBasis = (typeof COMPARABLE_BASES)[number];

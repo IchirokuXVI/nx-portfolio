@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  HarvestRunMode,
   HarvestWarningCode,
   type SourceSizeUnit,
 } from '@portfolio/luna-shopper/contracts';
@@ -16,6 +17,7 @@ import type { HarvesterConfig } from '../config/app-config';
 import type { SupermarketSource } from '../entities';
 import { runWorkerPool } from '../runner/worker-pool';
 import type { CatalogDiscoveryInput, CatalogRunner } from './catalog-runner';
+import { DezaKeyGuard } from './deza-key-guard';
 import { entryKey, normalizeName } from './matching';
 import { listingWarning, type RunContext } from './run-context';
 import type { RunReport } from './run-report';
@@ -47,7 +49,13 @@ export { entryKey } from './matching';
  *    which upserts `source_catalog_entries` and runs the one ladder over it.
  *    **The EAN rung never fires here**, because the site has no EAN, so every
  *    automatic match is a `CANDIDATE` and none of them writes anything a shopper
- *    reads.
+ *    reads. A product goes when the section that saw it first ends, after its
+ *    split queries (plan 0267, section 6), and the sink writes a chunk each
+ *    time `PRODUCT_CHUNK` products wait. A walk that ends part way thus keeps
+ *    the rows that were written. An abort by a person or a deploy also writes
+ *    the chunk that was not full, at the drain. A runner that throws loses
+ *    that chunk, and a process that dies loses it too, with what was still
+ *    queued or in flight in the sink (plan 0267, notes of 2026-11-20).
  * 4. Read back which catalog item each product resolved to, from the outcomes.
  * 5. Resolve the shop codes through `source_locations` (plan 0084, section 6),
  *    and store a claim for every product at every shop, positive **and**
@@ -55,6 +63,11 @@ export { entryKey } from './matching';
  * 6. Call `supermarketLocationItem.setAvailability` once per mapped shop, with
  *    the stored claims of the products that are bound. The rest wait in the
  *    table for a binding or a mapping, and are sent when it happens.
+ *
+ * **Every category path of a product is stated at the end** (plan 0268): the
+ * section path and attribute icons of each sighting, in walk order. They are
+ * always added to the stored paths and never replace them, because a DEZA
+ * crawl never proves that it saw every section a product sits in.
  *
  * Step 3 is what makes an aborted run cheap to resume, exactly as plan 0038
  * section 6.3 describes: the snapshot is already the answer.
@@ -74,7 +87,10 @@ export { entryKey } from './matching';
 export class DezaCatalogRunner implements CatalogRunner {
   private readonly logger = new Logger(DezaCatalogRunner.name);
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly dezaKeys: DezaKeyGuard
+  ) {}
 
   async run(
     context: RunContext,
@@ -82,6 +98,16 @@ export class DezaCatalogRunner implements CatalogRunner {
     input: CatalogDiscoveryInput,
     source: SupermarketSource
   ): Promise<void> {
+    // The spawn refused this already while a stored row waits for its new
+    // key (plan 0272, section 5.1). Asked again before the first request, for
+    // a run that was inserted before the guard existed or before the rollout.
+    const dezaRefusal = await this.dezaKeys.refusal(
+      source,
+      HarvestRunMode.CATALOG_DISCOVERY
+    );
+    if (dezaRefusal) {
+      throw new Error(dezaRefusal);
+    }
     const settings = this.config.getOrThrow<HarvesterConfig>('harvester');
     const client = (): DezaClient =>
       new DezaClient({
@@ -114,7 +140,7 @@ export class DezaCatalogRunner implements CatalogRunner {
       workers: source.workers,
       signal: context.signal,
       handle: (section) =>
-        this.enumerateSection(context, crawl, client, section),
+        this.enumerateSection(context, crawl, client, report, section),
       onError: async (error, section) => {
         // A section that fails does not fail the run. It is counted, logged, and
         // named in the report as unfinished, which is the same thing the budget
@@ -124,6 +150,10 @@ export class DezaCatalogRunner implements CatalogRunner {
             `failed: ${String(error)}`
         );
         crawl.unfinished(section, [String(error)]);
+        // A section that threw has ended too, and what it recorded before it
+        // threw is as final as what a finished section recorded: the walk
+        // reported it at the end before plan 0267, and reports it now.
+        this.reportProducts(report, crawl.takeFirstSeen(section));
         await context.report({ failed: 1 });
       },
     });
@@ -139,11 +169,19 @@ export class DezaCatalogRunner implements CatalogRunner {
     await context.setTotalPlanned(crawl.products.size);
 
     // --- 3 and 4. The products this crawl saw ------------------------------
+    //
+    // Each finished section reported its products as it ended (plan 0267). What
+    // is left is the products of the sections an abort or the guard's stop cut
+    // short, which a graceful stop hands over as it always has. A walk that
+    // dies hard never gets here, and loses only those.
+    const left = crawl.takeUnreported();
     await context.setStage(
       'SNAPSHOT',
-      `Writing ${crawl.products.size} product(s)`
+      `Finishing the walk: ${left.length} of ${crawl.products.size} ` +
+        `product(s) left to record`
     );
-    this.reportProducts(report, crawl);
+    this.reportProducts(report, left);
+    this.reportCategoryPaths(report, crawl);
 
     // --- 5 and 6. The shops, and what each carries ------------------------
     //
@@ -163,7 +201,14 @@ export class DezaCatalogRunner implements CatalogRunner {
   }
 
   /**
-   * Steps 3 and 4: every product this crawl saw.
+   * Steps 3 and 4: the products one section saw first, when it ends, or what
+   * is left at the end of the walk (plan 0267, section 6).
+   *
+   * **A section is the unit, not a query.** DEZA knows a section's product set
+   * only after its split queries (plans 0257 and 0258), so nothing is reported
+   * while a section is still being narrowed. The observation of a product does
+   * not change after its first sighting: its category path is fixed then, and
+   * its shops travel in availability, which stays at the end.
    *
    * **It reports no price, ever.** The site prints none, and the blank price
    * elements in its markup are the storefront's own hidden pricing, which a
@@ -173,10 +218,17 @@ export class DezaCatalogRunner implements CatalogRunner {
    * however it is filtered, so a section the budget could not finish is a
    * section this run cannot speak for, and `harvest_runs.report` names each one
    * rather than a number claiming otherwise (plan 0085).
+   *
+   * `observedAt` is the time the section ended. No price reads it, because the
+   * run writes none, and the price writer needs no one value per run anyway:
+   * it compares the values and moves a confirmed row's clock only forward.
    */
-  private reportProducts(report: RunReport, crawl: Crawl): void {
+  private reportProducts(
+    report: RunReport,
+    products: ReadonlyArray<[string, CrawledProduct]>
+  ): void {
     const observedAt = new Date();
-    for (const [externalId, product] of crawl.products) {
+    for (const [externalId, product] of products) {
       report.product({
         externalId,
         name: product.name,
@@ -189,6 +241,7 @@ export class DezaCatalogRunner implements CatalogRunner {
         // printed, so the format gate never ran for a DEZA row.
         unitSize: product.unitSize,
         sizeUnit: product.sizeUnit,
+        approxWeight: product.approxWeight,
         sizeFormat: product.sizeFormat,
         packCount: product.packCount,
         categoryPath: product.categoryPath,
@@ -200,6 +253,24 @@ export class DezaCatalogRunner implements CatalogRunner {
         extra: null,
         prices: [],
       });
+    }
+  }
+
+  /**
+   * Every path of every product, after the walk and before the drain (plan
+   * 0268, section 3), once a product. Never on an observation: a section
+   * reports its products when it ends, and a later section can still list
+   * them.
+   *
+   * **Always `ADD`.** Each query answers at most 300 rows however it is
+   * filtered, and a capped section is split by search terms until a pass adds
+   * nothing or the budget ends, so no walk proves that it saw every section a
+   * product is filed in. A product the walk did not meet under a section is
+   * thus no proof that it left that section, and a stored path stays.
+   */
+  private reportCategoryPaths(report: RunReport, crawl: Crawl): void {
+    for (const [externalId, paths] of crawl.categoryPaths) {
+      report.categoryPaths(externalId, paths, 'ADD');
     }
   }
 
@@ -240,6 +311,7 @@ export class DezaCatalogRunner implements CatalogRunner {
     context: RunContext,
     crawl: Crawl,
     client: () => DezaClient,
+    report: RunReport,
     section: DezaSection
   ): Promise<void> {
     const state = crawl.begin(section);
@@ -322,6 +394,10 @@ export class DezaCatalogRunner implements CatalogRunner {
     }
 
     state.finish(stoppedBy);
+    // The section's split queries are over, so the products it saw first are
+    // known, and they go to the sink now (plan 0267, section 6). A product a
+    // later section also returns only adds shop codes there.
+    this.reportProducts(report, crawl.takeFirstSeen(section));
   }
 
   /**
@@ -431,6 +507,8 @@ interface CrawledProduct {
   /** The number the size states and the unit it is in (plan 0177). */
   unitSize: number | null;
   sizeUnit: SourceSizeUnit | null;
+  /** Grams of a size printed with `aprox`, null beside a size (plan 0266). */
+  approxWeight: number | null;
   /** Read from the description by the adapter (plan 0162). */
   packCount: number | null;
   brand: string | null;
@@ -595,7 +673,20 @@ class Crawl {
   readonly products = new Map<string, CrawledProduct>();
   /** Shop code -> the name the source printed for it, most recently. */
   readonly shops = new Map<string, string>();
+  /**
+   * Identity key -> the path of every sighting, in walk order, each once
+   * (plan 0268). The first is the one {@link products} keeps as its
+   * `categoryPath`. Only a key with a non empty path is here.
+   */
+  readonly categoryPaths = new Map<string, string[][]>();
 
+  /**
+   * Section code -> the keys of the products it saw first that are not
+   * reported yet, in the order it saw them (plan 0267, section 6). A section
+   * hands them over when it ends. {@link products} keeps every product for the
+   * end of the walk, which availability and the report read.
+   */
+  private readonly unreported = new Map<string, string[]>();
   private readonly incomplete: IncompleteSection[] = [];
   private readonly vocabularies = new Map<string, Vocabulary>();
   /** Section code -> its summary and the keys of the products it recorded. */
@@ -789,13 +880,34 @@ class Crawl {
   }
 
   /**
+   * The products a section saw first and nobody reported yet, taken: a second
+   * call for the same section answers nothing (plan 0267, section 6).
+   */
+  takeFirstSeen(section: DezaSection): Array<[string, CrawledProduct]> {
+    const keys = this.unreported.get(section.code) ?? [];
+    this.unreported.delete(section.code);
+    return this.productsOf(keys);
+  }
+
+  /**
+   * Every product not reported yet, taken: those of the sections an abort or
+   * the guard's stop cut short, which never ended.
+   */
+  takeUnreported(): Array<[string, CrawledProduct]> {
+    const keys = [...this.unreported.values()].flat();
+    this.unreported.clear();
+    return this.productsOf(keys);
+  }
+
+  /**
    * Record one row.
    *
    * **The listing repeats rows** (plan 0085, section 6): one product filed under
    * two sections comes back in both, and was seen twice inside a single result
    * set. The key is what deduplicates it. The section path of the **first**
    * sighting is kept, because a product genuinely filed in two places has no one
-   * true section and the first is as good an answer as the last.
+   * true section and the first is as good an answer as the last. The path of
+   * every sighting is kept for the category paths (plan 0268).
    *
    * Answers the row's key and whether it was new to the run, which is what a
    * section's barren rule, its growth rule and its `firstSeen` count read.
@@ -815,6 +927,10 @@ class Crawl {
 
     const summarized = this.summaries.get(section.code);
     summarized?.products.add(key);
+    // The attribute icons sit beside the section path because they are the
+    // only classification beyond the section the page offers (section 8).
+    const path = [...section.path, ...row.attributes];
+    this.keepPath(key, path);
     const held = this.products.get(key);
     if (held) {
       for (const shop of row.shops) {
@@ -830,14 +946,32 @@ class Crawl {
       sizeFormat: row.sizeFormat,
       unitSize: row.unitSize,
       sizeUnit: row.sizeUnit,
+      approxWeight: row.approxWeight,
       packCount: row.packCount,
       brand: row.brand,
-      // The attribute icons sit beside the section path because they are the
-      // only classification beyond the section the page offers (section 8).
-      categoryPath: [...section.path, ...row.attributes],
+      categoryPath: path,
       shops: new Set(row.shops.map((shop) => shop.code)),
     });
+    const waiting = this.unreported.get(section.code);
+    if (waiting) {
+      waiting.push(key);
+    } else {
+      this.unreported.set(section.code, [key]);
+    }
     return { key, added: true };
+  }
+
+  /** One sighting's path, kept once, after the paths met before it. */
+  private keepPath(key: string, path: string[]): void {
+    if (path.length === 0) {
+      return;
+    }
+    const paths = this.categoryPaths.get(key);
+    if (!paths) {
+      this.categoryPaths.set(key, [path]);
+    } else if (!paths.some((other) => sameNames(other, path))) {
+      paths.push(path);
+    }
   }
 
   toReport(): Record<string, unknown> {
@@ -871,6 +1005,17 @@ class Crawl {
     };
   }
 
+  private productsOf(keys: string[]): Array<[string, CrawledProduct]> {
+    const found: Array<[string, CrawledProduct]> = [];
+    for (const key of keys) {
+      const product = this.products.get(key);
+      if (product) {
+        found.push([key, product]);
+      }
+    }
+    return found;
+  }
+
   /** The summary of a section, made on its first mention. */
   private summarize(
     section: DezaSection
@@ -894,6 +1039,11 @@ class Crawl {
     }
     return held.summary;
   }
+}
+
+/** Whether two paths name the same nodes, in the same order and case. */
+function sameNames(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((name, i) => name === b[i]);
 }
 
 /** The words of a description that are worth narrowing a query by. */

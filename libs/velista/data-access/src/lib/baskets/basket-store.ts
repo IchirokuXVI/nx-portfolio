@@ -172,6 +172,8 @@ export class BasketStore {
   /** See {@link accessEnded}. */
   private readonly _accessEnded = signal<BasketAccessEnded | null>(null);
   private readonly _busyRows = signal<ReadonlySet<string>>(new Set());
+  /** How many writes are out per key of {@link _busyRows}. */
+  private readonly _busyCount = new Map<string, number>();
   private readonly _present = signal<readonly BasketPresenceEntry[]>([]);
   /** See {@link rowGone}. A counter, so the same sentence can be said twice. */
   private readonly _rowGone = signal(0);
@@ -429,7 +431,7 @@ export class BasketStore {
    * blocking a tap.
    *
    * Keyed by the row's own key and never by a line id, which is what the sheet and
-   * the reel both address a row by. A write on a row whose key changed underneath
+   * the row's glyph both address a row by. A write on a row whose key changed underneath
    * it clears the old key, which is right: the busy state belongs to the request,
    * and the request named that key.
    */
@@ -448,8 +450,8 @@ export class BasketStore {
   /**
    * The product id a `BOUGHT` settle on this row carries, or undefined.
    *
-   * **The one place the rule lives**, because three controls send a settle: the
-   * row's glyph, the row's reel and the sheet's buttons. Since backend `0201` it
+   * **The one place the rule lives**, because two places send a settle: the
+   * row's glyph and the settle sheet. Since backend `0201` it
    * is the row's own product: a row is one product, so there is nothing left to
    * choose between, and a row whose lines hold none names none.
    */
@@ -1148,19 +1150,20 @@ export class BasketStore {
   }
 
   /**
-   * Move a row's reel, which is a settle or a revert depending on the direction.
+   * Move what a row has left, which is a settle or a revert depending on the
+   * direction.
    *
-   * **The row reel's one call**, so the control has one thing to call and cannot
-   * get the direction wrong. Below `from` the difference was bought; above it, the
-   * difference comes back. Equal is nothing, which is what a reel dropped where it
-   * was picked up means, and it costs no request.
+   * **One call for both directions**, so a caller cannot get the direction wrong.
+   * It was the row reel's call; the reel is gone (velista `0190`) and no screen calls
+   * it now. Below `from` the difference was bought; above it, the difference comes
+   * back. Equal is nothing, and it costs no request.
    *
    * `next` is an **absolute** number and `from` is where it started, which is
    * velista `0054`'s bargain unchanged: a gesture whose meaning depends on where it
    * started must be refused rather than reinterpreted when the number moved
    * underneath it.
    *
-   * The ceiling the reel offers is `row.asked`, which is read and never computed.
+   * The ceiling is `row.asked`, which is read and never computed.
    *
    * `at` is where the purchase happened and what was bought: the scope of the price
    * the row drew (velista `0095`, section 6), the shop the person is buying at
@@ -1712,6 +1715,7 @@ export class BasketStore {
       return null;
     }
 
+    this._busyCount.set(rowKey, (this._busyCount.get(rowKey) ?? 0) + 1);
     this._busyRows.update((busy) => new Set(busy).add(rowKey));
     try {
       return await send(id);
@@ -1720,11 +1724,19 @@ export class BasketStore {
       await this._rereadIfOvertaken(error);
       return null;
     } finally {
-      this._busyRows.update((busy) => {
-        const next = new Set(busy);
-        next.delete(rowKey);
-        return next;
-      });
+      // Free only once the last write on this key is back: two lines of one row
+      // can each have a demand out (velista `0190`).
+      const left = (this._busyCount.get(rowKey) ?? 1) - 1;
+      if (left > 0) {
+        this._busyCount.set(rowKey, left);
+      } else {
+        this._busyCount.delete(rowKey);
+        this._busyRows.update((busy) => {
+          const next = new Set(busy);
+          next.delete(rowKey);
+          return next;
+        });
+      }
     }
   }
 

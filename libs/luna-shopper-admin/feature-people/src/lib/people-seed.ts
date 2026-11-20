@@ -1,3 +1,4 @@
+import { ADMIN_NAME_SEED } from '@portfolio/luna-shopper-admin/data-access';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
 
 /**
@@ -460,19 +461,10 @@ export const LIST_LINE_SEED: readonly ListLineRow[] = LIST_SEED.flatMap(
   (list) => list.lines
 );
 
-export const ADMIN_SEED: readonly AdminRow[] = [
-  {
-    adminId: 'admin-ichiroku',
-    username: 'ichiroku',
-    displayName: 'Ichiroku',
-    lastLoginAt: '2026-09-02T07:30:00.000Z',
-    disabledAt: null,
-  },
-  {
-    adminId: 'admin-retired',
-    username: 'retired',
-    displayName: null,
-    lastLoginAt: '2026-04-11T15:00:00.000Z',
-    disabledAt: '2026-05-01T00:00:00.000Z',
-  },
-];
+/**
+ * The admins, read from data access and not typed out again. The run page
+ * names who reverted a run from the same path, and the memory gateway seeds
+ * that path's table from whichever source asks first, so a second copy that
+ * drifted would let the screen opened first decide what the other shows.
+ */
+export const ADMIN_SEED: readonly AdminRow[] = ADMIN_NAME_SEED;

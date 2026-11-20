@@ -4,7 +4,23 @@ import {
   type AddTargetList,
   type HeldLine,
 } from '@portfolio/velista/models';
-import { coveredPageUrl, rowAdds } from './row-adds';
+import {
+  addFailedCopy,
+  coveredPageUrl,
+  rowAdds as rowAddsOf,
+} from './row-adds';
+
+/** The list's URL as the pages build it, for a product already on it. */
+const pathOf = (target: AddTargetList) =>
+  `/en/zones/${target.zoneId}/lists/${target.listId}`;
+
+function rowAdds(
+  target: AddTargetList | null,
+  held: readonly HeldLine[],
+  productOf?: Parameters<typeof rowAddsOf>[3]
+) {
+  return rowAddsOf(target, held, pathOf, productOf);
+}
 
 const WEEKLY: AddTargetList = {
   listId: 'list-weekly',
@@ -21,25 +37,60 @@ function line(part: Partial<HeldLine> & Pick<HeldLine, 'lineId'>): HeldLine {
     listId: 'list-weekly',
     name: 'Extra virgin olive oil',
     quantity: 1,
+    unit: 'UNIT',
     pending: false,
     itemIds: ['item-oil'],
     ...part,
   };
 }
 
+describe("rowAdds: the product's step (velista 0186, decision E)", () => {
+  const LOOSE = { unit: 'KILOGRAM', size: null, approxWeight: null };
+  const weighed = line({
+    lineId: 'line-chicken',
+    unit: 'GRAM',
+    quantity: 1000,
+    itemIds: ['item-chicken'],
+  });
+  const rowOf = (adds: ReturnType<typeof rowAdds>) =>
+    adds.of('item-chicken')?.lines[0];
+
+  it("steps a held row by the page's record of its product", () => {
+    const adds = rowAdds(WEEKLY, [weighed], (itemId) =>
+      itemId === 'item-chicken' ? { ...LOOSE, quantityStep: 250 } : null
+    );
+    expect(rowOf(adds)?.step).toBe(250);
+  });
+
+  it('prefers the step the store read for the line', () => {
+    const adds = rowAdds(WEEKLY, [{ ...weighed, step: 100 }], () => ({
+      ...LOOSE,
+      quantityStep: 250,
+    }));
+    expect(rowOf(adds)?.step).toBe(100);
+  });
+
+  it('says nothing with no record, so the row steps by the default', () => {
+    expect(rowOf(rowAdds(WEEKLY, [weighed], () => null))).not.toHaveProperty(
+      'step'
+    );
+    expect(rowOf(rowAdds(WEEKLY, [weighed]))).not.toHaveProperty('step');
+  });
+});
+
 describe('rowAdds (velista 0134, section 4.1)', () => {
   it('draws no plus at all with no list to add to', () => {
     const adds = rowAdds(null, [line({ lineId: 'line-oil' })]);
 
     expect(adds.plain).toBeNull();
-    expect(adds.byItem.size).toBe(0);
+    expect(adds.of('item-oil')).toBeNull();
   });
 
   it('gives a product the list does not hold the plus alone, and the same one to every such row', () => {
     const adds = rowAdds(WEEKLY, [line({ lineId: 'line-oil' })]);
 
     expect(adds.plain).toEqual({ list: 'Weekly shop', lines: [] });
-    expect(adds.byItem.has('item-rice')).toBe(false);
+    expect(adds.of('item-rice')).toBe(adds.plain);
     // One object for all of them, so a row is redrawn only when its own lines move.
     expect(rowAdds(WEEKLY, []).plain).toEqual(adds.plain);
   });
@@ -51,13 +102,18 @@ describe('rowAdds (velista 0134, section 4.1)', () => {
       line({ lineId: 'line-frying', name: 'Oil for frying', quantity: 3 }),
     ]);
 
-    expect(adds.byItem.get('item-oil')).toEqual({
+    expect(adds.of('item-oil')).toEqual({
       list: 'Weekly shop',
+      onList: {
+        lineId: 'line-oil',
+        path: '/en/zones/zone-home/lists/list-weekly',
+      },
       lines: [
         {
           lineId: 'line-oil',
           name: 'Extra virgin olive oil',
           quantity: 2,
+          unit: 'UNIT',
           editable: true,
           pending: false,
         },
@@ -65,14 +121,15 @@ describe('rowAdds (velista 0134, section 4.1)', () => {
           lineId: 'line-frying',
           name: 'Oil for frying',
           quantity: 3,
+          unit: 'UNIT',
           editable: true,
           pending: false,
         },
       ],
     });
-    expect(
-      adds.byItem.get('item-rice')?.lines.map((row) => row.lineId)
-    ).toEqual(['line-rice']);
+    expect(adds.of('item-rice')?.lines.map((row) => row.lineId)).toEqual([
+      'line-rice',
+    ]);
   });
 
   it('leaves out the lines of every other list', () => {
@@ -80,7 +137,7 @@ describe('rowAdds (velista 0134, section 4.1)', () => {
       line({ lineId: 'line-party', listId: 'list-party' }),
     ]);
 
-    expect(adds.byItem.size).toBe(0);
+    expect(adds.of('item-oil')).toBe(adds.plain);
   });
 
   it('puts a line that holds several products under each of them', () => {
@@ -92,9 +149,9 @@ describe('rowAdds (velista 0134, section 4.1)', () => {
       }),
     ]);
 
-    expect(adds.byItem.get('item-oil')?.lines).toHaveLength(1);
-    expect(adds.byItem.get('item-oil-other')?.lines).toEqual(
-      adds.byItem.get('item-oil')?.lines
+    expect(adds.of('item-oil')?.lines).toHaveLength(1);
+    expect(adds.of('item-oil-other')?.lines).toEqual(
+      adds.of('item-oil')?.lines
     );
   });
 
@@ -103,9 +160,120 @@ describe('rowAdds (velista 0134, section 4.1)', () => {
       line({ lineId: unsavedLineId('list-weekly', 'item-oil') }),
     ]);
 
-    expect(adds.byItem.get('item-oil')?.lines[0]).toMatchObject({
+    expect(adds.of('item-oil')?.lines[0]).toMatchObject({
       quantity: 1,
       editable: false,
+    });
+  });
+
+  /** Velista `0185`, C1 and decision D; decisions 51 and 52 of 2026-11-16. */
+  describe('a product already on the list', () => {
+    it('switches the plus off for a line above zero, naming the first in the order drawn', () => {
+      const adds = rowAdds(WEEKLY, [
+        line({ lineId: 'line-kept', quantity: 0 }),
+        line({ lineId: 'line-oil', quantity: 2 }),
+        line({ lineId: 'line-frying', quantity: 3 }),
+      ]);
+
+      expect(adds.of('item-oil')?.onList).toEqual({
+        lineId: 'line-oil',
+        path: '/en/zones/zone-home/lists/list-weekly',
+      });
+      // The lines keep their steppers.
+      expect(adds.of('item-oil')?.lines.map((row) => row.editable)).toEqual([
+        true,
+        true,
+        true,
+      ]);
+    });
+
+    it('counts a line of several products that holds it', () => {
+      const adds = rowAdds(WEEKLY, [
+        line({
+          lineId: 'line-fruit',
+          itemIds: ['item-bananas', 'item-apples'],
+        }),
+      ]);
+
+      expect(adds.of('item-bananas')?.onList?.lineId).toBe('line-fruit');
+    });
+
+    it('switches the plus off with no link for one saved line at zero (decision 51 of 2026-11-16)', () => {
+      const oil = rowAdds(WEEKLY, [
+        line({ lineId: 'line-kept', quantity: 0 }),
+      ]).of('item-oil');
+
+      expect(oil?.atZero).toBe(true);
+      expect(oil?.onList).toBeUndefined();
+      // The line stays under the card with its own stepper, which raises it.
+      expect(oil?.lines.map((held) => [held.lineId, held.editable])).toEqual([
+        ['line-kept', true],
+      ]);
+    });
+
+    it('switches the plus off the same way for two or more saved lines at zero', () => {
+      const oil = rowAdds(WEEKLY, [
+        line({ lineId: 'line-kept-a', quantity: 0 }),
+        line({ lineId: 'line-kept-b', quantity: 0, name: 'Oil for frying' }),
+      ]).of('item-oil');
+
+      expect(oil?.atZero).toBe(true);
+      expect(oil?.onList).toBeUndefined();
+      expect(oil?.lines.map((held) => [held.lineId, held.editable])).toEqual([
+        ['line-kept-a', true],
+        ['line-kept-b', true],
+      ]);
+    });
+
+    it('keeps the plus on for an add still on its way, which no list knows yet', () => {
+      const adds = rowAdds(WEEKLY, [
+        line({
+          lineId: unsavedLineId('list-weekly', 'item-rice'),
+          itemIds: ['item-rice'],
+        }),
+        line({ lineId: unsavedLineId('list-weekly', 'item-oil'), quantity: 0 }),
+      ]);
+
+      for (const itemId of ['item-rice', 'item-oil']) {
+        expect(adds.of(itemId)?.onList).toBeUndefined();
+        expect(adds.of(itemId)?.atZero).toBeUndefined();
+      }
+    });
+
+    it('names a line above zero over any line at zero', () => {
+      const wanted = rowAdds(WEEKLY, [
+        line({ lineId: 'line-kept-a', quantity: 0 }),
+        line({ lineId: 'line-kept-b', quantity: 0 }),
+        line({ lineId: 'line-wanted', quantity: 2 }),
+      ]).of('item-oil');
+
+      expect(wanted?.atZero).toBeUndefined();
+      expect(wanted?.onList?.lineId).toBe('line-wanted');
+    });
+
+    it('counts a line of any unit, whatever unit the plus adds in (decision 52 a)', () => {
+      // Bananas sold by the kilo, held on a line in pieces at zero: the plus is
+      // off, so it never meets the server's refusal for another unit.
+      const pieces = rowAdds(WEEKLY, [
+        line({ lineId: 'line-pieces', quantity: 0, unit: 'UNIT' }),
+      ]).of('item-oil');
+      expect(pieces?.atZero).toBe(true);
+
+      // A line above zero of another unit is a line on the list, with its link.
+      const wantedPieces = rowAdds(WEEKLY, [
+        line({ lineId: 'line-grams', quantity: 0, unit: 'GRAM' }),
+        line({ lineId: 'line-pieces', quantity: 2, unit: 'UNIT' }),
+      ]).of('item-oil');
+      expect(wantedPieces?.onList?.lineId).toBe('line-pieces');
+      expect(wantedPieces?.lines.map((row) => row.lineId)).toEqual([
+        'line-grams',
+        'line-pieces',
+      ]);
+    });
+
+    it('answers the same object for the same product, so a row is not redrawn', () => {
+      const adds = rowAdds(WEEKLY, [line({ lineId: 'line-oil' })]);
+      expect(adds.of('item-oil')).toBe(adds.of('item-oil'));
     });
   });
 
@@ -116,7 +284,7 @@ describe('rowAdds (velista 0134, section 4.1)', () => {
     ];
     const editable = (permissions: AddTargetList['permissions']) =>
       rowAdds({ ...WEEKLY, permissions }, held)
-        .byItem.get('item-oil')
+        .of('item-oil')
         ?.lines.map((row) => row.editable);
 
     expect(editable(['READ', 'WRITE'])).toEqual([false, true]);
@@ -155,5 +323,41 @@ describe('coveredPageUrl', () => {
     expect(coveredPageUrl({ parent: null } as ActivatedRouteSnapshot)).toBe(
       '/'
     );
+  });
+});
+
+describe('addFailedCopy (velista 0185, section 4)', () => {
+  it('says the generic sentence for any failure but a unit refusal', () => {
+    expect(addFailedCopy(null)).toEqual({
+      key: 'catalog.add.failed',
+      args: {},
+    });
+  });
+
+  it('says why for a product the list counts in another unit', () => {
+    expect(
+      addFailedCopy({ lineId: 'l1', name: 'Leche entera', unit: 'MILLILITER' })
+    ).toEqual({
+      key: 'list.error.addUnitDiffers.MILLILITER',
+      args: { name: 'Leche entera' },
+    });
+    expect(addFailedCopy({ lineId: null, name: 'Leche', unit: null }).key).toBe(
+      'list.error.addUnitDiffers.unknown'
+    );
+  });
+
+  it('says why a stale card’s plus did nothing, in the card’s own words', () => {
+    expect(
+      addFailedCopy(null, { kind: 'atZero', list: 'Weekly shop' })
+    ).toEqual({
+      key: 'catalog.held.atZero',
+      args: { list: 'Weekly shop' },
+    });
+    expect(
+      addFailedCopy(null, { kind: 'onList', list: 'Weekly shop' })
+    ).toEqual({
+      key: 'catalog.held.alreadyOn',
+      args: { list: 'Weekly shop' },
+    });
   });
 });

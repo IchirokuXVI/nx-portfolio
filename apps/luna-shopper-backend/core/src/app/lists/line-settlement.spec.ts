@@ -804,6 +804,58 @@ describe('line.settle (plan 0047, section 4)', () => {
 });
 
 /**
+ * A settle never deletes a line. The settle saves the lowered line BEFORE it
+ * inserts the buy, so a rule that fired on any save of a line at 0 would delete
+ * a line that is about to hold a purchase. Plan 0263 proposed deleting a line
+ * at 0 and the owner withdrew it on 2026-11-12; this pins the settle half.
+ *
+ * The line is as bare as a line gets: a product from a card, never named, no
+ * chain, no favourite, no comment and no buy.
+ */
+describe('a settle keeps the line it lowers to 0', () => {
+  function bare(quantity: number): Harness {
+    const w = build({ quantity, itemIds: [MILK_ITEM] });
+    Object.assign(w.line, {
+      named: false,
+      favoriteItemId: null,
+      preferredSupermarketId: null,
+      productGroupId: null,
+      deletedAt: null,
+    });
+    return w;
+  }
+
+  it.each([1, 3])(
+    'BOUGHT %i of a bare line at 1 leaves it standing at 0 with its buy',
+    async (bought) => {
+      const w = bare(1);
+
+      const { line, settlement } = await w.service.settle({
+        userId: SHOPPER,
+        lineId: 'li1',
+        outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
+        quantity: bought,
+      });
+
+      // Floored at 0, and the buy records what was bought (plan 0047, 4.2).
+      expect(line.quantity).toBe(0);
+      expect(settlement.quantity).toBe(bought);
+      expect(line.boughtCount).toBe(1);
+      // One save of the line, at 0 and not deleted, then one buy.
+      expect(w.saved).toHaveLength(1);
+      expect(w.saved[0]).toMatchObject({ quantity: 0, deletedAt: null });
+      expect(w.written).toHaveLength(1);
+      expect(w.written[0]).toMatchObject({ lineId: 'li1' });
+      // The line's own event, and never a deletion.
+      expect(w.events.map((entry) => entry.event)).not.toContain(
+        RealtimeEvent.LineDeleted
+      );
+    }
+  );
+});
+
+/**
  * Who settled a basket row, which the view could not say before plan 0151
  * section 5: `settledByUserId` is null there by the actor check.
  */

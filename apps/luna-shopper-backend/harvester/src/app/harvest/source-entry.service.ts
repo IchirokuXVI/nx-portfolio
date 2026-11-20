@@ -280,9 +280,15 @@ export class SourceEntryService {
     if (req.supermarketId) {
       qb.andWhere('e."supermarketId" = :sid', { sid: req.supermarketId });
     }
+    // Admin plan 0073: the id is how the back office addresses one entry, and
+    // the row a link names can be decided already, so an id with no `status`
+    // adds no default status clause. A `status` given beside it still applies.
+    if (req.entryId) {
+      qb.andWhere('e.id = :entryId', { entryId: req.entryId });
+    }
     if (req.status) {
       qb.andWhere('e.status = :status', { status: req.status });
-    } else {
+    } else if (!req.entryId) {
       qb.andWhere('e.status IN (:...queued)', { queued: QUEUED });
     }
     if (req.sourceKind) {
@@ -313,6 +319,13 @@ export class SourceEntryService {
       qb.andWhere('e."delistedAt" IS NOT NULL');
     } else if (req.delisted === false) {
       qb.andWhere('e."delistedAt" IS NULL');
+    }
+    // Admin plan 0072: true is the rows whose size their own prices disprove
+    // (plan 0249), false leaves them out, and absent lists both.
+    if (req.sizeDoubt === true) {
+      qb.andWhere('e."sizeDoubtImplied" IS NOT NULL');
+    } else if (req.sizeDoubt === false) {
+      qb.andWhere('e."sizeDoubtImplied" IS NULL');
     }
     if (cursor) {
       qb.andWhere('(e."lastSeenAt", e.id) < (:cv, :cid)', {

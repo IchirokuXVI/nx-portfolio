@@ -55,6 +55,7 @@ function item(
 ): CatalogItem {
   return {
     id,
+    quantityStep: null,
     name: { en, es: en },
     brand: null,
     size: null,
@@ -85,6 +86,7 @@ const OAT = item('item-oat', 'Oat drink', null, null);
 
 const PRODUCT: BasketProduct = {
   id: MILK.id,
+  quantityStep: null,
   name: MILK.name,
   brand: null,
   imageUrl: null,

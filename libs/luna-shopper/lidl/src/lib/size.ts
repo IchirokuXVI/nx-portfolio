@@ -41,8 +41,9 @@ const UNITS: Record<string, UnitToken> = {
 };
 
 /**
- * `6x200ml`, `500 g`, `1,5 l`, `4x 300 g`, `350 / g`. One optional multiplier,
- * one number, one unit, with the separators the chain actually prints.
+ * `6x200ml`, `2X100 g`, `500 g`, `1,5 l`, `4x 300 g`, `350 / g`. One optional
+ * multiplier, one number, one unit, with the separators the chain actually
+ * prints. A capital `X` multiplies as a small one does (plan 0270).
  *
  * Anchored at both ends, so a string that carries anything else does not parse.
  * That is the point: an unrecognised string is a missing size, which is honest,
@@ -51,7 +52,7 @@ const UNITS: Record<string, UnitToken> = {
  * numbers, and neither of them is the size of the pack.
  */
 const PRINTED_SIZE =
-  /^(?:(\d+)\s*[x×]\s*)?(\d+(?:[.,]\d+)?)\s*\/?\s*([A-Za-zÀ-ÿ]{1,8})\.?$/;
+  /^(?:(\d+)\s*[xX×]\s*)?(\d+(?:[.,]\d+)?)\s*\/?\s*([A-Za-zÀ-ÿ]{1,8})\.?$/;
 
 /** A unit with no number in front of it: `Ud` is one of that unit. */
 const BARE_UNIT = /^([A-Za-zÀ-ÿ]{1,8})\.?$/;

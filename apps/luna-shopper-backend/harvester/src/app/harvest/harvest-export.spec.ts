@@ -16,6 +16,7 @@ import { FileImportRunner } from './file-import.runner';
 import { buildHarvestDocument, digestOf, producerName } from './harvest-export';
 import { PriceScopeResolver } from './price-scope-resolver';
 import type { RunContext } from './run-context';
+import { withEntryWrites } from './source-entry-writes.fake';
 import { SourceIngest } from './source-ingest';
 
 /**
@@ -341,19 +342,22 @@ describe('importing a run this backend exported', () => {
   function receiver(document: HarvestDocument, items: unknown[] = []) {
     const saved: SourceCatalogEntry[] = [];
     let created = 0;
-    const entries = {
-      find: jest.fn(async () => [...saved]),
-      create: jest.fn((row: SourceCatalogEntry) => {
-        created += 1;
-        return { id: `imported-${created}`, ...row };
-      }),
-      save: jest.fn(async (row: SourceCatalogEntry) => {
-        if (!saved.includes(row)) {
-          saved.push(row);
-        }
-        return row;
-      }),
-    } as unknown as Repository<SourceCatalogEntry>;
+    const entries = withEntryWrites(
+      {
+        find: jest.fn(async () => [...saved]),
+        create: jest.fn((row: SourceCatalogEntry) => {
+          created += 1;
+          return { id: `imported-${created}`, ...row };
+        }),
+        save: jest.fn(async (row: SourceCatalogEntry) => {
+          if (!saved.includes(row)) {
+            saved.push(row);
+          }
+          return row;
+        }),
+      },
+      () => saved
+    ) as unknown as Repository<SourceCatalogEntry>;
 
     const priceRows: Record<string, unknown>[] = [];
     const prices = {

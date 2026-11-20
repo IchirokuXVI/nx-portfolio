@@ -33,8 +33,8 @@ import { RunRequestForm } from './run-request-form';
  * filters are in `runs-page.spec.ts`.
  */
 
-const MERCADONA = '11111111-1111-4111-8111-111111111111';
-const DEZA = '33333333-3333-4333-8333-333333333333';
+const MERCADONA = 'sm_mercadona';
+const DEZA = 'sm_deza';
 const NATIONAL = 'scope-national';
 const CORDOBA = 'scope-4661';
 const CORUNA = 'scope-4804';

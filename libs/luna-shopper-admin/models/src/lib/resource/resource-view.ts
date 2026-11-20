@@ -40,6 +40,12 @@ export interface ResourceCell {
    */
   readonly flag?: true;
   /**
+   * Whether the cell is an empty value said in the field's own words, in
+   * place of "None" (admin plan 0070): a step left empty reads "Default:
+   * 25 g". Drawn muted, as "None" is. Set only from `NumberField.emptyText`.
+   */
+  readonly empty?: true;
+  /**
    * The scope mark drawn before the value (admin plan 0041, section 10). Set
    * only from `FieldBase.scope`.
    */
@@ -179,6 +185,17 @@ function valueCell<T extends ResourceRow>(
   }
 
   if (value === null || value === undefined || value === '') {
+    if (field.kind === 'number') {
+      // An empty number the field has words for: "Default: 25 g".
+      const said = field.emptyText?.(row) ?? null;
+      if (said !== null) {
+        return said.kind === 'text'
+          ? { text: said.text, empty: true }
+          : said.args === undefined
+            ? { text: '', key: said.key, empty: true }
+            : { text: '', key: said.key, args: said.args, empty: true };
+      }
+    }
     return field.kind === 'reference' && field.unsetFlag !== undefined
       ? { text: '', key: field.unsetFlag, flag: true }
       : EMPTY;
@@ -199,10 +216,19 @@ function valueCell<T extends ResourceRow>(
       return text === '' ? EMPTY : { text };
     }
 
-    case 'number':
-      return typeof value === 'number' && Number.isFinite(value)
-        ? { text: new Intl.NumberFormat(options.locale).format(value) }
-        : EMPTY;
+    case 'number': {
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return EMPTY;
+      }
+      // With its unit where the field has one for this row: "250 g".
+      const unit = field.unit?.(row) ?? null;
+      return {
+        text:
+          unit === null
+            ? new Intl.NumberFormat(options.locale).format(value)
+            : unit.format(value, options.locale),
+      };
+    }
 
     case 'date':
       return formatDate(value, options.locale, field.time === true);

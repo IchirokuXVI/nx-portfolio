@@ -30,6 +30,7 @@ import {
 import { PostalCodeDiscoveryWorker } from './postal-code-discovery.worker';
 import type { RunExecutor } from './run-executor.service';
 import type { SupermarketSourceService } from './supermarket-source.service';
+import { walkConfigFingerprint } from './walk-fingerprint';
 
 const ADMIN = 'owner-1';
 
@@ -39,6 +40,7 @@ const OSM: PlaceSourceRef = {
   supermarketId: null,
   label: 'OpenStreetMap',
   autoImportPlaces: false,
+  walkSource: null,
 };
 
 /** A chain that names its own shops, for the runs that are not OpenStreetMap's. */
@@ -47,6 +49,7 @@ const LIDL: PlaceSourceRef = {
   supermarketId: 'chain-lidl',
   label: 'lidl-api',
   autoImportPlaces: false,
+  walkSource: { adapterKey: 'lidl-api', config: { country: 'ES' } },
 };
 
 function settings(overrides: Partial<HarvesterConfig> = {}): HarvesterConfig {
@@ -389,12 +392,14 @@ describe('PostalCodeDiscoveryService place sources (plan 0107)', () => {
       supermarketId: null,
       label: 'OpenStreetMap',
       autoImportPlaces: false,
+      walkSource: null,
     });
     expect(lidl).toEqual({
       sourceId: 'src-lidl',
       supermarketId: 'chain-lidl',
       label: 'lidl-api',
       autoImportPlaces: true,
+      walkSource: { adapterKey: 'lidl-api', config: {} },
     });
   });
 
@@ -640,6 +645,36 @@ describe('PostalCodeDiscoveryWorker (plan 0063)', () => {
     // The row is done when every run it started has finished, and it points at
     // the last one.
     expect(markDone).toHaveBeenCalledWith('q-1', 'run-2');
+  });
+
+  it('stores the adapter that walks each run and its fingerprint, as the spawn does (owner decision 137b)', async () => {
+    const { worker, create } = build({
+      pending: [row()],
+      due: [OSM, LIDL],
+    });
+
+    await worker.drain();
+
+    expect(create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        adapterKey: 'osm-places',
+        configFingerprint: walkConfigFingerprint({
+          adapterKey: 'osm-places',
+          config: {},
+        }),
+      })
+    );
+    expect(create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        adapterKey: 'lidl-api',
+        configFingerprint: walkConfigFingerprint({
+          adapterKey: 'lidl-api',
+          config: { country: 'ES' },
+        }),
+      })
+    );
   });
 
   it('filters a chain wide source to the code, and never OpenStreetMap', async () => {

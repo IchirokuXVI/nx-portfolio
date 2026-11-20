@@ -140,6 +140,9 @@ export function normalizeProduct(
     packCount: readPackCount(price),
     categorySlug: resolveCategory(path),
     categoryPath: path.map((node) => node.name),
+    detailCategoryPaths: readProductCategoryPaths(raw).map((branch) =>
+      branch.map((node) => node.name)
+    ),
     price: readPrice(price, soldByWeight),
     unitPrice: readNumber(price, 'bulk_price'),
     unitPriceLabel: readUnitPriceLabel(price),
@@ -575,6 +578,47 @@ function readProductCategoryPath(raw: Json): CategoryPathNode[] {
 }
 
 /**
+ * Every branch of the category chain a detail payload carries, each root
+ * first and deepest last, in the order the payload states them (plan 0268,
+ * section 3). A product filed under two roots, or under two children of one
+ * root, has two branches.
+ *
+ * {@link readProductCategoryPath} follows the first child at every level, so
+ * its answer is the first branch here. It stays as it is, because the
+ * category of a product is read from that one path.
+ *
+ * A node with no name is passed over and its children are still read, as
+ * {@link readProductCategoryPath} does. A branch with no named node is left
+ * out.
+ */
+export function readProductCategoryPaths(raw: Json): CategoryPathNode[][] {
+  const branches: CategoryPathNode[][] = [];
+  const walk = (node: Json, above: CategoryPathNode[]): void => {
+    if (!isRecord(node)) {
+      return;
+    }
+    const name = readString(node, 'name');
+    const path = name
+      ? [...above, { id: readNumber(node, 'id') ?? undefined, name }]
+      : above;
+    const children = readArray(node, 'categories').filter(isRecord);
+    if (children.length === 0) {
+      if (path.length > 0) {
+        branches.push(path);
+      }
+      return;
+    }
+    for (const child of children) {
+      walk(child, path);
+    }
+  };
+  for (const root of readArray(raw, 'categories')) {
+    walk(root, []);
+  }
+  return branches;
+}
+
+/**
  * The unavailable product (section 2.6): a 404 from a detail call is a **value**
  * meaning "not stocked in this warehouse", not an error. It sets availability
  * rather than failing a run, and carries no price at all rather than a stale one.
@@ -600,6 +644,7 @@ export function unavailableProduct(
     packCount: null,
     categorySlug: null,
     categoryPath: [],
+    detailCategoryPaths: [],
     price: null,
     unitPrice: null,
     unitPriceLabel: null,

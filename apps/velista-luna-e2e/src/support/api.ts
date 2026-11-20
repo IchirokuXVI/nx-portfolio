@@ -579,13 +579,15 @@ export async function deleteSection(
 /**
  * `GET /v1/admin/catalog/items?query=`, then `POST /v1/admin/catalog/items` when
  * no product carries this exact English name: one product, created once and kept
- * across runs, since a product nothing names costs nothing.
+ * across runs, since a product nothing names costs nothing. A brand, when given,
+ * is set on the product as it is created.
  */
 export async function ensureItem(
   admin: Session,
   name: { en: string; es: string },
   categoryIds: string[],
-  defaultUnit: 'UNIT' | 'KILOGRAM' | 'LITER' = 'UNIT'
+  defaultUnit: 'UNIT' | 'KILOGRAM' | 'LITER' = 'UNIT',
+  brand: string | null = null
 ): Promise<string> {
   const page = await admin.get<{
     items: { id: string; name: { en?: string } }[];
@@ -596,8 +598,57 @@ export async function ensureItem(
     name,
     categoryIds,
     defaultUnit,
+    ...(brand === null ? {} : { brand }),
   });
   return made.id;
+}
+
+/**
+ * `GET /v1/admin/catalog/product-groups?query=`, then `POST` when no group
+ * carries this slug: one group, created once and kept across runs, as
+ * {@link ensureItem} keeps its products.
+ */
+export async function ensureProductGroup(
+  admin: Session,
+  slug: string,
+  name: { en: string; es: string },
+  referenceUnit: 'UNIT' | 'KILOGRAM' | 'LITER'
+): Promise<string> {
+  const page = await admin.get<{ items: { id: string; slug: string }[] }>(
+    `/v1/admin/catalog/product-groups?query=${encodeURIComponent(name.en)}`
+  );
+  const held = page.items.find((one) => one.slug === slug);
+  if (held) return held.id;
+  const made = await admin.post<{ id: string }>(
+    '/v1/admin/catalog/product-groups',
+    { name, slug, referenceUnit }
+  );
+  return made.id;
+}
+
+/**
+ * `PATCH /v1/admin/catalog/items/:id` with `productGroupId`: the group a
+ * product is compared in (backend `0048`). Absolute, as {@link setQuantityStep}.
+ */
+export async function setProductGroup(
+  admin: Session,
+  itemId: string,
+  productGroupId: string | null
+): Promise<void> {
+  await admin.patch(`/v1/admin/catalog/items/${itemId}`, { productGroupId });
+}
+
+/**
+ * `PATCH /v1/admin/catalog/items/:id` with `quantityStep` (backend `0261`,
+ * section 3): the step a curator gives a product sold by the kilo,
+ * or null for the default. Absolute, so a run after a failed one starts the same.
+ */
+export async function setQuantityStep(
+  admin: Session,
+  itemId: string,
+  quantityStep: number | null
+): Promise<void> {
+  await admin.patch(`/v1/admin/catalog/items/${itemId}`, { quantityStep });
 }
 
 /**

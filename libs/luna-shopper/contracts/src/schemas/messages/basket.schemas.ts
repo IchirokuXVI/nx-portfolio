@@ -538,6 +538,9 @@ const rowResult = object(
     entries: array(ref(BASKET_SCHEMA_IDS.rowEntryView)),
     progress: ref(BASKET_SCHEMA_IDS.progress),
     skippedCount: integer({ minimum: 0 }),
+    // What the line add did (plan 0260, section 2), absent on every other
+    // row write.
+    addOutcome: ref(ENUM_IDS.addLineOutcome),
   },
   ['entries', 'progress']
 );

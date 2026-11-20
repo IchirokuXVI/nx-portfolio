@@ -27,9 +27,9 @@ import {
 import { DashboardPage, FEED_ROWS_ON_A_PHONE } from './dashboard-page';
 
 /** The chains the seed's queues name, so a spec can assert a link on one. */
-const MERCADONA = '11111111-1111-4111-8111-111111111111';
-const CARREFOUR = '22222222-2222-4222-8222-222222222222';
-const DEZA = '33333333-3333-4333-8333-333333333333';
+const MERCADONA = 'sm_mercadona';
+const CARREFOUR = 'sm_carrefour';
+const DEZA = 'sm_deza';
 
 interface Row extends ResourceRow {
   id: string;
@@ -213,7 +213,7 @@ describe('DashboardPage against the seed', () => {
     // The two per chain queues are one tile each: the sum of their chains.
     expect(byKey.get('entries')?.value).toBe(66);
     expect(byKey.get('shops')?.value).toBe(4);
-    expect(byKey.get('places')?.value).toBe(7);
+    expect(byKey.get('places')?.value).toBe(9);
     expect(byKey.get('memberships')?.value).toBe(3);
     expect(byKey.get('stale')?.value).toBe(623);
     expect(byKey.get('loginFailures')?.value).toBe(2);

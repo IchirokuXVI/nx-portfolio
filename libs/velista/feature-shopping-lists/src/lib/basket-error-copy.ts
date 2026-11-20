@@ -45,12 +45,11 @@ export type BasketOperation =
   | 'basket.share'
   /** Removing somebody from the basket. */
   | 'basket.people'
-  /** Saying how many are still to get, from the row's own number (velista 0054). */
-  | 'basket.outstanding'
   /** The summary: reading every list on a line, and changing what one asked for. */
   | 'basket.origins'
   /**
-   * Changing what one list **got**, from the summary's second reel (velista 0073).
+   * Changing what one list **got** (velista 0073). Its control was the summary's
+   * second reel, which went with velista 0190, and no screen sends it now.
    *
    * Apart from `basket.origins` because it is the opposite act on the same rows: that
    * one changes what a household asked for and buys nothing, and this one records a
@@ -122,7 +121,7 @@ export function basketErrorKey(
       // as it now stands rather than saying the save failed.
       //
       // Every operation, and deliberately not keyed on one: it means exactly the
-      // same thing to somebody dragging a row's number and to somebody typing a
+      // same thing to somebody stepping a list's amount and to somebody typing a
       // household's share.
       return 'basket.error.staleLine';
 
@@ -147,7 +146,6 @@ export function basketErrorKey(
     case 'conflict':
       switch (operation) {
         case 'basket.settle':
-        case 'basket.outstanding':
         case 'basket.originSettled':
           // Somebody else finished this line between the sheet opening and the tap
           // landing, which luna `0054` section 4 is what makes reachable as a
@@ -188,7 +186,6 @@ export function basketErrorKey(
         // fact the first two report.
         case 'basket.settle':
         case 'basket.reopen':
-        case 'basket.outstanding':
         case 'basket.origins':
         case 'basket.originSettled':
           // Access to one of the lists behind this line moved since the basket was

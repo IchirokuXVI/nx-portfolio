@@ -1,4 +1,17 @@
+> **PR:** [#989](https://github.com/IchirokuXVI/nx-portfolio/pull/989)
+
 # 0185: an add starts a line at one step, and a line already on the list is shown
+
+> **Note of 2026-11-12**, from the owner's rulings on backend `0260` (PR #984). Backend `0263` is
+> **withdrawn**: no write deletes a line because it reached 0. A line at 0 stays on its list,
+> hidden outside a search, and only a delete from the line's sheet or page removes it. Every line
+> at 0 is therefore a kept line, and an add that meets only lines at 0 raises one. A press of
+> minus that reaches 0 draws the stepper's trash (velista `0188`); on a line the visit made, the
+> catalog's own take back still deletes the line it made. Second: a product add lands on a line
+> of **its own unit** when one holds the product, even when an earlier line of another unit
+> holds it too, and is refused with `line_unit_differs` only when no line of its unit does. That
+> refusal now carries its own server sentence; `code` and `details` are unchanged, so section 4
+> stands. The sentences below that say otherwise are amended in place.
 
 > **Amended on 2026-11-11** from the owner's decisions of 2026-11-10 and 2026-11-11 (section 0).
 > The plan of 2026-11-09 sent a typed name as an open add that raised the line it met by one
@@ -22,9 +35,10 @@
 > Other plans of this batch touch the same screens, and each can be built before or after this
 > one: velista `0188` (the stepper with buttons, which replaces the reel that carries today's mark),
 > velista `0189` (the search field at the top of a list, which moves the composer), velista `0187`
-> (the product page's lists table), velista `0186` (the per product step), velista `0192` and
-> backend `0263` (a line with nothing to keep is deleted at zero), backend `0262` (the limit of
-> 999 999). This plan names their surfaces only where they meet its own.
+> (the product page's lists table), velista `0186` (the per product step), backend `0262` (the
+> limit of 999 999, which the owner brought down to 99 999 for every unit on 2026-11-17). Velista `0192` and backend `0263` (a line with nothing to keep deleted at
+> zero) were withdrawn on 2026-11-12. This plan names their surfaces only where they meet its
+> own.
 >
 > Prerequisite reading: backend `0260` in full (its wire shape wins over sections 3 and 6 here);
 > backend `0246` section 0 (W1, M8); velista `0170` targets 3 to 6 and its section 6; velista
@@ -97,9 +111,12 @@ link that opens the list at that line.
 - Backend `0260` answers an add that met a wanted line with 201, `merged: true`, `outcome:
   'ALREADY_ON_LIST'` and `alreadyOnList` (the lines, unchanged, same `version`). It raises a line
   kept at 0 by the add's amount (`RAISED`), creates at one step when nothing is met (`CREATED`),
-  and asks `line_add_needs_choice` only when a typed name meets two or more lines all at 0. A
-  free text add is never refused for a unit; a product add that meets only a line of another unit
-  is `line_unit_differs` with `details.line`.
+  and asks `line_add_needs_choice` when an add with `askIfAmbiguous` meets two or more lines, at
+  any amount, typed or a product (ruling 46 of 2026-11-16; the sentence of 2026-11-11 said only
+  a typed name meeting lines all at 0). A
+  free text add is never refused for a unit; a product add that meets only lines of another unit
+  is `line_unit_differs` with `details.line`. A line of the add's own unit that holds the product
+  takes the add even when an earlier line of another unit holds it too (2026-11-12).
 - The list page already marks a raised row: `_markTook` scrolls it to the centre when it is out of
   view and gives its quantity an amber edge for `TOOK_DURATION_MS` (`list-page.ts:2081` to
   `:2108`). The edge is an input of `QuantityReel` (`quantity-reel.ts:33`), which velista `0188`
@@ -122,14 +139,19 @@ link that opens the list at that line.
    "{name} is already on the list". On the shopping list the same, through `addOutcome`, with the
    rows found by a new `data-line-ids` attribute. A met line the page does not draw is said as a
    sentence on the composer instead.
-4. The duplicate question, now asked only about lines at 0, draws each row as "0 → 25 g" in the
-   row's own unit.
+4. The duplicate question is asked whenever an interactive add meets two or more lines, a typed
+   name or a chosen product, at any amount (ruling 46 of 2026-11-16). A row at 0 draws "0 → 25 g"
+   in its own unit, up to the server's `resultingQuantity`; a row above 0 draws its amount and says
+   in words that it is already on the list and that choosing it shows it. "A new line" is offered
+   for a typed name only.
 5. A product add refused with `line_unit_differs` draws one sentence above the composer row, keeps
    the words and focus, and creates nothing.
 6. The catalog tab (and the product page's similar products, which share `rowAdds`): a product
    that the selected list holds on a wanted line has its plus switched off, with "Ya está en
    {list}." and the link "Ver en la lista" under the card in place of the heading of its lines;
-   the lines keep their steppers. The catalog's own add starts a line at one step.
+   the lines keep their steppers. The catalog's own add starts a line at one step. (Since
+   decision 51 of 2026-11-16: any saved line of the product on that list, at any amount and in
+   any unit, switches the plus off; lines all at 0 say `catalog.held.atZero` with no link.)
 
 ### Scope
 
@@ -201,6 +223,24 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
   says why and a link: "Ya está en Compra semanal." and "Ver en la lista", which opens the list
   scrolled to that line. The message is real text with the app's info icon. The list's lines of
   that product stay under the card, each with its own stepper, and those steppers work.
+- **45. A refusal for another unit shows the line it names** (2026-11-16): scrolled to and
+  marked as an add already on the list is, or the sentence alone for a line the page does not
+  draw. Section 4.
+- **46. The server accepts no ambiguous add; the person picks the line** (2026-11-16). In the
+  owner's words: "If more than one line matches (it will also match if the line's amount is at
+  0), the user needs to pick one line. The server will return the possible lines to pick from
+  and on client side a choice will be shown to the user. If the line is filled and has an
+  amount, it won't step when selecting it, only scroll to it and highlight the line." His further
+  choices: every interactive add asks (the composer on the zone list, typed or a chosen card, and
+  the basket's add), also when every line it meets is above 0; "A new line" stays in the choice
+  for a typed name only, never for a chosen product; the catalog's plus is switched off when no
+  line holds the product above 0 and two or more saved lines of it are at 0, with a sentence that
+  says to raise one of the lines under the card with its own buttons and no link. Section 3.3 and
+  section 5. Backend `0260` rules 4 to 7 (PR #984) carry the wire side.
+  > **The catalog half is replaced by decision 51 (corrected, 2026-11-16), decision C.** The
+  > catalog's plus is off whenever the selected list has one or more saved lines of the product,
+  > at any amount, 0 included, in any unit: one line at 0 switches it off as two do. The choice
+  > rule above stands for the composer on the zone list and the basket's add.
 
 ### The writer's, open to the owner
 
@@ -211,6 +251,20 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
   product, whether the line holds it alone or with others. That is the server's rule (backend
   `0260` R2, R5). A product whose only lines are at 0 keeps its plus on: a press raises the kept
   line to one step, as the line's own stepper would.
+  > **Replaced on 2026-11-16 by the owner's decision 51 (corrected), with 52 and 53.** The plus
+  > on a product card is off whenever the chosen list has one or more lines with that product,
+  > at any amount, 0 included, in any unit. This covers the catalog card, the product page and
+  > the similar products rows, which share the card and `rowAdds`. It replaces this decision and
+  > the earlier ruling that the plus goes off only with two or more lines at 0 (decision 46 and
+  > section 5). A line above 0 keeps the sentence `catalog.held.alreadyOn` and its link. Lines
+  > all at 0, one or several, say `catalog.held.atZero` with no link, because the list hides its
+  > lines at 0; the person raises the line with its own stepper under the card, or by typing.
+  > **52 a:** any line of the product counts, whatever its unit, so a product sold by the kilo
+  > with a line of it in pieces has its plus off too, and the card never meets the refusal of
+  > section 4 for a line it draws. **53 b:** permissions stay as built. A member who can add
+  > but not change amounts gets no action on the card for a line at 0; that is accepted, and
+  > permissions are to be revisited later. The composer on the zone list and the basket's
+  > typeahead keep the choice rule of decision 46.
 - **D. The link opens the list with `?line=`**, the mechanism plan `0032` already built and the
   list page still reads. Its target is the first wanted line of the product in the order the card
   draws them (list position). The URL is `appPath(locale, basePath, 'zones', zoneId, 'lists',
@@ -229,12 +283,23 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
   `aria-describedby` pointing at the sentence, because a disabled button is not announced by
   itself and the sentence is the reason. The sentence is plain text in the card, not a tooltip,
   so it reads without a press.
+  > **Amended 2026-11-12, the owner's choice:** the plus is switched off with
+  > `aria-disabled="true"`, not `disabled`. It stays in the Tab order, a click, Enter or Space
+  > does nothing, it keeps `aria-describedby` on the sentence, and it is drawn switched off as
+  > before (the mock's frame "catalog D3" does the same, and so do the stepper's ends). The
+  > reason: the first add of a product switches its plus off under the focus that pressed it,
+  > and a `disabled` button drops that focus to the page, on every first add from a keyboard.
 - **H. The composer's cards on the zone list and the shopping list keep their plus on.** C1 names
   the catalog tab. A card's plus that meets a wanted line is answered `ALREADY_ON_LIST` and the
   page shows the line (target 3). Asked in section 9.
+  > **Amended 2026-11-16, owner ruling 46:** a card's plus that meets two or more lines asks
+  > which, as typed words do, with no "A new line".
 - **I. No optimistic row for a product a loaded wanted line holds.** `drawsBeforeAnswer` answers
   true for every product add today; it now answers false when a loaded wanted line of the list
   holds every product of the add, so a row that would vanish is never drawn.
+  > **Amended 2026-11-16, from review:** any loaded line, not turned down, that holds every
+  > product, at any amount. A kept line at 0 that holds it is raised where it stands (hidden or
+  > not, velista `0192`), so a row drawn for it would vanish too.
 
 ## 1. The composer
 
@@ -268,13 +333,14 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
 - `BasketRowResult` in velista gains `addOutcome` with the same three values, mapped in
   `basket-mappers.ts`, absent on every other write.
 - `drawsBeforeAnswer` (decision I): `addMayMeetLine` gains a product twin,
-  `addMayMeetProduct(lines, itemIds)`, true when a loaded line, not rejected, with quantity above 0,
-  holds every id.
+  `addMayMeetProduct(lines, itemIds)`, true when a loaded line, not rejected, at any amount, holds
+  every id (decision I as amended).
 - The in memory fakes follow backend `0260` section 1: a wanted line met answers `alreadyOnList`
   and writes nothing; a kept line met is raised by the add's amount; two or more kept candidates of
-  a typed name with `askIfAmbiguous` refuse with `line_add_needs_choice`; a product add meeting
-  only another unit refuses with `line_unit_differs` and `details.line`; a create starts at
-  `addAmount`.
+  a typed name with `askIfAmbiguous` refuse with `line_add_needs_choice`; a product add meets the
+  lines of its own unit first, wherever a line of another unit stands, and refuses with
+  `line_unit_differs` and `details.line` only when no line of its unit holds it; a create starts
+  at `addAmount`. No fake deletes a line that reaches 0 (backend `0263` withdrawn).
 
 ## 3. The pages after an add
 
@@ -299,6 +365,21 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
 
 ### 3.3 The question
 
+> **Owner ruling 46 of 2026-11-16.** The question is no longer "asked only about lines at 0".
+> Every interactive add sends `askIfAmbiguous`, a chosen product too, and two or more lines it
+> meets are always a question. Each entry of `details.lines` carries `outcome` (`RAISED` or
+> `ALREADY_ON_LIST`) and `resultingQuantity`, mapped into velista's own `AddChoiceLine`; an
+> entry without them (an older backend) reads `quantity > 0` as already on the list. A row whose
+> outcome is `RAISED` draws "from → to" up to `resultingQuantity`. A row already on the list
+> draws its amount and the words `list.addChoice.onList`, and its accessible name is
+> `list.addChoice.rowOnList` (or `rowOnListNoProduct`). Choosing a row sends the add again with
+> `intoLineId`: `ALREADY_ON_LIST` scrolls to the line, marks it and says the sentence once;
+> `RAISED` is today's raise; a 404 `not_found` closes the question and says the add's generic
+> failure, never a second question. "A new line" is drawn only for a typed name, and `newLine`
+> is never sent beside products (the gateway answers 400). An answer `ALREADY_ON_LIST` to an add
+> nobody could be asked about (rule 5) marks the lines the list draws and passes over those at 0.
+> The bullets below stand where this does not replace them.
+
 - `addChoiceRows(choice, facts)` loses `added` and `addedUnit`. Each row's `to` is
   `min(LINE_QUANTITY_MAX, from + addAmount(line.unit))`, a plain number; `from` is 0 in every
   question the server now asks.
@@ -319,8 +400,19 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
   sentence.
 - **The pages.** They do not call `sent()`, remove an optimistic row if one was drawn, and set the
   notice. The notice clears on the next `queryChanged`, the next submit, and `noticeDismissed`.
+- **The line it names is shown** (owner ruling 45, 2026-11-16). The sentence names the line
+  already on the list, and the page also scrolls to that line and marks it, exactly as an add
+  already on the list does (A1): the same took mark, the same scroll to the centre when the row
+  is out of view, on the zone list and on the shopping list. A line the page does not draw (a
+  filter, a collapsed section, a line past the loaded pages, or a line hidden at 0 by velista
+  `0192`) is not hunted: the sentence under the field alone. The sentence stays under the field
+  in both cases, because it carries the reason and the words and focus came back there.
 - **The catalog.** A refused catalog plus takes back what it drew and reports through
   `catalog.add.failed` with the sentence of the table below in its place.
+  > **Amended 2026-11-16, from review:** the store also holds the line `details.line` names
+  > (`lineId`, `content`, `unit`, `quantity`) as a saved line of that list and product, so the
+  > card switches its plus off by decision 51 and the next press is not refused again. A bag
+  > that does not name all four is held as nothing, as before.
 
 | key | `en` | `es` |
 | --- | --- | --- |
@@ -345,13 +437,22 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
   such line by the order the card draws, `path` from `pathOf(target)`, which the catalog page and
   the product page pass as `appPath(locale, basePath, 'zones', target.zoneId, 'lists',
   target.listId)` (decision D). `held` lines at 0 do not set it (decision C).
-- **The card.** With `onList`, the plus (`:550` to `:561`) renders `disabled`, with
+  > **Amended 2026-11-16, decision 51 corrected:** saved lines all at 0 set `atZero` and switch
+  > the plus off too, as the last bullet of this section says. `onList` stays the case of a line
+  > above 0, in any unit.
+- **The card.** With `onList`, the plus (`:550` to `:561`) renders `aria-disabled="true"` (decision G as amended), with
   `aria-describedby` the sentence's id; it keeps its size and place. Under the card, in place of
   the heading of the lines (`catalog.held.title`, `:583` to `:586`), one line: `lib-info-icon`
   (decorative, `aria-hidden`), the text `catalog.held.alreadyOn`, and a link
   `catalog.held.openLine` with `[routerLink]="onList.path"` and `[queryParams]="{ line:
   onList.lineId }"`. The lines and their steppers below are unchanged and work. Without `onList`
   the card is as today.
+  > **Note of 2026-11-17**, from the review of the stepper batch: the reason and the link were
+  > drawn with no space between them ("Already on Review walk.See it on the list", the same in
+  > Spanish), because the template's line break between the two elements is dropped. A
+  > preserved space (`&ngsp;`) now sits between them, so the sentence reads and is spoken as
+  > two sentences. The `atZero` sentence has no link and had no such slip; the product page's
+  > Similar products draw the same card and are fixed with it.
 - **The look**, from the mock's frame "catalog D3": the switched off plus has the same outline in
   the disabled tokens; the sentence is body text in the secondary colour, the link in the app's
   link style, underlined. The sentence wraps; the link never breaks inside itself. Token names are
@@ -361,6 +462,25 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
   the correction of adds still on their way (`:883`). `_correctUnit` (`:586`) is a unit change and
   stays. An answer `alreadyOnList` (a race: another device made the line) takes back what was
   drawn, records nothing in the visit, and lets the held line read the server's quantity.
+- **Two or more lines at 0** (owner ruling 46 of 2026-11-16): with no line of the product above
+  0 and two or more saved lines of it at 0 on the selected list, `rowAdds` sets `pickLine: true`.
+  The plus is switched off exactly as for `onList` (`aria-disabled`, `aria-describedby` on the
+  reason text only), and in place of the heading of the lines the card says
+  `catalog.held.pickLine`, with the info icon and no link, because the list hides its lines at
+  0. One line at 0 keeps the plus, which raises it.
+  > **Amended 2026-11-16, decision 51 corrected (decision C):** `rowAdds` sets `atZero: true`
+  > (in place of `pickLine`) whenever the list holds the product on saved lines all at 0, one
+  > line or several, in any unit, and `onList` whenever one of them is above 0, in any unit.
+  > A line an add still on its way drew counts for neither. `rowAdds(...).of(itemId)` no longer
+  > takes the add's unit. The key `catalog.held.pickLine` is replaced by `catalog.held.atZero`.
+
+| key | `en` | `es` |
+| --- | --- | --- |
+| `catalog.held.atZero` | This is on {{list}} at 0. Raise it below with its own buttons. | Esto está en {{list}} a 0. Súbelo abajo con sus propios botones. |
+| `list.addChoice.onList` | Already on the list. Choose it to see it. | Ya está en la lista. Elígela para verla. |
+| `list.addChoice.rowOnList` | {{name}}, {{product}}: already on the list with {{amount}}. Choose it to see it on the list | {{name}}, {{product}}: ya está en la lista con {{amount}}. Elígela para verla en la lista |
+| `list.addChoice.rowOnListNoProduct` | {{name}}: already on the list with {{amount}}. Choose it to see it on the list | {{name}}: ya está en la lista con {{amount}}. Elígela para verla en la lista |
+
 - **The product page** passes `pathOf` the same way for its similar products. Its own lists table
   is velista `0187`; this plan does not touch it.
 
@@ -383,7 +503,9 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
 - `row-adds.spec.ts`, `product-row.spec.ts`, `catalog-page.spec.ts`: a product held on a wanted
   line has the plus disabled with `aria-describedby`, the sentence, the link with `line` in its
   query, and its lines' steppers enabled; a product held only at 0 keeps its plus; a product held
-  on a line of several products counts.
+  on a line of several products counts. (Since decision 51 of 2026-11-16: a product held only at
+  0, on one line or several, or only on a line of another unit, has its plus off with
+  `catalog.held.atZero` and no link.)
 - `catalog-add-store.spec.ts`: a new line is drawn and answered at 25 g; `visitFloor` of a weight
   line the visit made is 25; an `alreadyOnList` answer takes the drawn amount back.
 - `list-page.spec.ts`: a `?line=` link from the catalog marks and centres the row (the test of plan
@@ -406,7 +528,8 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
 - The stepper with buttons and its steps (velista `0188`, `0186`).
 - The search field at the top (velista `0189`).
 - The product page's lists table (velista `0187`).
-- The deletion of a line at zero (velista `0192`, backend `0263`).
+- The deletion of a line at zero (velista `0192`, backend `0263`), withdrawn by the owner on
+  2026-11-12: no write deletes a line at 0.
 
 ## 8. Acceptance criteria
 
@@ -421,7 +544,9 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
       the words and focus, and creates nothing; a rename keeps its old sentence.
 - [ ] On the catalog tab a product on a wanted line of the selected list has its plus off, the
       sentence with the info icon, and a link that opens the list at that line, marked; its lines'
-      steppers work. A product on no wanted line keeps its plus, which adds at one step.
+      steppers work. A product on no saved line of that list keeps its plus, which adds at one
+      step; a product whose saved lines there are all at 0, in any unit, has its plus off with
+      `catalog.held.atZero` and no link (decision 51, 2026-11-16).
 - [ ] Every new key exists in `en` and `es`, with no number inside a key.
 - [ ] `npx nx affected -t lint test` is green, `npx nx build velista` builds, and the e2e tests of
       section 6 pass on a slot with backend `0260`.
@@ -430,6 +555,8 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
 
 1. **Decision C.** A product whose only line on the list is at 0 (bought and kept) keeps its plus,
    and a press raises that line to one step. Should it count as "already on the list" instead?
+   *Answered 2026-11-16 (decision 51 corrected): the plus is off for any line of the product, at
+   any amount and in any unit; see decision C.*
 2. **Decision H.** The cards under the composer on the zone list and on the shopping list keep their
    plus: a press on a product already on the list scrolls to its line and marks it. Do you want the
    switched off plus and the sentence there too?

@@ -206,7 +206,7 @@
                   (chosen)="choose($event)"
                   (lineStepped)="stepLine(row, $event)"
                   (opened)="open($event)"
-                  [add]="addOf(row.id)"
+                  [add]="addOf(row)"
                   [choice]="choiceOf(row.id)"
                   [row]="row"
                 />
@@ -349,7 +349,7 @@
 -->
   <p aria-live="polite" class="add-failed" role="status">
     @if (addFailed()) {
-      {{ 'catalog.add.failed' | rokuT }}
+      {{ addFailedText().key | rokuT: addFailedText().args }}
     }
   </p>
 

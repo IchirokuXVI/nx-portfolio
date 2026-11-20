@@ -1,3 +1,15 @@
+> **PR:** [#977](https://github.com/IchirokuXVI/nx-portfolio/pull/977)
+
+> **Withdrawn on 2026-11-12 by the owner.** In his words: "to prevent users from deleting a
+> line by mistake (which also removes the history and other things), a line will only be
+> deleted if you manually delete it from the sheet or line page. Lines with a quantity of 0
+> (or less, just in case) will be hidden and you can only see them when searching. This
+> already happens for lines that have at least 1 buy in the list, but the lines that were
+> never bought will also be hidden. This change of heart comes from the fact that I didn't
+> think about the assistant, users with only edit access, and probably more situations."
+> PR #977 now deletes nothing: it holds this note and specs, unit and real Postgres, that a
+> settle, a delta and a basket demand that take a bare line to 0 leave it standing at 0.
+
 # 0263: a line with nothing to keep is deleted at zero
 
 > Written on 2026-11-11 from the owner's decision of that day (section 7 of the batch
@@ -218,6 +230,11 @@ section 3.
   is now deleted by the server when a minus takes it to 0, where `0187` says such a line "is
   never deleted". That sentence of `0187` is superseded for a line with nothing to keep. Velista
   `0192` reads the answer.
+  > Note of 2026-11-17, from the review of the stepper batch: this take back is the only delete
+  > a minus makes, and it stays (velista `0185`, note of 2026-11-12). The catalog's added sheet
+  > now draws it like every other minus that reaches 0: the trash, and a name for what the press
+  > removes. Its weight lines reached the take back from a floor of one gram under their first
+  > step, with the plain bar and "Remove 1 g" (velista `0188`, section 5.5, note of 2026-11-17).
 - **The assistant.** `upsert_lines` in `set` mode with quantity 0 sends the `PATCH`
   (`tools.ts:397`); when the answer says `deleted`, the item reports `action: 'removed'` (a new
   member of `ItemResult.action`, `:1134`) and `describeLine` reads it. Its free text lines are

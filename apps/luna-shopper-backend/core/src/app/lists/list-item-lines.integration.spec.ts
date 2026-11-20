@@ -1,6 +1,7 @@
 import {
   LineApprovalStatus,
   ListPermission,
+  type LineUnit,
   LISTS_WITH_ITEM_LINES_LIMITS,
   MembershipStatus,
   ZoneRole,
@@ -127,6 +128,7 @@ describeIntegration(
       options: {
         position?: number;
         quantity?: number;
+        unit?: LineUnit;
         approvalStatus?: LineApprovalStatus;
         itemIds?: string[];
       } = {}
@@ -136,6 +138,7 @@ describeIntegration(
           listId,
           content,
           quantity: options.quantity ?? 1,
+          unit: options.unit ?? 'UNIT',
           approvalStatus: options.approvalStatus ?? LineApprovalStatus.APPROVED,
           position: options.position ?? 1,
           createdByUserId: users.shopper,
@@ -238,9 +241,12 @@ describeIntegration(
       lists.linesHoldingItem({ userId, itemId });
 
     it('names a list with its two lines that hold the product, by position', async () => {
+      // A weight line answers its grams and its unit, so a stepper steps it
+      // in kilos and not in pieces (plan 0187 criterion 1).
       const second = await seedLine(ids.weekly, 'More milk', {
         position: 7,
-        quantity: 3,
+        quantity: 1600,
+        unit: 'GRAM',
       });
       const first = await seedLine(ids.weekly, 'Milk', { position: 2 });
       // Another product on the same list is not a line of this answer.
@@ -254,12 +260,14 @@ describeIntegration(
           id: first,
           content: 'Milk',
           quantity: 1,
+          unit: 'UNIT',
           approvalStatus: LineApprovalStatus.APPROVED,
         },
         {
           id: second,
           content: 'More milk',
-          quantity: 3,
+          quantity: 1600,
+          unit: 'GRAM',
           approvalStatus: LineApprovalStatus.APPROVED,
         },
       ]);

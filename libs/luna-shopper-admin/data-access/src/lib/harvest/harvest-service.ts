@@ -471,6 +471,19 @@ export interface EntryQuery extends PageQuery {
    * person typing punctuation gets an empty list and not an error.
    */
   readonly brandKey?: string;
+  /**
+   * True lists only the rows whose size their own prices disprove (backend
+   * plan 0249), false leaves them out, and absent lists both (admin plan
+   * 0072). The queue sends only `true`, and absent otherwise.
+   */
+  readonly sizeDoubt?: boolean;
+  /**
+   * The one row with this id, whatever its status (admin plan 0073). Every
+   * other filter given still applies, and with no `status` the queue's default
+   * of the two waiting statuses is not added: the row a link names can be
+   * decided already. The gateway refuses a value that is not a uuid.
+   */
+  readonly entryId?: string;
 }
 
 /**

@@ -71,6 +71,7 @@ export * from './lib/lines/line-store';
 export * from './lib/lines/static-line-data';
 export * from './lib/lists/list-api';
 export * from './lib/lists/list-memory';
+export * from './lib/lists/list-rows-store';
 export * from './lib/lists/list-service';
 export * from './lib/lists/list-store';
 export * from './lib/lists/list-view-store';

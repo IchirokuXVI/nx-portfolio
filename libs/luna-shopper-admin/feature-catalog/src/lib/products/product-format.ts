@@ -27,10 +27,21 @@ const APPROX_MARK = '~';
 const BY_THE_KILO = 'by the kilo';
 
 /** The weight of one piece, in grams, as it reads: `1.56 kg`, `395 g`. */
-function formatGrams(grams: number, locale: string): string {
+export function formatGrams(grams: number, locale: string): string {
   return grams >= 1000
     ? `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(grams / 1000)} kg`
     : `${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(grams)} g`;
+}
+
+/**
+ * An amount in millilitres, as it reads: `1 L`, `250 ml`. The twin of
+ * {@link formatGrams}, for the step of a product sold by the litre (admin
+ * plan 0070).
+ */
+export function formatMillilitres(millilitres: number, locale: string): string {
+  return millilitres >= 1000
+    ? `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(millilitres / 1000)} L`
+    : `${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(millilitres)} ml`;
 }
 
 /**
@@ -143,6 +154,64 @@ export function formatSize(
   const one = word === '' ? number : `${number} ${word}`;
 
   return packed ? `${pack} x ${one}` : one;
+}
+
+/**
+ * The two sizes of a doubted source row as the sentence beside its size
+ * writes them (admin plan 0072): `125 g` and `500 g`, both for the whole pack
+ * and both in the row's own unit, so the number a person reads is the number
+ * they would type back as the size.
+ *
+ * Six significant digits rather than a fixed number of decimals, because a
+ * litre row that a price per millilitre disproves implies `0.0012 L`, and
+ * three decimals would print a size it does not imply.
+ *
+ * A row sized in units has no short word, so `units` words its count: the
+ * caller passes the translator's plural, which is handed the count as a number
+ * to choose the form by and the figure in the locale's format to print
+ * (`30 units`, `1 unit`, `1.5 units`).
+ *
+ * `label` is the price label as the chain printed it, with a leading `€/`
+ * left off, since the sentence already says "price per", lower cased and with
+ * one trailing full stop dropped, as the harvester keys its label table
+ * (backend plan 0249, `labelKey`): `KILO` reads `kilo` and `100 ML.` reads
+ * `100 ml`. The word stays the chain's. `''` for none, which picks the
+ * sentence that names no label.
+ */
+export function formatSizeDoubt(
+  doubt: {
+    readonly stated: number;
+    readonly implied: number;
+    readonly unit: string;
+    readonly label: string | null;
+  },
+  locale: string,
+  units: (count: number, figure: string) => string
+): {
+  readonly stated: string;
+  readonly implied: string;
+  readonly label: string;
+} {
+  const number = new Intl.NumberFormat(locale, {
+    maximumSignificantDigits: 6,
+  });
+  const word = UNIT_WORDS[doubt.unit] ?? '';
+  const size = (value: number): string =>
+    doubt.unit === 'UNIT'
+      ? units(value, number.format(value))
+      : word === ''
+        ? number.format(value)
+        : `${number.format(value)} ${word}`;
+  return {
+    stated: size(doubt.stated),
+    implied: size(doubt.implied),
+    label: (doubt.label ?? '')
+      .replace(/^\s*(€|eur)\s*\/\s*/i, '')
+      .trim()
+      .toLowerCase()
+      .replace(/\.$/, '')
+      .trim(),
+  };
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;

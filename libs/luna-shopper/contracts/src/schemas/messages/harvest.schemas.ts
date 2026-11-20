@@ -118,6 +118,9 @@ export const HARVEST_SCHEMA_IDS = {
   harvestRunPage: schemaId('harvest/HarvestRunPage'),
   // Plan 0120: run requests saved under a name.
   harvestRunPresetInput: schemaId('harvest/HarvestRunPresetInput'),
+  // Owner decision 129b: a run's own request, a file import's source kind and
+  // window included. Never what a preset takes.
+  harvestRunInputRecord: schemaId('harvest/HarvestRunInputRecord'),
   harvestRunPresetLastRun: schemaId('harvest/HarvestRunPresetLastRun'),
   harvestRunPresetView: schemaId('harvest/HarvestRunPresetView'),
   harvestRunPresetPage: schemaId('harvest/HarvestRunPresetPage'),
@@ -323,6 +326,23 @@ const harvestRunView = object(
     // office types its fixtures with the generated wire types, and every run
     // this service answers carries it anyway.
     presetId: nullableString(),
+    // Owner decision 114a, not required for the same reason. The run's own
+    // request as it was started, in a preset's input shape, and never the
+    // preset's current one. Null when the stored input cannot be read.
+    input: {
+      anyOf: [ref(HARVEST_SCHEMA_IDS.harvestRunInputRecord), { type: 'null' }],
+    },
+    // Owner decision 130b, not required for the same reason: a digest of the
+    // source row's adapter and config the run was spawned under, never the
+    // config itself. Null for a run with no source row, for a run the postal
+    // code queue started, and for every run stored before the column existed.
+    configFingerprint: nullableString(),
+    // Owner decisions 127b and 137b, not required for the same reason: the
+    // adapter that walked the run, read at its spawn. A reader treats null,
+    // absent or an unknown key as a walk total that is not comparable.
+    adapterKey: {
+      anyOf: [ref(HARVEST_SCHEMA_IDS.adapterKey), { type: 'null' }],
+    },
     // Plan 0206, not required for the same reason. `estimate` is absent on the
     // dashboard's runs, which do not compute it.
     scheduleId: nullableString(),
@@ -610,6 +630,14 @@ const sourceCatalogEntryProperties = {
   packaging: nullableString(),
   packCount: packCountOrNull(),
   categoryPath: array(string()),
+  // Plan 0268: every path the chain files the product under, root first, in
+  // the chain's own words. Stated but not required, so a reader built before
+  // it keeps validating what it holds.
+  categoryPaths: {
+    ...array(array(string())),
+    description:
+      'Every category path the chain files the product under, each root first, in walk order, in the chain’s own words. Context for a person, never a category of ours. Empty until a walk of the chain states them.',
+  },
   url: nullableString(),
   // Plan 0198: the photo address the chain prints, on the chain's own host.
   imageUrl: nullableString(),
@@ -1362,6 +1390,23 @@ const harvestRunPresetInput = object(
   runRequestProperties,
   ['mode']
 );
+
+/**
+ * A run's own request as its view states it (owner decision 129b): a preset's
+ * input, and for a FILE_IMPORT the source kind and the window the spawn stored.
+ * The window is ISO 8601 instants, not the local days a spawn takes, and it is
+ * both or neither. Every added field is absent on a run of another mode.
+ */
+const harvestRunInputRecord = object(
+  HARVEST_SCHEMA_IDS.harvestRunInputRecord,
+  {
+    ...runRequestProperties,
+    sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+    validFrom: string({ format: 'date-time' }),
+    validUntil: string({ format: 'date-time' }),
+  },
+  ['mode']
+);
 const harvestRunPresetLastRun = object(
   HARVEST_SCHEMA_IDS.harvestRunPresetLastRun,
   {
@@ -1726,6 +1771,8 @@ const listEntriesRequest = object(
     brandKey: string(),
     // Plan 0220: true lists the gone rows only, false leaves them out.
     delisted: boolean(),
+    // Admin plan 0072: true lists the rows whose size is in doubt only.
+    sizeDoubt: boolean(),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),
@@ -1996,7 +2043,7 @@ const adapterCapabilityTable: JsonSchema = {
   $id: HARVEST_SCHEMA_IDS.adapterCapabilityTable,
   type: 'object',
   description:
-    'What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. `stockIndicator` is how the source tells stock: `per-shop` when it names the shops that carry a product, `per-scope` when each listed row or a scoped answer states it, and null when it says nothing about stock. `provesDelisting` means a walk can read the whole listing of a scope, so a product the listing did not name counts as a miss. A reader that does not know an adapter must answer no to every boolean, null to the language, null to the band and null to the stock indicator rather than throw.',
+    'What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. `stockIndicator` is how the source tells stock: `per-shop` when it names the shops that carry a product, `per-scope` when each listed row or a scoped answer states it, and null when it says nothing about stock. `provesDelisting` means a walk can read the whole listing of a scope, so a product the listing did not name counts as a miss. `comparableWalkTotal` means the count of one finished walk says about how big the next walk of the source is, so an earlier total may be drawn as an estimate; false for `deza-web`, whose capped queries can count different totals for one assortment. A reader that does not know an adapter must answer no to every boolean, null to the language, null to the band and null to the stock indicator rather than throw.',
   const: ADAPTER_CAPABILITIES,
 };
 
@@ -2094,6 +2141,7 @@ export const harvestSchemas: JsonSchema[] = [
   postalCodeDiscoveryRequestPage,
   spawnRunRequest,
   harvestRunPresetInput,
+  harvestRunInputRecord,
   harvestRunPresetLastRun,
   harvestRunPresetView,
   harvestRunPresetPage,

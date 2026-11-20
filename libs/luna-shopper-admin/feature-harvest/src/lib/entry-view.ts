@@ -1,10 +1,12 @@
 import {
   formatCurrencyAmount,
   toOfficialSourceKind,
+  toSizeDoubt,
   toSourceEntryMatch,
   toSourceEntryStatus,
   unitPriceUnit,
   type OfficialSourceKind,
+  type SizeDoubt,
   type SourceEntryMatch,
   type SourceEntryStatus,
 } from '@portfolio/luna-shopper-admin/models';
@@ -49,6 +51,14 @@ export interface SourceEntryRow {
   /** The chain's own id for the product, or the key a keyless source gets. */
   readonly externalId: string;
   readonly categoryPath: string;
+  /**
+   * Every path the chain files the product under, each joined root first
+   * with ` / `, in walk order (backend plan 0268). The chain's own words, as
+   * context: no rule here reads them. Empty for a row no walk of its chain
+   * has stated them for yet, and for a value of a shape this app does not
+   * expect.
+   */
+  readonly categoryPaths: readonly string[];
   readonly url: string;
 
   /**
@@ -95,6 +105,13 @@ export interface SourceEntryRow {
   readonly lastSeen: string;
   /** The run that last observed it, for a link. `''` when the row predates one. */
   readonly lastRunId: string;
+
+  /**
+   * The size its own price and comparison price disprove (backend plan 0249),
+   * with both sizes in the row's unit, or `null` (admin plan 0072). It never
+   * holds a decision back: the server refuses a create that names no size.
+   */
+  readonly sizeDoubt: SizeDoubt | null;
 }
 
 /**
@@ -157,11 +174,8 @@ export function toSourceEntryRow(
     ean: asText(entry['ean']),
     sizeFormat: asText(entry['sizeFormat']),
     externalId: asText(entry['externalId']),
-    categoryPath: Array.isArray(entry['categoryPath'])
-      ? entry['categoryPath']
-          .filter((part): part is string => typeof part === 'string')
-          .join(' / ')
-      : '',
+    categoryPath: joinPath(entry['categoryPath']),
+    categoryPaths: readCategoryPaths(entry['categoryPaths']),
     url: asText(entry['url']),
     sourceKind: toOfficialSourceKind(entry['sourceKind']),
     status: toSourceEntryStatus(entry['status']),
@@ -174,6 +188,7 @@ export function toSourceEntryRow(
     extra: readExtra(entry['extra']),
     lastSeen: formatInstant(asText(entry['lastSeenAt']) || null, locale),
     lastRunId: asText(entry['lastRunId']),
+    sizeDoubt: toSizeDoubt(entry),
   };
 }
 
@@ -191,6 +206,29 @@ export function proposalOf(row: SourceEntryRow): EntryProposal {
     return 'item';
   }
   return row.candidateEntryId === '' ? 'none' : 'sibling';
+}
+
+/** One path as one line, root first, or `''` for a value that is no path. */
+function joinPath(value: unknown): string {
+  return Array.isArray(value)
+    ? value
+        .filter((part): part is string => typeof part === 'string')
+        .join(' / ')
+    : '';
+}
+
+/**
+ * Every path of a row, one line each (backend plan 0268). A value that is not
+ * a list reads as no paths, and an item that is not a path is left out.
+ */
+function readCategoryPaths(value: unknown): readonly string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((path) => Array.isArray(path))
+    .map(joinPath)
+    .filter((path) => path !== '');
 }
 
 function readPrices(

@@ -35,6 +35,61 @@ describe('toCatalogProduct: the weight of a piece (velista 0179)', () => {
   });
 });
 
+describe("toCatalogProduct: the product's step (velista 0186, backend 0261)", () => {
+  const loose = {
+    id: 'item-chicken',
+    name: { es: 'Pollo', en: 'Chicken' },
+    defaultUnit: 'KILOGRAM',
+    unitSize: null,
+  };
+
+  it('reads one of the ten steps', () => {
+    expect(
+      toCatalogProduct({ ...loose, quantityStep: 250 })?.quantityStep
+    ).toBe(250);
+  });
+
+  it.each([
+    ['an absent field', undefined],
+    ['a step off the list', 30],
+    ['a string', '250'],
+    ['zero', 0],
+  ])('reads %s as no step', (_, value) => {
+    expect(
+      toCatalogProduct({ ...loose, quantityStep: value })?.quantityStep
+    ).toBeNull();
+  });
+});
+
+/** The basis a unit price is per (backend `0157`, and `0264` for a wash). */
+describe('toCatalogProduct: the unit basis', () => {
+  const tablets = {
+    id: 'item-tablets',
+    name: { es: 'Pastillas', en: 'Tablets' },
+    defaultUnit: 'UNIT',
+    unitSize: 40,
+    bestOffer: { price: 9.95, unitPrice: 0.25, priceScopeId: 's-1' },
+  };
+  const basisOf = (unitBasis: unknown) =>
+    toCatalogProduct({
+      ...tablets,
+      bestOffer: { ...tablets.bestOffer, unitBasis },
+    })?.unitBasis;
+
+  it('reads a basis it knows', () => {
+    expect(basisOf('LITER')).toBe('LITER');
+  });
+
+  // An older backend may still send `WASH`, and a later one a value this build
+  // has never seen: both read as no basis, and the product still reads.
+  it.each([['WASH'], ['FURLONG'], [42], [undefined]])(
+    'reads %p as no basis, without dropping the product',
+    (value) => {
+      expect(basisOf(value)).toBeNull();
+    }
+  );
+});
+
 /** `GET /v1/catalog/items/:id/price-history` (backend `0196`, section 2). */
 describe('toProductPriceHistory', () => {
   const FROM = '2026-07-01T00:00:00.000Z';

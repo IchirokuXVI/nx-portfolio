@@ -69,4 +69,42 @@ export const SUPERMARKET_SEED: readonly Wire.CatalogSupermarketView[] = [
     linkedImagesEnabled: false,
     locationCount: 1,
   },
+  // The three chains the harvest seed walks and the five above do not cover,
+  // so a harvest screen names each of them with nothing listening.
+  //
+  // Each is named as the real catalog names it. Dia carries its Wikidata key,
+  // which `Dia Market` and `Maxi Dia` share. Deza has no key in the real
+  // catalog, so a place resolves it by printed name only. El Jamón carries
+  // `Q6135982`, as the real chain does. The harvest seed shows a place
+  // whose chain the catalog does not resolve with ALDI, which is not here.
+  {
+    id: 'sm_deza',
+    name: { en: 'Deza', es: 'Deza' },
+    logoUrl: null,
+    websiteUrl: 'https://www.deza.es',
+    externalBrandKey: null,
+    defaultPriceScopeId: null,
+    linkedImagesEnabled: false,
+    locationCount: 0,
+  },
+  {
+    id: 'sm_dia',
+    name: { en: 'Dia', es: 'Dia' },
+    logoUrl: null,
+    websiteUrl: 'https://www.dia.es',
+    externalBrandKey: 'Q925132',
+    defaultPriceScopeId: null,
+    linkedImagesEnabled: false,
+    locationCount: 0,
+  },
+  {
+    id: 'sm_eljamon',
+    name: { en: 'El Jamón', es: 'El Jamón' },
+    logoUrl: null,
+    websiteUrl: 'https://www.supermercadoseljamon.com',
+    externalBrandKey: 'Q6135982',
+    defaultPriceScopeId: null,
+    linkedImagesEnabled: false,
+    locationCount: 0,
+  },
 ];

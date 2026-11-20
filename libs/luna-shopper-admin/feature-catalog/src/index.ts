@@ -7,7 +7,7 @@ export { priceScopeSource } from './lib/catalog-sources';
 export { CHAIN_RESOURCES, chainsRoutes } from './lib/chains/chains-routes';
 export { LOCATIONS } from './lib/locations';
 export { PRICE_SCOPES, type PriceScope } from './lib/price-scopes';
-export { formatSize } from './lib/products/product-format';
+export { formatSize, formatSizeDoubt } from './lib/products/product-format';
 export { PRODUCT_SCOPE_QUERY } from './lib/products/product-prices-tab';
 export {
   PRODUCTS_SEGMENT,

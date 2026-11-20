@@ -14,6 +14,7 @@ import {
 import {
   AUTH_SERVICE,
   GoogleSignIn,
+  ListRowsStore,
   ProfileStore,
   SessionStore,
   TokenStore,
@@ -37,6 +38,7 @@ import {
 } from '@portfolio/velista/platform';
 import {
   AccountRow,
+  AccountSwitch,
   AppVersion,
   LegalLinks,
   localeName,
@@ -96,6 +98,7 @@ import { RenameAnnouncement } from '../rename-announcement';
     RokuTranslatorPipe,
     RouterOutlet,
     AccountRow,
+    AccountSwitch,
     AppVersion,
     LegalLinks,
     PageHeader,
@@ -128,6 +131,9 @@ export class AccountPage {
   private readonly _browser = inject(BrowserFacade);
   private readonly _brand = inject(APP_BRAND);
   private readonly _tour = inject(TourStore);
+
+  /** How this device draws the rows of a zone list (velista `0191`). */
+  protected readonly listRows = inject(ListRowsStore);
   private readonly _standaloneOrigin = inject(APP_STANDALONE_ORIGIN);
 
   /**

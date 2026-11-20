@@ -108,6 +108,12 @@ format apart, and rule 1 merges anything they do not separate.
   `item.defaultUnit` `KILOGRAM` and `item.unitSize` null.
 - `entry.categoryPath` is the chain's own shelf path. Read it as evidence for
   `item.categorySlugs`. The vocabulary is ours, and the chain's own words are not in it.
+- `entry.categoryPaths` lists every shelf the chain files the product under, each one
+  root first, in the chain's own words. `entry.categoryPath` is usually the first of
+  them. They are context for `item.categorySlugs`, never a category of ours: a shelf
+  such as `Ibéricos y quesos` says the product is most probably ham or cheese, and a
+  shelf such as `Especial otoño` says little. The list is empty when the chain has not
+  stated it yet.
 - `entry.brand` can be null even when the printed name states a brand.
 - `entry.ean` is the barcode the source published, or null.
 - `entry.sharedEan` is null, or it lists the other queued entries of this chain with the same

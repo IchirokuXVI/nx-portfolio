@@ -163,9 +163,9 @@ export interface UpdateLineRequest {
   /**
    * Replace the whole product set. An empty array clears it back to free text.
    *
-   * A whole set rather than an add or a remove, for the same reason the reorder
-   * request takes the whole order: two people editing a line's products would
-   * otherwise each send a delta against a set neither of them still has.
+   * A whole set rather than an add or a remove, because two people editing a
+   * line's products would otherwise each send a delta against a set neither of
+   * them still has.
    */
   readonly itemIds?: readonly string[];
   /**
@@ -193,12 +193,11 @@ export interface UpdateLineRequest {
 /**
  * Move a line's quantity by a **signed delta** (backend plan 0040, section 3).
  *
- * Not an absolute number, and that is the whole design of the reel (velista plan
- * 0043, section 4.1). Absolute writes from a moving control race each other and
- * the loser silently wins; a delta is applied atomically under the row's lock and
- * cannot. One per settled adjustment, sent when the overlay closes rather than
- * during the drag, so it is one request however many times the thumb went back
- * for more inside that window.
+ * Not an absolute number, and that is the whole design of the stepper's write
+ * (velista plan 0043, section 4.1). Absolute writes from a moving control race each
+ * other and the loser silently wins; a delta is applied atomically under the row's
+ * lock and cannot. One per settled adjustment, sent after the presses stop (velista
+ * `0188`), so it is one request however many presses or repeats came before it.
  *
  * Never zero. The server refuses it, and a gesture that ended where it started is
  * not an adjustment to send.
@@ -273,10 +272,6 @@ export type SettleLineOptions = Pick<
  */
 export interface SetLineApprovalRequest {
   readonly approvalStatus: LineApprovalStatus;
-}
-
-export interface ReorderLinesRequest {
-  readonly orderedLineIds: readonly string[];
 }
 
 export interface AddCommentRequest {

@@ -25,7 +25,7 @@ import type {
 } from './catalog-runner';
 import { photoOf } from './photo-address';
 import type { RunContext } from './run-context';
-import type { RunReport } from './run-report';
+import type { CategoryPathsMode, RunReport } from './run-report';
 import type {
   SourceObservation,
   SourceObservationPrice,
@@ -50,7 +50,10 @@ import type {
  *    parallel, because the session is server state: start a session, confirm
  *    it holds the scope's own store, and walk every leaf, page by page.
  * 3. `INGEST`. Report every product once, with one regular price per walked
- *    scope that listed it, and its availability per walked scope.
+ *    scope that listed it, and its availability per walked scope. This is at
+ *    the end of the walk and not as it goes (plan 0267, section 4): an
+ *    observation is final only after the last scope, so a report per scope
+ *    would write a product twice and count it twice.
  *
  * **The price written is the regular one, never the Club Dia price** (section
  * 4). The club price goes in `extra.loyalty`, which no shopper reads.
@@ -127,6 +130,12 @@ export class DiaCatalogRunner implements CatalogRunner {
       );
       if (observation) {
         report.product(observation);
+        // Every leaf it was listed under, after the walk (plan 0268).
+        report.categoryPaths(
+          product.skuId,
+          product.leaves.map((leaf) => [leaf.rootName, leaf.name]),
+          pathsModeOf(product, walk, context.signal)
+        );
       }
       for (const claim of availabilityOf(product, walk)) {
         report.availability(claim);
@@ -376,10 +385,25 @@ export class DiaCatalogRunner implements CatalogRunner {
 /** One product, as every scope that listed it described it. */
 interface WalkedProduct {
   skuId: string;
-  /** The first leaf it appeared under, which names its category path. */
-  firstLeaf: DiaLeaf;
-  /** Every leaf it appeared under, in walk order. */
-  leafIds: string[];
+  /**
+   * Every leaf it appeared under, in walk order. The first names its
+   * category path, and every one is a path of `categoryPaths` (plan 0268).
+   */
+  leaves: DiaLeaf[];
+}
+
+/** How many products a leaf of `unslottedOnly` names (plan 0268, section 5). */
+const UNSLOTTED_EXAMPLES = 5;
+
+/** One leaf with no slug that holds products from such leaves only. */
+interface UnslottedLeaf {
+  id: string;
+  rootName: string;
+  name: string;
+  /** Products only from leaves with no slug, listed under this leaf. */
+  products: number;
+  /** The first five, in walk order. */
+  examples: Array<{ externalId: string; name: string }>;
 }
 
 /** What one scope's walk accumulates. */
@@ -506,14 +530,49 @@ class Walk {
     }
     const product = this.products.get(row.skuId);
     if (!product) {
-      this.products.set(row.skuId, {
-        skuId: row.skuId,
-        firstLeaf: leaf,
-        leafIds: [leaf.id],
-      });
-    } else if (!product.leafIds.includes(leaf.id)) {
-      product.leafIds.push(leaf.id);
+      this.products.set(row.skuId, { skuId: row.skuId, leaves: [leaf] });
+    } else if (!product.leaves.some((known) => known.id === leaf.id)) {
+      product.leaves.push(leaf);
     }
+  }
+
+  /**
+   * The products listed only under leaves with no slug, by leaf (plan 0268,
+   * section 5). A leaf has no slug when `DIA_CATEGORY_SLUGS` does not map its
+   * id, whether `DIA_CATEGORY_NAMES` names it or not, and such a product
+   * resolves to `uncategorised`. `unmappedLeaves` keeps its own meaning: a
+   * leaf the table does not know at all.
+   *
+   * A product under two such leaves counts once in `products` and once under
+   * each leaf. The leaves are in the order the walk met them.
+   */
+  unslottedOnly(): { products: number; leaves: UnslottedLeaf[] } {
+    let products = 0;
+    const leaves = new Map<string, UnslottedLeaf>();
+    for (const product of this.products.values()) {
+      if (
+        product.leaves.some((leaf) => DIA_CATEGORY_SLUGS[leaf.id] !== undefined)
+      ) {
+        continue;
+      }
+      products += 1;
+      const name = this.rowOf(product.skuId)?.displayName ?? '';
+      for (const leaf of product.leaves) {
+        const entry = leaves.get(leaf.id) ?? {
+          id: leaf.id,
+          rootName: leaf.rootName,
+          name: leaf.name,
+          products: 0,
+          examples: [],
+        };
+        entry.products += 1;
+        if (entry.examples.length < UNSLOTTED_EXAMPLES) {
+          entry.examples.push({ externalId: product.skuId, name });
+        }
+        leaves.set(leaf.id, entry);
+      }
+    }
+    return { products, leaves: [...leaves.values()] };
   }
 
   toReport(
@@ -550,6 +609,8 @@ class Walk {
       movedLeaves: [...this.movedLeaves.values()],
       unmappedLeaves: this.unmappedLeaves,
       renamedLeaves: this.renamedLeaves,
+      /** Products every leaf of which has no slug, by leaf (plan 0268). */
+      unslottedOnly: this.unslottedOnly(),
       listed: this.products.size,
       clubPrices: rows.filter((row) => row.prices?.isClubPrice).length,
       promotions: rows.filter((row) => row.promotions.length > 0).length,
@@ -728,7 +789,7 @@ function observationOf(
   const extra: Record<string, unknown> = {
     // Every leaf the product was listed under, which is what files it under
     // our categories (section 7).
-    diaCategoryIds: product.leafIds,
+    diaCategoryIds: product.leaves.map((leaf) => leaf.id),
   };
   if (row.weightInGrams !== null) {
     extra['weightInGrams'] = row.weightInGrams;
@@ -752,7 +813,7 @@ function observationOf(
     approxWeight: weight.approxWeight,
     sizeFormat: size.sizeFormat,
     packCount: packCountOf(size.packCount),
-    categoryPath: [product.firstLeaf.rootName, product.firstLeaf.name],
+    categoryPath: [product.leaves[0].rootName, product.leaves[0].name],
     url: row.url ? absolute(row.url) : null,
     // The listing's `image`, made absolute against the chain's own host
     // (plan 0198). It used to sit in `extra`, which nothing reads.
@@ -797,6 +858,30 @@ function availabilityOf(
     }
   }
   return claims;
+}
+
+/**
+ * Whether the paths of a product are every leaf it sits under (plan 0268,
+ * section 3): `REPLACE` when a scope that listed it read its whole listing,
+ * because that scope asked every page of every leaf, and `ADD` otherwise. A
+ * leaf is DIA's menu, the same for every store, so one whole scope is
+ * enough. An aborted run says `ADD`, and the sink would make it so anyway.
+ */
+function pathsModeOf(
+  product: WalkedProduct,
+  walk: Walk,
+  signal: AbortSignal
+): CategoryPathsMode {
+  if (signal.aborted) {
+    return 'ADD';
+  }
+  const whole = walk.scopes.some(
+    (scope) =>
+      scope.finished &&
+      scope.failedPages === 0 &&
+      scope.listed.has(product.skuId)
+  );
+  return whole ? 'REPLACE' : 'ADD';
 }
 
 /**

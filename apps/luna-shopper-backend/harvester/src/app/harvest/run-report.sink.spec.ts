@@ -9,7 +9,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { packCountIn as dezaPackCount } from '@portfolio/luna-shopper/deza';
 import { splitSize as elJamonSize } from '@portfolio/luna-shopper/eljamon';
-import type { Repository } from 'typeorm';
+import type { FindOperator, Repository } from 'typeorm';
 import type { SourceCatalogEntry, SourceLocation } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
 import type { DiscoveredPlaceService } from './discovered-place.service';
@@ -24,12 +24,13 @@ import type {
   SourceEntryAvailabilityWriter,
   StoredClaim,
 } from './source-entry-availability';
-import type {
-  PriceConflict,
+import {
   SourceIngest,
-  SourceIngestCounters,
-  SourceIngestImages,
-  SourceObservation,
+  type CategoryPathsWrite,
+  type PriceConflict,
+  type SourceIngestCounters,
+  type SourceIngestImages,
+  type SourceObservation,
 } from './source-ingest';
 import type { SourceLocationService } from './source-location.service';
 
@@ -87,6 +88,12 @@ function build(
   options: {
     /** The item each pushed external id resolves to, and whether it is ACTIVE. */
     resolves?: Record<string, { itemId: string; active: boolean }>;
+    /**
+     * What a person decided a row as after its chunk was written, by external
+     * id, which the drain reads again (plan 0269, section 5). Null is a row
+     * that is no longer bound.
+     */
+    decidedSince?: Record<string, { itemId: string; active: boolean } | null>;
     /** The chain's tracked rows, for the negative availability diff. */
     tracked?: Array<{ externalId: string; itemId: string }>;
     shops?: Array<Partial<SourceLocation>>;
@@ -120,6 +127,8 @@ function build(
     weightHasSize?: string[];
     /** Products whose weight a person wrote (plan 0244). */
     weightSetByAdmin?: string[];
+    // Plan 0261, S6: products a person gave a step.
+    weightHasStep?: string[];
     /** Whether the chain may declare a whole listing (plan 0220, 15.3). */
     provesDelisting?: boolean;
     /**
@@ -130,13 +139,21 @@ function build(
     listedOnce?: string[];
     /** How many places of a chunk the place service refreshed, not created. */
     placesRefreshed?: number;
+    /** The pushes, by their index from 0, that reject with this error (plan 0269). */
+    pushFails?: Record<number, Error>;
+    /** The category paths each row holds before the run, by external id (plan 0268). */
+    storedPaths?: Record<string, string[][]>;
+    /** Whether the run's signal is aborted by the time it drains. */
+    aborted?: boolean;
+    /** The update of category paths, by its index from 0, that rejects. */
+    pathUpdateFails?: { at: number; error: Error };
   } = {}
 ) {
   const pushed: SourceObservation[][] = [];
   const opened: unknown[] = [];
   /** Every outcome a push answered, which is what `close` answers for the run. */
   const outcomes: unknown[] = [];
-  const closed = jest.fn(async () => ({
+  const totalsOf = () => ({
     outcomes,
     counters: {
       created: 0,
@@ -167,13 +184,63 @@ function build(
       failed: 0,
       ...options.images,
     },
-  }));
+  });
+  // The category paths of the rows, written through the ingest's own
+  // `writeCategoryPaths` over a repository that holds them (plan 0268): a row
+  // exists once a push wrote it, or when the test stored paths on it.
+  const storedPaths = new Map<string, string[][]>(
+    Object.entries(options.storedPaths ?? {}).map(([externalId, paths]) => [
+      `entry-${externalId}`,
+      paths,
+    ])
+  );
+  const pathUpdates: Array<{ id: string; categoryPaths: string[][] }> = [];
+  let pathUpdateCalls = 0;
+  const pathsRepository = {
+    find: jest.fn(async (query: { where: { id: FindOperator<string[]> } }) =>
+      (query.where.id.value as unknown as string[])
+        .filter(
+          (id) =>
+            storedPaths.has(id) ||
+            pushed.flat().some((each) => `entry-${each.externalId}` === id)
+        )
+        .map((id) => ({ id, categoryPaths: storedPaths.get(id) ?? [] }))
+    ),
+    update: jest.fn(
+      async (where: { id: string }, values: { categoryPaths: string[][] }) => {
+        const call = pathUpdateCalls;
+        pathUpdateCalls += 1;
+        if (options.pathUpdateFails?.at === call) {
+          throw options.pathUpdateFails.error;
+        }
+        storedPaths.set(where.id, values.categoryPaths);
+        pathUpdates.push({ id: where.id, categoryPaths: values.categoryPaths });
+        return { affected: 1 };
+      }
+    ),
+  };
+  const pathsIngest = new SourceIngest(
+    pathsRepository as unknown as Repository<SourceCatalogEntry>,
+    {} as never,
+    {} as never
+  );
+  const writeCategoryPaths = jest.fn(
+    (writes: readonly CategoryPathsWrite[], onWritten?: () => void) =>
+      pathsIngest.writeCategoryPaths(writes, onWritten)
+  );
+  const closed = jest.fn(async () => totalsOf());
+  /** What the chunks so far wrote, without a close (plan 0269, D9). */
+  const totals = jest.fn(() => totalsOf());
   const ingest = {
     open: jest.fn(async (_context: RunContext, input: unknown) => {
       opened.push(input);
       return {
         push: jest.fn(async (chunk: readonly SourceObservation[]) => {
+          const failure = options.pushFails?.[pushed.length];
           pushed.push([...chunk]);
+          if (failure) {
+            throw failure;
+          }
           const answered = chunk.map((each) => {
             const resolved = options.resolves?.[each.externalId];
             return {
@@ -196,6 +263,24 @@ function build(
           return answered;
         }),
         close: closed,
+        totals,
+        writeCategoryPaths,
+        // What the rows are decided as at the drain (plan 0269, section 5):
+        // what they resolved to, unless a person decided them since.
+        activeItemsOf: jest.fn(async (entryIds: readonly string[]) => {
+          const active = new Map<string, string>();
+          for (const entryId of entryIds) {
+            const externalId = entryId.replace(/^entry-/, '');
+            const decided =
+              options.decidedSince && externalId in options.decidedSince
+                ? options.decidedSince[externalId]
+                : options.resolves?.[externalId];
+            if (decided?.active) {
+              active.set(entryId, decided.itemId);
+            }
+          }
+          return active;
+        }),
       };
     }),
   } as unknown as SourceIngest;
@@ -247,10 +332,14 @@ function build(
       const byAdmin = entries.filter((entry) =>
         options.weightSetByAdmin?.includes(entry.itemId)
       ).length;
+      const stepped = entries.filter((entry) =>
+        options.weightHasStep?.includes(entry.itemId)
+      ).length;
       return {
-        written: entries.length - sized - byAdmin,
+        written: entries.length - sized - byAdmin - stepped,
         skippedHasSize: sized,
         skippedSetByAdmin: byAdmin,
+        skippedHasStep: stepped,
       };
     }),
   } as unknown as CatalogClient;
@@ -317,13 +406,19 @@ function build(
     keys: declared,
   } as unknown as RunScopeResolver;
 
+  const controller = new AbortController();
+  if (options.aborted) {
+    controller.abort();
+  }
   const context = {
     runId: RUN,
+    signal: controller.signal,
     report: jest.fn(async () => undefined),
     advance: jest.fn(async () => undefined),
     warn: jest.fn(),
   } as unknown as RunContext;
 
+  const onWriteFailed = jest.fn();
   const sink = new RunReportSink(
     context,
     {
@@ -338,7 +433,16 @@ function build(
       writes: options.writes,
       provesDelisting: options.provesDelisting,
     },
-    { ingest, scopes, places, shops, catalog, entries, availability }
+    {
+      ingest,
+      scopes,
+      places,
+      shops,
+      catalog,
+      entries,
+      availability,
+      onWriteFailed,
+    }
   );
 
   return {
@@ -354,6 +458,13 @@ function build(
     availability,
     storedClaims,
     entries,
+    onWriteFailed,
+    closed,
+    totals,
+    storedPaths,
+    pathUpdates,
+    pathsRepository,
+    writeCategoryPaths,
   };
 }
 
@@ -635,6 +746,7 @@ describe('RunReportSink', () => {
         approxWeightsWritten: 1,
         approxWeightsSkippedSetByAdmin: 0,
         approxWeightsSkippedHasSize: 0,
+        approxWeightsSkippedHasStep: 0,
       });
       expect(context.warn).not.toHaveBeenCalled();
     });
@@ -730,6 +842,7 @@ describe('RunReportSink', () => {
         resolves,
         weightHasSize: ['item-0'],
         weightSetByAdmin: ['item-1', 'item-2'],
+        weightHasStep: ['item-3'],
       });
 
       for (let i = 0; i < 1001; i += 1) {
@@ -739,9 +852,10 @@ describe('RunReportSink', () => {
 
       expect(catalog.setApproxWeights).toHaveBeenCalledTimes(2);
       expect(written).toMatchObject({
-        approxWeightsWritten: 998,
+        approxWeightsWritten: 997,
         approxWeightsSkippedHasSize: 1,
         approxWeightsSkippedSetByAdmin: 2,
+        approxWeightsSkippedHasStep: 1,
       });
     });
   });
@@ -1454,5 +1568,543 @@ describe('RunReportSink', () => {
         { shop: 'T1', itemId: 'item-1', held: false, offered: true },
       ]);
     });
+  });
+});
+
+/**
+ * A write that fails during a walk (plan 0269, section 1). The chain keeps
+ * the first failure, runs nothing after it and tells the executor once, and
+ * the drain rejects with it. No rejection is ever left unhandled on the chain,
+ * because a walk goes on with network I/O after a chunk is queued.
+ */
+describe('RunReportSink, a write that fails during a walk (plan 0269)', () => {
+  /** One whole chunk, which the sink queues as soon as it is reported. */
+  const chunk = (prefix: string) =>
+    Array.from({ length: 400 }, (_, n) =>
+      observation({ externalId: `${prefix}-${n}` })
+    );
+  /** Let the chain run what is queued, and a turn of the event loop after. */
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it('keeps the first failure, tells the executor once, skips later work, and the drain rejects with it', async () => {
+    const failure = new Error('connection terminated');
+    const { sink, pushed, onWriteFailed, closed, catalog, placesObserved } =
+      build({
+        resolves: { 'a-0': { itemId: 'item-a', active: true } },
+        pushFails: { 0: failure },
+      });
+    const unhandled: unknown[] = [];
+    const listen = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', listen);
+    try {
+      for (const each of chunk('a')) {
+        sink.product(each);
+      }
+      await settle();
+
+      expect(onWriteFailed).toHaveBeenCalledTimes(1);
+      expect(onWriteFailed).toHaveBeenCalledWith(failure);
+      expect(sink.failure).toBe(failure);
+
+      // What the runner says after the failure is dropped: it is stopping.
+      for (const each of chunk('b')) {
+        sink.product(each);
+      }
+      sink.place(place());
+      await settle();
+
+      await expect(sink.drain()).rejects.toBe(failure);
+      // Only the chunk that failed reached the ingest.
+      expect(pushed).toHaveLength(1);
+      expect(placesObserved).toHaveLength(0);
+      // The drain wrote nothing after the failure: no close, no availability.
+      expect(closed).not.toHaveBeenCalled();
+      expect(catalog.setAvailability).not.toHaveBeenCalled();
+      expect(onWriteFailed).toHaveBeenCalledTimes(1);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', listen);
+    }
+  });
+
+  it('states what the chunks before the failure wrote, and nothing of the chunk that failed (D9)', async () => {
+    const failure = new Error('connection terminated');
+    const { sink, closed, totals, catalog } = build({
+      resolves: { 'a-0': { itemId: 'item-a', active: true } },
+      // What the ingest counted for the chunk that was written.
+      counters: { pricesRecorded: 9, pricesWritten: 7, pricesConfirmed: 1 },
+      images: { linked: 2 },
+      pushFails: { 1: failure },
+    });
+
+    for (const each of chunk('a')) {
+      sink.product(each);
+    }
+    await settle();
+    for (const each of chunk('b')) {
+      sink.product(each);
+    }
+
+    await expect(sink.drain()).rejects.toBe(failure);
+    // Only the first chunk landed, and the result says that much and no more.
+    expect(sink.writtenSoFar).toEqual(
+      expect.objectContaining({
+        products: 400,
+        pricesRecorded: 9,
+        pricesPublished: 7,
+        pricesConfirmed: 1,
+        imagesLinked: 2,
+        availabilityWritten: 0,
+        packCountsFilled: 0,
+        approxWeightsWritten: 0,
+      })
+    );
+    // Read without a close, and nothing was written after the failure.
+    expect(totals).toHaveBeenCalledTimes(1);
+    expect(closed).not.toHaveBeenCalled();
+    expect(catalog.fillPackCounts).not.toHaveBeenCalled();
+    expect(catalog.setApproxWeights).not.toHaveBeenCalled();
+    expect(catalog.setAvailability).not.toHaveBeenCalled();
+  });
+
+  it('answers no failure while every write succeeds', async () => {
+    const { sink, onWriteFailed } = build();
+
+    for (const each of chunk('a')) {
+      sink.product(each);
+    }
+    await sink.drain();
+
+    expect(sink.failure).toBeNull();
+    expect(onWriteFailed).not.toHaveBeenCalled();
+  });
+
+  it('settles what is queued without the partial chunk, closes nothing, and never rejects (D11)', async () => {
+    const failure = new Error('deadlock detected');
+    const { sink, pushed, closed, totals, catalog } = build({
+      counters: { pricesRecorded: 3, pricesWritten: 2 },
+      pushFails: { 1: failure },
+    });
+
+    for (const each of [...chunk('a'), ...chunk('b')]) {
+      sink.product(each);
+    }
+    // A partial chunk the runner never filled.
+    sink.product(observation({ externalId: 'c' }));
+
+    const written = await sink.settle();
+    expect(pushed.map((each) => each.length)).toEqual([400, 400]);
+    expect(written).toEqual(
+      expect.objectContaining({
+        products: 400,
+        pricesRecorded: 3,
+        pricesPublished: 2,
+      })
+    );
+    expect(sink.failure).toBe(failure);
+    expect(sink.failedWork).toBe('products');
+    expect(totals).toHaveBeenCalledTimes(1);
+    expect(closed).not.toHaveBeenCalled();
+    expect(catalog.setAvailability).not.toHaveBeenCalled();
+    expect(catalog.fillPackCounts).not.toHaveBeenCalled();
+  });
+
+  it('names the kind of work that failed, and counts a scope only once it was declared (D11)', async () => {
+    const failure = new Error('could not write the places');
+    const { sink, placesObserved, scopes } = build();
+    (scopes.declare as jest.Mock).mockImplementationOnce(async () => {
+      throw failure;
+    });
+
+    sink.scope({ key: 'A', kind: 'REGION', name: null } as never);
+    sink.place(place());
+    await settle();
+
+    expect(sink.failedWork).toBe('scope');
+    await expect(sink.drain()).rejects.toBe(failure);
+    expect(sink.writtenSoFar.scopesDeclared).toBe(0);
+    expect(placesObserved).toHaveLength(0);
+  });
+
+  it('rejects the drain with a failure of the last chunk, which only the drain queues', async () => {
+    const failure = new Error('deadlock detected');
+    const { sink, onWriteFailed, closed } = build({
+      pushFails: { 0: failure },
+    });
+
+    sink.product(observation({ externalId: 'a' }));
+
+    await expect(sink.drain()).rejects.toBe(failure);
+    expect(onWriteFailed).toHaveBeenCalledWith(failure);
+    expect(closed).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The drain reads the decisions again before it states availability (plan
+ * 0269, section 5). A chunk kept the item each `ACTIVE` row resolved to when
+ * it was written, and a person may have decided the row since.
+ */
+describe('RunReportSink, decisions made after a chunk (plan 0269)', () => {
+  const told = (catalog: CatalogClient) =>
+    (catalog.setAvailability as jest.Mock).mock.calls[0][1] as Array<{
+      itemId: string;
+      available: boolean;
+    }>;
+
+  it('states nothing for the product a row left, and the new product of a row a person moved', async () => {
+    const { sink, catalog } = build({
+      resolves: {
+        rejected: { itemId: 'item-left', active: true },
+        moved: { itemId: 'item-old', active: true },
+        kept: { itemId: 'item-kept', active: true },
+      },
+      decidedSince: {
+        rejected: null,
+        moved: { itemId: 'item-new', active: true },
+      },
+    });
+
+    sink.product(observation({ externalId: 'rejected' }));
+    sink.product(observation({ externalId: 'moved' }));
+    sink.product(observation({ externalId: 'kept' }));
+    sink.assortmentComplete(null);
+    await sink.drain();
+
+    expect(told(catalog)).toEqual([
+      { itemId: 'item-new', available: true },
+      { itemId: 'item-kept', available: true },
+    ]);
+  });
+
+  it('sends no pack count and no weight to the product a row left, and sends them to the new product of a row a person moved (D8)', async () => {
+    const { sink, catalog } = build({
+      resolves: {
+        rejected: { itemId: 'item-left', active: true },
+        moved: { itemId: 'item-old', active: true },
+      },
+      decidedSince: {
+        rejected: null,
+        moved: { itemId: 'item-new', active: true },
+      },
+    });
+
+    sink.product(
+      observation({ externalId: 'rejected', packCount: 6, approxWeight: 250 })
+    );
+    sink.product(
+      observation({ externalId: 'moved', packCount: 4, approxWeight: 300 })
+    );
+    await sink.drain();
+
+    expect(catalog.fillPackCounts).toHaveBeenCalledTimes(1);
+    expect(catalog.fillPackCounts).toHaveBeenCalledWith([
+      { itemId: 'item-new', packCount: 4 },
+    ]);
+    expect(catalog.setApproxWeights).toHaveBeenCalledTimes(1);
+    expect(catalog.setApproxWeights).toHaveBeenCalledWith([
+      { itemId: 'item-new', approxWeight: 300 },
+    ]);
+  });
+
+  it('reads the decisions again for a run that writes prices only, when a row carries a pack count (D8)', async () => {
+    const { sink, ingest, catalog } = build({
+      resolves: { a: { itemId: 'item-a', active: true } },
+      decidedSince: { a: null },
+      writes: HarvestRunWrites.PRICES,
+    });
+
+    sink.product(observation({ externalId: 'a', packCount: 6 }));
+    await sink.drain();
+
+    const session = await (ingest.open as jest.Mock).mock.results[0].value;
+    expect(session.activeItemsOf).toHaveBeenCalledTimes(1);
+    expect(catalog.fillPackCounts).not.toHaveBeenCalled();
+  });
+
+  it('reads nothing again for a run that writes prices only', async () => {
+    const { sink, ingest } = build({
+      resolves: { a: { itemId: 'item-a', active: true } },
+      writes: HarvestRunWrites.PRICES,
+    });
+
+    sink.product(observation({ externalId: 'a' }));
+    await sink.drain();
+
+    const session = await (ingest.open as jest.Mock).mock.results[0].value;
+    expect(session.activeItemsOf).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Every path the chain files a product under (plan 0268, section 2). The
+ * runner states them at the end of its walk, the sink collects them, and the
+ * drain writes them after the last chunk, through the ingest's own write.
+ */
+describe('RunReportSink, the category paths of a run (plan 0268)', () => {
+  const COLA = ['Agua y refrescos', 'Cola'];
+  const PACKS = ['Agua y refrescos', 'Packs de agua y refrescos'];
+  const IBERICOS = ['Navidad', 'Ibéricos y quesos'];
+
+  it('writes the run paths in place of the stored ones for REPLACE, and adds the new ones once for ADD', async () => {
+    const { sink, storedPaths } = build({
+      storedPaths: { a: [IBERICOS], b: [IBERICOS, COLA] },
+    });
+
+    sink.product(observation({ externalId: 'a' }));
+    sink.product(observation({ externalId: 'b' }));
+    sink.categoryPaths('a', [COLA, PACKS], 'REPLACE');
+    sink.categoryPaths('b', [COLA, PACKS], 'ADD');
+    const written = await sink.drain();
+
+    expect(storedPaths.get('entry-a')).toEqual([COLA, PACKS]);
+    expect(storedPaths.get('entry-b')).toEqual([IBERICOS, COLA, PACKS]);
+    expect(written.categoryPathsWritten).toBe(2);
+  });
+
+  it('writes a REPLACE call of an aborted run as ADD', async () => {
+    const { sink, storedPaths } = build({
+      storedPaths: { a: [IBERICOS] },
+      aborted: true,
+    });
+
+    sink.product(observation({ externalId: 'a' }));
+    sink.categoryPaths('a', [COLA], 'REPLACE');
+    await sink.drain();
+
+    expect(storedPaths.get('entry-a')).toEqual([IBERICOS, COLA]);
+  });
+
+  it('keeps every stored path, in its order, under ADD, even one a longer run path covers', async () => {
+    const A = ['Frescos'];
+    const AB = ['Frescos', 'Frutas'];
+    const C = ['Despensa'];
+    const { sink, storedPaths } = build({
+      storedPaths: { short: [A], two: [A, C] },
+    });
+
+    sink.product(observation({ externalId: 'short' }));
+    sink.product(observation({ externalId: 'two' }));
+    sink.categoryPaths('short', [AB], 'ADD');
+    sink.categoryPaths('two', [AB], 'ADD');
+    await sink.drain();
+
+    expect(storedPaths.get('entry-short')).toEqual([A, AB]);
+    expect(storedPaths.get('entry-two')).toEqual([A, C, AB]);
+  });
+
+  it('removes no stored path in an aborted run, not even one its longer path covers', async () => {
+    const A = ['Frescos'];
+    const AB = ['Frescos', 'Frutas'];
+    const C = ['Despensa'];
+    const { sink, storedPaths } = build({
+      storedPaths: { a: [A, C] },
+      aborted: true,
+    });
+
+    sink.product(observation({ externalId: 'a' }));
+    sink.categoryPaths('a', [AB], 'REPLACE');
+    await sink.drain();
+
+    expect(storedPaths.get('entry-a')).toEqual([A, C, AB]);
+  });
+
+  it('writes no path for a run that only settles, though a whole chunk of its products landed', async () => {
+    const { sink, pushed, writeCategoryPaths, pathUpdates, storedPaths } =
+      build({ storedPaths: { 'p-0': [IBERICOS] } });
+
+    // A whole chunk, which the sink queues the moment it fills, so the
+    // settle below awaits a real write of rows.
+    for (let n = 0; n < 400; n += 1) {
+      sink.product(observation({ externalId: `p-${n}` }));
+    }
+    sink.categoryPaths('p-0', [COLA], 'REPLACE');
+    sink.categoryPaths('p-1', [COLA], 'REPLACE');
+
+    // A run that fails before its drain only settles what it queued.
+    await sink.settle();
+
+    expect(pushed.flat()).toHaveLength(400);
+    expect(writeCategoryPaths).not.toHaveBeenCalled();
+    expect(pathUpdates).toEqual([]);
+    expect(storedPaths.get('entry-p-0')).toEqual([IBERICOS]);
+    expect(sink.writtenSoFar.categoryPathsWritten).toBe(0);
+  });
+
+  it('writes the paths last, and a failed path write fails the drain with the rows that landed counted', async () => {
+    const failure = new Error('connection terminated');
+    const {
+      sink,
+      storedPaths,
+      catalog,
+      availability,
+      shopsObserved,
+      pathsRepository,
+    } = build({
+      resolves: {
+        a: { itemId: 'item-a', active: true },
+        b: { itemId: 'item-b', active: true },
+        c: { itemId: 'item-c', active: true },
+      },
+      shops: [
+        {
+          id: 'shop-T1',
+          externalId: 'T1',
+          printedName: 'Centro',
+          supermarketLocationId: 'loc-1',
+          status: SourceLocationStatus.ACTIVE,
+        } as Partial<SourceLocation>,
+      ],
+      pathUpdateFails: { at: 1, error: failure },
+    });
+
+    for (const externalId of ['a', 'b', 'c']) {
+      sink.product(
+        observation({ externalId, packCount: 6, approxWeight: 1540 })
+      );
+      sink.availability({ externalId, available: true, shopCode: 'T1' });
+      sink.categoryPaths(externalId, [COLA], 'REPLACE');
+    }
+
+    await expect(sink.drain()).rejects.toBe(failure);
+
+    // The first row landed and is counted, the second rejected, and the
+    // third was never reached.
+    expect(storedPaths.get('entry-a')).toEqual([COLA]);
+    expect(storedPaths.has('entry-b')).toBe(false);
+    expect(storedPaths.has('entry-c')).toBe(false);
+    expect(sink.writtenSoFar.categoryPathsWritten).toBe(1);
+
+    // Every other write of the end of the run was done before it.
+    const firstPathUpdate = pathsRepository.update.mock.invocationCallOrder[0];
+    for (const before of [
+      catalog.fillPackCounts,
+      catalog.setApproxWeights,
+      availability.store,
+      availability.writeForRun,
+      availability.writePricelessOffersForRun,
+    ] as unknown as jest.Mock[]) {
+      expect(before).toHaveBeenCalledTimes(1);
+      expect(before.mock.invocationCallOrder[0]).toBeLessThan(firstPathUpdate);
+    }
+    expect(shopsObserved).toHaveLength(1);
+    expect(sink.writtenSoFar.packCountsFilled).toBe(3);
+    expect(sink.writtenSoFar.approxWeightsWritten).toBe(3);
+  });
+
+  it('writes the paths once the products are written, and a new row holds them', async () => {
+    const { sink, pushed, writeCategoryPaths, storedPaths } = build();
+    const order: string[] = [];
+    writeCategoryPaths.mockImplementationOnce(async () => {
+      order.push(`paths after ${pushed.flat().length} product(s)`);
+      return 0;
+    });
+
+    for (let n = 0; n < 401; n += 1) {
+      sink.product(observation({ externalId: `p-${n}` }));
+    }
+    sink.categoryPaths('p-400', [COLA], 'REPLACE');
+    await sink.drain();
+
+    // The last chunk, which only the drain queues, came first.
+    expect(order).toEqual(['paths after 401 product(s)']);
+    expect(writeCategoryPaths).toHaveBeenCalledWith(
+      [{ entryId: 'entry-p-400', paths: [COLA], mode: 'REPLACE' }],
+      expect.any(Function)
+    );
+    expect(storedPaths.has('entry-p-400')).toBe(false);
+  });
+
+  it('leaves a row no call named, and a product the run did not report, as they were', async () => {
+    const { sink, storedPaths, pathUpdates } = build({
+      storedPaths: { kept: [IBERICOS], unreported: [IBERICOS] },
+    });
+
+    sink.product(observation({ externalId: 'kept' }));
+    sink.product(observation({ externalId: 'named' }));
+    sink.categoryPaths('named', [COLA], 'REPLACE');
+    sink.categoryPaths('unreported', [COLA], 'REPLACE');
+    await sink.drain();
+
+    expect(storedPaths.get('entry-kept')).toEqual([IBERICOS]);
+    expect(storedPaths.get('entry-unreported')).toEqual([IBERICOS]);
+    expect(pathUpdates).toEqual([{ id: 'entry-named', categoryPaths: [COLA] }]);
+  });
+
+  it('writes nothing for a row whose paths are already what the run stated', async () => {
+    const { sink, pathUpdates } = build({ storedPaths: { a: [COLA, PACKS] } });
+
+    sink.product(observation({ externalId: 'a' }));
+    sink.categoryPaths('a', [COLA, PACKS], 'REPLACE');
+    const written = await sink.drain();
+
+    expect(pathUpdates).toEqual([]);
+    expect(written.categoryPathsWritten).toBe(0);
+  });
+
+  it('drops a repeated path and a path that a longer one of the product covers', async () => {
+    const { sink, storedPaths } = build();
+
+    sink.product(observation({ externalId: 'a' }));
+    sink.categoryPaths('a', [['Agua y refrescos'], COLA, COLA], 'ADD');
+    // A second call for one product adds after the first, and replaces when
+    // either said so.
+    sink.categoryPaths('a', [PACKS, []], 'REPLACE');
+    await sink.drain();
+
+    expect(storedPaths.get('entry-a')).toEqual([COLA, PACKS]);
+  });
+
+  it('keeps the names verbatim', async () => {
+    const { sink, storedPaths } = build();
+
+    sink.product(observation({ externalId: 'a' }));
+    sink.categoryPaths('a', [[' Ibéricos  y QUESOS ', 'Turrón']], 'REPLACE');
+    await sink.drain();
+
+    expect(storedPaths.get('entry-a')).toEqual([
+      [' Ibéricos  y QUESOS ', 'Turrón'],
+    ]);
+  });
+
+  it('writes no path for a run whose chunk failed', async () => {
+    const failure = new Error('connection terminated');
+    const { sink, writeCategoryPaths } = build({ pushFails: { 0: failure } });
+
+    sink.product(observation({ externalId: 'a' }));
+    sink.categoryPaths('a', [COLA], 'REPLACE');
+
+    await expect(sink.drain()).rejects.toBe(failure);
+    expect(writeCategoryPaths).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Once {@link RunReportSink.settle} answered, the sink takes no more work
+ * (plan 0269, D11, 2026-11-17): a worker of the runner that is still going
+ * reports after the run is finished, and nothing of it may land.
+ */
+describe('RunReportSink, work that comes after the run settled (plan 0269)', () => {
+  it('writes no chunk a late worker fills after the settle', async () => {
+    const { sink, pushed, placesObserved, scopes, context } = build();
+
+    await sink.settle();
+
+    // A whole chunk of products and of places, each of which the sink queues
+    // the moment it fills, and a scope, which it queues at once.
+    for (let n = 0; n < 400; n += 1) {
+      sink.product(observation({ externalId: `late-${n}` }));
+    }
+    for (let n = 0; n < 100; n += 1) {
+      sink.place(place({ externalRef: `node/${n}` }));
+    }
+    sink.scope({ key: 'late', kind: 'REGION', name: null } as never);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(pushed).toEqual([]);
+    expect(placesObserved).toEqual([]);
+    expect(scopes.declare).not.toHaveBeenCalled();
+    expect(context.advance).not.toHaveBeenCalled();
+    expect(sink.failure).toBeNull();
   });
 });

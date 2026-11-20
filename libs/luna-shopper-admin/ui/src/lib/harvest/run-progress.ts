@@ -2,11 +2,18 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  inject,
   input,
 } from '@angular/core';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
+  RokuTranslatorPipe,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
+import {
+  isReverted,
+  isTerminalRun,
   runPriceCounters,
+  runProgressLine,
   type HarvestRun,
   type RunProgress,
 } from '@portfolio/luna-shopper-admin/models';
@@ -22,7 +29,12 @@ import {
  * The bar is absent until there is a denominator. `totalPlanned` is null until
  * the category walk has finished counting, which is minutes in, and a bar moving
  * against a number nobody chose says less than the count alone does. So the
- * count is always shown and the bar joins it when the run knows its own size.
+ * count is always shown and the bar joins it when the run knows its own size,
+ * or, while the run goes, when another completed run of the same kind gives an
+ * approximate one (decision 86 of the harvester round). That bar never reaches
+ * full, and once the run passes the estimate the bar goes and the count says
+ * how many, as it does with no earlier run. An ended run keeps the estimate,
+ * in the past tense, and no bar (owner decision 97b).
  *
  * The counters are the run's own, and they are shown separately rather than
  * summed. `notFound` is not a failure: a 404 from a detail call means the
@@ -34,19 +46,8 @@ import {
   imports: [RokuTranslatorPipe],
   template: `
     <div class="head">
-      <p class="count">
-        @if (progress().total !== null) {
-          {{
-            'harvest.run.progress.of'
-              | rokuT
-                : { processed: progress().processed, total: progress().total }
-          }}
-        } @else {
-          {{
-            'harvest.run.progress.processed'
-              | rokuT: { processed: progress().processed }
-          }}
-        }
+      <p class="count" data-progress-count>
+        {{ line().key | rokuT: line().args }}
       </p>
 
       @if (stageLabel(); as stage) {
@@ -55,9 +56,15 @@ import {
     </div>
 
     @if (progress().percent; as percent) {
+      <!-- Against an estimate the bar says so to a screen reader in the words
+           of the line, and stops short of full (decision 86). An ended run
+           has no percent against an estimate, so it gets no bar. -->
       <div
         [attr.aria-label]="'harvest.run.progress.label' | rokuT"
         [attr.aria-valuenow]="percent"
+        [attr.aria-valuetext]="
+          approximate() ? (line().key | rokuT: line().args) : null
+        "
         aria-valuemax="100"
         aria-valuemin="0"
         class="track"
@@ -65,7 +72,12 @@ import {
       >
         <div [style.inline-size.%]="percent" class="fill"></div>
       </div>
-    } @else {
+    }
+    @if (approximate()) {
+      <p class="unsized" data-progress-approximate>
+        {{ approximateNote() | rokuT: line().args }}
+      </p>
+    } @else if (unsizedNote()) {
       <p class="unsized">{{ 'harvest.run.progress.unsized' | rokuT }}</p>
     }
 
@@ -154,8 +166,41 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RunProgressView {
+  private readonly _translate = inject(RokuTranslatorService);
+
   readonly run = input.required<HarvestRun>();
   readonly progress = input.required<RunProgress>();
+
+  /**
+   * "N of T", "N processed", or the estimate line. "About" when the total is
+   * another run's (decision 86 of the harvester round), and never a known
+   * total replaced by one.
+   */
+  readonly line = computed(() =>
+    runProgressLine(this.progress(), this._translate.locale())
+  );
+
+  /** Whether the line is drawn against another run's total. */
+  readonly approximate = computed(() => this.line().approximate);
+
+  /** The note under the estimate: present while the run goes, past after. */
+  readonly approximateNote = computed(() =>
+    this.progress().ended
+      ? 'harvest.run.progress.approximateEnded'
+      : 'harvest.run.progress.approximate'
+  );
+
+  /**
+   * Whether to say that the run does not know yet how much work it has: no
+   * bar, no estimate, and a run that is still going and so can still learn
+   * it. An ended run has nothing left to learn, however it ended (owner
+   * decisions 120b and 131b): a completed, failed, aborted or stale run with
+   * no total and no estimate shows its count alone and no note at all.
+   * Ended is `isTerminalRun`, the rule polling stops on.
+   */
+  readonly unsizedNote = computed(
+    () => !this.progress().percent && !isTerminalRun(this.run())
+  );
 
   /**
    * The harvester's own words for what it is doing, when it says.
@@ -163,8 +208,19 @@ export class RunProgressView {
    * `stageLabel` and not `stage`: the first is written for a person and the
    * second is a key. Neither is translated here, because both come from the
    * service and this app owns no copy of the harvester's stage list.
+   *
+   * The harvester never clears the phase when a run ends, so this is where a
+   * finished run stops showing it (admin plan 0074, section 1b). A completed
+   * run reached every phase, and a reverted run had its writes taken back, so
+   * for both the last phase says nothing. A run that stopped short keeps it,
+   * because it says where the run stopped.
    */
-  readonly stageLabel = computed(() => this.run().stageLabel);
+  readonly stageLabel = computed(() => {
+    const run = this.run();
+    return run.status === 'COMPLETED' || isReverted(run)
+      ? null
+      : run.stageLabel;
+  });
 
   /**
    * The run's own counters, shown separately rather than summed.

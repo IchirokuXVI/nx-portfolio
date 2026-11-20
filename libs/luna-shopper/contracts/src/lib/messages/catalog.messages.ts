@@ -1145,15 +1145,11 @@ export interface RegisterBrandSuggestionResult {
  * a client can display "per litre" without parsing "el litro le sale a". The
  * label and the amount are never changed, and a label the table does not know
  * reads as null rather than as a guess.
+ *
+ * No value names a wash (plan 0264): a wash count is the brand's own claim and
+ * no basis to compare prices on, so a label such as `lv` reads as null.
  */
-export const UNIT_BASES = [
-  'KILOGRAM',
-  'LITER',
-  'UNIT',
-  'DOZEN',
-  /** A washing machine or dishwasher load, Mercadona's `lv`. */
-  'WASH',
-] as const;
+export const UNIT_BASES = ['KILOGRAM', 'LITER', 'UNIT', 'DOZEN'] as const;
 export type UnitBasis = (typeof UNIT_BASES)[number];
 
 /**
@@ -1490,6 +1486,19 @@ export interface ItemView {
    * leave it out.
    */
   approxWeightSetBy?: ApproxWeightSetBy | null;
+  /**
+   * How far one step moves a line of this product, in grams or millilitres,
+   * or null for the default steps (plan 0261).
+   *
+   * One of {@link QUANTITY_STEPS}, and only on a product sold by the kilo
+   * (`KILOGRAM`, no size, no weight). No product by the litre carries one:
+   * `LITER` is not a base unit, and a liquid is stored in millilitres with a
+   * size, a pack counted in pieces (the owner's ruling of 2026-11-17). Only a
+   * legacy `LITER` row with no size, which no write can make, still passes
+   * {@link carriesQuantityStep}. A curator writes it, and no run does. Velista reads it to step a line; no server code
+   * steps an amount by it, and an amount off its grid stays valid.
+   */
+  quantityStep: number | null;
   /**
    * How many units the pack holds, a whole number from {@link PACK_COUNT_MIN}
    * to {@link PACK_COUNT_MAX}, or null for a product that is not a pack or
@@ -2446,6 +2455,13 @@ export interface CreateItemRequest extends AdminCredential {
    * 0006 is the one sender today.
    */
   createdFromEntry?: string;
+  /**
+   * The step of a product sold by the kilo (plan 0261). See
+   * {@link ItemView.quantityStep}. A value off {@link QUANTITY_STEPS}, or a
+   * step on any other product, is refused with
+   * `item_quantity_step_not_allowed`. A run never sends one.
+   */
+  quantityStep?: number | null;
   /** How many units the pack holds (plan 0162). See {@link ItemView.packCount}. */
   packCount?: number | null;
   /**
@@ -2528,6 +2544,15 @@ export interface UpdateItemRequest extends AdminCredential {
    */
   approxWeightSetBy?: ApproxWeightSetBy;
   /**
+   * Set, change or (with `null`) clear the step of a product sold by the kilo
+   * (plan 0261, section 2.2). See {@link ItemView.quantityStep}.
+   *
+   * An edit that makes a stepped product a pack or a piece (a size, a weight
+   * or another unit) must send `quantityStep: null` with it, or it is refused
+   * with `item_quantity_step_not_allowed`.
+   */
+  quantityStep?: number | null;
+  /**
    * Set, correct or (with `null`) clear the pack count (plan 0162).
    *
    * **The only write that changes a count that is set.** A run fills a null
@@ -2576,6 +2601,8 @@ export interface ItemExpectation {
   unitSize?: number | null;
   /** Compared as a number, as `unitSize` is (plan 0244, section 3.3). */
   approxWeight?: number | null;
+  /** The step the product holds, or null for none (plan 0261, section 2.4). */
+  quantityStep?: number | null;
   defaultUnit?: UnitOfMeasure;
   packCount?: number | null;
   categorySlugs?: string[];
@@ -2727,6 +2754,12 @@ export interface SetApproxWeightsResult {
   skippedHasSize: number;
   /** Products skipped because a person wrote their weight. */
   skippedSetByAdmin: number;
+  /**
+   * Products skipped because a person gave them a step (plan 0261, S6). A
+   * weight would make such a product a kilo piece, which carries no step, so
+   * the run leaves it and the curator decides.
+   */
+  skippedHasStep: number;
 }
 
 /**

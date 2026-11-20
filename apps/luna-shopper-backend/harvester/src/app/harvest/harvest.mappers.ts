@@ -37,6 +37,7 @@ import type {
   SupermarketSource,
 } from '../entities';
 import { declaredScopeKey } from './place-matching';
+import { readRunInput } from './run-input';
 import { dimensionOf, labelAmount } from './size-check';
 
 /**
@@ -142,6 +143,14 @@ export function toHarvestRunView(row: HarvestRun): HarvestRunView {
     revertedPriceCount: row.revertedPriceCount ?? null,
     // Plan 0120. The preset a run came from, which may since have been deleted.
     presetId: row.presetId ?? null,
+    // Owner decision 114a. The run's own request, read back from what it
+    // stored, and null when that cannot be read.
+    input: readRunInput(row.mode, row.input),
+    // Owner decisions 130b and 127b. What the walk ran under outside its
+    // request, as a digest, and the adapter of its row. A run stored before
+    // the columns reads null in both, which draws no estimate from it.
+    configFingerprint: row.configFingerprint ?? null,
+    adapterKey: row.adapterKey ?? null,
     // Plan 0206. The schedule that started it, and whether a shutdown or the
     // reaper ended it rather than a person.
     scheduleId: row.scheduleId ?? null,
@@ -270,6 +279,7 @@ export function toSourceCatalogEntryView(
     packaging: row.packaging ?? null,
     packCount: row.packCount ?? null,
     categoryPath: row.categoryPath ?? [],
+    categoryPaths: row.categoryPaths ?? [],
     url: row.url,
     imageUrl: row.imageUrl ?? null,
     extra: row.extra ?? null,

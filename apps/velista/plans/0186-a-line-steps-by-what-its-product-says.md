@@ -1,3 +1,5 @@
+> **PR:** [#988](https://github.com/IchirokuXVI/nx-portfolio/pull/988)
+
 # 0186: a line steps by what its product says
 
 > Amended on 2026-11-11: the default steps are now 25 g, 25 ml and 1 (a count steps by 10 from
@@ -14,6 +16,20 @@
 > (no grid and no snapping, `0188` decision B, in place of a snap onto the product's grid),
 > the S7b hundredth rule applied to a product step (decision F, question 2), and every
 > example that snapped.
+>
+> Amended on 2026-11-12, the owner's decisions of that day. A line steps the same on every
+> screen, so decision A wins over decisions C and E: the settle sheet and the shopping list
+> page's typeahead step a zone line by `lineStepOf` over every product the line holds, not by
+> the basket row's own product (decisions C and E, section 3). Backend `0263` is withdrawn: a
+> line at 0 is never deleted by a write, it is hidden, so a minus that reaches 0 in one press
+> (a line at 300 g on a step of 500, decision D) hides the line and deletes nothing.
+>
+> Amended on 2026-11-16, the owner's rulings 43 and 44 of that day. **43:** a first add of a
+> product uses the product's step, which answers question 1: a chosen product sold by the kilo
+> or the litre is added at `stepAt(0, unit, step)`, so a whole chicken stepped at 1000 is
+> added at 1 kg and plus then gives 2 kg. Target 5, section 5 and "Not in this plan" are
+> rewritten. **44:** typing accepts any amount, and the step only moves the buttons (section
+> 3a). Decisions G and H record what the builder chose for both.
 >
 > Decided on 2026-11-09. Every weight or volume line in velista steps by one fixed rule:
 > 25 g or 25 ml at every amount (velista `0188`, which replaced `0182` section 3). The owner
@@ -102,9 +118,14 @@ wherever the product says nothing.
 4. `QuantityStepper` gains `step = input<number | null>(null)` and passes it to `stepFrom` and
    `canStepUp` and to the step its buttons name (`amount.less`, `amount.more`). Every
    container that draws a stepper for a weight or a volume line binds `[step]` beside `[unit]`.
-5. A new line still starts at `defaultQuantity(unit)` (1000), which every allowed step
+5. ~~A new line still starts at `defaultQuantity(unit)` (1000), which every allowed step
    divides (backend `0261` S2), so the take back floor of velista `0182` and `visitFloor`
-   are unchanged.
+   are unchanged.~~ Replaced on 2026-11-16 by the owner's ruling 43: a first add of a
+   product sold by the kilo or the litre asks for one step of that product,
+   `addAmount(unit, step)`, which is `stepAt(0, unit, step)`; a product with no step, a
+   count and a typed name are added as before (25 g, 25 ml, one piece, or nothing stated).
+   `visitFloor` takes the same step, so a line the visit made at 100 g is taken back by one
+   minus at 100 g.
 
 ### Scope
 
@@ -190,20 +211,58 @@ stepping 25 g.
 - **C. The basket's steppers read their own product.** A basket row is one product (backend
   `0201`), served as `BasketProduct` on the row, so the steppers `0190` draws for it take
   `quantityStep` from that product and need no `ItemNames` read.
+
+  > Note of 2026-11-12: the owner ruled that A wins. A line steps the same on every screen,
+  > and a line that holds several products could step by 250 in the settle sheet and by 100
+  > on its zone list. Each list's stepper in the settle sheet now steps by `lineStepOf` over
+  > the entry's `itemIds` (the basket read already carries them): a product the basket read
+  > names comes from `Basket.products`, any other from `ItemNames`, which the basket page
+  > fills for the measured lines' products the read did not name. A record not read yet says
+  > nothing (decision B). A row whose line holds only its own product steps as before. A list
+  > that does not ask yet still steps by the row's product, since the line it gains holds
+  > that product.
 - **D. No grid and no snapping, also on a product step** (velista `0188` decision B). Plus adds
   the step at the amount as it stands; minus takes away the step that plus uses one base step
   lower, so plus then minus returns. A line at 975 g on a step of 100 goes up to 1075 and down
   to 875; a line at 1000 goes down to 900 and up to 1100. Backend `0261` section 5 still says an
   amount off the grid snaps; this plan follows `0188` and the owner's sentence behind it, and
   the server accepts any amount either way.
+
+  > Note of 2026-11-12. Minus never goes under 0, so a line under one step goes to 0 in one
+  > press: a line at 300 g on a step of 500 goes to 0, and its minus draws the red trash of
+  > velista `0188` S14 (class `is-clear`, read from `stepFrom(value, unit, -1, step)`), as a
+  > line at 100 g on a step of 100 does. A saffron line at 1005 g on a step of 5 goes to 995
+  > and draws no trash. Backend `0263` is withdrawn (the owner, 2026-11-12): a line at 0 is
+  > never deleted by a write, it is hidden, so that press hides the line and deletes nothing.
 - **E. The typeahead card and the catalog rows read the step of the product they show.**
   They hold one product, so the S5 rule reduces to that product's step; they still call
   `lineStepOf`, so a held line with several products is stepped as the list steps it.
+
+  > Note of 2026-11-12: the owner ruled that A wins here too. The shopping list page's
+  > typeahead holdings step each held line by `lineStepOf` over the line's own products, as
+  > the settle sheet does (decision C's note), with the card's product standing in for a
+  > record not read yet. The list page and the catalog rows already did.
 - **F. The hundredth rule holds for a product step too** (the writer's reading of S7b, question
   2). The step used is the product's step, but never less than one hundredth of the name the
   row shows. A saffron step of 1 g or 5 g is used below 1000 g and becomes 10 g from 1000 g,
   because "1,00 kg" plus 1 g still reads "1 kg". A step of 10 or more is used unchanged at
   every amount.
+- **G. Where a first add reads its step** (the builder's, 2026-11-16, ruling 43). The composer
+  (zone list, shopping list typeahead) reads `lineStepOf` of a line of the chosen product
+  alone, over the card's record; the catalog rows and the product page pass the same from
+  the page's records as `CatalogAddProduct.step`. `CatalogAddStore` sends that amount, draws
+  it, draws each add still on its way at it, and names that step on its held line while the
+  product's own record is still on its way. A group card is counted, so it stays one piece.
+  The choice popover's raise rows read the server's `resultingQuantity`; the request behind
+  them is the same request, with the product's step as its amount.
+- **H. How many: the buttons keep their floor, typing does not** (the builder's, 2026-11-16,
+  ruling 44). The stepper gains `typedMin` (null by default, which is `min` as before). The
+  how many field keeps `min` at one step of the product, so its minus stops where it stopped
+  before, and sets `typedMin` to 1, so a typed 10 g on a step of 100 is recorded as 10 g and
+  a typed 0 as 1 g. It opens at the wanted amount when there is one, even under one step, and
+  at one step when nothing is wanted. Every other typed field already took any amount: the
+  line sheet's amount and the settle sheet's floor at 0, and the list row, the line page and
+  the due rows take no typing.
 
 ## 1. The models and the mappers
 
@@ -220,6 +279,12 @@ stepping 25 g.
   server's rule.
 - The in memory catalog, line and basket fakes carry `quantityStep: null` on every product
   and two products with a step (100 g and 5 g) for the specs.
+
+  > Note of 2026-11-17, from the review of the stepper batch: the two stepped products were
+  > missing. `CatalogMemory` now holds loose round rice by the kilo stepped by 100 g and loose
+  > coffee beans stepped by 5 g (`catalog-memory.spec.ts`), which a backend-less run reads through
+  > `ItemNames`. The basket fake keeps `quantityStep: null` on its four products: a
+  > stepped product there would need a basket row of its own.
 
 ## 2. The rule
 
@@ -264,9 +329,22 @@ export function canStepUp(value: number, unit: LineUnit, max: number, step?: num
   product the row holds (decisions C and E): the zone list row, the due rows, the line page,
   the list's line sheet (both steppers), `ProductRow`'s two steppers, the lists table, the
   added sheet (`VisitAdded`), the shopping list page's typeahead, and once velista `0190` is
-  merged the basket's steppers.
+  merged the basket's steppers. Since 2026-11-12 the basket's steppers and the shopping list
+  page's typeahead read the line's step too (the notes under decisions C and E).
 - **`line-detail-sheet.ts:258`'s `howManyFloor`**, which `0188` makes `QUANTITY_STEP[unit]`,
-  becomes `stepAt(0, unit, step)`, one step of the product.
+  becomes `stepAt(0, unit, step)`, one step of the product. Since ruling 44 it is the floor of
+  the buttons only (section 3a).
+
+### 3a. Typing accepts any amount (the owner's ruling 44, 2026-11-16)
+
+> "Plus and minus move by the product's step, typing accepts any amount. I don't think 25 g
+> should be the minimum, any amount should be acceptable."
+
+- A typed amount between 1 base unit and the most is kept as typed in every field that takes
+  typing; no field rounds it to a step or raises it to 25. The how many field is the one that
+  did, and it now passes `typedMin` 1 beside `min` (decision H).
+- A press from an amount off the step adds or takes the step with no grid (decision D): 10 g on
+  a step of 50 goes down to 0, with the red trash, or up to 60.
 - **`CatalogAddStore`** steps nothing: it takes the stepper's `to` (`0188` section 5.5). Its
   take back test is unchanged: it compares with `visitFloor`, which is 1000. `_correctUnit`
   still writes `defaultQuantity(unit)`.
@@ -304,12 +382,19 @@ export function canStepUp(value: number, unit: LineUnit, max: number, step?: num
   of 200 g. It is a separate product so that the bananas' numbers never depend on a step left
   by an earlier run.
 
+  > Note of 2026-11-17, from the review of the stepper batch: the test was first built in the
+  > settle sheet. It now steps on the zone list row, as this section and the progress evidence
+  > say: three presses of minus to 700, one of plus to 800. "Records a buy of 200 g" is stale:
+  > since velista `0190` (the owner, 2026-11-11, its question 1) no part of a row is bought from
+  > the shopping list, so "Got all" records the 800 g the line asks for.
+
 ## 5. Not changed
 
 - The words of an amount, and where they move up one name.
-- The amount of a first add is not this plan's. Since the amendment of 2026-11-11 a first add
-  is one step (backend `0260`, velista `0185`: 25 g, 25 ml or 1 piece), and the owner said
-  that the product's step is the step an add uses once it exists; see question 1.
+- ~~The amount of a first add is not this plan's.~~ Since the owner's ruling 43 of
+  2026-11-16 it is: a first add of a stepped product is one step of it (target 5). The
+  server's own default for an add that states no amount stays 25 g, 25 ml or one piece
+  (backend `0260`); velista always states it for a product.
 - The hold, the quiet beat and how each feature saves a run (`0188` sections 3.3 and 4).
 - Any server rule on amounts: backend `0261` refuses no amount off the step.
 
@@ -334,7 +419,8 @@ export function canStepUp(value: number, unit: LineUnit, max: number, step?: num
 ## Not in this plan
 
 - **The back office form** that writes the step. Admin `0070`.
-- **A first add that follows the product's step.** Question 1.
+- ~~**A first add that follows the product's step.** Question 1.~~ In the plan since ruling 43
+  (2026-11-16), on the client; the server's default for an add with no amount is unchanged.
 - **A step for a count or for a pack.** Backend `0261` S3.
 - **The product page's lists table stepping an existing line.** Velista `0187`.
 - **The reel.** Velista `0188` and `0190` remove it; it never reads a product step.
@@ -346,6 +432,10 @@ export function canStepUp(value: number, unit: LineUnit, max: number, step?: num
    Neither this plan nor backend `0261` changes the add. Should a follow up make a first add of
    saffron 1 g and of a whole chicken its own step, on the server (`0260`) and in velista
    (`0185`), once `0261` is built?
+
+   > **Answered 2026-11-16, the owner's ruling 43:** yes, in this plan. A first add of a
+   > product uses the product's step (target 5, decision G): the whole chicken at 1 kg, and
+   > plus then gives 2 kg.
 2. Your rule that a press always changes what the row reads (S7b) was stated for the default
    step. This plan reads it as holding for a curator's step too: a saffron step of 1 g or 5 g
    is used below 1 kg and becomes 10 g from 1 kg, so "1 kg" plus one press reads "1,01 kg". Is

@@ -67,13 +67,125 @@ describe('splitSize', () => {
       ['queso curado, 500g aprox.', '500g aprox.', 500, 'GRAM'],
       ['crema fresca de calabaza, 330ml', '330ml', 330, 'MILLILITER'],
       ['café en cápsulas, 16ud', '16ud', 16, 'UNIT'],
-      ['detergente líquido, 40 lavados', '40 lavados', 40, 'UNIT'],
+      ['calcetines deportivos, 3 pares', '3 pares', 3, 'UNIT'],
+      ['manzanilla, 20 bolsitas', '20 bolsitas', 20, 'UNIT'],
+      ['queso en porciones, 8 porciones', '8 porciones', 8, 'UNIT'],
+      ['yogur natural, 2X125g', '2X125g', 250, 'GRAM'],
     ])('%s', (printed, sizeFormat, unitSize, sizeUnit) => {
       // The printed text is the key, and it is exactly what the chain wrote.
       expect(splitSize(printed)).toMatchObject({
         sizeFormat,
         unitSize,
         sizeUnit,
+      });
+    });
+
+    describe('count words, a wash and a capital X (plan 0270)', () => {
+      it('reads 2x3 pares as six pairs in a pack of two', () => {
+        expect(splitSize('calcetines, 2x3 pares')).toMatchObject({
+          sizeFormat: '2x3 pares',
+          unitSize: 6,
+          sizeUnit: 'UNIT',
+          packCount: 2,
+        });
+      });
+
+      it.each([
+        ['detergente líquido, 40 lavados', '40 lavados'],
+        ['detergente líquido, 2x40 lavados', '2x40 lavados'],
+      ])(
+        '%p keeps the wash and states no size and no pack',
+        (printed, sizeFormat) => {
+          expect(splitSize(printed)).toEqual({
+            name: 'detergente líquido',
+            sizeFormat,
+            unitSize: null,
+            sizeUnit: null,
+            packCount: null,
+            soldByWeight: false,
+          });
+        }
+      );
+
+      it('reads the pack count of a capital X', () => {
+        expect(splitSize('yogur natural, 2X125g').packCount).toBe(2);
+      });
+
+      describe('hostile sizes', () => {
+        const NOTHING = {
+          unitSize: null,
+          sizeUnit: null,
+          packCount: null,
+          soldByWeight: false,
+        };
+
+        it.each(['XL', '2XL', 'MAX', 'X2', '2X60 w'])(
+          'keeps %p after the comma and states no size and no pack',
+          (sizeFormat) => {
+            expect(splitSize(`camiseta térmica, ${sizeFormat}`)).toEqual({
+              name: 'camiseta térmica',
+              sizeFormat,
+              ...NOTHING,
+            });
+          }
+        );
+
+        it.each(['55X60 cm', '1.2X1.8 m'])(
+          'keeps the length %p and states no size and no pack',
+          (sizeFormat) => {
+            expect(splitSize(`mantel, ${sizeFormat}`)).toEqual({
+              name: 'mantel',
+              sizeFormat,
+              ...NOTHING,
+            });
+          }
+        );
+
+        it.each([
+          ['calcetines 3 pares, 40g', 'calcetines 3 pares', '40g', 40],
+          ['té verde 10 bolsitas, 1,5g', 'té verde 10 bolsitas', '1,5g', 1.5],
+        ])(
+          'reads only the size after the comma of %p',
+          (printed, name, sizeFormat, unitSize) => {
+            expect(splitSize(printed)).toEqual({
+              name,
+              sizeFormat,
+              unitSize,
+              sizeUnit: 'GRAM',
+              packCount: null,
+              soldByWeight: false,
+            });
+          }
+        );
+
+        it.each([
+          ['queso fundido, 1 PORCIÓN', '1 PORCIÓN', 1],
+          ['calcetines, 3 Pares.', '3 Pares.', 3],
+        ])(
+          'reads the count word of %p in capitals or with a stop',
+          (printed, sizeFormat, unitSize) => {
+            expect(splitSize(printed)).toMatchObject({
+              sizeFormat,
+              unitSize,
+              sizeUnit: 'UNIT',
+              packCount: null,
+            });
+          }
+        );
+
+        it.each([
+          ['detergente, lavado a mano', 'detergente', 'lavado a mano'],
+          ['par de calcetines', 'par de calcetines', null],
+        ])(
+          'reads no size in %p, where lavado or par has no number',
+          (printed, name, sizeFormat) => {
+            expect(splitSize(printed)).toEqual({
+              name,
+              sizeFormat,
+              ...NOTHING,
+            });
+          }
+        );
       });
     });
 

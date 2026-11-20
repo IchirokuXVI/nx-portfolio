@@ -5,7 +5,7 @@ import {
   output,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import type { LineUnit } from '@portfolio/velista/models';
+import type { LineUnit, QuantityStep } from '@portfolio/velista/models';
 import { ProductRow, type ProductRowView } from './product-row';
 
 /** One line the visit added to, as its row draws it. */
@@ -21,8 +21,14 @@ export interface VisitAddedRow {
   readonly quantity: number;
   /** What {@link quantity} counts (velista `0182`). Absent is a count. */
   readonly unit?: LineUnit;
-  /** The lowest count the stepper shows. A minus pressed there takes it back. */
-  readonly floor: number;
+  /** The step its stepper presses by, `lineStepOf` (velista `0186`). Absent is the default. */
+  readonly step?: number | null;
+  /**
+   * The lowest amount the stepper's minus reaches. A minus that reaches it takes
+   * the product back: 0 for a line the visit made, so that minus draws the trash
+   * and is named for all it removes, or what a line that was there before held.
+   */
+  readonly min: number;
   /** The line waits for approval, which the row says under the name. */
   readonly pending: boolean;
 }
@@ -35,7 +41,7 @@ export interface VisitAddedSection {
   readonly rows: readonly VisitAddedRow[];
 }
 
-/** A press on one row's stepper. */
+/** A step of one row's stepper, as the stepper drew it. */
 export interface VisitAddedStep {
   readonly listId: string;
   readonly itemId: string;
@@ -44,7 +50,7 @@ export interface VisitAddedStep {
   readonly detail: string | null;
   /** The product's photo, which the record keeps for the line. */
   readonly imageUrl: string | null;
-  readonly by: 1 | -1;
+  readonly step: QuantityStep;
 }
 
 /**
@@ -53,10 +59,11 @@ export interface VisitAddedStep {
  * One row for each line the visit added to, drawn as the compact product card
  * (velista `0163`): the photo, its name, the detail with the price, and a stepper
  * in the control slot. The card opens nothing here; the stepper is its control.
- * **The minus at the floor takes the product back**, so the stepper's lowest value
- * is one under the floor and the container reads a step down from the floor as
- * the undo. One quiet button takes back everything on a list, and a link opens
- * the list.
+ * **The minus at the floor takes the product back.** On a line the visit made it
+ * goes to 0 like every other stepper, with the trash; on a line that was there
+ * before it stops at what the line held. The container reads that step as the
+ * undo. One quiet button takes back everything on a list, and a link opens the
+ * list.
  *
  * Products added to two lists sit under two headings, one for each list. With one
  * list the sheet's title already names it and no heading is drawn.
@@ -85,7 +92,7 @@ export interface VisitAddedStep {
                     lineId: row.lineId,
                     detail: row.detail,
                     imageUrl: row.imageUrl,
-                    by: $event,
+                    step: $event,
                   })
                 "
                 [compact]="true"
@@ -95,8 +102,9 @@ export interface VisitAddedStep {
                 [stepper]="{
                   value: row.quantity,
                   unit: row.unit,
-                  label: 'catalog.added.stepper' | rokuT: { name: row.name },
-                  min: row.floor - 1,
+                  step: row.step,
+                  name: row.name,
+                  min: row.min,
                 }"
               />
             </li>

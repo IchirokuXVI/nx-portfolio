@@ -351,6 +351,26 @@ export class MercadonaClient {
 
   private missing: string[] = [];
 
+  /**
+   * Every path the last {@link walkCatalog} listed each product under, by
+   * external id, in walk order (plan 0268, section 3).
+   *
+   * The walk yields a product once, at the first category that listed it, with
+   * that category's path. A product filed under several categories is listed
+   * again under each, and those later listings yield nothing: their paths are
+   * kept here. The first path of each product is the path its yield carried.
+   * A path listed twice is kept once. Complete once the walk has ended, and
+   * empty before a walk.
+   */
+  get walkedCategoryPaths(): ReadonlyMap<
+    string,
+    readonly (readonly CategoryPathNode[])[]
+  > {
+    return this.walked;
+  }
+
+  private walked = new Map<string, CategoryPathNode[][]>();
+
   /** The category tree, two levels (26 roots holding 151 children). */
   async listCategories(
     lang: MercadonaLang = 'es'
@@ -427,13 +447,15 @@ export class MercadonaClient {
    *
    * Products are deduplicated by external id as they are yielded, because a
    * product filed under several branches appears in several category responses
-   * and the caller's work queue must hold it once.
+   * and the caller's work queue must hold it once. The path of each later
+   * listing is kept in {@link walkedCategoryPaths} (plan 0268).
    */
   async *walkCatalog(
     lang: MercadonaLang = 'es'
   ): AsyncIterable<MercadonaListProduct> {
     const seen = new Set<string>();
     this.missing = [];
+    this.walked = new Map();
     const tree = await this.getJson(this.url('/categories/', lang));
     if (tree === null) {
       this.missing.push('categories');
@@ -454,13 +476,29 @@ export class MercadonaClient {
           continue;
         }
         for (const product of normalizeCategoryProducts(payload, [rootNode])) {
-          if (!product.externalId || seen.has(product.externalId)) {
+          if (!product.externalId) {
+            continue;
+          }
+          this.keepPath(product.externalId, product.categoryPath);
+          if (seen.has(product.externalId)) {
             continue;
           }
           seen.add(product.externalId);
           yield product;
         }
       }
+    }
+  }
+
+  /** One more listing of a product, kept unless it repeats a path it has. */
+  private keepPath(externalId: string, path: CategoryPathNode[]): void {
+    const paths = this.walked.get(externalId);
+    if (!paths) {
+      this.walked.set(externalId, [path]);
+      return;
+    }
+    if (!paths.some((other) => samePath(other, path))) {
+      paths.push(path);
     }
   }
 
@@ -553,4 +591,15 @@ export class MercadonaClient {
     }
     this.lastRequestAt = Date.now();
   }
+}
+
+/** Two walk paths that name the same nodes, ids and names, in one order. */
+function samePath(
+  a: readonly CategoryPathNode[],
+  b: readonly CategoryPathNode[]
+): boolean {
+  return (
+    a.length === b.length &&
+    a.every((node, i) => node.id === b[i].id && node.name === b[i].name)
+  );
 }

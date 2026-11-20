@@ -267,10 +267,7 @@ describe('appRoutes', () => {
     ['/harvest/runs/run-catalog-running', 'one run'],
     ['/harvest/setup/sources', 'the chain sources'],
     ['/harvest/setup/sources/new', 'the form of a new chain source'],
-    [
-      '/harvest/setup/sources/11111111-1111-4111-8111-111111111111',
-      'a chain source',
-    ],
+    ['/harvest/setup/sources/sm_mercadona', 'a chain source'],
     ['/harvest/setup/brands', 'the registered brands'],
     ['/harvest/setup/brands/new', 'the form of a new brand'],
     ['/harvest/setup/brands/br_1', 'a registered brand'],
@@ -344,10 +341,7 @@ describe('appRoutes', () => {
     ['/harvest/runs/import', [ImportUploadPage]],
     ['/harvest/runs/run-1', [RunPage]],
     ['/harvest/setup/sources', [HarvestSetupPage, SourcesTab]],
-    [
-      '/harvest/setup/sources/11111111-1111-4111-8111-111111111111',
-      [RecordPage],
-    ],
+    ['/harvest/setup/sources/sm_mercadona', [RecordPage]],
     ['/harvest/setup/brands', [HarvestSetupPage, ResourceListPage]],
     ['/harvest/setup/postal-codes', [HarvestSetupPage, ResourceListPage]],
     ['/harvest/setup/brands/br_1', [RecordPage]],

@@ -45,6 +45,7 @@ import type {
   SupermarketSource,
 } from '../entities';
 import { CatalogClient } from './catalog-client.service';
+import { DezaKeyGuard } from './deza-key-guard';
 import { readHarvestDocument } from './harvest-document.reader';
 import { HarvestRunPresetStore } from './harvest-run-preset.store';
 import {
@@ -61,6 +62,7 @@ import { ESTIMATE_SAMPLES, estimateRun } from './run-estimate';
 import { RunExecutor } from './run-executor.service';
 import { SourceEntryService } from './source-entry.service';
 import { SupermarketSourceService } from './supermarket-source.service';
+import { runWalkConfig } from './walk-fingerprint';
 
 interface RunCursor {
   value: string;
@@ -255,7 +257,8 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     private readonly catalog: CatalogClient,
     private readonly admin: PlatformAdminService,
     private readonly config: ConfigService,
-    private readonly presets: HarvestRunPresetStore
+    private readonly presets: HarvestRunPresetStore,
+    private readonly dezaKeys: DezaKeyGuard
   ) {}
 
   private settings(): HarvesterConfig {
@@ -547,12 +550,18 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
       throw new ValidationException(SOURCE_DISABLED);
     }
 
+    // What the walk runs under outside its request (owner decisions 130b, 127b
+    // and 137b): the adapter that does the work, as `runWalkConfig` decides it.
+    // An OpenStreetMap store discovery records `osm-places`, and a file import
+    // records neither.
+    const walkSource = needsSource ? source : null;
     try {
       const run = await this.store.create({
         mode: req.mode,
         trigger: origin.trigger,
         supermarketId,
-        sourceId: needsSource ? (source?.id ?? null) : null,
+        sourceId: walkSource?.id ?? null,
+        ...runWalkConfig(req.mode, walkSource),
         priceScopeId,
         requestedByUserId: origin.userId,
         correlationId: getRequestContext()?.correlationId ?? null,
@@ -881,6 +890,13 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
         'That supermarket has no configured source. Create one with ' +
           'supermarketSource.upsert before starting a run.'
       );
+    }
+    // No DEZA walk while a stored row waits for the key the deployed split
+    // builds (plan 0272, section 5.1). A preset saved in that gap is refused
+    // too, by the same sentence, and a scheduled slot is recorded REFUSED.
+    const dezaRefusal = await this.dezaKeys.refusal(source, req.mode);
+    if (dezaRefusal) {
+      throw new ValidationException(dezaRefusal);
     }
     return validated;
   }

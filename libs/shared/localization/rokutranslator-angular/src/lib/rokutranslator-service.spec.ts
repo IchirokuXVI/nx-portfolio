@@ -141,9 +141,36 @@ class OnPushBinding {}
 class Host {}
 
 describe('RokuTranslatorPipe', () => {
-  function text(fixture: ComponentFixture<Host>): string {
+  function text(fixture: ComponentFixture<unknown>): string {
     return (fixture.nativeElement.textContent ?? '').trim();
   }
+
+  it('draws an interpolated value as written', async () => {
+    @Component({
+      selector: 'lib-value-binding',
+      imports: [RokuTranslatorPipe],
+      template: `{{ 'amount' | rokuT: { name: name } }}`,
+    })
+    class ValueBinding {
+      name = `O'Brien's "rye" & <b>/`;
+    }
+
+    configure('ns-value-pipe', () =>
+      Promise.resolve({ amount: 'Amount of {{name}}' })
+    );
+    const service = TestBed.inject(RokuTranslatorService);
+    await firstValueFrom(service.loaded$);
+
+    const fixture = TestBed.createComponent(ValueBinding);
+    fixture.detectChanges();
+
+    // Escaped once by the translator and drawn as text, the screen showed
+    // `O&#39;Brien&#39;s`. Angular's text binding is the only escaping now.
+    expect(text(fixture)).toBe(`Amount of O'Brien's "rye" & <b>/`);
+    expect(
+      service.t('amount', undefined, undefined, { name: '€2.49 / kg' })
+    ).toBe('Amount of €2.49 / kg');
+  });
 
   it('re-renders an OnPush host when the load completes', async () => {
     const { loader, resolve } = deferredLoader();

@@ -184,6 +184,7 @@ describe('PostalCodeDiscoveryWorker and the owner alert (answer 4)', () => {
     supermarketId: null,
     label: 'OpenStreetMap',
     autoImportPlaces: false,
+    walkSource: null,
   };
 
   function request(attempts: number): PostalCodeDiscoveryRequest {

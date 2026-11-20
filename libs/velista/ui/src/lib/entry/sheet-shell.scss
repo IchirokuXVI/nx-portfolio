@@ -121,6 +121,9 @@
   flex: 1 1 auto;
   min-block-size: 0;
   overflow-y: auto;
+  // A containing block, so a hidden helper inside it scrolls with it rather than
+  // with the document (scroll-containers-are-positioned.spec.ts).
+  position: relative;
   // A scroll that reaches either end of the body stops here rather than continuing into
   // the document behind it. Without it the browser chains the leftover distance to the
   // page, and at the top of the page a downward chain is pull to refresh: dragging the

@@ -3,7 +3,7 @@ import {
   DEFAULT_SCHEDULE_TIMEZONE,
   nextScheduleSlot,
   sortedDays,
-  type Wire,
+  Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import { brandKey } from '@portfolio/luna-shopper/contracts/brand-key';
 import type { BulkOperationError } from '../bulk-operation-error';
@@ -25,6 +25,7 @@ import {
   HARVEST_RUN_SEED,
   HARVEST_SCHEDULE_SEED,
   ITEM_SOURCE_ENTRY_SEED,
+  memoryWalkFingerprint,
   PLACE_CHAIN_SEED,
   PLACE_FOOTPRINT_SEED,
   PLACE_SHOP_SEED,
@@ -126,11 +127,21 @@ export class HarvestMemory implements HarvestServiceI {
   async spawnRun(
     input: Wire.SpawnHarvestRunDto
   ): Promise<Wire.HarvestHarvestRunView> {
-    // The real service answers 409 carrying the active run's id, because one
-    // harvester runs one thing at a time. Refusing here too keeps the screen's
-    // conflict branch reachable with no backend.
+    // The real service answers 409 carrying the active run's id. Its database
+    // holds two rules, and this mirrors both. `uq_harvest_run_active`: a run of
+    // a chain is refused while that chain has a PENDING or RUNNING run of any
+    // mode. `uq_harvest_run_active_store_discovery`: a store discovery is
+    // refused while any store discovery is PENDING or RUNNING, of any chain or
+    // of none. A run with no chain is held by the second rule only, so one that
+    // is not a store discovery is never refused. The seed can thus hold a
+    // Mercadona walk and a DEZA walk at once. Refusing here too keeps the
+    // screen's conflict branch reachable with no backend.
+    const chain = input.supermarketId ?? null;
     const active = this._runs.find(
-      (run) => run.status === 'PENDING' || run.status === 'RUNNING'
+      (run) =>
+        (run.status === 'PENDING' || run.status === 'RUNNING') &&
+        ((chain !== null && run.supermarketId === chain) ||
+          (input.mode === 'STORE_DISCOVERY' && run.mode === 'STORE_DISCOVERY'))
     );
     if (active !== undefined) {
       throw new GatewayError({
@@ -141,10 +152,35 @@ export class HarvestMemory implements HarvestServiceI {
     }
 
     const now = new Date().toISOString();
+    // The run keeps its own request, as the harvester stores it: the spawn's
+    // fields without the chain, which the run carries as `supermarketId`.
+    const { supermarketId: _chain, ...request } = copyInput(input);
+    // What the walk runs under outside its request (owner decisions 130b,
+    // 127b and 137b), as the harvester's spawn records it: the adapter that
+    // walks it. A file import and a chain with no row record neither, and a
+    // store discovery OpenStreetMap walks records `osm-places` with an empty
+    // config.
+    const source =
+      input.mode === 'FILE_IMPORT' || chain === null
+        ? undefined
+        : this._sources.find((row) => row.supermarketId === chain);
+    const walker =
+      input.mode === 'STORE_DISCOVERY' &&
+      Wire.HarvestAdapterCapabilityTable[
+        source?.adapterKey as Wire.EnumsAdapterKey
+      ]?.listsItsOwnStores !== true
+        ? { adapterKey: 'osm-places' as const, config: {} }
+        : source;
     const run: Wire.HarvestHarvestRunView = {
       id: mintRunId(this._nextId++),
+      input: request,
       supermarketId: input.supermarketId ?? null,
-      sourceId: null,
+      sourceId: source?.id ?? null,
+      adapterKey: walker?.adapterKey ?? null,
+      configFingerprint:
+        walker === undefined
+          ? null
+          : memoryWalkFingerprint(walker.adapterKey, walker.config),
       mode: input.mode,
       trigger: 'MANUAL',
       status: 'PENDING',
@@ -630,18 +666,25 @@ export class HarvestMemory implements HarvestServiceI {
    * No status asked for means the queue: `CANDIDATE` and `UNRESOLVED` together,
    * which is what is waiting for a person. That default is the route's, not the
    * screen's, so it lives here rather than in the page.
+   *
+   * An `entryId` answers that one row, and with no status asked for it drops
+   * the default, as the route does (admin plan 0073).
    */
   async listEntries(
     query: EntryQuery
   ): Promise<Wire.HarvestQueuedSourceEntryPage> {
     const term = (query.query ?? '').trim().toLowerCase();
     const chain = query.supermarketId ?? '';
+    const entryId = query.entryId ?? '';
     const matching = this._entries.filter(
       (entry) =>
         // Absent lists every chain's rows, as the route does.
         (chain === '' || entry.supermarketId === chain) &&
+        (entryId === '' || entry.id === entryId) &&
         (query.status === undefined
-          ? entry.status === 'CANDIDATE' || entry.status === 'UNRESOLVED'
+          ? entryId !== '' ||
+            entry.status === 'CANDIDATE' ||
+            entry.status === 'UNRESOLVED'
           : entry.status === query.status) &&
         (query.sourceKind === undefined ||
           entry.sourceKind === query.sourceKind) &&
@@ -650,6 +693,11 @@ export class HarvestMemory implements HarvestServiceI {
         // the route does with it: `brandKey` never answers punctuation.
         (query.brandKey === undefined ||
           brandKey(entry.brand ?? '') === query.brandKey) &&
+        // Admin plan 0072, as the route reads it: true is the doubted rows,
+        // false the others, and absent both.
+        (query.sizeDoubt === undefined ||
+          (entry.sizeDoubt !== null && entry.sizeDoubt !== undefined) ===
+            query.sizeDoubt) &&
         (term === '' ||
           entry.name.toLowerCase().includes(term) ||
           (entry.brand ?? '').toLowerCase().includes(term) ||
@@ -953,8 +1001,11 @@ export class HarvestMemory implements HarvestServiceI {
       id: mintRunId(this._nextId++),
       supermarketId: input.supermarketId,
       // Never a source. An upload fetches nothing, so a chain that publishes
-      // only leaflets needs no source row at all.
+      // only leaflets needs no source row at all. So it records no adapter
+      // and no config either (owner decisions 127b and 130b).
       sourceId: null,
+      adapterKey: null,
+      configFingerprint: null,
       mode: 'FILE_IMPORT',
       trigger: 'MANUAL',
       status: 'PENDING',
@@ -1499,9 +1550,14 @@ export class HarvestMemory implements HarvestServiceI {
       return;
     }
 
+    // A run that does not know its total (a DEZA walk) still counts up; it
+    // used to be pinned at zero against a total of nothing.
     const total = run.totalPlanned ?? 0;
     run.heartbeatAt = new Date().toISOString();
-    run.processed = Math.min(total, run.processed + 137);
+    run.processed =
+      run.totalPlanned === null
+        ? run.processed + 137
+        : Math.min(total, run.processed + 137);
     run.created += 61;
     run.unchanged += 76;
 

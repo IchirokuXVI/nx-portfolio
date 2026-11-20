@@ -67,15 +67,25 @@ const UNITS: Readonly<Record<string, CardUnit>> = {
   grs: { base: 'kg', factor: 0.001 },
   gramos: { base: 'kg', factor: 0.001 },
   mg: { base: 'kg', factor: 0.000001 },
-  // Count, in units. The chain counts a household product in what it holds, so
-  // `lavados` and `rollos` are units here exactly as `ud` is, and the card
-  // measuring in `ud` is what says so.
+  // Count, in units. The chain counts a household product in the pieces it
+  // holds, so `rollos` and `pares` are units here exactly as `ud` is, and the
+  // card measuring in `ud` is what says so.
   ud: { base: 'ud', factor: 1 },
   uds: { base: 'ud', factor: 1 },
   unidad: { base: 'ud', factor: 1 },
   unidades: { base: 'ud', factor: 1 },
-  lavado: { base: 'ud', factor: 1 },
-  lavados: { base: 'ud', factor: 1 },
+  // A wash is the brand's claim and counts nothing in the pack (plan 0270).
+  // No factor, so it states no size, and the printed text still splits off
+  // the name as the size it is.
+  lavado: { base: 'ud' },
+  lavados: { base: 'ud' },
+  par: { base: 'ud', factor: 1 },
+  pares: { base: 'ud', factor: 1 },
+  bolsita: { base: 'ud', factor: 1 },
+  bolsitas: { base: 'ud', factor: 1 },
+  porción: { base: 'ud', factor: 1 },
+  porcion: { base: 'ud', factor: 1 },
+  porciones: { base: 'ud', factor: 1 },
   rollo: { base: 'ud', factor: 1 },
   rollos: { base: 'ud', factor: 1 },
   sobre: { base: 'ud', factor: 1 },

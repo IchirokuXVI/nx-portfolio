@@ -6,9 +6,12 @@ import {
   SourceGuard,
 } from '@portfolio/luna-shopper/source-guard';
 import type { SupermarketSource } from '../entities';
+import { mergeCategoryPaths } from './category-paths';
+import { FailingRunReport } from './failing-run-report.fake';
 import { LidlCatalogRunner } from './lidl-catalog.runner';
 import type { RunContext } from './run-context';
 import { RecordingRunReport } from './run-report';
+import { ReportWriteFailedError } from './run-report.sink';
 
 /**
  * The run, end to end, over a fake fetch (plan 0089, section 12).
@@ -65,9 +68,14 @@ function row(options: {
   brand?: string;
   size?: string;
   won?: string;
+  /** `wonCategoryBreadcrumbs` of the row's `meta`, by name (plan 0268). */
+  breadcrumbs?: string[][];
 }): Record<string, unknown> {
   return {
     gridbox: {
+      ...(options.breadcrumbs
+        ? { meta: { wonCategoryBreadcrumbs: crumbs(options.breadcrumbs) } }
+        : {}),
       data: {
         productId: options.id,
         category: options.category,
@@ -88,6 +96,18 @@ function row(options: {
   };
 }
 
+/** Paths of names as the chain prints a breadcrumb list: nodes, root first. */
+function crumbs(paths: string[][]): unknown[] {
+  return paths.map((path) =>
+    path.map((name, i) => ({
+      id: `${name.length}${i}`,
+      name,
+      url: '/c/x',
+      hiddenCategory: false,
+    }))
+  );
+}
+
 /** One product page's state, with a price per region group. */
 function product(options: {
   id: string;
@@ -95,6 +115,13 @@ function product(options: {
   /** The size the page prints, verbatim. */
   size?: string;
   groups?: Array<{ priceId: string; regions: string[]; price: number | null }>;
+  /**
+   * The page's `wonCategoryBreadcrumbs`, by name (plan 0268). Absent leaves
+   * the list out of the page, as the pages captured before November do.
+   */
+  breadcrumbs?: string[][];
+  /** The page's `wonCategoryBreadcrumbs` as printed, over {@link breadcrumbs}. */
+  rawBreadcrumbs?: unknown[];
 }): string {
   const regionsV2: Record<string, unknown> = {};
   const regionsPrices: Record<string, unknown> = {};
@@ -135,6 +162,12 @@ function product(options: {
             storeFacts: { retail: true, online: false },
             regionsV2,
             regionsPrices,
+            ...(options.breadcrumbs
+              ? { wonCategoryBreadcrumbs: crumbs(options.breadcrumbs) }
+              : {}),
+            ...(options.rawBreadcrumbs
+              ? { wonCategoryBreadcrumbs: options.rawBreadcrumbs }
+              : {}),
           },
         },
       },
@@ -172,7 +205,9 @@ class TestRunner extends LidlCatalogRunner {
       acquire: context.acquire,
       guard: context.guard,
       signal: context.signal,
-      fetchImpl: (async (url: string) => {
+      fetchImpl: (async (url: string, init?: RequestInit) => {
+        // As the real fetch does: a request on an aborted signal never leaves.
+        init?.signal?.throwIfAborted();
         const path = String(url).replace('https://www.lidl.es', '');
         this.asked.push(path);
         this.onAsk?.(path);
@@ -634,5 +669,564 @@ describe('LidlCatalogRunner', () => {
     // Nothing in the report claims the chain's assortment: the site publishes
     // a window, and `listed` is a count of what this window held.
     expect(Object.keys(runReport as object)).not.toContain('total');
+  });
+
+  describe('a walk reports what it has read as it goes (plan 0267)', () => {
+    /**
+     * Three products over three regions. The second names a region the first
+     * did not, and the third names none the run has not declared, so the
+     * order of declarations against products is visible.
+     */
+    const index = [
+      row({ id: '1', title: 'Queso', category: 'Food' }),
+      row({ id: '2', title: 'Uva', category: 'F+V' }),
+      // The index repeats a row it already gave: one product, one page.
+      row({ id: '1', title: 'Queso', category: 'Food' }),
+      row({ id: '3', title: 'Leche', category: 'Food' }),
+    ];
+    const pages = (): Record<string, string | number> => ({
+      '/p/x/p1': product({
+        id: '1',
+        groups: [{ priceId: 'a', regions: ['1', '2'], price: 2.5 }],
+      }),
+      '/p/x/p2': product({
+        id: '2',
+        groups: [
+          { priceId: 'a', regions: ['2'], price: 1.5 },
+          { priceId: 'b', regions: ['3'], price: 1.75 },
+        ],
+      }),
+      '/p/x/p3': product({
+        id: '3',
+        groups: [{ priceId: 'a', regions: ['3', '1'], price: 0.99 }],
+      }),
+    });
+
+    /**
+     * Every scope, product, page asked and stage set, in the order the run
+     * said them, as `scope:<key>`, `product:<id>`, `ask:<path>` and
+     * `stage:<stage>`.
+     */
+    function watch(runContext: RunContext): string[] {
+      const events: string[] = [];
+      const scope = report.scope.bind(report);
+      report.scope = (declaration) => {
+        events.push(`scope:${declaration.key}`);
+        scope(declaration);
+      };
+      const reported = report.product.bind(report);
+      report.product = (observation) => {
+        events.push(`product:${observation.externalId}`);
+        reported(observation);
+      };
+      (runContext.setStage as jest.Mock).mockImplementation(
+        async (stage: string) => {
+          events.push(`stage:${stage}`);
+        }
+      );
+      return events;
+    }
+
+    it('reports each product once, as its page answers, each region declared before the first product that names it', async () => {
+      const runContext = context();
+      const events = watch(runContext);
+      const runner = new TestRunner({ index, products: pages() }, (path) => {
+        if (path.startsWith('/p/')) {
+          events.push(`ask:${path}`);
+        }
+      });
+
+      await runner.run(runContext, report, { supermarketId: CHAIN }, source());
+
+      expect(events).toEqual([
+        'stage:LIST',
+        'stage:DETAIL',
+        'ask:/p/x/p1',
+        'scope:1',
+        'scope:2',
+        'product:1',
+        'ask:/p/x/p2',
+        'scope:3',
+        'product:2',
+        'ask:/p/x/p3',
+        // Both of its regions were declared already: once each, never again.
+        'product:3',
+        'stage:INGEST',
+      ]);
+      // The name of a region is that of its first sighting.
+      expect(report.scopes).toEqual([
+        { key: '1', kind: PriceScopeKind.REGION, name: 'Region 1' },
+        { key: '2', kind: PriceScopeKind.REGION, name: 'Region 2' },
+        { key: '3', kind: PriceScopeKind.REGION, name: 'Region 3' },
+      ]);
+      // LIDL publishes a window, not an assortment: nothing is ever whole.
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole).toEqual([]);
+    });
+
+    it('gives the same report at the end as before', async () => {
+      const runContext = context();
+      const runner = new TestRunner({ index, products: pages() });
+
+      await runner.run(runContext, report, { supermarketId: CHAIN }, source());
+
+      expect(runContext.setReport).toHaveBeenCalledTimes(1);
+      expect((runContext.setReport as jest.Mock).mock.calls[0][0]).toEqual({
+        window: {
+          from: '2026-09-03T22:00:00.000Z',
+          to: '2026-09-06T21:59:59.000Z',
+        },
+        listed: 3,
+        grocery: 3,
+        detailRead: 3,
+        detailFailed: 0,
+        unreadableProducts: [],
+        priced: 3,
+        unpriced: 0,
+        withEan13: 3,
+        regionsSeen: 3,
+        regionsDeclared: ['1', '2', '3'],
+        observations: 4,
+        regionallyPriced: 1,
+        requests: runner.asked.length,
+      });
+      expect(idsOf()).toEqual(['1', '2', '3']);
+    });
+
+    it('has reported what it read while the walk is still going, and declared nothing whole', async () => {
+      let reached!: () => void;
+      const stalled = new Promise<void>((resolve) => (reached = resolve));
+      let release!: () => void;
+      const released = new Promise<void>((resolve) => (release = resolve));
+      /** A walk whose third page never answers until released, as a dying pod. */
+      class StallingRunner extends TestRunner {
+        protected override createClient(runContext: RunContext): LidlClient {
+          const inner = super.createClient(runContext);
+          const getProduct = inner.getProduct.bind(inner);
+          inner.getProduct = async (listed) => {
+            if (listed.externalId === '3') {
+              reached();
+              await released;
+              throw new Error('The connection was reset.');
+            }
+            return getProduct(listed);
+          };
+          return inner;
+        }
+      }
+      const runContext = context();
+      const runner = new StallingRunner({ index, products: pages() });
+
+      const run = runner.run(
+        runContext,
+        report,
+        { supermarketId: CHAIN },
+        source()
+      );
+      await stalled;
+
+      // Half way: the products read are with the sink, with their regions,
+      // and the end of the walk has not run.
+      expect(idsOf()).toEqual(['1', '2']);
+      expect(report.scopes.map((scope) => scope.key)).toEqual(['1', '2', '3']);
+      expect(report.wholeListings).toEqual([]);
+      expect(runContext.setReport).not.toHaveBeenCalled();
+      expect(runContext.setStage).not.toHaveBeenCalledWith(
+        'INGEST',
+        expect.anything()
+      );
+
+      release();
+      await run;
+      // The page that failed costs one product, and nothing is reported twice.
+      expect(idsOf()).toEqual(['1', '2']);
+      expect(runContext.report).toHaveBeenCalledWith({ failed: 1 });
+      expect(report.wholeListings).toEqual([]);
+    });
+
+    it('reports the products read before an abort, and none after it', async () => {
+      const controller = new AbortController();
+      const runContext = context(controller.signal);
+      const events = watch(runContext);
+      const runner = new TestRunner({ index, products: pages() }, (path) => {
+        if (path === '/p/x/p2') {
+          controller.abort();
+        }
+      });
+
+      await runner.run(runContext, report, { supermarketId: CHAIN }, source());
+
+      // The page in flight answered and is kept, its new region declared
+      // before it. The third page was never asked.
+      expect(events).toEqual([
+        'stage:LIST',
+        'stage:DETAIL',
+        'scope:1',
+        'scope:2',
+        'product:1',
+        'scope:3',
+        'product:2',
+        'stage:INGEST',
+      ]);
+      expect(runner.asked).not.toContain('/p/x/p3');
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole).toEqual([]);
+    });
+
+    it('asks for no page after a chunk failed to write (plan 0269, section 1)', async () => {
+      const controller = new AbortController();
+      const failing = new FailingRunReport(controller);
+      const runContext = context(controller.signal);
+      const runner = new TestRunner({ index, products: pages() });
+
+      await runner.run(runContext, failing, { supermarketId: CHAIN }, source());
+
+      // The executor's abort reached the walk through the signal it reads.
+      expect(controller.signal.reason).toBeInstanceOf(ReportWriteFailedError);
+      expect(runner.asked).toContain('/p/x/p1');
+      expect(runner.asked).not.toContain('/p/x/p2');
+      expect(runner.asked).not.toContain('/p/x/p3');
+      expect(failing.dropped).toBe(0);
+      expect(failing.wholeListings).toEqual([]);
+      expect(failing.notWhole).toEqual([]);
+    });
+  });
+
+  describe('every path a product is filed under (plan 0268)', () => {
+    const QUESO = [
+      'Mundos de necesidad',
+      'Comida y cerca de la comida',
+      'Quesos, productos lácteos y huevos',
+      'Queso',
+    ];
+    const SHOP = ['Alimentación', 'Quesos'];
+    const AUTUMN = ['Especial otoño'];
+    const priced = [{ priceId: 'a', regions: ['1'], price: 2.5 }];
+
+    const callFor = (externalId: string) =>
+      report.categoryPathCalls.find((call) => call.externalId === externalId);
+
+    it('gives a product its need world path and every breadcrumb, in that order, as REPLACE', async () => {
+      const run = context();
+      const runner = new TestRunner({
+        index: [
+          row({ id: '1', title: 'Queso', category: 'Food' }),
+          row({ id: '2', title: 'Leche', category: 'Food' }),
+        ],
+        products: {
+          '/p/x/p1': product({
+            id: '1',
+            groups: priced,
+            breadcrumbs: [SHOP, AUTUMN],
+          }),
+          // The page states the list, and it is empty: no statement (owner
+          // decision 95b).
+          '/p/x/p2': product({ id: '2', groups: priced, breadcrumbs: [] }),
+        },
+      });
+      let callsAtFlush = -1;
+      (run.flush as jest.Mock).mockImplementation(async () => {
+        callsAtFlush = report.categoryPathCalls.length;
+      });
+
+      await runner.run(run, report, { supermarketId: CHAIN }, source());
+
+      expect(callFor('1')).toEqual({
+        externalId: '1',
+        paths: [QUESO, SHOP, AUTUMN],
+        mode: 'REPLACE',
+      });
+      expect(callFor('2')).toEqual({
+        externalId: '2',
+        paths: [QUESO],
+        mode: 'ADD',
+      });
+      // One call a product.
+      expect(report.categoryPathCalls).toHaveLength(2);
+      // `categoryPath` is what it was, and the first path of the call.
+      const observed = report.products.find(
+        (observation) => observation.externalId === '1'
+      );
+      expect(observed?.categoryPath).toEqual(QUESO);
+      expect(observed?.categoryPath).toEqual(callFor('1')?.paths[0]);
+      // No observation carries the paths.
+      for (const observation of report.products) {
+        expect(observation).not.toHaveProperty('categoryPaths');
+      }
+      // Made at the end of the walk, before the run flushes and the sink
+      // drains.
+      expect(callsAtFlush).toBe(2);
+    });
+
+    it('takes the breadcrumbs of the index row for a page that prints none, as ADD', async () => {
+      const runner = new TestRunner({
+        index: [
+          row({
+            id: '1',
+            title: 'Queso',
+            category: 'Food',
+            breadcrumbs: [SHOP],
+          }),
+        ],
+        // A page that leaves the list out, as every page captured before
+        // November does.
+        products: { '/p/x/p1': product({ id: '1', groups: priced }) },
+      });
+
+      await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: '1', paths: [QUESO, SHOP], mode: 'ADD' },
+      ]);
+    });
+
+    it('says ADD for a page that states its need world path and leaves the list out', async () => {
+      const runner = new TestRunner({
+        index: [row({ id: '1', title: 'Queso', category: 'Food' })],
+        products: { '/p/x/p1': product({ id: '1', groups: priced }) },
+      });
+
+      await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: '1', paths: [QUESO], mode: 'ADD' },
+      ]);
+    });
+
+    it('says ADD for a page whose list is not empty and has nothing readable', async () => {
+      const runner = new TestRunner({
+        index: [row({ id: '1', title: 'Queso', category: 'Food' })],
+        products: {
+          '/p/x/p1': product({
+            id: '1',
+            groups: priced,
+            // A renamed field: no node carries a name.
+            rawBreadcrumbs: [[{ id: '1', label: 'Alimentación' }]],
+          }),
+        },
+      });
+
+      await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: '1', paths: [QUESO], mode: 'ADD' },
+      ]);
+    });
+
+    it('says ADD for a page whose list was read only in part', async () => {
+      const runner = new TestRunner({
+        index: [row({ id: '1', title: 'Queso', category: 'Food' })],
+        products: {
+          '/p/x/p1': product({
+            id: '1',
+            groups: priced,
+            rawBreadcrumbs: [
+              [
+                { id: '1', name: 'Alimentación' },
+                { id: '2', name: 'Quesos' },
+              ],
+              [{ id: '3', label: 'Especial otoño' }],
+            ],
+          }),
+        },
+      });
+
+      await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: '1', paths: [QUESO, SHOP], mode: 'ADD' },
+      ]);
+    });
+
+    it('adds the breadcrumbs of the index row to a page list read only in part, as ADD (owner decision 115b)', async () => {
+      const runner = new TestRunner({
+        index: [
+          row({
+            id: '1',
+            title: 'Queso',
+            category: 'Food',
+            breadcrumbs: [AUTUMN, SHOP],
+          }),
+        ],
+        products: {
+          '/p/x/p1': product({
+            id: '1',
+            groups: priced,
+            rawBreadcrumbs: [
+              [
+                { id: '1', name: 'Alimentación' },
+                { id: '2', name: 'Quesos' },
+              ],
+              [{ id: '3' }],
+            ],
+          }),
+        },
+      });
+
+      await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+      // SHOP is on both lists and is written once.
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: '1', paths: [QUESO, SHOP, AUTUMN], mode: 'ADD' },
+      ]);
+    });
+
+    it('leaves the breadcrumbs of the index row out beside a page list read in full, as REPLACE', async () => {
+      const runner = new TestRunner({
+        index: [
+          row({
+            id: '1',
+            title: 'Queso',
+            category: 'Food',
+            breadcrumbs: [AUTUMN],
+          }),
+        ],
+        products: {
+          '/p/x/p1': product({ id: '1', groups: priced, breadcrumbs: [SHOP] }),
+        },
+      });
+
+      await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: '1', paths: [QUESO, SHOP], mode: 'REPLACE' },
+      ]);
+    });
+
+    it('says ADD for a page that states an empty list, so a path stored earlier survives (owner decision 95b)', async () => {
+      const runner = new TestRunner({
+        index: [row({ id: '1', title: 'Queso', category: 'Food' })],
+        products: {
+          '/p/x/p1': product({ id: '1', groups: priced, rawBreadcrumbs: [] }),
+        },
+      });
+
+      await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: '1', paths: [QUESO], mode: 'ADD' },
+      ]);
+      // What the entry holds after the call: the breadcrumb an earlier week
+      // stored is still there, beside the need world path.
+      const [call] = report.categoryPathCalls;
+      expect(mergeCategoryPaths([SHOP], call.paths, call.mode)).toEqual([
+        SHOP,
+        QUESO,
+      ]);
+    });
+
+    it('takes the breadcrumbs of the index row for a page that states an empty list, as ADD (owner decision 101b)', async () => {
+      const runner = new TestRunner({
+        index: [
+          row({
+            id: '1',
+            title: 'Queso',
+            category: 'Food',
+            breadcrumbs: [SHOP],
+          }),
+        ],
+        products: {
+          '/p/x/p1': product({ id: '1', groups: priced, rawBreadcrumbs: [] }),
+        },
+      });
+
+      await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: '1', paths: [QUESO, SHOP], mode: 'ADD' },
+      ]);
+    });
+
+    it('says REPLACE for a page that states a real list read in full, so a path it no longer names goes', async () => {
+      const runner = new TestRunner({
+        index: [row({ id: '1', title: 'Queso', category: 'Food' })],
+        products: {
+          '/p/x/p1': product({ id: '1', groups: priced, breadcrumbs: [SHOP] }),
+        },
+      });
+
+      await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: '1', paths: [QUESO, SHOP], mode: 'REPLACE' },
+      ]);
+      const [call] = report.categoryPathCalls;
+      expect(mergeCategoryPaths([AUTUMN], call.paths, call.mode)).toEqual([
+        QUESO,
+        SHOP,
+      ]);
+    });
+
+    it('says ADD for a page whose list holds one empty breadcrumb', async () => {
+      const runner = new TestRunner({
+        index: [row({ id: '1', title: 'Queso', category: 'Food' })],
+        products: {
+          '/p/x/p1': product({ id: '1', groups: priced, rawBreadcrumbs: [[]] }),
+        },
+      });
+
+      await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: '1', paths: [QUESO], mode: 'ADD' },
+      ]);
+    });
+
+    it('makes no call for a product whose page did not answer', async () => {
+      const runner = new TestRunner({
+        index: [
+          row({ id: '1', title: 'Queso', category: 'Food' }),
+          row({ id: '2', title: 'Uva', category: 'F+V' }),
+        ],
+        products: {
+          '/p/x/p1': product({ id: '1', groups: priced, breadcrumbs: [] }),
+          '/p/x/p2': 500,
+        },
+      });
+
+      await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+      expect(report.categoryPathCalls.map((call) => call.externalId)).toEqual([
+        '1',
+      ]);
+    });
+
+    it('says ADD for every product when the run was aborted', async () => {
+      const controller = new AbortController();
+      const runner = new TestRunner(
+        {
+          index: [
+            row({ id: '1', title: 'Queso', category: 'Food' }),
+            row({ id: '2', title: 'Uva', category: 'F+V' }),
+            row({ id: '3', title: 'Leche', category: 'Food' }),
+          ],
+          products: {
+            '/p/x/p1': product({ id: '1', groups: priced, breadcrumbs: [] }),
+            '/p/x/p2': product({ id: '2', groups: priced, breadcrumbs: [] }),
+            '/p/x/p3': product({ id: '3', groups: priced, breadcrumbs: [] }),
+          },
+        },
+        (path) => {
+          if (path === '/p/x/p2') {
+            controller.abort();
+          }
+        }
+      );
+
+      await runner.run(
+        context(controller.signal),
+        report,
+        { supermarketId: CHAIN },
+        source()
+      );
+
+      expect(report.categoryPathCalls.map((call) => call.externalId)).toEqual([
+        '1',
+        '2',
+      ]);
+      expect(
+        report.categoryPathCalls.every((call) => call.mode === 'ADD')
+      ).toBe(true);
+    });
   });
 });

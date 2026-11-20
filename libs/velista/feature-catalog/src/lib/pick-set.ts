@@ -87,5 +87,6 @@ export function lineProductCard(item: CatalogItem): CatalogProduct {
     offer: item.offer,
     unitBasis: item.unitBasis,
     approxWeight: item.approxWeight,
+    quantityStep: item.quantityStep,
   };
 }

@@ -85,6 +85,35 @@ async function register(
   });
 }
 
+describe('interpolated values', () => {
+  it('come back as written, with no HTML escaping', async () => {
+    const translator = new RokuTranslator();
+    await translator.init({ locale: 'en', supportedLocales: ['en'] });
+    await register(translator, 'en', 'ns-values', () =>
+      Promise.resolve({
+        amount: 'Amount of {{name}}',
+        price: '{{price}} at {{chain}}',
+      })
+    );
+
+    // The i18next default escapes each value as HTML, and every consumer draws
+    // the sentence as text, so `&#39;` and `&#x2F;` reached the screen.
+    expect(
+      translator.t('amount', {
+        ns: 'ns-values',
+        name: `O'Brien's "rye" & <b>/`,
+      })
+    ).toBe(`Amount of O'Brien's "rye" & <b>/`);
+    expect(
+      translator.t('price', {
+        ns: 'ns-values',
+        price: '€2.49 / kg',
+        chain: 'Sánchez & Co',
+      })
+    ).toBe('€2.49 / kg at Sánchez & Co');
+  });
+});
+
 describe('registering a namespace', () => {
   let translator: RokuTranslator;
 

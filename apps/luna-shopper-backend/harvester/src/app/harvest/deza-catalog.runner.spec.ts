@@ -6,11 +6,19 @@ import {
 } from '@portfolio/luna-shopper/source-guard';
 import type { SupermarketSource } from '../entities';
 import {
+  descriptionOf,
+  dezaKeysRefusal,
+  rekeyable,
+  selectMoves,
+  type StoredRow,
+} from '../release-tasks/deza-keys';
+import {
   DezaCatalogRunner,
   entryKey,
   heaviestUntried,
   type CappedQuery,
 } from './deza-catalog.runner';
+import type { DezaKeyGuard } from './deza-key-guard';
 import { startFakeListing, type FakeListing } from './deza-listing.fake';
 import type { RunContext } from './run-context';
 import { RecordingRunReport } from './run-report';
@@ -140,7 +148,11 @@ interface Built {
  * with a report, including resolving shop codes and writing availability, is
  * `run-report.sink.spec.ts`.
  */
-function build(_listing: FakeListing): Built {
+function build(
+  _listing: FakeListing,
+  /** What the DEZA key guard answers (plan 0272): none, by default. */
+  dezaRefusal: string | null = null
+): Built {
   const runReport: Record<string, unknown> = {};
   const context = {
     runId: RUN,
@@ -157,9 +169,12 @@ function build(_listing: FakeListing): Built {
     }),
   } as unknown as RunContext;
 
-  const runner = new DezaCatalogRunner({
-    getOrThrow: () => ({ userAgent: 'test' }),
-  } as unknown as ConfigService);
+  const runner = new DezaCatalogRunner(
+    {
+      getOrThrow: () => ({ userAgent: 'test' }),
+    } as unknown as ConfigService,
+    { refusal: async () => dezaRefusal } as unknown as DezaKeyGuard
+  );
 
   return { runner, context, report: new RecordingRunReport(), runReport };
 }
@@ -1416,6 +1431,110 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     );
   });
 
+  it('keys a row whose count word now splits under one new key, walk after walk (plan 0270, section 5.2)', async () => {
+    listing = await startFakeListing(SECTIONS, [
+      {
+        description: 'Calcetines 3 pares',
+        section: 'W011',
+        shops: ['T1'],
+      },
+    ]);
+
+    // Two runs, so two `Crawl` instances, read the same printed description.
+    const keys: string[] = [];
+    for (let walk = 0; walk < 2; walk++) {
+      const { runner, context, report } = build(listing);
+      await runner.run(
+        context,
+        report,
+        { supermarketId: CHAIN },
+        source({ baseUrl: listing.url })
+      );
+      expect(report.products).toHaveLength(1);
+      expect(report.products[0]).toMatchObject({
+        name: 'Calcetines',
+        sizeFormat: '3 pares',
+        unitSize: 3,
+        sizeUnit: 'UNIT',
+      });
+      keys.push(report.products[0].externalId);
+    }
+
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[0]).toBe(entryKey('Calcetines', '3 pares'));
+    // The key the split before this plan built for the same description,
+    // which kept the size in the name: the stored row moves once.
+    expect(keys[0]).not.toBe(entryKey('Calcetines 3 pares', null));
+  });
+
+  it('writes a wash as a split size with no number (plan 0270)', async () => {
+    listing = await startFakeListing(SECTIONS, [
+      {
+        description: 'Detergente ARIEL 40 lavados',
+        section: 'W011',
+        shops: ['T1'],
+      },
+    ]);
+    const { runner, context, report } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+
+    expect(report.products[0]).toMatchObject({
+      externalId: entryKey('Detergente ARIEL', '40 lavados'),
+      name: 'Detergente ARIEL',
+      sizeFormat: '40 lavados',
+      unitSize: null,
+      sizeUnit: null,
+      packCount: null,
+    });
+  });
+
+  it('writes a weight printed with aprox as an approximate weight and no size (plan 0266, D4)', async () => {
+    listing = await startFakeListing(SECTIONS, [
+      {
+        description: 'Fuet extra ALTEZA 180 g aprox.',
+        section: 'W011',
+        shops: ['T1'],
+      },
+      {
+        description: 'Leche entera ALTEZA 1 L.',
+        section: 'W011',
+        shops: ['T1'],
+      },
+    ]);
+    const { runner, context, report } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+
+    const byFormat = Object.fromEntries(
+      report.products.map((product) => [
+        product.sizeFormat,
+        [product.unitSize, product.sizeUnit, product.approxWeight],
+      ])
+    );
+    expect(byFormat).toEqual({
+      '180 g aprox.': [null, null, 180],
+      '1 L.': [1, 'LITER', null],
+    });
+    expect(report.products.map((product) => product.externalId)).toContain(
+      entryKey('Fuet extra ALTEZA', '180 g aprox.')
+    );
+    // Still no price, ever.
+    expect(
+      report.products.every((product) => product.prices.length === 0)
+    ).toBe(true);
+  });
+
   it('writes no price of any kind', async () => {
     listing = await startFakeListing(SECTIONS, [
       {
@@ -1587,5 +1706,490 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     ).toBe(true);
     // No request went out after the stop, the one it cut off included.
     expect(listing.requests()).toBe(3);
+  });
+});
+
+describe('deza: a walk reports what it has read as it goes (plan 0267)', () => {
+  let listing: FakeListing | undefined;
+
+  afterEach(async () => {
+    await listing?.close();
+    listing = undefined;
+  });
+
+  /** One `report.product` call, and where the walk stood when it came. */
+  interface Reported {
+    externalId: string;
+    stage: string | null;
+    /** The queries the listing had answered by then. */
+    queries: string[];
+    /** The availability claims stated by then. */
+    claims: number;
+  }
+
+  /** Records every product call with the stage and the queries before it. */
+  function watch(built: Built, fake: FakeListing): Reported[] {
+    const calls: Reported[] = [];
+    let stage: string | null = null;
+    (built.context.setStage as jest.Mock).mockImplementation(
+      async (name: string) => {
+        stage = name;
+      }
+    );
+    const product = built.report.product.bind(built.report);
+    built.report.product = (observation) => {
+      calls.push({
+        externalId: observation.externalId,
+        stage,
+        queries: [...fake.queries],
+        claims: built.report.availabilities.length,
+      });
+      product(observation);
+    };
+    return calls;
+  }
+
+  /**
+   * Carniceria capped (400 rows) and split under a floor of 3, then Bolleria
+   * with 40 rows over three pages. One product is listed in both sections.
+   */
+  function twoSections() {
+    return [
+      // First, so the section's own query shows it under the ceiling.
+      { description: 'Fuet ALTEZA 180 g', section: 'W011', shops: ['T1'] },
+      ...cappedSection(),
+      ...Array.from({ length: 40 }, (_, index) => ({
+        description: `Bolleria ALTEZA numero${index} ${index} g`,
+        section: 'W051',
+        shops: ['T2'],
+      })),
+      { description: 'Fuet ALTEZA 180 g', section: 'W051', shops: ['T2'] },
+    ];
+  }
+
+  it('reports each product once when the section that saw it first ends, before the end of the walk', async () => {
+    listing = await startFakeListing(SECTIONS, twoSections());
+    const built = build(listing);
+    const calls = watch(built, listing);
+
+    await built.runner.run(
+      built.context,
+      built.report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url, sectionQueryBudget: 3 })
+    );
+
+    const ids = calls.map((call) => call.externalId);
+    expect(new Set(ids).size).toBe(ids.length);
+    // Every product of the crawl, each once.
+    expect(ids).toHaveLength(built.runReport['products'] as number);
+    expect(built.context.setTotalPlanned).toHaveBeenCalledWith(ids.length);
+
+    const carniceriaQueries = carniceria(listing);
+    expect(carniceriaQueries.length).toBeGreaterThan(1);
+    const fuet = entryKey('Fuet ALTEZA', '180 g');
+    const fromCarniceria = built.report.products.filter(
+      (product) => product.categoryPath[1] === 'Carniceria'
+    );
+    const fromBolleria = built.report.products.filter(
+      (product) => product.categoryPath[1] === 'Bolleria'
+    );
+    expect(fromBolleria).toHaveLength(40);
+    for (const call of calls) {
+      // Never at the end of the walk, and never before a claim is stated.
+      expect(call.stage).toBe('ENUMERATE');
+      expect(call.claims).toBe(0);
+    }
+    for (const call of calls.slice(0, fromCarniceria.length)) {
+      // **A section is the unit, not a query.** Carniceria's products came
+      // after every one of its split queries and before Bolleria's first.
+      expect(call.queries).toEqual(carniceriaQueries);
+    }
+    for (const call of calls.slice(fromCarniceria.length)) {
+      expect(call.queries).toEqual(listing.queries);
+    }
+    // The product of both sections keeps the path of its first sighting, and
+    // its second sighting only added a shop, which availability states.
+    expect(
+      built.report.products.find((product) => product.externalId === fuet)
+        ?.categoryPath
+    ).toEqual(['FRIO', 'Carniceria']);
+    expect(
+      built.report.availabilities
+        .filter((claim) => claim.externalId === fuet && claim.available)
+        .map((claim) => claim.shopCode)
+        .sort()
+    ).toEqual(['T1', 'T2']);
+    // DEZA writes no price, ever.
+    expect(
+      built.report.products.every((product) => product.prices.length === 0)
+    ).toBe(true);
+  });
+
+  it('reports each product once when sections run side by side', async () => {
+    listing = await startFakeListing(SECTIONS, twoSections());
+    const built = build(listing);
+    const calls = watch(built, listing);
+
+    await built.runner.run(
+      built.context,
+      built.report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url, sectionQueryBudget: 3 }, 4)
+    );
+
+    const ids = calls.map((call) => call.externalId);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toHaveLength(built.runReport['products'] as number);
+    expect(calls.every((call) => call.stage === 'ENUMERATE')).toBe(true);
+  });
+
+  it('has reported the finished sections when a walk stalls, and states no availability and no report', async () => {
+    listing = await startFakeListing(SECTIONS, twoSections());
+    const built = build(listing);
+    const calls = watch(built, listing);
+    const fake = listing;
+    const controller = new AbortController();
+    let release: () => void = () => undefined;
+    let stalled: () => void = () => undefined;
+    const stall = new Promise<void>((resolve) => {
+      stalled = resolve;
+    });
+    // Bolleria's second page never comes: the walk is as a process killed
+    // there leaves it, with its first page recorded and nothing after it.
+    Object.assign(built.context, {
+      signal: controller.signal,
+      acquire: async () => {
+        if (fake.queries.some((query) => query.startsWith('W051|'))) {
+          stalled();
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        }
+      },
+    });
+
+    const walk = built.runner.run(
+      built.context,
+      built.report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url, sectionQueryBudget: 3 })
+    );
+    await stall;
+
+    // Carniceria ended, so its products are with the sink. Bolleria has not.
+    expect(calls.length).toBeGreaterThan(300);
+    expect(
+      built.report.products.every(
+        (product) => product.categoryPath[1] === 'Carniceria'
+      )
+    ).toBe(true);
+    // Nothing that needs the whole crawl has been said: no claim, so no
+    // negative one, no whole listing, no warning and no run report.
+    expect(built.report.availabilities).toHaveLength(0);
+    expect(built.report.wholeListings).toHaveLength(0);
+    expect(built.context.warn).not.toHaveBeenCalled();
+    expect(built.context.setReport).not.toHaveBeenCalled();
+    const finished = calls.length;
+
+    // An abort now is a graceful stop: the walk hands over what Bolleria
+    // read before it, and names no section unread.
+    controller.abort();
+    release();
+    await walk;
+
+    const ids = calls.map((call) => call.externalId);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toHaveLength(built.runReport['products'] as number);
+    expect(ids.length).toBeGreaterThanOrEqual(finished);
+    expect(built.report.wholeListings).toHaveLength(0);
+    expect(built.context.warn).not.toHaveBeenCalled();
+    expect(
+      built.report.products.every((product) => product.prices.length === 0)
+    ).toBe(true);
+  });
+
+  it('reports what a section that threw recorded, and names it unread', async () => {
+    listing = await startFakeListing(SECTIONS, twoSections());
+    const built = build(listing);
+    const calls = watch(built, listing);
+    const fake = listing;
+    let thrown = false;
+    // Bolleria's second page fails the section, after its first was read.
+    Object.assign(built.context, {
+      acquire: async () => {
+        if (
+          !thrown &&
+          fake.queries.some((query) => query.startsWith('W051|'))
+        ) {
+          thrown = true;
+          throw new Error('boom');
+        }
+      },
+    });
+
+    await built.runner.run(
+      built.context,
+      built.report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url, sectionQueryBudget: 3 })
+    );
+
+    const ids = calls.map((call) => call.externalId);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toHaveLength(built.runReport['products'] as number);
+    expect(calls.every((call) => call.stage === 'ENUMERATE')).toBe(true);
+    expect(built.context.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: HarvestWarningCode.LISTING_UNREAD,
+        name: 'Bolleria',
+      })
+    );
+  });
+});
+
+describe('deza: every path a product is filed under (plan 0268)', () => {
+  let listing: FakeListing | undefined;
+
+  afterEach(async () => {
+    await listing?.close();
+    listing = undefined;
+  });
+
+  const repeated = {
+    description: 'Perlas de perfume LENOR classic 195 g',
+    shops: ['T1'],
+  };
+  const lenor = entryKey('Perlas de perfume LENOR classic', '195 g');
+  const croissants = entryKey('Croissants ALTEZA', '360 g');
+  /**
+   * One product filed under both sections, met twice in Bolleria, and one
+   * product under Bolleria only. The listing of the fake prints no attribute
+   * icon, so a path is the section path alone.
+   */
+  const twoSections = () => [
+    { ...repeated, section: 'W011' },
+    { ...repeated, section: 'W051' },
+    { ...repeated, section: 'W051' },
+    { description: 'Croissants ALTEZA 360 g', section: 'W051', shops: ['T1'] },
+  ];
+  const callOf = (report: RecordingRunReport, externalId: string) =>
+    report.categoryPathCalls.find((call) => call.externalId === externalId);
+
+  async function crawl(): Promise<Built> {
+    listing = await startFakeListing(SECTIONS, twoSections());
+    const built = build(listing);
+    await built.runner.run(
+      built.context,
+      built.report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+    return built;
+  }
+
+  it('gives a product met in two sections both paths, in walk order, and adds them', async () => {
+    const { report } = await crawl();
+
+    expect(callOf(report, lenor)).toEqual({
+      externalId: lenor,
+      paths: [
+        ['FRIO', 'Carniceria'],
+        ['PAN', 'Bolleria'],
+      ],
+      mode: 'ADD',
+    });
+    // The first path is the one `categoryPath` holds, which is unchanged: the
+    // section of the first sighting.
+    const product = report.products.find((p) => p.externalId === lenor);
+    expect(product?.categoryPath).toEqual(['FRIO', 'Carniceria']);
+    expect(callOf(report, lenor)?.paths[0]).toEqual(product?.categoryPath);
+    // A product of one section gets that one path.
+    expect(callOf(report, croissants)).toEqual({
+      externalId: croissants,
+      paths: [['PAN', 'Bolleria']],
+      mode: 'ADD',
+    });
+    // One call a product, in the order the walk first met them.
+    expect(report.categoryPathCalls.map((call) => call.externalId)).toEqual([
+      lenor,
+      croissants,
+    ]);
+  });
+
+  it('never replaces, writes no price, and puts the paths on no observation', async () => {
+    listing = await startFakeListing(SECTIONS, twoSections());
+    const built = build(listing);
+    const events: string[] = [];
+    (built.context.flush as jest.Mock).mockImplementation(async () => {
+      events.push('flush');
+    });
+    const product = built.report.product.bind(built.report);
+    built.report.product = (observation) => {
+      events.push('product');
+      product(observation);
+    };
+    const paths = built.report.categoryPaths.bind(built.report);
+    built.report.categoryPaths = (externalId, list, mode) => {
+      events.push('paths');
+      paths(externalId, list, mode);
+    };
+
+    await built.runner.run(
+      built.context,
+      built.report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+
+    // **Always ADD**: no DEZA walk proves it saw every section a product sits
+    // in, so none can say a stored path is gone.
+    expect(built.report.categoryPathCalls).toHaveLength(2);
+    expect(
+      built.report.categoryPathCalls.every((call) => call.mode === 'ADD')
+    ).toBe(true);
+    for (const observed of built.report.products) {
+      expect(observed).not.toHaveProperty('categoryPaths');
+      // DEZA writes no price, ever.
+      expect(observed.prices).toEqual([]);
+    }
+    expect(events.lastIndexOf('product')).toBeLessThan(events.indexOf('paths'));
+    // The run's own flush comes after every path call, so the paths are with
+    // the sink before the run hands it over.
+    expect(events.filter((event) => event === 'flush')).toHaveLength(1);
+    expect(events.lastIndexOf('paths')).toBeLessThan(events.indexOf('flush'));
+  });
+
+  it('makes no call when the walk dies before its end', async () => {
+    listing = await startFakeListing(SECTIONS, twoSections());
+    const fake = listing;
+    const built = build(listing);
+    // Carniceria ends and reports its products. On the first row of Bolleria
+    // the heartbeat fails, which fails that section, and the run row then
+    // refuses the failure count too, which is what kills a DEZA walk: a
+    // section that fails alone does not.
+    (built.context.heartbeat as jest.Mock).mockImplementation(async () => {
+      if (fake.queries.some((query) => query.startsWith('W051|'))) {
+        throw new Error('The heartbeat did not answer.');
+      }
+    });
+    (built.context.report as jest.Mock).mockRejectedValue(
+      new Error('The run row did not answer.')
+    );
+
+    await expect(
+      built.runner.run(
+        built.context,
+        built.report,
+        { supermarketId: CHAIN },
+        source({ baseUrl: listing.url })
+      )
+    ).rejects.toThrow('The run row did not answer.');
+
+    // The finished section reported its product, which by then had a path
+    // recorded, and Bolleria had listed it again: still no path call.
+    const product = built.report.products.find((p) => p.externalId === lenor);
+    expect(product?.categoryPath).toEqual(['FRIO', 'Carniceria']);
+    expect(carniceria(fake).length).toBeGreaterThan(0);
+    expect(built.context.setTotalPlanned).not.toHaveBeenCalled();
+    expect(built.report.categoryPathCalls).toEqual([]);
+  });
+});
+
+describe('deza keys: a DEZA walk and the stored keys (plan 0272)', () => {
+  let listing: FakeListing | undefined;
+
+  afterEach(async () => {
+    await listing?.close();
+    listing = undefined;
+  });
+
+  /** A walk row as a walk before the split change stored it. */
+  function stored(
+    id: string,
+    name: string,
+    sizeFormat: string | null
+  ): StoredRow {
+    return {
+      id,
+      externalId: entryKey(name, sizeFormat),
+      name,
+      sizeFormat,
+      status: 'ACTIVE',
+      sourceKind: 'OFFICIAL_WEB',
+    };
+  }
+
+  it('throws the guard sentence before its first request', async () => {
+    listing = await startFakeListing(SECTIONS, [
+      { description: 'Calcetines 3 pares', section: 'W011', shops: ['T1'] },
+    ]);
+    const sentence = dezaKeysRefusal(1);
+    const { runner, context, report } = build(listing, sentence);
+
+    await expect(
+      runner.run(
+        context,
+        report,
+        { supermarketId: CHAIN },
+        source({ baseUrl: listing.url })
+      )
+    ).rejects.toThrow(sentence);
+    expect(listing.requests()).toBe(0);
+    expect(report.products).toHaveLength(0);
+  });
+
+  it('records every description the task re-keyed under the key the task wrote', async () => {
+    // Each held the whole description as its name and no size text, which
+    // is the stored shape of every moved row counted on 2026-11-18.
+    const rows = [
+      stored('e-1', 'Calcetines ALTEZA 3 pares', null),
+      stored('e-2', 'Yogur natural ALTEZA 2X125 g', null),
+      stored('e-3', 'Manguera riego ALTEZA 15 m.', null),
+      // A collision: its new key is the key of the row below.
+      stored('e-4', 'Infusion ALTEZA 20 bolsitas', null),
+      stored('e-5', 'Infusion ALTEZA', '20 bolsitas'),
+    ];
+    const selection = selectMoves(rows);
+    const rekeyed = rekeyable(selection);
+    expect(rekeyed.map((move) => move.id)).toEqual(['e-1', 'e-2', 'e-3']);
+    expect(selection.moves.filter((move) => move.collision)).toEqual([
+      expect.objectContaining({ id: 'e-4', holder: 'e-5' }),
+    ]);
+
+    listing = await startFakeListing(
+      SECTIONS,
+      rows
+        .filter((row) => row.id !== 'e-5')
+        .map((row) => ({
+          description: descriptionOf(row.name, row.sizeFormat),
+          section: 'W011',
+          shops: ['T1'],
+        }))
+    );
+    const { runner, context, report } = build(listing);
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+
+    const byKey = new Map(
+      report.products.map((product) => [product.externalId, product])
+    );
+    expect(byKey.size).toBe(4);
+    // The ingest upserts on (chain, key), so the same key is the same row.
+    for (const move of rekeyed) {
+      expect(byKey.get(move.newKey)).toEqual(
+        expect.objectContaining({
+          name: move.name,
+          sizeFormat: move.sizeFormat,
+        })
+      );
+    }
+    // The skipped row's description lands on the holder of its key.
+    expect(byKey.has(rows[4].externalId)).toBe(true);
+    expect(byKey.has(rows[3].externalId)).toBe(false);
   });
 });

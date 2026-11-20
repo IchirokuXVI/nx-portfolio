@@ -1,5 +1,6 @@
 import {
   COMMENT_PATTERNS,
+  LINE_ADD_CHOICE_MAX,
   LINE_BATCH_MAX_ITEMS,
   LINE_ITEM_SET_CEILING,
   LINE_ITEM_SET_MAX,
@@ -469,12 +470,23 @@ const commentAudioView = object(
   ['commentId', 'contentType', 'audio']
 );
 
-// What an add did: the line as it now stands, and whether the add raised one
-// that was already there rather than creating it (plan 0091, section 4).
+// What an add did: the line as it now stands, whether it landed on a line that
+// was already there (plan 0091, section 4), which of the three things happened
+// and every line it met and left as it was (plan 0260, section 2): one wanted
+// line, or two or more lines of any amount it could not choose between (the
+// owner, 2026-11-16).
 const addLineResult = object(
   LIST_SCHEMA_IDS.addLineResult,
-  { line: ref(LIST_SCHEMA_IDS.lineView), merged: boolean() },
-  ['line', 'merged']
+  {
+    line: ref(LIST_SCHEMA_IDS.lineView),
+    merged: boolean(),
+    outcome: ref(ENUM_IDS.addLineOutcome),
+    alreadyOnList: {
+      ...array(ref(LIST_SCHEMA_IDS.lineView)),
+      maxItems: LINE_ADD_CHOICE_MAX,
+    },
+  },
+  ['line', 'merged', 'outcome', 'alreadyOnList']
 );
 
 /**
@@ -628,7 +640,9 @@ const addLineQuantityRequest = object(
     unit: ref(ENUM_IDS.lineUnit),
     // Optional: a delta needs no starting point, and the basket sends one so a
     // settle that landed in between refuses the gesture (plan 0136, section 5.3).
-    expect: integer({ minimum: 0, maximum: LINE_QUANTITY_MAX }),
+    // What the line holds, and not a write, so it has no ceiling: a line stored
+    // above the ceiling is still stepped down (plan 0262, 2026-11-17).
+    expect: integer({ minimum: 0 }),
   },
   ['userId', 'lineId', 'delta', 'unit']
 );
@@ -647,8 +661,10 @@ const updateLineRequest = object(
     // for the reason the settle's `quantity` rule is not (plan 0047, section 4).
     unit: ref(ENUM_IDS.lineUnit),
     // The quantity the client saw (plan 0209, section 2.2). Optional: absent,
-    // the edit writes what it was given.
-    from: integer({ minimum: LINE_QUANTITY_MIN, maximum: LINE_QUANTITY_MAX }),
+    // the edit writes what it was given. What the line holds, and not a write,
+    // so it has no ceiling, as the basket's `from` has none: a line stored
+    // above the ceiling is still edited down (plan 0262, 2026-11-17).
+    from: integer({ minimum: LINE_QUANTITY_MIN }),
     // Replace the line's product set (plan 0048, section 1.1); `[]` clears it.
     //
     // The **ceiling** and not the cap (plan 0070, section 7.2). A subscribed line
@@ -818,9 +834,10 @@ const itemLineView = object(
     id: nonEmptyString(),
     content: string(),
     quantity: integer({ minimum: 0 }),
+    unit: ref(ENUM_IDS.lineUnit),
     approvalStatus: ref(ENUM_IDS.lineApprovalStatus),
   },
-  ['id', 'content', 'quantity', 'approvalStatus']
+  ['id', 'content', 'quantity', 'unit', 'approvalStatus']
 );
 const listWithItemLinesView = object(
   LIST_SCHEMA_IDS.listWithItemLinesView,

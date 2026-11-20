@@ -1,3 +1,5 @@
+> **PR:** [#983](https://github.com/IchirokuXVI/nx-portfolio/pull/983)
+
 # 0190: a shopping list row shows its amount and its sheet changes it
 
 > Decided on 2026-11-11. The owner finds the reel "confusing for most users", and velista
@@ -296,6 +298,10 @@ lists ask for (compare "D3 Outline"), a step that saves once after the presses s
   are `lib-amount-figure`'s own; the row sets none.
 - The row keeps `align-items: flex-start` (`:13`). The cell sits at the top of the row
   beside the name line, as in the mock.
+
+  > Note of 2026-11-17, from the review of the stepper batch: the cell was first built
+  > centred on the row (`align-self: center`); it now sits at the top as written here
+  > (`align-self: flex-start`).
 - `.row:has(.body:hover)` (`:168`) also matches `.amount:hover`, so the row lights the same
   way from either press.
 
@@ -368,6 +374,12 @@ nothing imports it. Keep `quantityCaption` (decision C).
 - A typed value committed by Enter or blur is a step with `repeat: false` like a press, and
   the sheet calls `flush(key)` right after it, so a typed amount is sent at once; only
   presses wait.
+
+  > Note of 2026-11-17, from the review of the stepper batch. As first built, the sheet told
+  > a typed amount from a press by its size: anything other than one step was sent at once.
+  > A typed amount exactly one step away therefore waited 800 ms, and Home and End were sent
+  > at once. Now the stepper marks a typed commit (`QuantityStep.typed`), and the sheet sends
+  > that alone at once; a press, a repeat, an arrow key, Home and End wait for the beat.
 - One write per line at a time, in the sheet. It keeps a map of the write in flight per key
   (a promise). A run that `quantityRuns` sends while a write of the same key is out waits
   for that write, then sends with `from` equal to the line's asks after the answer.
@@ -398,7 +410,14 @@ nothing imports it. Keep `quantityCaption` (decision C).
   accessibility tree, so it is not read twice. Nothing on the row announces by itself.
 - **In the sheet.** Each list's control is the `spinbutton` of `lib-quantity-stepper`
   (`0188` section 3.5), its `name` the existing `basket.demand.askLabel` ("Compra semanal,
-  pide"), with its value text, Arrow Up and Down, Home and End as `0188` defines them. A
+  pide"), with its value text, Arrow Up and Down, Home and End as `0188` defines them.
+
+  > Note of 2026-11-17: as built, the stepper wrapped the label again ("Amount of Review
+  > walk, asks for"). The spinbutton now carries the label as given, through the stepper's
+  > `fieldName` input. The stepper's `name` is the list's name ("Compra semanal"), which the
+  > minus and plus read ("Quitar 25 g de Compra semanal", "Add 1 to Review walk") and the
+  > settled amount says ("Compra semanal, 750 gramos"). Every other stepper keeps "Amount of
+  > {{name}}". A
   focused spinbutton's value is announced by the screen reader as it changes. For steps made
   with the minus and plus buttons the stepper says the amount once when the presses stop
   (`0188` decision E). The sheet adds no live region and no sentence of its own.
@@ -436,6 +455,13 @@ before each deletion (Action boundaries).
 | `QUANTITY_REEL_CLICK_SHIELD_MS` (`limits.ts:210`) | `basket-row.ts:23`, `:685` (`_holdIfRemote`, the status control's shield after another person's flip) and `:690` (`onReelAutoClosed`, removed in section 1) | Kept, renamed `STATUS_FLIP_SHIELD_MS`, value 250 unchanged. Its comment is rewritten: how long the status control ignores a press after another person flipped the row, so a press aimed at the old state does not undo theirs. It no longer speaks of a reel |
 | `stepsFrom` (`libs/velista/models/src/lib/line-unit.ts:179`) and its describe in `line-unit.spec.ts:144` | the reel only (`quantity-reel.ts:771`) | Removed |
 | `basket-labels.ts:426` comment on the row's reel | goes with `outstandingCaption` (section 2) | Removed |
+| `--app-reel-unit`, `--app-reel-height`, `--app-reel-radius`, `--app-reel-digit-width` (`libs/velista/ui/src/lib/styles/_semantic.scss`) | none | Removed with their comments (owner, 2026-11-12) |
+| `.allocation-reel` (`settle-sheet.scss`) | none | Removed (owner, 2026-11-12) |
+| `'basket.outstanding'` (`BasketOperation` in `basket-error-copy.ts`) and its cases in `basket-error-copy.spec.ts` | none; every key it mapped to is still read by another operation | Removed (owner, 2026-11-12) |
+
+> **The owner, 2026-11-12:** delete in this plan what the reel left with no reader. The
+> builder searched the workspace before each of the three rows above and found no reader.
+> No i18n key was read only by `'basket.outstanding'`, so none was removed with it.
 
 `TOOK_DURATION_MS` is not this plan's: `0188` moves it to `quantity-stepper.ts`.
 
@@ -555,13 +581,34 @@ version for "no partial buy from the row":
    (which records no buy and no price) or buy all 6. Is that what you want, or should the
    sheet gain a "got" amount beside the lists (a second plan, using `BasketStore.setLeft`,
    which this plan keeps)? The build waits for this answer.
+
+   Answered by the owner on 2026-11-11: build as written. No partial buy from the row for
+   now: a person lowers what the list asks for, or buys all. `BasketStore.setLeft` stays
+   with no caller (decision F), and a "got some" amount in the sheet is a later plan.
+
+   The owner, 2026-11-12: question 1 stays answered as above. Since 2026-11-12 a line at 0
+   is never deleted by a write (backend `0263` is withdrawn): a demand to 0 leaves the line
+   at 0, and the row leaves the basket, as before plan `0263`. The sheet's "the row left the
+   basket" ending needs nothing new for it: it fires when the store no longer holds the row,
+   and no code path reads a `deleted` answer (`setDemand` answers the entries and the
+   skipped count only).
 2. On a bought or "No había" row the cell shows what was asked, not 0 (decision B). Is that
    the number you want there?
+
+   Reviewed by the owner, stands as built (2026-11-17).
 3. The cell is a second button beside the row's text, both opening the same sheet, so a
    keyboard or screen reader user meets one more stop per row than the text alone would give
    (the same count as today, where the reel was that stop). Keep it, or make the cell a
    pointer target only and leave the text as the one stop?
+
+   Reviewed by the owner, stands as built (2026-11-17).
 4. The lists that do not ask yet, under "Añadir a otra lista", get the same typed control
    starting at 0 (decision H). Is that right, or should they keep a single "Añadir" action?
+
+   Reviewed by the owner, stands as built (2026-11-17).
 5. A step waits `QUANTITY_STEP_QUIET_MS`, 800 ms, after the last press before it is saved,
    the wait velista `0188` gives every surface. Is that the feel you want in the sheet too?
+
+   Answered by velista 0188 (2026-11-17): the quiet beat stays 800 ms on every surface, the
+   settle sheet included. A typed amount is sent at once and every press, arrow key, Home and
+   End waits for the beat (section 4, note of 2026-11-17).

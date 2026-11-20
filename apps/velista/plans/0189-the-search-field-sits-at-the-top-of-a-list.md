@@ -1,3 +1,5 @@
+> **PR:** [#979](https://github.com/IchirokuXVI/nx-portfolio/pull/979)
+
 # 0189: the search field sits at the top of a list
 
 > Decided on 2026-11-10 and 2026-11-11. On the zone list page and on the shopping list page the
@@ -409,9 +411,11 @@ and rewrite the comment at `:1` to `:7`; `list-tools.ts:39` likewise.
 - Remove the `fieldFocused` output, its two bindings in `line-composer.html:81` to `:82`, and
   its comment (decision I).
 - `line-composer.scss:1` to `:15`: the row no longer sits at the foot. Remove the
-  `--app-safe-bottom` term from `padding-block-end` of `.composer` and `.listening`, move the
-  hairline from `border-block-start` to `border-block-end`, and drop the raised fill so the
-  row sits on the ground as in the mock. The builder checks the listening row against the
+  `--app-safe-bottom` term from `padding-block-end` of `.composer` and `.listening`, remove
+  the hairline (`border-block-start`) and draw no rule under the row, and drop the raised fill
+  so the row sits on the ground as in the mock. (Amended 2026-11-12: this said to move the
+  hairline to `border-block-end`. The owner decided on 2026-11-12 that the row draws no rule,
+  as the approved mock draws it.) The builder checks the listening row against the
   mock's surfaces with `design-taste-frontend`. Rewrite the comment.
 - The voice stop of the tour (`tour-stops.ts:124`) changes `placement` to `'below'`.
 
@@ -628,13 +632,25 @@ The mock emulates the keyboard; it does not run on a phone. Not verified:
    means the order the lines were added in, plus whatever order a list had before today. Is
    that the order you want, or should the label change, or should the order become "newest
    first"? (decision A)
+
+   Reviewed by the owner, stands as built (2026-11-17).
 2. Should the gateway's reorder route be removed later, once no installed Android bundle older
    than this plan is in use? That is a backend backlog plan. (decision A)
+
+   Reviewed by the owner, stands as built (2026-11-17).
 3. The zone list's filter button in the page header disappears while the field holds words, as
    today; the mock draws it while typing. Keep it on screen while typing? (decision L)
+
+   Reviewed by the owner, stands as built (2026-11-17).
 4. The drag also releases the keyboard when the field is focused and empty over the list, not
    only over the results. Is that what you want? (decision F)
+
+   Reviewed by the owner, stands as built (2026-11-17).
 5. After an add, the page brings the new line into view where it landed rather than jumping to
    the end of the list. Is that right now that the field is at the top? (decision H)
+
+   Reviewed by the owner, stands as built (2026-11-17).
 6. On the shopping list the tools row and the chips stay while typing, above the field, as the
    mock draws them. Confirm. (decision D)
+
+   Reviewed by the owner, stands as built (2026-11-17).

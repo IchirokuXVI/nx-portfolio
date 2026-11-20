@@ -10,7 +10,7 @@ import {
   type BrandOrder,
   type CategoryKind,
 } from '@portfolio/luna-shopper/contracts';
-import { PageQueryDto } from '@portfolio/luna-shopper/platform';
+import { asQueryFlag, PageQueryDto } from '@portfolio/luna-shopper/platform';
 import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -30,7 +30,6 @@ import {
 } from '../admin/reference-none';
 import {
   asArray,
-  asBoolean,
   CatalogListQueryDto,
   SearchOrderQueryDto,
 } from './catalog.dto';
@@ -179,10 +178,10 @@ export class AdminSearchItemsQueryDto extends SearchOrderQueryDto {
    */
   @ApiPropertyOptional({
     description:
-      'Only the products that were merged into another one, each with its own name, brand and size and with `mergedInto` naming the survivor. Absent or false lists the live products: a merged product is never in a list or a search otherwise.',
+      'Only the products that were merged into another one, each with its own name, brand and size and with `mergedInto` naming the survivor. Absent or false lists the live products: a merged product is never in a list or a search otherwise. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.',
   })
   @IsOptional()
-  @Transform(asBoolean)
+  @Transform(asQueryFlag)
   @IsBoolean()
   merged?: boolean;
 }
@@ -287,19 +286,19 @@ export class AdminListSupermarketItemsQueryDto extends CatalogListQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'The rows shown on sufferance: nothing eligible prices them, so the newest row of any kind is shown and flagged (plan 0080, section 5).',
+      'The rows shown on sufferance: nothing eligible prices them, so the newest row of any kind is shown and flagged (plan 0080, section 5). Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.',
   })
   @IsOptional()
-  @Transform(asBoolean)
+  @Transform(asQueryFlag)
   @IsBoolean()
   stale?: boolean;
 
   @ApiPropertyOptional({
     description:
-      'The scope wide flag, not the per store override on a location item.',
+      'The scope wide flag, not the per store override on a location item. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.',
   })
   @IsOptional()
-  @Transform(asBoolean)
+  @Transform(asQueryFlag)
   @IsBoolean()
   available?: boolean;
 }

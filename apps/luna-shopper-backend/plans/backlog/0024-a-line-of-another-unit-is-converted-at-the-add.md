@@ -13,6 +13,11 @@
 > questions only. Code anchors were read on `origin/feat/velista-0183-line-unit-chip` on
 > 2026-11-09.
 
+> Note of 2026-11-17: U1 was replaced by the owner. A free text line may count in `UNIT`,
+> `GRAM` or `MILLILITER` (`0260` and `0246` as amended that day), so the last row of the table
+> below and the "in `UNIT`" of case 2 describe a free text add sent in pieces, which is what
+> velista sends, and no longer the only kind.
+
 ## What `0246` decided and this plan would revisit
 
 `0246` W4 (the owner's, 2026-11-05): one unit per product and no conversion table. The weight

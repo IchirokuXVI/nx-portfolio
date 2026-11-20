@@ -9,8 +9,11 @@ import {
   type OnDestroy,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import {
+  RokuTranslatorPipe,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   ContentLocaleStore,
   HARVEST_SERVICE,
@@ -20,6 +23,7 @@ import {
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   formatSize,
+  formatSizeDoubt,
   PRICE_SCOPES,
   priceScopeMark,
   priceScopeSource,
@@ -33,6 +37,8 @@ import {
 import {
   harvestRunPath,
   OFFICIAL_SOURCE_KINDS,
+  recordIdIn,
+  REVIEW_ENTRY_PARAM,
   SOURCE_ENTRY_STATUSES,
   type OfficialSourceKind,
   type ScopeMarkView,
@@ -68,6 +74,8 @@ interface CardLine {
   readonly value: string;
   /** A barcode or an id, which this app sets in the mono face. */
   readonly mono?: boolean;
+  /** Several values, one a line, which `value` holds joined (plan 0268). */
+  readonly list?: readonly string[];
 }
 
 /** The product a row was matched to, as the panel beside the row draws it. */
@@ -105,6 +113,21 @@ const SCOPE_PAGE = 100;
 
 /** How long typing in the brand filter settles before a read goes out. */
 const BRAND_SEARCH_DELAY_MS = 250;
+
+/**
+ * The entry an address names, read from `unknown` (admin plan 0073).
+ *
+ * `null` for no parameter at all, which is the whole queue. `''` for one that
+ * is there and not the shape of an id, which narrows the queue to nothing
+ * rather than sending the gateway a value it refuses. A parameter given twice
+ * arrives as an array, and is not an id either.
+ */
+function entryIn(value: unknown): string | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  return typeof value === 'string' ? (recordIdIn(value) ?? '') : '';
+}
 
 /**
  * Everything a source named and nobody has decided (admin plan 0014, section 1).
@@ -172,8 +195,11 @@ const BRAND_SEARCH_DELAY_MS = 250;
     <section class="filters">
       <label>
         <span>{{ 'harvest.entries.filter.status' | rokuT }}</span>
+        <!-- Not sent while one entry is shown, so it does not claim to be a
+             filter then (admin plan 0073, decision 47b). -->
         <select
           (ngModelChange)="chooseStatus($event)"
+          [disabled]="entryFilter() !== null"
           [ngModel]="status()"
           name="status"
         >
@@ -234,6 +260,30 @@ const BRAND_SEARCH_DELAY_MS = 250;
           }
         </select>
       </label>
+
+      <!-- The rows whose own prices disprove their size (admin plan 0072). -->
+      <label class="check">
+        <input
+          (change)="chooseSizeDoubt($event)"
+          [checked]="sizeDoubtOnly()"
+          name="sizeDoubt"
+          type="checkbox"
+          data-size-doubt-filter
+        />
+        <span>{{ 'harvest.entries.filter.sizeDoubt' | rokuT }}</span>
+      </label>
+
+      <!-- The queue narrowed to one entry by its address (admin plan 0073).
+           The other filters are not sent while it is, so it says so, and the
+           button is the way back to the whole queue. -->
+      @if (entryFilter() !== null) {
+        <p class="entry-notice" role="status" data-entry-notice>
+          <span>{{ 'harvest.entries.entry.one' | rokuT }}</span>
+          <button (click)="showWholeQueue()" type="button" data-entry-all>
+            {{ 'harvest.entries.entry.all' | rokuT }}
+          </button>
+        </p>
+      }
     </section>
 
     @if (queue !== null) {
@@ -248,12 +298,12 @@ const BRAND_SEARCH_DELAY_MS = 250;
         [confirmKey]="confirmKey()"
         [currentId]="row()?.id ?? null"
         [empty]="queue!.empty()"
+        [emptyKey]="emptyKey()"
         [errorKey]="errorKey()"
         [failed]="queue!.failed()"
         [loading]="queue!.loading()"
         [loadingMore]="queue!.loadingMore()"
         [rows]="listRows()"
-        emptyKey="harvest.entries.empty"
         rejectKey="harvest.entries.reject"
         rejectShortKey="harvest.entries.rejectShort"
         titleKey="harvest.entries.heading"
@@ -281,6 +331,22 @@ const BRAND_SEARCH_DELAY_MS = 250;
           <div class="head">
             <h2>{{ entry.name }}</h2>
             <p class="identity">
+              <!-- The row's own status, whatever the filter asked for (admin
+                   plan 0073, decision 47b). -->
+              <span
+                [class.good]="entry.status === 'ACTIVE'"
+                class="chip"
+                data-status
+                >{{ 'harvest.entryStatus.' + entry.status | rokuT }}</span
+              >
+              <!-- Its own prices disprove its size (admin plan 0072). A state
+                   a person reads, so the waiting tone, and the sentence beside
+                   the size says what the two figures are. -->
+              @if (entry.sizeDoubt) {
+                <span class="chip doubt" data-size-doubt>{{
+                  'harvest.entries.sizeDoubt.chip' | rokuT
+                }}</span>
+              }
               @if (chainName(entry.supermarketId); as chain) {
                 <span class="chip chain">{{ chain }}</span>
               }
@@ -310,7 +376,36 @@ const BRAND_SEARCH_DELAY_MS = 250;
                   @if (line.value !== '') {
                     <div>
                       <dt>{{ 'harvest.entries.field.' + line.key | rokuT }}</dt>
-                      <dd [class.mono]="line.mono">{{ line.value }}</dd>
+                      @if (line.list; as list) {
+                        <dd class="list">
+                          @for (part of list; track $index) {
+                            <span>{{ part }}</span>
+                          }
+                        </dd>
+                      } @else if (
+                        line.key === 'size' && doubtWords();
+                        as words
+                      ) {
+                        <dd>
+                          {{ line.value }}
+                          <span class="doubt-note" data-size-doubt-sentence>
+                            {{
+                              (words.label === ''
+                                ? 'harvest.entries.sizeDoubt.sentenceNoLabel'
+                                : 'harvest.entries.sizeDoubt.sentence'
+                              ) | rokuT: words
+                            }}
+                            @if (entry.sizeDoubt?.packGuess; as count) {
+                              <span data-size-doubt-pack>{{
+                                'harvest.entries.sizeDoubt.pack'
+                                  | rokuT: { count }
+                              }}</span>
+                            }
+                          </span>
+                        </dd>
+                      } @else {
+                        <dd [class.mono]="line.mono">{{ line.value }}</dd>
+                      }
                     </div>
                   }
                 }
@@ -328,7 +423,14 @@ const BRAND_SEARCH_DELAY_MS = 250;
 
             <section [class.has]="proposal() !== 'none'" class="proposed">
               <div class="proposed-head">
-                <h3>{{ 'harvest.entries.proposal.heading' | rokuT }}</h3>
+                <h3 data-proposal-heading>
+                  {{
+                    (bound()
+                      ? 'harvest.entries.proposal.boundHeading'
+                      : 'harvest.entries.proposal.heading'
+                    ) | rokuT
+                  }}
+                </h3>
                 <!-- Why this product was proposed, as a state. -->
                 @if (proposal() === 'none') {
                   <span class="chip">{{
@@ -363,11 +465,15 @@ const BRAND_SEARCH_DELAY_MS = 250;
                       }}</a>
                     }
                   }
-                  <p class="hint">
-                    {{
-                      'harvest.entries.proposal.item'
-                        | rokuT: { confidence: entry.confidence }
-                    }}
+                  <p class="hint" data-proposal-hint>
+                    @if (bound()) {
+                      {{ 'harvest.entries.proposal.bound' | rokuT }}
+                    } @else {
+                      {{
+                        'harvest.entries.proposal.item'
+                          | rokuT: { confidence: entry.confidence }
+                      }}
+                    }
                   </p>
                 }
                 @case ('sibling') {
@@ -619,9 +725,19 @@ const BRAND_SEARCH_DELAY_MS = 250;
           @if (chainName(row.supermarketId); as chain) {
             <span class="line-chain">{{ chain }}</span>
           }
-          <span [class.good]="proposalKind(row) !== 'none'" class="chip">{{
-            'harvest.entries.proposalBadge.' + proposalKind(row) | rokuT
-          }}</span>
+          <span
+            [class.good]="proposalKind(row) !== 'none'"
+            class="chip"
+            data-line-badge
+            >{{
+              'harvest.entries.proposalBadge.' + lineBadge(row) | rokuT
+            }}</span
+          >
+          @if (row.sizeDoubt) {
+            <span class="chip doubt" data-line-size-doubt>{{
+              'harvest.entries.sizeDoubt.chip' | rokuT
+            }}</span>
+          }
         </ng-template>
       </lib-queue-frame>
 
@@ -693,6 +809,16 @@ const BRAND_SEARCH_DELAY_MS = 250;
       align-items: flex-start;
     }
 
+    /* A line of its own under the filters, because it says what they do not
+       do while it stands. */
+    .entry-notice {
+      display: flex;
+      flex-basis: 100%;
+      flex-wrap: wrap;
+      gap: var(--admin-space-2) var(--admin-space-3);
+      align-items: center;
+    }
+
     .head {
       display: flex;
       flex-direction: column;
@@ -719,6 +845,45 @@ const BRAND_SEARCH_DELAY_MS = 250;
     .chip.OFFICIAL_LEAFLET {
       background: var(--admin-accent-wash);
       color: var(--admin-accent-on-wash);
+    }
+
+    /* A size in doubt is for a person to look at, so the waiting tone, on the
+       chip alone (admin plan 0072). */
+    .chip.doubt {
+      background: var(--admin-waiting-wash);
+      color: var(--admin-waiting-on-wash);
+    }
+
+    /* Under the stated size, in the muted ink of a note, so the size stays
+       what the line says and the sentence reads as what is wrong with it. */
+    .doubt-note {
+      display: block;
+      margin-block-start: var(--admin-space-1);
+      font-size: 0.8125rem;
+      color: var(--admin-ink-muted);
+    }
+
+    /* A box and its words on one line, one tap target, level with the boxes
+       of the selects beside it rather than with their names. */
+    .filters > .check {
+      flex: 0 0 auto;
+      flex-direction: row;
+      align-items: center;
+      align-self: flex-end;
+      min-block-size: 2.75rem;
+      cursor: pointer;
+    }
+
+    .check > input {
+      inline-size: 1.125rem;
+      block-size: 1.125rem;
+      margin: 0;
+      accent-color: var(--admin-accent);
+    }
+
+    .check > span {
+      font-size: 0.875rem;
+      color: var(--admin-ink);
     }
 
     .kind,
@@ -806,6 +971,13 @@ const BRAND_SEARCH_DELAY_MS = 250;
 
     dd {
       overflow-wrap: anywhere;
+    }
+
+    /* A gap, so a path that wraps on a phone does not read as two. */
+    dd.list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-1);
     }
 
     .prices,
@@ -993,7 +1165,9 @@ const BRAND_SEARCH_DELAY_MS = 250;
 export class EntriesQueuePage implements OnDestroy {
   private readonly _service = inject(HARVEST_SERVICE);
   private readonly _content = inject(ContentLocaleStore);
+  private readonly _translate = inject(RokuTranslatorService);
   private readonly _route = inject(ActivatedRoute);
+  private readonly _router = inject(Router);
   /**
    * The chosen chain's scopes, read for their names.
    *
@@ -1030,9 +1204,24 @@ export class EntriesQueuePage implements OnDestroy {
    */
   readonly status = signal<SourceEntryStatus | ''>('');
   readonly sourceKind = signal<OfficialSourceKind | ''>('');
+  /**
+   * Only the rows whose size is in doubt (admin plan 0072). Off lists them
+   * all, so only `true` is ever sent.
+   */
+  readonly sizeDoubtOnly = signal(false);
 
   /** The brand, as it was typed. The key it makes is what goes out. */
   readonly brandText = signal('');
+
+  /**
+   * The one entry the queue is narrowed to, by its address (admin plan 0073).
+   *
+   * `null` while the address names none, which is the queue. A string while it
+   * names one: the entry's id, or `''` when the parameter is not the shape of
+   * an id. The gateway refuses such a value with a 400, so the queue asks
+   * nothing for it and draws its empty state under the notice.
+   */
+  readonly entryFilter = signal<string | null>(null);
 
   /**
    * The key that text makes, or `null` when it makes none.
@@ -1176,13 +1365,27 @@ export class EntriesQueuePage implements OnDestroy {
     this.brandText.set(
       this._route.snapshot.queryParamMap.get('brandKey') ?? ''
     );
+    this.entryFilter.set(
+      entryIn(this._route.snapshot.queryParams[REVIEW_ENTRY_PARAM])
+    );
 
     // The chain the four queues share (admin plan 0044). A run's own link
     // names it, and so does the filter above the queue. Each change builds
     // the queue again, and the first read is this effect's first run.
+    //
+    // A chain chosen after that is another question, so it ends the one entry
+    // view (admin plan 0073). `ReviewChain.choose` drops the parameter from
+    // the URL in the same navigation; this drops the state.
+    let first = true;
     effect(() => {
       const chain = this._review.chain();
-      untracked(() => this.open(chain));
+      untracked(() => {
+        if (!first) {
+          this.entryFilter.set(null);
+        }
+        first = false;
+        this.open(chain);
+      });
     });
 
     // The product a proposal names, for the panel beside the row.
@@ -1239,6 +1442,29 @@ export class EntriesQueuePage implements OnDestroy {
     const row = this.row();
     return row === null ? 'none' : proposalOf(row);
   });
+
+  /**
+   * Whether the row in front is bound to its product (admin plan 0073,
+   * decision 47b).
+   *
+   * Read off the row's own status and never off the filter, because the one
+   * entry view sends no status and still answers a decided row. A bound row's
+   * product is no proposal, so the panel names it as what it is. The buttons
+   * stay as they are: what they may do on a decided row is a later plan.
+   */
+  readonly bound = computed(() => this.row()?.status === 'ACTIVE');
+
+  /**
+   * The empty state, which in the one entry view is about the address and
+   * not about the queue (admin plan 0073, decision 45a): a malformed id, an
+   * entry that does not exist and a chain that does not match all answer
+   * nothing, and none of them means everything was decided.
+   */
+  readonly emptyKey = computed(() =>
+    this.entryFilter() === null
+      ? 'harvest.entries.empty'
+      : 'harvest.entries.entry.empty'
+  );
 
   /**
    * The sibling row the ladder proposed, when the queue is holding it.
@@ -1298,6 +1524,33 @@ export class EntriesQueuePage implements OnDestroy {
   });
 
   /**
+   * The two sizes of the row in front and the label that disproved one, as
+   * the sentence beside the stated size reads them, or `null` for a row whose
+   * size nobody doubts (admin plan 0072).
+   *
+   * Asserted on as a value rather than as rendered text, because the sentence
+   * interpolates and the testing translator does not interpolate.
+   */
+  readonly doubtWords = computed(() => {
+    const doubt = this.row()?.sizeDoubt ?? null;
+    // Read so the words of a count are taken again once the strings arrive.
+    this._translate.loaded();
+    return doubt === null
+      ? null
+      : formatSizeDoubt(doubt, this._content.locale(), (count, figure) =>
+          this._translate.t(
+            'harvest.entries.sizeDoubt.units',
+            undefined,
+            undefined,
+            {
+              count,
+              figure,
+            }
+          )
+        );
+  });
+
+  /**
    * What the source says about the row, under that heading.
    *
    * The page at the chain is a link under these and not a line among them.
@@ -1311,9 +1564,15 @@ export class EntriesQueuePage implements OnDestroy {
     return [
       { key: 'name', value: row.name },
       { key: 'brand', value: row.brand },
-      { key: 'size', value: row.sizeFormat },
+      // A doubted row with no printed format still draws the line, with the
+      // size it states, so the sentence has a place beside it (admin plan
+      // 0072).
+      {
+        key: 'size',
+        value: row.sizeFormat || (this.doubtWords()?.stated ?? ''),
+      },
       { key: 'ean', value: row.ean, mono: true },
-      { key: 'categoryPath', value: row.categoryPath },
+      categoryLine(row),
       { key: 'externalId', value: row.externalId, mono: true },
       { key: 'lastSeen', value: row.lastSeen },
     ];
@@ -1380,12 +1639,54 @@ export class EntriesQueuePage implements OnDestroy {
    */
   chooseStatus(status: SourceEntryStatus | ''): void {
     this.status.set(status);
+    this._leaveEntry();
     this.reload();
   }
 
   chooseKind(sourceKind: OfficialSourceKind | ''): void {
     this.sourceKind.set(sourceKind);
+    this._leaveEntry();
     this.reload();
+  }
+
+  /**
+   * Narrow the queue to the rows whose size is in doubt, or widen it back
+   * (admin plan 0072). Read off the box itself, so the state is the one the
+   * person sees, and like the kind it ends the one entry view.
+   */
+  chooseSizeDoubt(event: Event): void {
+    const box = event.target;
+    this.sizeDoubtOnly.set(box instanceof HTMLInputElement && box.checked);
+    this._leaveEntry();
+    this.reload();
+  }
+
+  /**
+   * Widen the queue from the one entry its address named back to the whole
+   * queue, read again from the top (admin plan 0073).
+   */
+  showWholeQueue(): void {
+    this._leaveEntry();
+    this.reload();
+  }
+
+  /**
+   * End the one entry view: the state at once, and the parameter in the URL.
+   *
+   * The URL is replaced, as `ReviewChain.choose` writes a filter, so the back
+   * button still returns to the page that linked here.
+   */
+  private _leaveEntry(): void {
+    if (this.entryFilter() === null) {
+      return;
+    }
+    this.entryFilter.set(null);
+
+    const tree = this._router.parseUrl(this._router.url);
+    const kept = { ...tree.queryParams };
+    delete kept[REVIEW_ENTRY_PARAM];
+    tree.queryParams = kept;
+    void this._router.navigateByUrl(tree, { replaceUrl: true });
   }
 
   /**
@@ -1402,6 +1703,7 @@ export class EntriesQueuePage implements OnDestroy {
     }
     this._brandTimer = setTimeout(() => {
       this._brandTimer = null;
+      this._leaveEntry();
       this.reload();
     }, BRAND_SEARCH_DELAY_MS);
   }
@@ -1435,14 +1737,34 @@ export class EntriesQueuePage implements OnDestroy {
    * rather than a filter applied to what is in hand: the queue holds one page,
    * and filtering that page would answer from a twentieth of the rows.
    */
-  reload(): void {
+  reload(options: { keepWritten?: boolean } = {}): void {
     const supermarketId = this.chosen();
     const brandKeyFilter = this._brandFilterValue();
+    const entryId = this.entryFilter();
 
-    this.written.set(null);
+    if (options.keepWritten !== true) {
+      this.written.set(null);
+    }
     const queue = new QueueStore<Entry>(
       async (cursor) => {
         try {
+          // One entry by its address (admin plan 0073): the id and the chain
+          // and nothing else, because the entry is the question. An id that
+          // is not the shape of one asks nothing, since the gateway would
+          // refuse it.
+          if (entryId !== null) {
+            if (entryId === '') {
+              return { items: [], nextCursor: null };
+            }
+            const page = await this._service.listEntries({
+              entryId,
+              ...(supermarketId === '' ? {} : { supermarketId }),
+              cursor,
+            });
+            this.shell.observeReachable();
+            return page;
+          }
+
           const status = this.status();
           const sourceKind = this.sourceKind();
           const page = await this._service.listEntries({
@@ -1454,6 +1776,8 @@ export class EntriesQueuePage implements OnDestroy {
             ...(status === '' ? {} : { status }),
             ...(sourceKind === '' ? {} : { sourceKind }),
             ...(brandKeyFilter === null ? {} : { brandKey: brandKeyFilter }),
+            // Admin plan 0072: off sends nothing, which lists both.
+            ...(this.sizeDoubtOnly() ? { sizeDoubt: true } : {}),
             cursor,
           });
           this.shell.observeReachable();
@@ -1467,7 +1791,13 @@ export class EntriesQueuePage implements OnDestroy {
     );
 
     this._queue.set(queue);
-    void queue.load().then(() => this._syncSubject());
+    void queue.load().then(() => {
+      // The row the address names is opened, when the page answers it.
+      if (entryId !== null && entryId !== '') {
+        queue.focus(entryId);
+      }
+      this._syncSubject();
+    });
   }
 
   /**
@@ -1624,6 +1954,15 @@ export class EntriesQueuePage implements OnDestroy {
     return proposalOf(row);
   }
 
+  /**
+   * The word on a line of the column: "Bound" for a bound row's product,
+   * where a waiting row says it has a proposal (admin plan 0073, decision 47b).
+   */
+  lineBadge(row: SourceEntryRow): string {
+    const kind = proposalOf(row);
+    return kind === 'item' && row.status === 'ACTIVE' ? 'bound' : kind;
+  }
+
   /** Where a run is read. Absolute, because this screen has no route to pop. */
   runLink(runId: string): readonly string[] {
     return harvestRunPath(runId);
@@ -1643,7 +1982,14 @@ export class EntriesQueuePage implements OnDestroy {
    * switch above say what the queue holds (admin plan 0044, target 2).
    */
   private _decided(): void {
-    this._syncSubject();
+    // A decided row leaves the queue in hand, but the route answers the one
+    // entry whatever its status, so in that view it is read again and the
+    // operator sees what the decision made of it (admin plan 0073).
+    if (this.entryFilter() !== null) {
+      this.reload({ keepWritten: true });
+    } else {
+      this._syncSubject();
+    }
     this._status.refresh();
   }
 
@@ -1887,6 +2233,22 @@ function accepted(
     count,
     name: decided?.name ?? '',
     prices: (decided?.prices ?? []).map(priceSentence).join(', '),
+  };
+}
+
+/**
+ * The chain's category paths of a row, one a line (backend plan 0268): every
+ * path the chain files it under, or the one path a row holds that no walk
+ * has stated every path for yet.
+ */
+function categoryLine(row: SourceEntryRow): CardLine {
+  if (row.categoryPaths.length === 0) {
+    return { key: 'categoryPath', value: row.categoryPath };
+  }
+  return {
+    key: 'categoryPath',
+    value: row.categoryPaths.join('\n'),
+    list: row.categoryPaths,
   };
 }
 

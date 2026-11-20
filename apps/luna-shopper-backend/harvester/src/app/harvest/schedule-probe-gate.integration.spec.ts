@@ -17,11 +17,13 @@ import {
   HarvestRun,
   HarvestRunPreset,
   HarvestSchedule,
+  SourceCatalogEntry,
   SourceProbe,
   type SupermarketSource,
 } from '../entities';
 import type { HarvestAlertDraft } from './alerts/harvest-alert.rules';
 import type { CatalogClient } from './catalog-client.service';
+import { DezaKeyGuard } from './deza-key-guard';
 import { HarvestRunPresetStore } from './harvest-run-preset.store';
 import { HarvestRunService } from './harvest-run.service';
 import { HarvestRunStore } from './harvest-run.store';
@@ -129,7 +131,8 @@ describeIntegration('the probe gate (real Postgres)', () => {
       { listAllPriceScopes: async () => [] } as unknown as CatalogClient,
       { requireAdmin: async () => ADMIN } as unknown as PlatformAdminService,
       config,
-      presets
+      presets,
+      new DezaKeyGuard(dataSource.getRepository(SourceCatalogEntry))
     );
     schedules = new HarvestScheduleStore(
       dataSource.getRepository(HarvestSchedule)

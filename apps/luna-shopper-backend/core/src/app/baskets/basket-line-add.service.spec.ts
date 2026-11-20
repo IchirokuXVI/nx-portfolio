@@ -3,7 +3,10 @@ import {
   type AddBasketLineRequest,
   type AddLineRequest,
 } from '@portfolio/luna-shopper/contracts';
-import { LineAddNeedsChoiceException } from '@portfolio/luna-shopper/platform';
+import {
+  LineAddNeedsChoiceException,
+  LineUnitDiffersException,
+} from '@portfolio/luna-shopper/platform';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import type { LineService } from '../lists/line.service';
 import type { ProfileService } from '../profiles/profile.service';
@@ -116,5 +119,55 @@ describe('a typed name added from a basket (plan 0228)', () => {
     await expect(service.add(request({ askIfAmbiguous: true }))).rejects.toBe(
       refusal
     );
+  });
+});
+
+describe('what a basket add answers (plan 0260, section 2)', () => {
+  it('passes the outcome on as addOutcome, naming the line it wrote', async () => {
+    for (const outcome of ['CREATED', 'RAISED'] as const) {
+      const { service } = build(async () => ({
+        line: { id: 'li-1' },
+        merged: outcome === 'RAISED',
+        outcome,
+        alreadyOnList: [],
+      }));
+
+      expect(await service.add(request())).toEqual({
+        lineIds: ['li-1'],
+        addOutcome: outcome,
+      });
+    }
+  });
+
+  it('names every line met in the entries when the add met wanted lines', async () => {
+    const { service } = build(async () => ({
+      line: { id: 'li-1' },
+      merged: true,
+      outcome: 'ALREADY_ON_LIST',
+      alreadyOnList: [{ id: 'li-1' }, { id: 'li-2' }],
+    }));
+
+    expect(await service.add(request())).toEqual({
+      lineIds: ['li-1', 'li-2'],
+      addOutcome: 'ALREADY_ON_LIST',
+    });
+  });
+
+  it('lets the refusal of another unit reach the route unchanged', async () => {
+    const refusal = new LineUnitDiffersException('another unit', {
+      details: {
+        line: { lineId: 'li-1', content: 'Leche', unit: 'UNIT', quantity: 2 },
+        unit: 'GRAM',
+        index: null,
+      },
+      messageArgs: { content: 'Leche' },
+    });
+    const { service } = build(async () => {
+      throw refusal;
+    });
+
+    await expect(
+      service.add(request({ itemIds: ['i-1'], unit: 'GRAM' }))
+    ).rejects.toBe(refusal);
   });
 });

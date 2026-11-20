@@ -1,3 +1,5 @@
+> **PR:** [#985](https://github.com/IchirokuXVI/nx-portfolio/pull/985)
+
 # 0070: A product carries the step a shopper counts in
 
 > Amended on 2026-11-11: the default steps are now 25 g and 25 ml at every amount, with no
@@ -218,6 +220,16 @@ server refuses the save.
 A switch between `KILOGRAM` and `LITER` keeps the value and redraws the options in the other
 unit (writer decision G). Both units take the same ten values.
 
+> Note of 2026-11-17, the owner's ruling: **only a loose product sold by the kilo carries a
+> step.** No product by the litre does, because the catalog stores a liquid in millilitres
+> with a size, which is a pack counted in pieces. As built, a write that names `LITER` is
+> refused with `item_unit_not_base`, whose details name the millilitres and the size it
+> becomes; such a product has a size, so the field is hidden and the save sends
+> `quantityStep: null`. The millilitre options are kept as built for a legacy `LITER` row with
+> no size and no weight, which `carriesQuantityStep` still admits on an edit that names no
+> unit and no size. The sentence of `item_quantity_step_not_allowed` (section 4) now names the
+> loose kilo product alone.
+
 ### 2.5 A refusal
 
 - `validation_failed` with a field error on `quantityStep` (a value off the list, which the
@@ -265,7 +277,7 @@ English only, as the rest of the back office (`product-format.ts:17` to `21`).
 | `catalog.items.quantityStepDefault.gram` | Default: 25 g |
 | `catalog.items.quantityStepDefault.milliliter` | Default: 25 ml |
 | `catalog.items.quantityStepSet` | Set for this product. A run does not give it a weight while it has a step. |
-| `resource.error.itemQuantityStepNotAllowed` | Only a product sold by the kilo or by the litre has a step. Choose the default, or sell it by the kilo or the litre. |
+| `resource.error.itemQuantityStepNotAllowed` | Only a loose product sold by the kilo has a step. Choose the default, or sell it loose by the kilo. (Reworded on 2026-11-17 by the owner's ruling, section 2.4.) |
 
 ## 5. The walk
 
@@ -358,6 +370,11 @@ here. The values, the kinds, the meaning of null, the refusals and the run's beh
 - **G. A switch between `KILOGRAM` and `LITER` keeps the value.** Both units take the same ten
   values, and the options redraw in the new unit in front of the curator. Nothing in
   production is sold by the litre today (backend `0246` section 1).
+
+  > Note of 2026-11-17: superseded by the owner's ruling of that day, as section 2.4 states.
+  > Only a loose product by the kilo carries a step; a product by the litre is stored in
+  > millilitres with a size and carries none. The form's switch is kept as built for a legacy
+  > `LITER` row.
 - **H. The line under a set step says what `0261` S6 means.** A curator who stepped a product
   should know that a run will not turn it into a kilo piece by itself.
 

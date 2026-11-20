@@ -9,8 +9,13 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
+  RokuTranslatorPipe,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
+import {
+  AdminNames,
+  EarlierRunTotals,
   HARVEST_SERVICE,
   toGatewayError,
   type GatewayError,
@@ -27,6 +32,7 @@ import {
   runProgress,
   type HarvestRun,
   type InfoContent,
+  type RunProgress,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import {
@@ -145,12 +151,21 @@ export const IMPORT_INFO: InfoContent = {
     RunProgressView,
     RunRowView,
   ],
+  // The names of the admins, read once for this page (admin plan 0074).
+  providers: [AdminNames],
   template: `
     <lib-harvest-header>
-      <span [class]="'state ' + state()" pageChip data-runs-state>{{
-        'harvest.runs.state.' + state() | rokuT
-      }}</span>
-      <lib-info-button [info]="stateInfo" align="start" pageChip />
+      <!-- On a phone the state is a line under the header and not a chip in
+           it, as on the run page (admin plan 0074, choice C1): the header cuts
+           a chip to an ellipsis, and "Runs may start" read "Runs may st...". -->
+      @if (!compact()) {
+        <span [class]="'state ' + state()" pageChip data-runs-state>{{
+          'harvest.runs.state.' + state() | rokuT
+        }}</span>
+      }
+      @if (!compact()) {
+        <lib-info-button [info]="stateInfo" align="start" pageChip />
+      }
       <!-- One block for each action: a block with two nodes at its root is
            not projected into the action slot. -->
       @if (!compact()) {
@@ -168,6 +183,15 @@ export const IMPORT_INFO: InfoContent = {
         >
       }
     </lib-harvest-header>
+
+    @if (compact()) {
+      <div class="state-line">
+        <span [class]="'state ' + state()" data-runs-state>{{
+          'harvest.runs.state.' + state() | rokuT
+        }}</span>
+        <lib-info-button [info]="stateInfo" align="start" />
+      </div>
+    }
 
     <!-- The dashboard read the harvester did not answer. It was the notice of
          the harvester's own dashboard, and it stays at the top of this tab. -->
@@ -530,6 +554,13 @@ export const IMPORT_INFO: InfoContent = {
       color: var(--admin-neutral-on-wash);
     }
 
+    .state-line {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-2);
+      align-items: center;
+    }
+
     .state.on {
       background: var(--admin-accent-wash);
       color: var(--admin-accent-on-wash);
@@ -600,11 +631,20 @@ export const IMPORT_INFO: InfoContent = {
       gap: var(--admin-space-3);
     }
 
+    /* A select is as wide as its longest option, and a preset named with its
+       chain made the page scroll sideways at 390 px (admin plan 0074). The
+       field may shrink to its row, and the select shows what fits. */
     label {
       display: flex;
       flex: 1 1 10rem;
       flex-direction: column;
       gap: var(--admin-space-1);
+      min-inline-size: 0;
+    }
+
+    label select {
+      inline-size: 100%;
+      min-inline-size: 0;
     }
 
     label span {
@@ -711,6 +751,9 @@ export class RunsPage {
   private readonly _router = inject(Router);
   private readonly _handoff = inject(ImportHandoff);
   private readonly _registry = inject(ResourceRegistry);
+  private readonly _admins = inject(AdminNames);
+  private readonly _translate = inject(RokuTranslatorService);
+  private readonly _earlier = inject(EarlierRunTotals);
 
   readonly shell = inject(HarvestShell);
   readonly status = inject(HarvestStatus);
@@ -786,7 +829,14 @@ export class RunsPage {
   /** The run in progress, which the dashboard read names. */
   readonly running = this.status.running;
 
-  readonly progress = runProgress;
+  /**
+   * How far the run in progress is, with an approximate total from the last
+   * completed run of its chain and mode while it does not know its own
+   * (decision 86 of the harvester round).
+   */
+  progress(run: HarvestRun): RunProgress {
+    return runProgress(run, this._earlier.of(run));
+  }
   readonly canAbort = canAbort;
 
   readonly rows = computed<readonly RunRow[]>(() =>
@@ -799,9 +849,9 @@ export class RunsPage {
       failed: run.failed,
       // Empty when the run still stands, which is what the row branches on.
       reverted: formatInstant(run.revertedAt),
-      // On hover rather than in the row: the operator id is a uuid, and a row
-      // that spelled one out would be mostly uuid.
-      revertedBy: run.revertedByUserId ?? '',
+      // On hover rather than in the row, and by name (admin plan 0074): the
+      // run holds only the admin's id, which is a uuid.
+      revertedBy: this._revertedBy(run.revertedByUserId ?? null),
       // A finished run that failed because of a switch says which one, on the
       // row, because that is where somebody is looking when they wonder.
       reasonKey: reasonKey(failureBlockReason(run)),
@@ -840,13 +890,56 @@ export class RunsPage {
       });
     });
 
-    // The chain of the run in progress, for the panel's title.
+    // The chain of the run in progress, for the panel's title, and its
+    // earlier run, once for each run that does not know its total.
     effect(() => {
-      const chain = this.running()?.supermarketId ?? '';
-      if (chain !== '') {
-        untracked(() => void this.names.resolve([chain]));
+      const run = this.running();
+      const chain = run?.supermarketId ?? '';
+      untracked(() => {
+        if (chain !== '') {
+          void this.names.resolve([chain]);
+        }
+        void this._earlier.resolve(run);
+      });
+    });
+
+    // The admins, once for the page and only when a listed run was reverted:
+    // the reader ignores every call after the first.
+    effect(() => {
+      if (this.runs().some((run) => (run.revertedByUserId ?? '') !== '')) {
+        untracked(() => void this._admins.load());
       }
     });
+  }
+
+  /**
+   * Who reverted a run, for the hover of its chip: the admin's name, the
+   * words for an admin the list does not hold, or the words for a list that
+   * could not be read, each followed by the id in parentheses so the id is on
+   * the page (admin plan 0074, section 4). Nothing until the list has
+   * answered, so the hover never shows the uuid alone.
+   */
+  private _revertedBy(adminId: string | null): string {
+    const state = this._admins.state();
+    if (
+      adminId === null ||
+      adminId === '' ||
+      state === 'idle' ||
+      state === 'loading'
+    ) {
+      return '';
+    }
+
+    // Read like the pipe reads them, so the words follow the strings when
+    // they load after the list (decision 46a of the harvester round).
+    this._translate.locale();
+    this._translate.loaded();
+    const who =
+      state === 'failed'
+        ? this._translate.t('harvest.run.revertedByUnread')
+        : (this._admins.nameOf(adminId) ??
+          this._translate.t('harvest.run.revertedByUnknown'));
+    return `${who} (${adminId})`;
   }
 
   /** The chain, where the run has one, for the title of "Running now". */

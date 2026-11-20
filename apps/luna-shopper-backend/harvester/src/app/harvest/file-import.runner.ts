@@ -12,6 +12,7 @@ import {
   type HarvestRunWarning,
   type SourceSize,
 } from '@portfolio/luna-shopper/contracts';
+import { distinctCategoryPaths } from './category-paths';
 import { readHarvestDocument } from './harvest-document.reader';
 import { resolveImportWindow, type ImportWindow } from './import-window';
 import { entryKey } from './matching';
@@ -34,6 +35,45 @@ export interface FileImportInput {
    * scope is then created unnamed rather than under a guessed language.
    */
   adapterKey: string | null;
+}
+
+/**
+ * What the ingest of an import counted, and the rows whose category paths it
+ * changed (plan 0268), which the run report states as `categoryPathsWritten`
+ * as it does for a walk.
+ */
+export interface FileImportCounters extends SourceIngestCounters {
+  categoryPathsWritten: number;
+}
+
+/**
+ * The steps of an import that run after the ingest wrote its rows and prices:
+ * the warnings and the skipped count of the outcomes, the write of the
+ * category paths, and the last flush of the run's counters and warnings.
+ */
+export type FileImportStepAfterIngest = 'OUTCOMES' | 'CATEGORY_PATHS' | 'FLUSH';
+
+/**
+ * A step after the ingest failed, once the ingest had written its rows and
+ * prices (plan 0268, owner decisions 96c and 102b).
+ *
+ * The run still fails, but those rows and prices are saved, so the report of
+ * the failed run states them, as a walk whose drain failed states what its
+ * chunks wrote (plan 0269, D9). {@link counters} is what the ingest counted,
+ * and `categoryPathsWritten` the rows whose paths changed before the failure
+ * (zero when the step that failed comes before the path write). {@link step}
+ * names the step. The message is that of {@link failure}, the error the step
+ * threw, so the run's sentence is the one the step gave.
+ */
+export class FileImportFailedAfterIngestError extends Error {
+  constructor(
+    readonly step: FileImportStepAfterIngest,
+    readonly counters: FileImportCounters,
+    readonly failure: unknown
+  ) {
+    super(failure instanceof Error ? failure.message : String(failure));
+    this.name = 'FileImportFailedAfterIngestError';
+  }
 }
 
 /**
@@ -93,7 +133,7 @@ export class FileImportRunner {
   async run(
     context: RunContext,
     input: FileImportInput
-  ): Promise<SourceIngestCounters> {
+  ): Promise<FileImportCounters> {
     // Validated again here, because the harvester owns the schema version and a
     // broker message is not a trusted input (section 6.2). The gateway already
     // refused a malformed document; this refuses one that arrived some other way.
@@ -193,9 +233,89 @@ export class FileImportRunner {
       observations,
     });
 
-    await this.recordOutcomes(context, document.products, outcomes);
-    await context.flush();
-    return counters;
+    // From here on the ingest has written rows and prices. A step below that
+    // throws still fails the run, and the error carries what was written so
+    // the report of the failed run states it (owner decision 102b). An ingest
+    // that throws above wrote nothing this has to carry.
+    // Counted as each row lands, so a failure midway leaves the true count.
+    let categoryPathsWritten = 0;
+    const afterIngest = async (
+      step: FileImportStepAfterIngest,
+      work: () => Promise<void>
+    ): Promise<void> => {
+      try {
+        await work();
+      } catch (error) {
+        throw new FileImportFailedAfterIngestError(
+          step,
+          { ...counters, categoryPathsWritten },
+          error
+        );
+      }
+    };
+    await afterIngest('OUTCOMES', () =>
+      this.recordOutcomes(context, document.products, outcomes)
+    );
+    await afterIngest('CATEGORY_PATHS', () =>
+      this.writeCategoryPaths(document.products, outcomes, () => {
+        categoryPathsWritten += 1;
+      })
+    );
+    await afterIngest('FLUSH', () => context.flush());
+    return { ...counters, categoryPathsWritten };
+  }
+
+  /**
+   * The one category path each product of the document states, added to the
+   * paths its row holds (plan 0268, section 3). `onWritten` is called once
+   * for each row whose paths changed, as it lands.
+   *
+   * **Always `ADD`.** A document is one reading of one source: a leaflet
+   * shows one department of a product, not every shelf it sits on, and the
+   * harvester's own export of a walk keeps one `category_path` of the several
+   * the walk met. Neither has shown that a stored path no longer holds.
+   *
+   * Written after the ingest, so each row the import created exists, as a
+   * walk writes its paths at the drain after the last chunk. An ingest that
+   * throws reaches no line here, so a failed import writes no path. A write
+   * here that throws fails the run, which {@link run} raises as a
+   * {@link FileImportFailedAfterIngestError} carrying what the ingest wrote. A product
+   * with no path makes no write. Two products of the document that resolve to
+   * one row (`DUPLICATE_KEY`) add their paths to it together.
+   *
+   * A path is the chain's context for the curator and never a match: no row
+   * is bound or resolved by it, and the ingest above resolved each row as it
+   * did before (plan 0081).
+   */
+  private async writeCategoryPaths(
+    products: readonly HarvestDocumentProduct[],
+    outcomes: readonly SourceEntryOutcome[],
+    onWritten: () => void
+  ): Promise<void> {
+    const byEntry = new Map<string, string[][]>();
+    outcomes.forEach((outcome, index) => {
+      const path = products[index]?.category_path ?? [];
+      if (path.length === 0) {
+        return;
+      }
+      const held = byEntry.get(outcome.entry.id);
+      if (held) {
+        held.push([...path]);
+      } else {
+        byEntry.set(outcome.entry.id, [[...path]]);
+      }
+    });
+    const writes = [...byEntry]
+      .map(([entryId, paths]) => ({
+        entryId,
+        paths: distinctCategoryPaths(paths),
+        mode: 'ADD' as const,
+      }))
+      .filter((write) => write.paths.length > 0);
+    if (writes.length === 0) {
+      return;
+    }
+    await this.ingest.writeCategoryPaths(writes, onWritten);
   }
 
   /**

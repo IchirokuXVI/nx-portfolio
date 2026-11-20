@@ -91,6 +91,20 @@ export interface AvailabilityClaim {
 }
 
 /**
+ * How the paths of one {@link RunReport.categoryPaths} call meet the paths the
+ * entry already holds (plan 0268, section 2).
+ *
+ * - `REPLACE`: the walk met every place the product sits in that this walk
+ *   can reach, so the run's paths take the place of the stored ones.
+ * - `ADD`: the walk cannot say that, so the stored paths stay and each run
+ *   path that is not stored yet is added after them.
+ *
+ * The sink writes every call of an aborted run as `ADD`, because a walk that
+ * stopped early has not proved that a stored path is gone.
+ */
+export type CategoryPathsMode = 'REPLACE' | 'ADD';
+
+/**
  * What a runner has to say about the world, and the whole of what it can do
  * with it (plan 0103, section 2.2).
  *
@@ -166,6 +180,34 @@ export interface RunReport {
     detail?: readonly unknown[],
     listed?: Iterable<string>
   ): void;
+
+  /**
+   * Every category path the chain files this product under, as this walk met
+   * them (plan 0268, section 2): each path root first, the paths in walk
+   * order, in the chain's own words.
+   *
+   * **Made once a product, at the end of the walk**, as availability is, and
+   * never on the observation: a streamed observation is written at the first
+   * sighting, before the later paths are known. The sink writes the calls in
+   * `drain()`, after the last chunk, so a run that dies before it writes no
+   * path and the stored list stays whole.
+   *
+   * A runner that met no path for a product makes no call. The sink drops a
+   * repeated path and a path that is a prefix of another path of the same
+   * product, because it adds nothing the longer path does not say.
+   */
+  categoryPaths(
+    externalId: string,
+    paths: readonly (readonly string[])[],
+    mode: CategoryPathsMode
+  ): void;
+}
+
+/** One {@link RunReport.categoryPaths} call, as {@link RecordingRunReport} keeps it. */
+export interface RecordedCategoryPaths {
+  externalId: string;
+  paths: string[][];
+  mode: CategoryPathsMode;
 }
 
 /** A whole listing a runner declared, as {@link RecordingRunReport} keeps it. */
@@ -200,6 +242,8 @@ export class RecordingRunReport implements RunReport {
   readonly completed: (string | null)[] = [];
   readonly wholeListings: RecordedListing[] = [];
   readonly notWhole: RecordedNotWhole[] = [];
+  /** Every {@link categoryPaths} call, in the order it was made (plan 0268). */
+  readonly categoryPathCalls: RecordedCategoryPaths[] = [];
 
   scope(declaration: ScopeDeclaration): void {
     this.scopes.push(declaration);
@@ -240,6 +284,18 @@ export class RecordingRunReport implements RunReport {
       reason,
       detail,
       listed: listed ? [...listed] : null,
+    });
+  }
+
+  categoryPaths(
+    externalId: string,
+    paths: readonly (readonly string[])[],
+    mode: CategoryPathsMode
+  ): void {
+    this.categoryPathCalls.push({
+      externalId,
+      paths: paths.map((path) => [...path]),
+      mode,
     });
   }
 }

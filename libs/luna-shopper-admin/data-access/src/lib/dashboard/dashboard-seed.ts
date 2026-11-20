@@ -36,11 +36,12 @@ export const SEED_WINDOW: Wire.AdminDashboardAdminDashboardWindow = {
  * The chains the seeded queues are about.
  *
  * The same three ids `HARVEST_RUN_SEED` uses, so the dashboard and the harvester
- * screens describe one harvester rather than two.
+ * screens describe one harvester rather than two. They are the ids of the
+ * catalog's chain seed, so each tile draws the chain's name.
  */
-const MERCADONA = '11111111-1111-4111-8111-111111111111';
-const CARREFOUR = '22222222-2222-4222-8222-222222222222';
-const DEZA = '33333333-3333-4333-8333-333333333333';
+const MERCADONA = 'sm_mercadona';
+const CARREFOUR = 'sm_carrefour';
+const DEZA = 'sm_deza';
 
 /** The operator most of the seeded trail is attributed to. */
 const OPERATOR = 'admin-1';
@@ -172,7 +173,8 @@ const HARVEST: Wire.AdminDashboardAdminHarvestDashboard = {
       { supermarketId: CARREFOUR, candidate: 0, unresolved: 0 },
       { supermarketId: DEZA, candidate: 6, unresolved: 0 },
     ],
-    places: 7,
+    // The places of `DISCOVERED_PLACE_SEED`, so the tab and the list agree.
+    places: 9,
     shops: [
       { supermarketId: MERCADONA, unmapped: 4 },
       { supermarketId: CARREFOUR, unmapped: 0 },

@@ -1,15 +1,20 @@
 import {
   canAbort,
   canRevert,
+  earlierTotal,
   failureBlockReason,
+  hasComparableWalkTotal,
   isReverted,
   isTerminalRun,
   PRICE_WRITING_MODES,
   runPriceCounters,
   runPricesPublished,
   runProgress,
+  runProgressLine,
   spawnBlockReason,
   TERMINAL_RUN_STATUSES,
+  walkedUnderSameConfigAs,
+  wantsEarlierTotal,
   type HarvestRun,
 } from './harvest-run';
 
@@ -45,6 +50,10 @@ function run(over: Partial<HarvestRun> = {}): HarvestRun {
     revertedAt: null,
     revertedByUserId: null,
     revertedPriceCount: null,
+    // A walk of a chain whose totals compare (owner decision 127b), under a
+    // known configuration (owner decision 130b), unless a case says otherwise.
+    adapterKey: 'mercadona-api',
+    configFingerprint: 'fp-1',
     ...over,
   };
 }
@@ -126,6 +135,367 @@ describe('runProgress', () => {
     expect(
       runProgress(run({ processed: 120, totalPlanned: 100 })).percent
     ).toBe(100);
+  });
+});
+
+/**
+ * An approximate total from another run (decision 86 of the harvester round).
+ * A DEZA walk does not know its total while it runs, and the owner wants "824
+ * of about 2,361" rather than "824 processed".
+ */
+describe('runProgress with an earlier total', () => {
+  it('gives the earlier total as an approximate one, with a bar', () => {
+    expect(
+      runProgress(run({ processed: 824, totalPlanned: null }), 2361)
+    ).toEqual({
+      processed: 824,
+      total: null,
+      percent: 35,
+      about: 2361,
+      ended: false,
+    });
+  });
+
+  it('keeps the unknown form when no earlier run gives a total', () => {
+    expect(
+      runProgress(run({ processed: 824, totalPlanned: null }), null)
+    ).toEqual({ processed: 824, total: null, percent: null });
+  });
+
+  /** "0 of about 2,361" says nothing a bare count does not. */
+  it.each(['RUNNING', 'PENDING', 'ABORTED', 'FAILED', 'COMPLETED'] as const)(
+    'keeps the unknown form for a %s run that processed nothing',
+    (status) => {
+      expect(
+        runProgress(run({ status, processed: 0, totalPlanned: null }), 2361)
+      ).toEqual({ processed: 0, total: null, percent: null });
+    }
+  );
+
+  /** "900 of about 824" would print a whole smaller than its part. */
+  it('keeps the unknown form once the run has passed the estimate', () => {
+    expect(
+      runProgress(run({ processed: 2400, totalPlanned: null }), 2361)
+    ).toEqual({ processed: 2400, total: null, percent: null });
+  });
+
+  it('never draws a bar against an estimate as full', () => {
+    expect(
+      runProgress(run({ processed: 2361, totalPlanned: null }), 2361)
+    ).toEqual({
+      processed: 2361,
+      total: null,
+      percent: 99,
+      about: 2361,
+      ended: false,
+    });
+  });
+
+  it('never replaces a known total', () => {
+    expect(
+      runProgress(run({ processed: 25, totalPlanned: 100 }), 2361)
+    ).toEqual({ processed: 25, total: 100, percent: 25 });
+  });
+
+  it('gives no estimate beside a known total of zero', () => {
+    expect(
+      runProgress(run({ processed: 0, totalPlanned: 0 }), 2361).about ?? null
+    ).toBeNull();
+  });
+
+  /**
+   * Owner decision 97b: a run that stopped short keeps the number, in the past
+   * tense, and gets no bar, because a bar on a run that stopped reads as
+   * progress.
+   */
+  it.each(['ABORTED', 'FAILED', 'STALE'] as const)(
+    'gives an ended %s run the estimate with no bar',
+    (status) => {
+      expect(
+        runProgress(run({ status, processed: 824, totalPlanned: null }), 2361)
+      ).toEqual({
+        processed: 824,
+        total: null,
+        percent: null,
+        about: 2361,
+        ended: true,
+      });
+    }
+  );
+
+  /**
+   * Owner decision 111c: a completed run did the whole walk, so it shows its
+   * own count and no estimate, even when an earlier run is handed in.
+   */
+  it('gives a completed run with no total its count and no estimate', () => {
+    const progress = runProgress(
+      run({ status: 'COMPLETED', processed: 2100, totalPlanned: null }),
+      2361
+    );
+    expect(progress).toEqual({ processed: 2100, total: null, percent: null });
+    expect(runProgressLine(progress, 'en')).toEqual({
+      key: 'harvest.run.progress.processed',
+      args: { processed: 2100 },
+      approximate: false,
+    });
+  });
+
+  /**
+   * Owner decision 127b: a DEZA walk shows "4,000 processed" and never "of
+   * about 15,115", because its capped queries count different totals for one
+   * assortment. Nor does a run that names no adapter, or one this build does
+   * not know.
+   */
+  it.each([
+    ['deza-web', 'RUNNING'],
+    ['deza-web', 'ABORTED'],
+    [null, 'RUNNING'],
+    [undefined, 'RUNNING'],
+    ['not-an-adapter', 'RUNNING'],
+  ] as const)(
+    'gives a run of adapter %s that is %s its count and no estimate',
+    (adapterKey, status) => {
+      const progress = runProgress(
+        run({
+          status,
+          processed: 4000,
+          totalPlanned: null,
+          adapterKey: adapterKey as HarvestRun['adapterKey'],
+        }),
+        15115
+      );
+      expect(progress).toEqual({ processed: 4000, total: null, percent: null });
+      expect(runProgressLine(progress, 'en').key).toBe(
+        'harvest.run.progress.processed'
+      );
+    }
+  );
+});
+
+describe('hasComparableWalkTotal', () => {
+  it('is true for an adapter whose walk totals compare', () => {
+    expect(hasComparableWalkTotal(run({ adapterKey: 'dia-api' }))).toBe(true);
+  });
+
+  it('is false for deza-web, no adapter, and an unknown one', () => {
+    expect(hasComparableWalkTotal(run({ adapterKey: 'deza-web' }))).toBe(false);
+    expect(hasComparableWalkTotal(run({ adapterKey: null }))).toBe(false);
+    expect(hasComparableWalkTotal(run({ adapterKey: undefined }))).toBe(false);
+    expect(
+      hasComparableWalkTotal(
+        run({ adapterKey: 'not-an-adapter' as HarvestRun['adapterKey'] })
+      )
+    ).toBe(false);
+  });
+});
+
+/** Owner decision 130b: a reference walked under the same configuration. */
+describe('walkedUnderSameConfigAs', () => {
+  it('is true only for the same fingerprint on both runs', () => {
+    expect(walkedUnderSameConfigAs(run(), run({ id: 'before' }))).toBe(true);
+    expect(
+      walkedUnderSameConfigAs(run(), run({ configFingerprint: 'fp-2' }))
+    ).toBe(false);
+  });
+
+  it('is false when either run has no fingerprint', () => {
+    expect(
+      walkedUnderSameConfigAs(run(), run({ configFingerprint: null }))
+    ).toBe(false);
+    expect(
+      walkedUnderSameConfigAs(
+        run({ configFingerprint: undefined }),
+        run({ configFingerprint: undefined })
+      )
+    ).toBe(false);
+  });
+});
+
+describe('runProgressLine', () => {
+  it('says "of about" for a running estimate, with the numbers grouped', () => {
+    expect(
+      runProgressLine(
+        {
+          processed: 1824,
+          total: null,
+          percent: 77,
+          about: 2361,
+          ended: false,
+        },
+        'en'
+      )
+    ).toEqual({
+      key: 'harvest.run.progress.ofAbout',
+      args: { processed: '1,824', total: '2,361' },
+      approximate: true,
+    });
+  });
+
+  it('words an ended estimate in the past', () => {
+    expect(
+      runProgressLine(
+        {
+          processed: 824,
+          total: null,
+          percent: null,
+          about: 2361,
+          ended: true,
+        },
+        'en'
+      )
+    ).toEqual({
+      key: 'harvest.run.progress.ofAboutEnded',
+      args: { processed: '824', total: '2,361' },
+      approximate: true,
+    });
+  });
+
+  /**
+   * Owner decision 99b: a known total is drawn as it was before the estimate
+   * existed, raw, like every other count on the page. Only the estimate line
+   * is grouped.
+   */
+  it('says "of" for a known total with the raw numbers, never "about"', () => {
+    expect(
+      runProgressLine({ processed: 1907, total: 4383, percent: 44 }, 'en')
+    ).toEqual({
+      key: 'harvest.run.progress.of',
+      args: { processed: 1907, total: 4383 },
+      approximate: false,
+    });
+  });
+
+  it('says how many with the raw number when there is neither', () => {
+    expect(
+      runProgressLine({ processed: 2361, total: null, percent: null }, 'en')
+    ).toEqual({
+      key: 'harvest.run.progress.processed',
+      args: { processed: 2361 },
+      approximate: false,
+    });
+  });
+
+  it('formats the estimate for the reader’s language', () => {
+    expect(
+      runProgressLine(
+        { processed: 824, total: null, percent: 7, about: 12361 },
+        'es'
+      ).args.total
+    ).toBe('12.361');
+  });
+});
+
+describe('earlierTotal', () => {
+  const completed = run({
+    status: 'COMPLETED',
+    processed: 2361,
+    totalPlanned: null,
+  });
+
+  it('is what a completed run that stands processed', () => {
+    expect(earlierTotal(completed)).toBe(2361);
+  });
+
+  it('ignores a reverted run', () => {
+    expect(
+      earlierTotal({ ...completed, revertedAt: '2026-09-01T11:20:00.000Z' })
+    ).toBeNull();
+  });
+
+  it.each(['FAILED', 'ABORTED', 'STALE', 'RUNNING', 'PENDING'] as const)(
+    'ignores a %s run, which says nothing of the whole',
+    (status) => {
+      expect(earlierTotal({ ...completed, status })).toBeNull();
+    }
+  );
+
+  it('ignores a run that processed nothing, and no run at all', () => {
+    expect(earlierTotal({ ...completed, processed: 0 })).toBeNull();
+    expect(earlierTotal(null)).toBeNull();
+    expect(earlierTotal(undefined)).toBeNull();
+  });
+});
+
+describe('wantsEarlierTotal', () => {
+  const going = run({
+    supermarketId: 'sm_deza',
+    totalPlanned: null,
+    processed: 824,
+    input: { mode: 'CATALOG_DISCOVERY' },
+  });
+
+  it('is true for a run of one chain that does not know its total', () => {
+    expect(wantsEarlierTotal(going)).toBe(true);
+  });
+
+  /**
+   * Owner decision 112b: a narrowed request, or an unknown one, has nothing
+   * to compare with but its preset.
+   */
+  describe('a run whose own request is narrowed', () => {
+    const postal = run({
+      supermarketId: 'sm_carrefour',
+      mode: 'STORE_DISCOVERY',
+      totalPlanned: null,
+      processed: 14,
+      input: { mode: 'STORE_DISCOVERY', postalCodes: ['15001', '15002'] },
+    });
+
+    it('is false with no preset, the chain and mode saying nothing of it', () => {
+      expect(wantsEarlierTotal(postal)).toBe(false);
+    });
+
+    it('is false for an unknown request, null or absent', () => {
+      expect(wantsEarlierTotal({ ...going, input: null })).toBe(false);
+      expect(wantsEarlierTotal({ ...going, input: undefined })).toBe(false);
+    });
+
+    it('is still true from a preset, whose runs share its request', () => {
+      expect(wantsEarlierTotal({ ...postal, presetId: 'p1' })).toBe(true);
+    });
+  });
+
+  it.each(['ABORTED', 'FAILED', 'STALE'] as const)(
+    'is true for a %s run, which keeps the estimate in the past',
+    (status) => {
+      expect(wantsEarlierTotal({ ...going, status })).toBe(true);
+    }
+  );
+
+  it('is false for a completed run, which shows its own count (111c)', () => {
+    expect(wantsEarlierTotal({ ...going, status: 'COMPLETED' })).toBe(false);
+  });
+
+  it('is true for a run of a preset over every chain', () => {
+    expect(
+      wantsEarlierTotal({ ...going, supermarketId: null, presetId: 'p1' })
+    ).toBe(true);
+  });
+
+  /** Owner decision 127b: no estimate is drawn, so none is read. */
+  it('is false for a run whose adapter cannot compare its walk totals', () => {
+    expect(wantsEarlierTotal({ ...going, adapterKey: 'deza-web' })).toBe(false);
+    expect(wantsEarlierTotal({ ...going, adapterKey: null })).toBe(false);
+    expect(
+      wantsEarlierTotal({ ...going, adapterKey: 'deza-web', presetId: 'p1' })
+    ).toBe(false);
+  });
+
+  /** Owner decision 130b: no earlier run can match a run with no fingerprint. */
+  it('is false for a run with no fingerprint, from a preset too', () => {
+    expect(wantsEarlierTotal({ ...going, configFingerprint: null })).toBe(
+      false
+    );
+    expect(
+      wantsEarlierTotal({ ...going, configFingerprint: '', presetId: 'p1' })
+    ).toBe(false);
+  });
+
+  it('is false for a known total, nothing processed, nothing to compare, no run', () => {
+    expect(wantsEarlierTotal({ ...going, totalPlanned: 100 })).toBe(false);
+    expect(wantsEarlierTotal({ ...going, processed: 0 })).toBe(false);
+    expect(wantsEarlierTotal({ ...going, supermarketId: null })).toBe(false);
+    expect(wantsEarlierTotal(null)).toBe(false);
   });
 });
 

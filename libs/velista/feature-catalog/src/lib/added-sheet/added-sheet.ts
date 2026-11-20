@@ -13,11 +13,7 @@ import {
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import { CatalogAddStore } from '@portfolio/velista/data-access';
-import {
-  APP_BASE_PATH,
-  visitFloor,
-  visitSections,
-} from '@portfolio/velista/models';
+import { APP_BASE_PATH, visitSections } from '@portfolio/velista/models';
 import { appPath, SheetNavigation } from '@portfolio/velista/platform';
 import {
   SheetShell,
@@ -86,10 +82,7 @@ export class AddedSheet {
   /** The record, one section for each list, the chosen list first. */
   protected readonly sections = computed<readonly VisitAddedSection[]>(() => {
     const lists = this._adds.lists();
-    // What each line counts, off the store's held lines (velista `0182`).
-    const units = new Map(
-      this._adds.held().map((line) => [line.lineId, line.unit])
-    );
+    const held = new Map(this._adds.held().map((line) => [line.lineId, line]));
     return visitSections(
       this._adds.visit(),
       this._adds.target()?.listId ?? null
@@ -102,9 +95,17 @@ export class AddedSheet {
         name: entry.name,
         detail: entry.detail,
         imageUrl: entry.imageUrl,
-        quantity: entry.quantity,
-        unit: units.get(entry.lineId) ?? 'UNIT',
-        floor: visitFloor(entry, units.get(entry.lineId) ?? 'UNIT'),
+        // The amount drawn, off the store's held line: a run a stepper opened is
+        // in it at once, and the record has it only once the run is written
+        // (velista 0188 S12). A sheet opened inside that wait drew the record's
+        // older amount, and its minus at 1 took a line at 2 back.
+        quantity: held.get(entry.lineId)?.quantity ?? entry.quantity,
+        // What it counts (velista `0182`) and its product's step (`0186`).
+        unit: held.get(entry.lineId)?.unit ?? 'UNIT',
+        step: held.get(entry.lineId)?.step ?? null,
+        // A line the visit made goes to 0 and is taken back there, a weight as a
+        // count (velista 0188 S14); one that was there before stops at what it held.
+        min: entry.created ? 0 : entry.before,
         pending: entry.pending,
       })),
     }));
@@ -124,7 +125,7 @@ export class AddedSheet {
   }
 
   protected step(step: VisitAddedStep): void {
-    void this._adds.step(
+    this._adds.step(
       {
         listId: step.listId,
         itemId: step.itemId,
@@ -132,7 +133,7 @@ export class AddedSheet {
         imageUrl: step.imageUrl,
       },
       step.lineId,
-      step.by
+      step.step
     );
   }
 

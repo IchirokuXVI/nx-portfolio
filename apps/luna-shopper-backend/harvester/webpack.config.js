@@ -51,5 +51,29 @@ module.exports = {
       outputHashing: 'none',
       generatePackageJson: false,
     }),
+    // The one off command of release task 0007 (plan 0271), for the same reason.
+    new NxAppWebpackPlugin({
+      target: 'node',
+      compiler: 'tsc',
+      main: './src/wash-sizes.ts',
+      outputFileName: 'wash-sizes.js',
+      tsConfig: './tsconfig.app.json',
+      optimization: false,
+      outputHashing: 'none',
+      generatePackageJson: false,
+    }),
+    // The command of release task 0008 (plan 0272), for the same reason. It
+    // stays after the task (D6): a later change of the size split ships a new
+    // task directory that runs it again.
+    new NxAppWebpackPlugin({
+      target: 'node',
+      compiler: 'tsc',
+      main: './src/deza-keys.ts',
+      outputFileName: 'deza-keys.js',
+      tsConfig: './tsconfig.app.json',
+      optimization: false,
+      outputHashing: 'none',
+      generatePackageJson: false,
+    }),
   ],
 };

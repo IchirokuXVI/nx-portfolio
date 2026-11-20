@@ -22,9 +22,11 @@ import {
   HarvestRun,
   HarvestRunPreset,
   HarvestSchedule,
+  SourceCatalogEntry,
   type SupermarketSource,
 } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
+import { DezaKeyGuard } from './deza-key-guard';
 import { HarvestRunPresetService } from './harvest-run-preset.service';
 import { HarvestRunPresetStore } from './harvest-run-preset.store';
 import { HarvestRunService } from './harvest-run.service';
@@ -135,7 +137,8 @@ describeIntegration('run presets (real Postgres)', () => {
       catalog,
       admin,
       config,
-      presetStore
+      presetStore,
+      new DezaKeyGuard(dataSource.getRepository(SourceCatalogEntry))
     );
     presets = new HarvestRunPresetService(
       presetStore,

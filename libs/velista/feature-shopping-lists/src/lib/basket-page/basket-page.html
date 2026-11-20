@@ -67,7 +67,196 @@
   </ng-container>
 </lib-page-header>
 
-<main #column class="page">
+<!--
+  The head block (velista 0189): pinned between the page header and the column, so
+  the field stays put while the column scrolls. The tools row with its chips, drawn
+  while the basket has rows, then the field.
+-->
+<div class="page-top">
+  @if (state() === 'ready' && rows().length > 0) {
+    <!--
+      **The tools row** (plan 0074, section 3): the count at the leading edge
+      and the filter button (`0075`) at the trailing one. The search it held
+      is the composer's field since velista 0117.
+
+      Not in the header, which holds the title, share, the map and the menu.
+      One more control there shrinks the title on a 390 wide phone, and the
+      title is the one thing in a header a person reads. This row was empty at
+      the trailing edge, and the count it holds is about the lines, which is
+      what the controls are about too.
+
+      Drawn for every reader, guests included. Nothing in it names a household.
+
+      **The row and the chips stay on screen** (velista 0079, section 2), and
+      stay while the field holds words too (velista 0189, decision D): the field
+      sits under them, and a block that went at the first character would move
+      the field under the thumb. The results are the basket's rows narrowed by
+      the view, so the chips still describe what is shown. The empty states stay
+      below, in the scroll.
+    -->
+    <lib-list-tools (openFilter)="openFilter()" [activeCount]="activeCount()">
+      <!--
+        Who is holding this basket open **right now**, guests marked by a dashed
+        ring. No sentence: a row of faces does the job, and the word "anonymous"
+        appears nowhere in this product (section 5.1).
+
+        At the leading edge of this row since velista 0130. It sat in the header,
+        and a header holds only a title: faces are not one. Pressing them still
+        opens the people sheet, under the same name.
+
+        Nothing at all for nobody, which is `ListViewers`' rule and matters more
+        here: presence empties the moment the socket drops, and a zero drawn
+        where a crowd was would be a claim about the shop rather than about the
+        connection. The people sheet is still reachable then, from the menu, and
+        it answers the other question: everybody who *can* open this basket.
+      -->
+      @if (faces().length > 0) {
+        <button
+          (click)="openPeople()"
+          [attr.aria-label]="'basket.people.open' | rokuT"
+          class="faces"
+          type="button"
+        >
+          @for (face of faces(); track face.id) {
+            <span [class.is-guest]="face.isGuest" class="face">
+              {{ face.initials }}
+            </span>
+          }
+          @if (overflow() > 0) {
+            <span class="face is-overflow">
+              {{ 'basket.people.more' | rokuT: { count: overflow() } }}
+            </span>
+          }
+        </button>
+      }
+
+      <!--
+        "got" means bought. A line closed because the shop had none is counted
+        separately rather than folded in, because folding it in would claim a
+        purchase that never happened.
+
+        It counts the **whole** basket and never what a filter left standing:
+        this is about how much shopping is left, and hiding rows does not buy
+        anything.
+      -->
+      <!--
+        **Which** sentence this is belongs to the model (velista `0091`,
+        section 4): a trip that ends counts what was got, and the basket
+        that is always there says what is left, because "3 of 40 got" on a
+        basket nobody ever finishes is true and reads as a failure.
+      -->
+      <p class="progress">
+        {{ progressLine().key | rokuT: progressLine().args }}
+        @if (progressLine().unavailable > 0) {
+          <span class="progress-unavailable">
+            {{
+              'basket.progressUnavailable'
+                | rokuT: { count: progressLine().unavailable }
+            }}
+          </span>
+        }
+      </p>
+
+      <!--
+        What the lines on screen come to (velista 0132, section 3), at the
+        trailing edge before the filter. Drawn while a visible line adds a
+        price: with none there is no number to stand behind, and the small row
+        under this bar says so instead (rule T8).
+      -->
+      @if (total().withPrice > 0) {
+        <lib-basket-total
+          [chainName]="totalChain()"
+          [locale]="locale()"
+          [total]="total()"
+          listToolsTrail
+        />
+      }
+
+      <!--
+        What the sheet turned on, named on the page (plan 0075, section 5). Absent
+        entirely when nothing is on, so the lines move up. The chips name the order
+        and the grouping as well as the filters, because a basket that is suddenly
+        alphabetical with nothing saying so looks broken to the next person handed
+        the phone.
+      -->
+      @if (chipItems().length > 0) {
+        <lib-chip-row
+          (more)="openFilter()"
+          (remove)="removeChip($event)"
+          [chips]="chipItems()"
+          [count]="chipCount()"
+          class="chips"
+          listToolsBelow
+        />
+      }
+    </lib-list-tools>
+  }
+
+  <!--
+    The composer, back with a list to put things on (velista 0092, section 7).
+
+    Pinned in the head block, under the tools row, where the list page's sits too
+    (velista 0189). A sheet is fixed to the viewport above everything on the page, so
+    the composer is covered by it rather than sitting over its panel.
+
+    **Drawn for an account holder with somewhere to put a line, and nobody else.**
+    A guest gets no dock, no field and no sentence about it: velista 0038 section
+    2.1 refuses to draw an invitation that cannot be accepted, and the product rule
+    that a guest is never pushed to register forbids explaining why.
+  -->
+  @if (state() === 'ready' && canAdd()) {
+    <div class="composer-dock">
+      <!--
+        The field always takes words (velista 0116). Where the line goes is asked
+        when it is added: the plus, or a card's add button, opens the picker below,
+        and the composer keeps the words until a list is picked.
+      -->
+      <!--
+        Escape closes the picker while it is open, and leaves the words; otherwise it
+        empties the field (velista 0117, rule F2).
+      -->
+      <lib-line-composer
+        (noticeDismissed)="dismissNotice()"
+        (queryChanged)="onComposerQuery($event)"
+        (submitted)="askWhere($event)"
+        [busy]="adding()"
+        [escapeClears]="pickerAnchor() === null"
+        [holdOnSend]="true"
+        [notice]="composerNotice()"
+        [resultsId]="resultsId"
+        [voice]="false"
+      />
+    </div>
+
+    <!--
+      Which list is it for? Held against the button that was pressed and never inside
+      the suggestion panel, which clips and scrolls. A pick is the add. Below the
+      composer's plus, at the top of the page, and above a card's button in the
+      results (velista 0189).
+    -->
+    <!--
+      After a pick, a typed name already on two or more lines of that list turns the
+      same popover into the question of which line (velista 0170).
+    -->
+    <lib-list-picker
+      (backToLists)="backToLists()"
+      (choseLine)="chooseLine($event)"
+      (chosen)="pickList($event)"
+      (choseNewLine)="chooseNewLine()"
+      (dismissed)="dismissPicker()"
+      [anchor]="pickerAnchor()"
+      [choice]="pickerChoice()"
+      [rows]="pickerRows()"
+      [side]="pickerSide()"
+    />
+  }
+</div>
+
+<!--
+  The first touch or pen drag of the column takes the focus off the field, so a phone
+  puts its keyboard away and the results get the room (velista 0189, section 4).
+-->
+<main (dragged)="releaseField()" #column class="page" libDragReleasesField>
   <!--
     Which of the two screens this is. A live basket and a refetching one look
     identical while nobody else is shopping and completely different the moment
@@ -83,7 +272,7 @@
     How long this reader has, said once on arrival and again half an hour
     before the end (velista 0094, section 5).
 
-    **Above the lines and under the bar**, rather than in the
+    **Above the lines and under the field**, rather than in the
     footer: somebody who came in on a link never saw the screen that would have
     told them, so this is the first thing about their own access they are told,
     and it has to be where they are already reading.
@@ -241,7 +430,8 @@
       @if (typing()) {
         <!--
           What the composer's field found (velista 0117, rule F1), in place of the
-          basket's body: the tools row, the chips, the banners and the sections. The
+          basket's body: the banners and the sections. The tools row and the chips
+          stay, in the head block above the field (velista 0189). The
           rows that match first, drawn by the same row the basket uses with its
           controls, then from the third character the catalog's cards.
 
@@ -273,10 +463,9 @@
           @if (resultRows().length > 0) {
             <ul class="lines">
               @for (row of resultRows(); track row.key) {
-                <li>
+                <li [attr.data-line-ids]="lineIdsOf(row)">
                   <lib-basket-row
                     (changeProduct)="openChange(row.row)"
-                    (left)="setRowLeft(row, $event)"
                     (open)="openRow(row.row)"
                     (revert)="revertRow(row.row)"
                     (settle)="settleRow(row.row)"
@@ -338,141 +527,10 @@
         </div>
       } @else {
         <!--
-          **The tools row** (plan 0074, section 3): the count at the leading edge
-          and the filter button (`0075`) at the trailing one. The search it held
-          is the composer's field since velista 0117.
-
-          Not in the header, which holds the title, share, the map and the menu.
-          One more control there shrinks the title on a 390 wide phone, and the
-          title is the one thing in a header a person reads. This row was empty at
-          the trailing edge, and the count it holds is about the lines, which is
-          what the controls are about too.
-
-          Drawn for every reader, guests included. Nothing in it names a household.
-
-          **The row and the chips stay on screen** (velista 0079, section 2). One
-          sticky bar holds both, so a shopper halfway down a long basket can still
-          filter, and see what is on, without scrolling back to the top. The empty
-          states stay below it, in the scroll.
-        -->
-        <lib-list-tools
-          (openFilter)="openFilter()"
-          [activeCount]="activeCount()"
-        >
-          <!--
-            Who is holding this basket open **right now**, guests marked by a dashed
-            ring. No sentence: a row of faces does the job, and the word "anonymous"
-            appears nowhere in this product (section 5.1).
-
-            At the leading edge of this row since velista 0130. It sat in the header,
-            and a header holds only a title: faces are not one. Pressing them still
-            opens the people sheet, under the same name.
-
-            Nothing at all for nobody, which is `ListViewers`' rule and matters more
-            here: presence empties the moment the socket drops, and a zero drawn
-            where a crowd was would be a claim about the shop rather than about the
-            connection. The people sheet is still reachable then, from the menu, and
-            it answers the other question: everybody who *can* open this basket.
-          -->
-          @if (faces().length > 0) {
-            <button
-              (click)="openPeople()"
-              [attr.aria-label]="'basket.people.open' | rokuT"
-              class="faces"
-              type="button"
-            >
-              @for (face of faces(); track face.id) {
-                <span [class.is-guest]="face.isGuest" class="face">
-                  {{ face.initials }}
-                </span>
-              }
-              @if (overflow() > 0) {
-                <span class="face is-overflow">
-                  {{ 'basket.people.more' | rokuT: { count: overflow() } }}
-                </span>
-              }
-            </button>
-          }
-
-          <!--
-            "got" means bought. A line closed because the shop had none is counted
-            separately rather than folded in, because folding it in would claim a
-            purchase that never happened.
-
-            It counts the **whole** basket and never what a filter left standing:
-            this is about how much shopping is left, and hiding rows does not buy
-            anything.
-          -->
-          <!--
-            **Which** sentence this is belongs to the model (velista `0091`,
-            section 4): a trip that ends counts what was got, and the basket
-            that is always there says what is left, because "3 of 40 got" on a
-            basket nobody ever finishes is true and reads as a failure.
-          -->
-          <p class="progress">
-            {{ progressLine().key | rokuT: progressLine().args }}
-            @if (progressLine().unavailable > 0) {
-              <span class="progress-unavailable">
-                {{
-                  'basket.progressUnavailable'
-                    | rokuT: { count: progressLine().unavailable }
-                }}
-              </span>
-            }
-          </p>
-
-          <!--
-            What the lines on screen come to (velista 0132, section 3), at the
-            trailing edge before the filter. Drawn while a visible line adds a
-            price: with none there is no number to stand behind, and the small row
-            under this bar says so instead (rule T8).
-          -->
-          @if (total().withPrice > 0) {
-            <lib-basket-total
-              [chainName]="totalChain()"
-              [locale]="locale()"
-              [total]="total()"
-              listToolsTrail
-            />
-          }
-
-          <!--
-            What the sheet turned on, named on the page (plan 0075, section 5). Absent
-            entirely when nothing is on, so the lines move up. The chips name the order
-            and the grouping as well as the filters, because a basket that is suddenly
-            alphabetical with nothing saying so looks broken to the next person handed
-            the phone.
-          -->
-          @if (chipItems().length > 0) {
-            <lib-chip-row
-              (more)="openFilter()"
-              (remove)="removeChip($event)"
-              [chips]="chipItems()"
-              [count]="chipCount()"
-              class="chips"
-              listToolsBelow
-            />
-          }
-
-          <!--
-            How much of that total is bought (section 4): under the chips, or
-            directly under the row with none on, and inside the sticky bar.
-          -->
-          @if (total().withPrice > 0) {
-            <lib-basket-total-bar
-              [locale]="locale()"
-              [total]="total()"
-              class="total-bar"
-              listToolsBelow
-            />
-          }
-        </lib-list-tools>
-
-        <!--
           No visible line has a price (velista 0132, section 6), so there is no
-          number and no bar, and one small row says why. First in the scroll,
-          under the sticky bar and above the changes banner. It goes by itself
-          when a line gets a price.
+          number, and one small row says why. First in the scroll, under the
+          field and above the changes banner. It goes by itself when a line gets
+          a price.
         -->
         @if (total().lines > 0 && total().withPrice === 0) {
           <lib-no-prices-note
@@ -487,10 +545,10 @@
           What changed on the lists while somebody was shopping (velista 0093,
           section 5).
 
-          **Under the tools bar and above the prompt**, inside the scroll and
-          outside the sticky bar: the bar's height is velista 0079's and a
-          banner inside it would push the row and the chips down a phone
-          every time a line moved on somebody else's list.
+          **Under the field and above the prompt**, inside the scroll and
+          outside the head block: a banner in the head block would push the
+          row, the chips and the field down a phone every time a line moved on
+          somebody else's list.
 
           The count is the server's, per viewer. It goes when a read says zero,
           which is what follows an acknowledgement, and never because this page
@@ -657,10 +715,12 @@
                       marked: an ordinary row observes nothing, so a basket of
                       forty rows holds observers for the two that changed.
                     -->
-                    <li [libSeenTarget]="row.row.mark !== null">
+                    <li
+                      [attr.data-line-ids]="lineIdsOf(row)"
+                      [libSeenTarget]="row.row.mark !== null"
+                    >
                       <lib-basket-row
                         (changeProduct)="openChange(row.row)"
-                        (left)="setRowLeft(row, $event)"
                         (open)="openRow(row.row)"
                         (revert)="revertRow(row.row)"
                         (settle)="settleRow(row.row)"
@@ -705,62 +765,6 @@
   once collapse into one sentence and the latest wins.
 -->
 <p aria-live="polite" class="visually-hidden said">{{ outstandingSaid() }}</p>
-
-<!--
-  The composer, back with a list to put things on (velista 0092, section 7).
-
-  It sits in a fixed dock at the foot of the page, which is where the list page's
-  sits and where a thumb finds it. That is also what keeps it out of a sheet's
-  way: a sheet is fixed to the viewport above everything on the page, so the
-  composer is covered by it rather than sitting over its panel.
-
-  **Drawn for an account holder with somewhere to put a line, and nobody else.**
-  A guest gets no dock, no field and no sentence about it: velista 0038 section
-  2.1 refuses to draw an invitation that cannot be accepted, and the product rule
-  that a guest is never pushed to register forbids explaining why.
--->
-@if (state() === 'ready' && canAdd()) {
-  <div class="composer-dock">
-    <!--
-      The field always takes words (velista 0116). Where the line goes is asked
-      when it is added: the plus, or a card's add button, opens the picker below,
-      and the composer keeps the words until a list is picked.
-    -->
-    <!--
-      Escape closes the picker while it is open, and leaves the words; otherwise it
-      empties the field (velista 0117, rule F2).
-    -->
-    <lib-line-composer
-      (fieldFocused)="onFieldFocused($event)"
-      (queryChanged)="onComposerQuery($event)"
-      (submitted)="askWhere($event)"
-      [busy]="adding()"
-      [escapeClears]="pickerAnchor() === null"
-      [holdOnSend]="true"
-      [resultsId]="resultsId"
-      [voice]="false"
-    />
-  </div>
-
-  <!--
-    Which list is it for? Held against the button that was pressed and never inside
-    the suggestion panel, which clips and scrolls. A pick is the add.
-  -->
-  <!--
-    After a pick, a typed name already on two or more lines of that list turns the
-    same popover into the question of which line (velista 0170).
-  -->
-  <lib-list-picker
-    (backToLists)="backToLists()"
-    (choseLine)="chooseLine($event)"
-    (chosen)="pickList($event)"
-    (choseNewLine)="chooseNewLine()"
-    (dismissed)="dismissPicker()"
-    [anchor]="pickerAnchor()"
-    [choice]="pickerChoice()"
-    [rows]="pickerRows()"
-  />
-}
 
 <!--
   The sheets, as children of the page they cover (rule E1, plan 0008): the page

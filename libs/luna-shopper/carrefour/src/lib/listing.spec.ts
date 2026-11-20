@@ -259,6 +259,166 @@ describe('splitCardName', () => {
     });
   });
 
+  describe('count words, a wash and a capital X (plan 0270)', () => {
+    it('reads a count word on a card priced per unit', () => {
+      expect(splitCardName('Calcetines CARREFOUR 3 pares', 'ud')).toEqual({
+        name: 'Calcetines CARREFOUR',
+        sizeFormat: '3 pares',
+        unitSize: 3,
+        sizeUnit: 'UNIT',
+        packCount: null,
+      });
+      expect(
+        splitCardName('Infusión manzanilla CARREFOUR 20 bolsitas', 'ud')
+      ).toMatchObject({ sizeFormat: '20 bolsitas', unitSize: 20 });
+      expect(splitCardName('Queso CARREFOUR 8 porciones', 'ud')).toMatchObject({
+        sizeFormat: '8 porciones',
+        unitSize: 8,
+      });
+    });
+
+    it('refuses a count word on a card priced per kilogram', () => {
+      expect(splitCardName('Calcetines CARREFOUR 3 pares', 'kg')).toEqual({
+        name: 'Calcetines CARREFOUR 3 pares',
+        sizeFormat: null,
+        unitSize: null,
+        sizeUnit: null,
+        packCount: null,
+      });
+    });
+
+    it('splits a wash off the name and states no size and no pack', () => {
+      expect(splitCardName('Detergente ARIEL 40 lavados', 'ud')).toEqual({
+        name: 'Detergente ARIEL',
+        sizeFormat: '40 lavados',
+        unitSize: null,
+        sizeUnit: null,
+        packCount: null,
+      });
+      expect(splitCardName('Detergente ARIEL 2x40 lavados', 'ud')).toEqual({
+        name: 'Detergente ARIEL',
+        sizeFormat: '2x40 lavados',
+        unitSize: null,
+        sizeUnit: null,
+        packCount: null,
+      });
+    });
+
+    it('reads a capital X as a small one', () => {
+      expect(splitCardName('Yogur natural CARREFOUR 2X100 g', 'kg')).toEqual({
+        ...splitCardName('Yogur natural CARREFOUR 2x100 g', 'kg'),
+        // The text stays as printed.
+        sizeFormat: '2X100 g',
+      });
+      expect(
+        splitCardName('Yogur natural CARREFOUR 2X100 g', 'kg')
+      ).toMatchObject({
+        name: 'Yogur natural CARREFOUR',
+        sizeFormat: '2X100 g',
+        packCount: 2,
+      });
+    });
+
+    describe('hostile names', () => {
+      const unsplit = (name: string) => ({
+        name,
+        sizeFormat: null,
+        unitSize: null,
+        sizeUnit: null,
+        packCount: null,
+      });
+
+      it.each([
+        'Pañales DODOT talla 6 XL',
+        'Camiseta térmica hombre 2XL',
+        'Maquinilla GILLETTE Mach3 MAX',
+        'Pilas alcalinas DURACELL AA X2',
+        'Bombilla halógena 2X60 w',
+      ])('does not split %p, whose capital X multiplies nothing', (printed) => {
+        expect(splitCardName(printed, 'ud')).toEqual(unsplit(printed));
+      });
+
+      it.each([
+        ['Mantel CARREFOUR 55X60 cm', 'Mantel CARREFOUR', '55X60 cm'],
+        ['Toalla de playa 1.2X1.8 m', 'Toalla de playa', '1.2X1.8 m'],
+      ])(
+        'splits the length of %p on a card priced per metre, with no size and no pack',
+        (printed, name, sizeFormat) => {
+          expect(splitCardName(printed, 'm')).toEqual({
+            name,
+            sizeFormat,
+            unitSize: null,
+            sizeUnit: null,
+            packCount: null,
+          });
+        }
+      );
+
+      it('takes the last size after a wash and leaves the wash in the name', () => {
+        expect(
+          splitCardName('Detergente líquido ARIEL 40 lavados 2 l', 'l')
+        ).toEqual({
+          name: 'Detergente líquido ARIEL 40 lavados',
+          sizeFormat: '2 l',
+          unitSize: 2,
+          sizeUnit: 'LITER',
+          packCount: null,
+        });
+      });
+
+      it.each([
+        [
+          'Calcetines CARREFOUR 3 pares 40 g',
+          'Calcetines CARREFOUR 3 pares',
+          '40 g',
+          0.04,
+        ],
+        [
+          'Té verde CARREFOUR 10 bolsitas 1,5 g',
+          'Té verde CARREFOUR 10 bolsitas',
+          '1,5 g',
+          0.0015,
+        ],
+      ])(
+        'takes the last size of %p, a weight stated in kilograms',
+        (printed, name, sizeFormat, unitSize) => {
+          expect(splitCardName(printed, 'kg')).toEqual({
+            name,
+            sizeFormat,
+            unitSize,
+            sizeUnit: 'KILOGRAM',
+            packCount: null,
+          });
+        }
+      );
+
+      it.each([
+        ['Queso fundido CARREFOUR 1 PORCIÓN', '1 PORCIÓN', 1],
+        ['Queso fundido CARREFOUR 1 porción', '1 porción', 1],
+        ['Calcetines CARREFOUR 3 Pares.', '3 Pares.', 3],
+      ])(
+        'reads the count word of %p in capitals, accented or with a stop',
+        (printed, sizeFormat, unitSize) => {
+          expect(splitCardName(printed, 'ud')).toEqual({
+            name: printed.slice(0, printed.length - sizeFormat.length).trim(),
+            sizeFormat,
+            unitSize,
+            sizeUnit: 'UNIT',
+            packCount: null,
+          });
+        }
+      );
+
+      it.each([
+        'Detergente para lavado a mano CARREFOUR',
+        'Par de calcetines CARREFOUR',
+        'Calcetines 1 par de deporte',
+      ])('does not split %p, where lavado or par ends no size', (printed) => {
+        expect(splitCardName(printed, 'ud')).toEqual(unsplit(printed));
+      });
+    });
+  });
+
   it('keeps the whole name when the name is nothing but a size', () => {
     expect(splitCardName('1,5 l', 'l')).toEqual({
       name: '1,5 l',
