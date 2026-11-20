@@ -352,12 +352,67 @@ describe('every path a product is filed under (plan 0268)', () => {
     expect(product?.categoryPathsStated).toBe(false);
   });
 
-  it('takes the page list over the row list, even when the page list is empty', () => {
+  it('takes the row list when the page states an empty list, as when it leaves the list out (owner decision 101b)', () => {
+    // The 2026-11-05 page states `wonCategoryBreadcrumbs: []`.
     const product = readFixture(productApproximateWeight, '11031963', {
       categoryBreadcrumbs: [['Hogar y decoración', 'Cocina']],
     });
 
-    expect(product?.categoryPaths).toHaveLength(1);
+    expect(product?.categoryPaths).toEqual([
+      [
+        'Mundos de necesidad',
+        'Comida y cerca de la comida',
+        'Carne y aves',
+        'Carne de cerdo',
+      ],
+      ['Hogar y decoración', 'Cocina'],
+    ]);
+    // The mode rule does not change: the row's list proves nothing.
+    expect(product?.categoryPathsStated).toBe(false);
+  });
+
+  it('takes the page list over the row list when the page list yields a path', () => {
+    const product = normalizeProduct(
+      {
+        keyfacts: { wonCategoryPrimary: NEED_WORLD_QUESO.join('/') },
+        wonCategoryBreadcrumbs: [[{ id: '1', name: 'Alimentación' }]],
+      },
+      {
+        row: {
+          ...emptyRow('1'),
+          categoryBreadcrumbs: [['Hogar y decoración', 'Cocina']],
+        },
+        observedAt: OBSERVED_AT,
+      }
+    );
+
+    expect(product?.categoryPaths).toEqual([
+      NEED_WORLD_QUESO,
+      ['Alimentación'],
+    ]);
+    expect(product?.categoryPathsStated).toBe(true);
+  });
+
+  it('takes the row list when the page list holds only an empty breadcrumb', () => {
+    const product = normalizeProduct(
+      {
+        keyfacts: { wonCategoryPrimary: NEED_WORLD_QUESO.join('/') },
+        wonCategoryBreadcrumbs: [[]],
+      },
+      {
+        row: {
+          ...emptyRow('1'),
+          categoryBreadcrumbs: [['Hogar y decoración', 'Cocina']],
+        },
+        observedAt: OBSERVED_AT,
+      }
+    );
+
+    expect(product?.categoryPaths).toEqual([
+      NEED_WORLD_QUESO,
+      ['Hogar y decoración', 'Cocina'],
+    ]);
+    expect(product?.categoryPathsStated).toBe(false);
   });
 
   it('gives a product with no path at all no paths', () => {

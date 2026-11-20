@@ -45,7 +45,7 @@ import {
 import { DelistingService } from './delisting.service';
 import { DiscoveredPlaceService } from './discovered-place.service';
 import {
-  FileImportPathsFailedError,
+  FileImportFailedAfterIngestError,
   FileImportRunner,
   type FileImportCounters,
 } from './file-import.runner';
@@ -417,8 +417,9 @@ export class RunExecutor implements OnApplicationShutdown {
     let reportWrites: ((written: RunReportResult) => Promise<void>) | null =
       null;
     // What a file import wrote, into the run's report: the same fields for an
-    // import that completed and for one whose path write failed after the
-    // ingest (plan 0268, owner decision 96c), as `reportWrites` is for a walk.
+    // import that completed and for one with a step that failed after the
+    // ingest (plan 0268, owner decisions 96c and 102b), as `reportWrites` is
+    // for a walk.
     const reportImport = async (imported: FileImportCounters) => {
       await this.store.setReport(runId, {
         ...(await this.store.load(runId)).report,
@@ -737,10 +738,11 @@ export class RunExecutor implements OnApplicationShutdown {
       if (sink && writesSettled && !writesReported && reportWrites) {
         await reportWrites(sink.writtenSoFar).catch(() => undefined);
       }
-      // A file import whose path write failed after its ingest wrote rows and
-      // prices states them the same way (plan 0268, owner decision 96c). The
-      // run still ends FAILED below, with the write's own sentence.
-      if (error instanceof FileImportPathsFailedError) {
+      // A file import whose outcomes, path write or last flush failed after
+      // its ingest wrote rows and prices states them the same way (plan 0268,
+      // owner decisions 96c and 102b). The run still ends FAILED below, with
+      // the step's own sentence.
+      if (error instanceof FileImportFailedAfterIngestError) {
         await reportImport(error.counters).catch(() => undefined);
       }
       // A failed write ends FAILED although it aborted the run (plan 0269,
