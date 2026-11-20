@@ -2672,20 +2672,76 @@ describe('HarvestRunService.spawn, the walk configuration', () => {
     );
   });
 
-  it('stores neither on an OpenStreetMap store discovery, which names no chain', async () => {
-    const { service, store } = build();
+  it('stores osm-places and one fingerprint on every OpenStreetMap store discovery, which names no chain (owner decision 137b)', async () => {
+    const spawnAround = async (postalCode: string) => {
+      const { service, store } = build();
+      await service.spawn({
+        userId: ADMIN,
+        mode: HarvestRunMode.STORE_DISCOVERY,
+        postalCode,
+      });
+      return (store.create as jest.Mock).mock.calls[0][0];
+    };
+
+    const first = await spawnAround('14013');
+    const second = await spawnAround('28013');
+
+    expect(first).toEqual(
+      expect.objectContaining({
+        sourceId: null,
+        adapterKey: 'osm-places',
+        configFingerprint: walkConfigFingerprint({
+          adapterKey: 'osm-places',
+          config: {},
+        }),
+      })
+    );
+    expect(second.adapterKey).toBe('osm-places');
+    expect(second.configFingerprint).toBe(first.configFingerprint);
+  });
+
+  it('stores osm-places on a store discovery of a chain whose adapter lists no shops, which OpenStreetMap walks', async () => {
+    const { service, store } = build({ source: { adapterKey: 'manual' } });
 
     await service.spawn({
       userId: ADMIN,
       mode: HarvestRunMode.STORE_DISCOVERY,
+      supermarketId: SUPERMARKET,
       postalCode: '14013',
     });
 
     expect(store.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        sourceId: null,
-        configFingerprint: null,
-        adapterKey: null,
+        sourceId: 'src-1',
+        adapterKey: 'osm-places',
+        configFingerprint: walkConfigFingerprint({
+          adapterKey: 'osm-places',
+          config: {},
+        }),
+      })
+    );
+  });
+
+  it("stores the chain's own row on a store discovery of a chain that lists its shops", async () => {
+    const config = { country: 'ES' };
+    const { service, store } = build({
+      source: { adapterKey: 'lidl-api', config },
+    });
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.STORE_DISCOVERY,
+      supermarketId: SUPERMARKET,
+    });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceId: 'src-1',
+        adapterKey: 'lidl-api',
+        configFingerprint: walkConfigFingerprint({
+          adapterKey: 'lidl-api',
+          config,
+        }),
       })
     );
   });

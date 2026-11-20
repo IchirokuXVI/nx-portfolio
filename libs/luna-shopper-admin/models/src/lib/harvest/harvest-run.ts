@@ -354,11 +354,12 @@ export function isNarrowedRun(run: HarvestRun): boolean {
  *
  * False for `deza-web`, whose capped queries can count different totals for
  * one assortment, and false for an adapter this build does not know. False as
- * well for a run that names no adapter: one stored before the column existed,
- * a run that used no source row (a file import, an OpenStreetMap store
- * discovery), and a run the postal code queue started. All three also
- * carry no `configFingerprint`, so owner decision 130b gives them no
- * reference whatever this answers.
+ * well for a run that names no adapter: a file import, and a run stored
+ * before the harvester recorded one for every walk. Both also carry no
+ * `configFingerprint`, so owner decision 130b gives them no reference
+ * whatever this answers. A store discovery OpenStreetMap walks, typed, from a
+ * preset or from the postal code queue, names `osm-places` (owner decision
+ * 137b), whose walk totals compare.
  */
 export function hasComparableWalkTotal(run: HarvestRun): boolean {
   const adapterKey = run.adapterKey ?? null;

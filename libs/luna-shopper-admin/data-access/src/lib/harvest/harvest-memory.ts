@@ -3,7 +3,7 @@ import {
   DEFAULT_SCHEDULE_TIMEZONE,
   nextScheduleSlot,
   sortedDays,
-  type Wire,
+  Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import { brandKey } from '@portfolio/luna-shopper/contracts/brand-key';
 import type { BulkOperationError } from '../bulk-operation-error';
@@ -155,24 +155,32 @@ export class HarvestMemory implements HarvestServiceI {
     // The run keeps its own request, as the harvester stores it: the spawn's
     // fields without the chain, which the run carries as `supermarketId`.
     const { supermarketId: _chain, ...request } = copyInput(input);
-    // What the walk runs under outside its request (owner decisions 130b and
-    // 127b), as the harvester's spawn records it: from the chain's source row
-    // and only from it. A file import, a store discovery of no chain and a
-    // chain with no row name none and record neither.
+    // What the walk runs under outside its request (owner decisions 130b,
+    // 127b and 137b), as the harvester's spawn records it: the adapter that
+    // walks it. A file import and a chain with no row record neither, and a
+    // store discovery OpenStreetMap walks records `osm-places` with an empty
+    // config.
     const source =
       input.mode === 'FILE_IMPORT' || chain === null
         ? undefined
         : this._sources.find((row) => row.supermarketId === chain);
+    const walker =
+      input.mode === 'STORE_DISCOVERY' &&
+      Wire.HarvestAdapterCapabilityTable[
+        source?.adapterKey as Wire.EnumsAdapterKey
+      ]?.listsItsOwnStores !== true
+        ? { adapterKey: 'osm-places' as const, config: {} }
+        : source;
     const run: Wire.HarvestHarvestRunView = {
       id: mintRunId(this._nextId++),
       input: request,
       supermarketId: input.supermarketId ?? null,
       sourceId: source?.id ?? null,
-      adapterKey: source?.adapterKey ?? null,
+      adapterKey: walker?.adapterKey ?? null,
       configFingerprint:
-        source === undefined
+        walker === undefined
           ? null
-          : memoryWalkFingerprint(source.adapterKey, source.config),
+          : memoryWalkFingerprint(walker.adapterKey, walker.config),
       mode: input.mode,
       trigger: 'MANUAL',
       status: 'PENDING',

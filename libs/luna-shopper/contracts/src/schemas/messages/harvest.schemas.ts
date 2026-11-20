@@ -337,9 +337,9 @@ const harvestRunView = object(
     // config itself. Null for a run with no source row, for a run the postal
     // code queue started, and for every run stored before the column existed.
     configFingerprint: nullableString(),
-    // Owner decision 127b, not required for the same reason: the adapter of
-    // the run's source row at its spawn. A reader treats null, absent or an
-    // unknown key as a walk total that is not comparable.
+    // Owner decisions 127b and 137b, not required for the same reason: the
+    // adapter that walked the run, read at its spawn. A reader treats null,
+    // absent or an unknown key as a walk total that is not comparable.
     adapterKey: {
       anyOf: [ref(HARVEST_SCHEMA_IDS.adapterKey), { type: 'null' }],
     },
