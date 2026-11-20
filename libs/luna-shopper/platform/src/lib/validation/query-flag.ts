@@ -8,12 +8,14 @@
  * This one reads `obj[key]`, the request's own text, which is the only place
  * the word `false` still exists.
  *
- * - `true` reads as true, and so does a bare `?flag`, which arrives as the
- *   empty text and means the caller set it.
+ * - `true` reads as true.
  * - `false` reads as false.
  * - Absent stays absent, so the default of the route applies.
  * - Anything else is handed on as it was spelled, so `@IsBoolean` refuses it
- *   with a 400 rather than reading a typo as either answer.
+ *   with a 400 rather than reading a typo as either answer. A bare `?flag`
+ *   arrives as the empty text and is refused the same way: a flag with no
+ *   value states no answer, and some flags (`revokeParticipants`) remove
+ *   things.
  *
  * Every boolean property of a DTO bound with `@Query()` uses it:
  *
@@ -36,7 +38,7 @@ export function asQueryFlag({
   key: string;
 }): unknown {
   const spelled = obj?.[key];
-  if (spelled === '' || spelled === 'true' || spelled === true) {
+  if (spelled === 'true' || spelled === true) {
     return true;
   }
   return spelled === 'false' || spelled === false ? false : spelled;

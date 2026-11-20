@@ -23,7 +23,6 @@ describe('asQueryFlag through the gateway pipe', () => {
   it.each([
     ['true', true],
     ['false', false],
-    ['', true],
   ])('reads flag=%p as %p', async (spelled, expected) => {
     expect((await read({ flag: spelled })).flag).toBe(expected);
   });
@@ -35,7 +34,7 @@ describe('asQueryFlag through the gateway pipe', () => {
     expect('flag' in dto).toBe(false);
   });
 
-  it.each(['no', 'yes', '0', '1', 'False', 'TRUE'])(
+  it.each(['', 'no', 'yes', '0', '1', 'False', 'TRUE'])(
     'refuses flag=%p',
     async (spelled) => {
       await expect(read({ flag: spelled })).rejects.toBeInstanceOf(

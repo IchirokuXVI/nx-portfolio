@@ -58,7 +58,7 @@ export class ListAdminUsersQueryDto extends PageQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'True for confirmed addresses only. False is unconfirmed **and** absent: an account with no address has not confirmed one, and an operator looking for unconfirmed accounts wants it in the answer. Parsed strictly: the string `false` is false.',
+      'True for confirmed addresses only. False is unconfirmed **and** absent: an account with no address has not confirmed one, and an operator looking for unconfirmed accounts wants it in the answer. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.',
   })
   @IsOptional()
   @Transform(asQueryFlag)
@@ -151,7 +151,7 @@ export class ListAdminZonesQueryDto extends PageQueryDto {
    */
   @ApiPropertyOptional({
     description:
-      'True for the zones with at least one pending join request. False is the same as absent: it narrows nothing.',
+      'True for the zones with at least one pending join request. False is the same as absent: it narrows nothing. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.',
   })
   @IsOptional()
   @Transform(asQueryFlag)
@@ -253,7 +253,7 @@ export class ListAdminPostalCodesQueryDto extends PageQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'True for codes with at least one shop, false for those with none. Omitted is every code, which is the default because a listing that hid the empty ones would hide the coverage gap it exists to show. Parsed strictly: the string `false` is false.',
+      'True for codes with at least one shop, false for those with none. Omitted is every code, which is the default because a listing that hid the empty ones would hide the coverage gap it exists to show. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.',
   })
   @IsOptional()
   @Transform(asQueryFlag)

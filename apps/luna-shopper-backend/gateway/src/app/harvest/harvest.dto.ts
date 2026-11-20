@@ -720,7 +720,7 @@ export class HarvestRunListQueryDto extends PageQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'Reverted runs only, or unreverted runs only (plan 0082). Absent lists both. A filter of its own rather than a status, because a revert does not change how the run ended. Parsed strictly: the string `false` is false.',
+      'Reverted runs only, or unreverted runs only (plan 0082). Absent lists both. A filter of its own rather than a status, because a revert does not change how the run ended. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.',
   })
   @IsOptional()
   @Transform(asQueryFlag)
@@ -861,7 +861,7 @@ export class SourceEntryListQueryDto extends PageQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'True lists only the rows every counted scope lost (`delistedAt` set), false leaves them out, and omitted lists both (plan 0220). Parsed strictly: the string `false` is false.',
+      'True lists only the rows every counted scope lost (`delistedAt` set), false leaves them out, and omitted lists both (plan 0220). Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.',
   })
   @IsOptional()
   @Transform(asQueryFlag)
@@ -870,7 +870,7 @@ export class SourceEntryListQueryDto extends PageQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'True lists only the rows whose size their own price and comparison price disprove (`sizeDoubt` set, plan 0249), false leaves them out, and omitted lists both (admin plan 0072). Parsed strictly: the string `false` is false.',
+      'True lists only the rows whose size their own price and comparison price disprove (`sizeDoubt` set, plan 0249), false leaves them out, and omitted lists both (admin plan 0072). Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.',
   })
   @IsOptional()
   @Transform(asQueryFlag)
@@ -935,7 +935,7 @@ export class PostalCodeDiscoveryListQueryDto extends PageQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'Omitted lists the working set, which is the codes nobody has dismissed. True lists the dismissed ones alone, so one can be found and put back. Parsed strictly: the string `false` is false.',
+      'Omitted lists the working set, which is the codes nobody has dismissed. True lists the dismissed ones alone, so one can be found and put back. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.',
   })
   @IsOptional()
   @Transform(asQueryFlag)

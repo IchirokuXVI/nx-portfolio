@@ -94,7 +94,6 @@ describe.each([
   it.each([
     ['true', true],
     ['false', false],
-    ['', true],
   ])(`reads ${flag}=%p as %p`, async (spelled, read) => {
     context = await boot();
 
@@ -116,14 +115,17 @@ describe.each([
     expect(context.sent[0].payload[flag]).toBeUndefined();
   });
 
-  it(`refuses a ${flag} that is neither true nor false`, async () => {
-    context = await boot();
+  it.each([`${flag}=no`, `${flag}=`, flag])(
+    'refuses ?%s, which is neither true nor false',
+    async (query) => {
+      context = await boot();
 
-    const response = await fetch(
-      `${context.origin}/v1/admin/harvest/${path}?${flag}=no`
-    );
+      const response = await fetch(
+        `${context.origin}/v1/admin/harvest/${path}?${query}`
+      );
 
-    expect(response.status).toBe(400);
-    expect(context.sent).toHaveLength(0);
-  });
+      expect(response.status).toBe(400);
+      expect(context.sent).toHaveLength(0);
+    }
+  );
 });

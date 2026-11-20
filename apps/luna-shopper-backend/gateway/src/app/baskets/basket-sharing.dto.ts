@@ -43,7 +43,7 @@ export const BASKET_SUGGEST_QUERY_MAX_LENGTH = 120;
 export class RevokeShareLinkDto {
   @ApiPropertyOptional({
     description:
-      'Also revoke everybody this link let in. Without it the link stops accepting new people and every existing participant keeps working, which is the common case: stop it spreading, do not throw out the people in the shop. Parsed strictly: the string `false` is false.',
+      'Also revoke everybody this link let in. Without it the link stops accepting new people and every existing participant keeps working, which is the common case: stop it spreading, do not throw out the people in the shop. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.',
   })
   @IsOptional()
   @Transform(asQueryFlag)

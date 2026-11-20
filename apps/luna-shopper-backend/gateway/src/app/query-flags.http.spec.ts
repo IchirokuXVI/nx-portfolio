@@ -37,7 +37,8 @@ import { NatsClient } from './messaging/nats-client';
  * The pipe converts implicitly, and its conversion of a boolean is
  * `Boolean(value)`: the text `false` reaches a transform as `true`. A flag that
  * is not read from the raw text thus answers the opposite question for
- * `?flag=false`. Over HTTP, because the conversion happens in the pipe and a
+ * `?flag=false`. A bare `?flag`, with no value, is refused like any other
+ * text but `true` and `false`. Over HTTP, because the conversion happens in the pipe and a
  * handler call never meets it. The harvest flags have their own specs
  * (`harvest-query-flags.http.spec.ts`, `queue-brand-matches.http.spec.ts`).
  */
@@ -176,7 +177,7 @@ const ROUTES: readonly FlagRoute[] = [
     absent: undefined,
   },
   {
-    route: 'GET /v3/admin/catalog/supermarket-items (stale)',
+    route: 'GET /v1/admin/catalog/supermarket-items (stale)',
     controller: AdminCatalogSupermarketItemsController,
     method: 'GET',
     path: 'admin/catalog/supermarket-items',
@@ -185,7 +186,7 @@ const ROUTES: readonly FlagRoute[] = [
     absent: undefined,
   },
   {
-    route: 'GET /v3/admin/catalog/supermarket-items (available)',
+    route: 'GET /v1/admin/catalog/supermarket-items (available)',
     controller: AdminCatalogSupermarketItemsController,
     method: 'GET',
     path: 'admin/catalog/supermarket-items',
@@ -248,7 +249,6 @@ describe.each(ROUTES)(
     it.each([
       ['true', true],
       ['false', false],
-      ['', true],
     ])(`reads ${flag}=%p as %p`, async (spelled, read) => {
       context = await boot(controller);
 
@@ -272,16 +272,18 @@ describe.each(ROUTES)(
       expect(message?.payload[flag]).toBe(absent);
     });
 
-    it.each(['no', '1'])(`refuses ${flag}=%p`, async (spelled) => {
-      context = await boot(controller);
+    it.each([`${flag}=no`, `${flag}=1`, `${flag}=`, flag])(
+      'refuses ?%s',
+      async (query) => {
+        context = await boot(controller);
 
-      const response = await fetch(
-        `${context.origin}/v1/${path}?${flag}=${spelled}`,
-        { method }
-      );
+        const response = await fetch(`${context.origin}/v1/${path}?${query}`, {
+          method,
+        });
 
-      expect(response.status).toBe(400);
-      expect(messageOf(context.sent)).toBeUndefined();
-    });
+        expect(response.status).toBe(400);
+        expect(messageOf(context.sent)).toBeUndefined();
+      }
+    );
   }
 );
