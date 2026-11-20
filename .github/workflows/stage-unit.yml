@@ -156,10 +156,14 @@ jobs:
         env:
           TESTABLE: ${{ needs.setup.outputs.testable }}
         run: |
+          # BUILD_IMAGE has no git, and velista:native-api hashes the tracked
+          # Android files (velista plan 0180), so the runner lists them first.
+          git ls-files -z -- apps/velista/android > .native-api-files
           docker run --rm \
             -u "$(id -u):$(id -g)" \
             -v "$PWD":/w -w /w \
             -e CI=true -e HOME=/tmp -e npm_config_cache=/w/.npm \
+            -e NATIVE_API_TRACKED_FILES=.native-api-files \
             "$BUILD_IMAGE" \
             npx nx run-many -t lint test --projects "$TESTABLE" \
             --exclude luna-shopper-backend-transcriber
