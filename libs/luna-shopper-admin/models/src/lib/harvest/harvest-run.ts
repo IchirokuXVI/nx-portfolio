@@ -1,3 +1,4 @@
+import { isNarrowedRunRequest } from '@portfolio/luna-shopper/contracts/run-narrowing';
 import type * as Wire from '../wire/wire-types';
 
 /**
@@ -322,12 +323,30 @@ export function runProgressLine(
 }
 
 /**
+ * Whether a run read less than its chain's whole walk, by its own request
+ * (owner decision 112b): a store discovery of two postal codes, a catalog walk
+ * of named scopes, a detail backfill. The rule is the contracts' own
+ * {@link isNarrowedRunRequest}, called and not restated.
+ *
+ * A run whose request is unknown answers true: `input` is null when the
+ * harvester could not read what it stored, and absent from a gateway older
+ * than the field. True is the direction that draws no estimate rather than a
+ * wrong one. The run's own `mode` is the one read, so a request that names
+ * another cannot move the run to another rule.
+ */
+export function isNarrowedRun(run: HarvestRun): boolean {
+  const input = run.input ?? null;
+  return input === null || isNarrowedRunRequest({ ...input, mode: run.mode });
+}
+
+/**
  * Whether a run's progress is drawn against nothing it knows, so that another
  * run is worth reading for an approximate total. A run that has processed
  * nothing shows no estimate, so it is not read for one either; nor is a
  * completed run, which shows its own count and never an estimate (owner
- * decision 111c); nor is a run with neither a preset nor a chain, which has
- * nothing to compare with.
+ * decision 111c); nor is a run with nothing to compare with: no preset, and
+ * no chain, or a chain whose earlier runs say nothing about it because its own
+ * request is narrowed (owner decision 112b).
  */
 export function wantsEarlierTotal(run: HarvestRun | null): run is HarvestRun {
   return (
@@ -335,7 +354,8 @@ export function wantsEarlierTotal(run: HarvestRun | null): run is HarvestRun {
     run.status !== 'COMPLETED' &&
     run.totalPlanned === null &&
     run.processed > 0 &&
-    ((run.presetId ?? '') !== '' || (run.supermarketId ?? '') !== '')
+    ((run.presetId ?? '') !== '' ||
+      ((run.supermarketId ?? '') !== '' && !isNarrowedRun(run)))
   );
 }
 

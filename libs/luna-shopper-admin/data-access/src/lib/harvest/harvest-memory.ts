@@ -151,8 +151,12 @@ export class HarvestMemory implements HarvestServiceI {
     }
 
     const now = new Date().toISOString();
+    // The run keeps its own request, as the harvester stores it: the spawn's
+    // fields without the chain, which the run carries as `supermarketId`.
+    const { supermarketId: _chain, ...request } = copyInput(input);
     const run: Wire.HarvestHarvestRunView = {
       id: mintRunId(this._nextId++),
+      input: request,
       supermarketId: input.supermarketId ?? null,
       sourceId: null,
       mode: input.mode,

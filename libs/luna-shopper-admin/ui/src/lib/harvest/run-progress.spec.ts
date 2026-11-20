@@ -199,6 +199,35 @@ describe('RunProgressView with an approximate total', () => {
     expect(page.textContent).toContain('harvest.run.progress.unsized');
   });
 
+  /**
+   * Owner decision 120b: a completed run with no total has nothing left to
+   * learn, so it shows its count and no note at all.
+   */
+  it('draws a completed run with no total as its count alone', async () => {
+    const page = await draw(
+      { processed: 2100, total: null, percent: null },
+      { status: 'COMPLETED' }
+    );
+
+    expect(text(page, '[data-progress-count]')).toBe(
+      'harvest.run.progress.processed'
+    );
+    expect(page.querySelector('.unsized')).toBeNull();
+    expect(page.querySelector('[role="progressbar"]')).toBeNull();
+  });
+
+  it.each(['RUNNING', 'ABORTED', 'FAILED', 'STALE'] as const)(
+    'keeps the note on a %s run with no total and no estimate',
+    async (status) => {
+      const page = await draw(
+        { processed: 824, total: null, percent: null },
+        { status }
+      );
+
+      expect(page.textContent).toContain('harvest.run.progress.unsized');
+    }
+  );
+
   it('draws a known total as it always did', async () => {
     const page = await draw(
       { processed: 1907, total: 4383, percent: 44, about: null },

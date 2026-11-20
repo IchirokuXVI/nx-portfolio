@@ -69,6 +69,9 @@ function run(over: Partial<HarvestRun> = {}): HarvestRun {
     revertedAt: null,
     revertedByUserId: null,
     revertedPriceCount: null,
+    // A walk of the whole chain, so its chain and mode are a fair reference
+    // for an estimate (owner decision 112b).
+    input: { mode: 'CATALOG_DISCOVERY' },
     ...over,
   };
 }
@@ -378,6 +381,8 @@ describe('RunPage, arriving mid run', () => {
       expect(
         fixture.nativeElement.querySelector('[role="progressbar"]')
       ).toBeNull();
+      // Owner decision 120b: no note either, only the count.
+      expect(text(fixture)).not.toContain('harvest.run.progress.unsized');
       fixture.componentInstance.watch.stop();
     });
 
@@ -434,6 +439,37 @@ describe('RunPage, arriving mid run', () => {
 
       expect(count(fixture)).toBe('harvest.run.progress.processed');
       expect(text(fixture)).toContain('harvest.run.progress.unsized');
+      expect(
+        fixture.nativeElement.querySelector('[data-progress-approximate]')
+      ).toBeNull();
+      fixture.componentInstance.watch.stop();
+    });
+
+    /**
+     * Owner decision 112b: a store discovery of two postal codes is not "of
+     * about" the chain's whole discovery, and reads nothing for one.
+     */
+    it('draws no estimate for a narrowed run with no preset, and reads nothing', async () => {
+      let reads = 0;
+      const postal = run({
+        supermarketId: 'sm_deza',
+        mode: 'STORE_DISCOVERY',
+        status: 'RUNNING',
+        totalPlanned: null,
+        processed: 14,
+        input: { mode: 'STORE_DISCOVERY', postalCodes: ['15001', '15002'] },
+      });
+      const fixture = await render(postal, undefined, {
+        earlier: [
+          { ...whole, mode: 'STORE_DISCOVERY', input: { mode: 'STORE_DISCOVERY' } },
+        ],
+        onList: () => (reads += 1),
+      });
+      await drain();
+      fixture.detectChanges();
+
+      expect(reads).toBe(0);
+      expect(count(fixture)).toBe('harvest.run.progress.processed');
       expect(
         fixture.nativeElement.querySelector('[data-progress-approximate]')
       ).toBeNull();

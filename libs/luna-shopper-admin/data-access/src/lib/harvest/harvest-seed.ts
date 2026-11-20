@@ -67,6 +67,26 @@ export const CARREFOUR_ACEITE_ENTRY = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee02';
 
 const NOW = '2026-09-03T10:00:00.000Z';
 
+/**
+ * A DEZA walk of the whole chain, as the harvester states a run's request
+ * with its defaults resolved (backend `run-input.ts`). Whole, so a run of it is
+ * a fair reference for another whole walk of the chain (owner decision 112b).
+ */
+const DEZA_WHOLE_WALK: Wire.HarvestHarvestRunPresetInput = {
+  mode: 'CATALOG_DISCOVERY',
+  writes: 'PRICES_AND_AVAILABILITY',
+  details: 'ALL',
+};
+
+/** A Carrefour store discovery of every shop the chain lists. */
+const CARREFOUR_EVERY_SHOP: Wire.HarvestHarvestRunPresetInput = {
+  mode: 'STORE_DISCOVERY',
+  postalCode: '',
+  postalCodes: [],
+  country: 'es',
+  radiusMetres: 3000,
+};
+
 export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
   {
     id: 'run-catalog-running',
@@ -327,6 +347,7 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     // from: "824 of about 2,361". After the first five, so the dashboard's
     // recent runs stay as they were.
     id: 'run-deza-aborted',
+    input: { ...DEZA_WHOLE_WALK },
     supermarketId: DEZA,
     sourceId: 'source-deza',
     mode: 'CATALOG_DISCOVERY',
@@ -367,6 +388,7 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     // 98b). After the first five, and after the Mercadona run, so the
     // dashboard's running and recent runs stay as they were.
     id: 'run-deza-running',
+    input: { ...DEZA_WHOLE_WALK },
     supermarketId: DEZA,
     sourceId: 'source-deza',
     presetId: DEZA_CATALOG_PRESET,
@@ -403,6 +425,7 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     // out of queries, one that stopped growing with queries still at the
     // ceiling, one read whole. DEZA prints no price, so it created none.
     id: 'run-deza-completed',
+    input: { ...DEZA_WHOLE_WALK },
     supermarketId: DEZA,
     sourceId: 'source-deza',
     mode: 'CATALOG_DISCOVERY',
@@ -515,6 +538,7 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     // decision 111c of the harvester round). Requested before the walk above,
     // so that one stays the reference the other DEZA runs read.
     id: 'run-deza-completed-unsized',
+    input: { ...DEZA_WHOLE_WALK },
     supermarketId: DEZA,
     sourceId: 'source-deza',
     mode: 'CATALOG_DISCOVERY',
@@ -747,6 +771,85 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     // index ignores a reverted run, so a reverted seed run would let the same
     // document be imported again and the upload screen's 409 would be
     // unreachable with nothing listening.
+    revertedAt: null,
+    revertedByUserId: null,
+    revertedPriceCount: null,
+  },
+  {
+    // A Carrefour store discovery of two postal codes, still going (owner
+    // decision 112b). It does not know its total and has no preset, and the
+    // chain's whole discovery below found 1,180 shops. That count says nothing
+    // about two postal codes, so its page reads "14 processed" and no
+    // estimate. The one store discovery the harvester lets run at a time
+    // (`uq_harvest_run_active_store_discovery`), and the one active run of
+    // Carrefour. Last, so the dashboard's running and recent runs stay as
+    // they were.
+    id: 'run-store-postal-running',
+    input: {
+      ...CARREFOUR_EVERY_SHOP,
+      postalCodes: ['15001', '15002'],
+    },
+    supermarketId: CARREFOUR,
+    sourceId: 'source-carrefour',
+    mode: 'STORE_DISCOVERY',
+    trigger: 'MANUAL',
+    status: 'RUNNING',
+    requestedAt: '2026-09-03T09:55:00.000Z',
+    startedAt: '2026-09-03T09:55:02.000Z',
+    finishedAt: null,
+    heartbeatAt: NOW,
+    totalPlanned: null,
+    processed: 14,
+    created: 3,
+    updated: 0,
+    unchanged: 11,
+    notFound: 0,
+    skipped: 0,
+    failed: 0,
+    stage: 'list-shops',
+    stageLabel: 'Reading the shop list',
+    warnings: [],
+    documentSha256: null,
+    abortRequestedAt: null,
+    error: null,
+    report: {},
+    correlationId: 'seed-correlation-store-postal',
+    requestedByUserId: null,
+    revertedAt: null,
+    revertedByUserId: null,
+    revertedPriceCount: null,
+  },
+  {
+    // The whole Carrefour store discovery the narrowed one above must not be
+    // measured against (owner decision 112b).
+    id: 'run-store-carrefour-completed',
+    input: { ...CARREFOUR_EVERY_SHOP },
+    supermarketId: CARREFOUR,
+    sourceId: 'source-carrefour',
+    mode: 'STORE_DISCOVERY',
+    trigger: 'MANUAL',
+    status: 'COMPLETED',
+    requestedAt: '2026-08-20T08:00:00.000Z',
+    startedAt: '2026-08-20T08:00:02.000Z',
+    finishedAt: '2026-08-20T08:06:40.000Z',
+    heartbeatAt: '2026-08-20T08:06:40.000Z',
+    totalPlanned: 1180,
+    processed: 1180,
+    created: 1180,
+    updated: 0,
+    unchanged: 0,
+    notFound: 0,
+    skipped: 0,
+    failed: 0,
+    stage: null,
+    stageLabel: null,
+    warnings: [],
+    documentSha256: null,
+    abortRequestedAt: null,
+    error: null,
+    report: {},
+    correlationId: 'seed-correlation-store-carrefour',
+    requestedByUserId: null,
     revertedAt: null,
     revertedByUserId: null,
     revertedPriceCount: null,

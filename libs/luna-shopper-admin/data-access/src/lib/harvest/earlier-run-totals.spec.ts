@@ -172,6 +172,95 @@ describe('EarlierRunTotals', () => {
     });
   });
 
+  /**
+   * Owner decision 112b: the chain and mode stand in for a whole walk only,
+   * and only from a whole walk. A preset's runs share one request, so the
+   * preset stays.
+   */
+  describe('a narrowed request', () => {
+    const POSTAL_INPUT = {
+      mode: 'STORE_DISCOVERY' as const,
+      postalCodes: ['15001', '15002'],
+    };
+    const postal: HarvestRun = {
+      ...ABORTED,
+      id: 'postal-going',
+      mode: 'STORE_DISCOVERY',
+      status: 'RUNNING',
+      presetId: null,
+      processed: 14,
+      input: POSTAL_INPUT,
+    };
+    const wholeDiscovery: HarvestRun = {
+      ...COMPLETED,
+      id: 'whole-discovery',
+      mode: 'STORE_DISCOVERY',
+      processed: 2361,
+      input: { mode: 'STORE_DISCOVERY', postalCodes: [] },
+    };
+
+    it('reads nothing for a narrowed run with no preset', async () => {
+      const listRuns = listing([wholeDiscovery]);
+      const totals = setUp(listRuns);
+
+      await totals.resolve(postal);
+
+      expect(listRuns).not.toHaveBeenCalled();
+      expect(totals.of(postal)).toBeNull();
+    });
+
+    it('reads nothing by chain for a run whose request is unknown', async () => {
+      const listRuns = listing([COMPLETED]);
+      const totals = setUp(listRuns);
+
+      await totals.resolve({ ...ABORTED, presetId: null, input: null });
+      await totals.resolve({ ...ABORTED, id: 'absent', presetId: null, input: undefined });
+
+      expect(listRuns).not.toHaveBeenCalled();
+    });
+
+    it('reads its preset, and does not fall back to the chain', async () => {
+      const fromPreset = { ...postal, presetId: PRESET };
+      const listRuns = listing([wholeDiscovery]);
+      const totals = setUp(listRuns);
+
+      await totals.resolve(fromPreset);
+
+      expect(listRuns).toHaveBeenCalledTimes(1);
+      expect(listRuns).toHaveBeenCalledWith(
+        expect.objectContaining({ presetId: PRESET })
+      );
+      expect(totals.of(fromPreset)).toBeNull();
+    });
+
+    it('still takes its preset run, narrowed as it is', async () => {
+      const fromPreset = { ...postal, presetId: PRESET };
+      const totals = setUp(
+        listing([
+          { ...wholeDiscovery, id: 'preset-run', presetId: PRESET, processed: 40, input: POSTAL_INPUT },
+        ])
+      );
+
+      await totals.resolve(fromPreset);
+
+      expect(totals.of(fromPreset)).toBe(40);
+    });
+
+    it('passes over a narrowed or unknown earlier run of the chain for a whole one', async () => {
+      const totals = setUp(
+        listing([
+          { ...COMPLETED, id: 'scopes', processed: 900, input: { mode: 'CATALOG_DISCOVERY', priceScopeIds: ['s1'] } },
+          { ...COMPLETED, id: 'unknown', processed: 3000, input: null },
+          { ...COMPLETED, id: 'whole', processed: 2500 },
+        ])
+      );
+
+      await totals.resolve(ABORTED);
+
+      expect(totals.of(ABORTED)).toBe(2500);
+    });
+  });
+
   /** Owner decision 111c: a completed run shows its count and reads nothing. */
   it('reads nothing for a completed run and holds nothing for it', async () => {
     const done = {
@@ -259,7 +348,8 @@ describe('EarlierRunTotals', () => {
       expect(totals.of(ABORTED)).toBe(2361);
     });
 
-    it('keeps the one retry on a reread, and drops the old answer when both fail', async () => {
+    /** Owner decision 121b: a failed reread does not clear the number shown. */
+    it('keeps the one retry on a reread, and keeps the old answer when both fail', async () => {
       const answer = listing([COMPLETED]);
       const listRuns = jest
         .fn()
@@ -273,7 +363,7 @@ describe('EarlierRunTotals', () => {
       await totals.resolve(ABORTED);
 
       expect(listRuns).toHaveBeenCalledTimes(3);
-      expect(totals.of(ABORTED)).toBeNull();
+      expect(totals.of(ABORTED)).toBe(2361);
     });
   });
 
@@ -399,5 +489,17 @@ describe('EarlierRunTotals', () => {
 
     expect(running.presetId).not.toBeNull();
     expect(totals.of(running)).toBe(2361);
+  });
+
+  /** The seeded store discovery of two postal codes, beside a whole one. */
+  it('gives the seeded narrowed discovery nothing in the memory back end', async () => {
+    TestBed.resetTestingModule();
+    const totals = TestBed.inject(EarlierRunTotals);
+    const postal = seeded('run-store-postal-running');
+
+    await totals.resolve(postal);
+
+    expect(seeded('run-store-carrefour-completed').processed).toBe(1180);
+    expect(totals.of(postal)).toBeNull();
   });
 });
