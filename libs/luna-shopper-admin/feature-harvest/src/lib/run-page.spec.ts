@@ -282,20 +282,25 @@ describe('RunPage, arriving mid run', () => {
   });
 
   /**
-   * A DEZA walk never knows its total while it runs (backend plan 0267), so
-   * the screen reads one from the last completed walk of the chain (decision
-   * 86 of the harvester round).
+   * A walk that does not know its total yet reads one from the last completed
+   * walk of the chain (decision 86 of the harvester round), when its adapter's
+   * totals compare (owner decision 127b) and the earlier walk ran under the
+   * same config (owner decision 130b). An El Jamón walk qualifies.
    */
   describe('a walk that does not know its total', () => {
     const going = run({
-      supermarketId: 'sm_deza',
+      supermarketId: 'sm_eljamon',
+      adapterKey: 'eljamon-web',
+      configFingerprint: 'fp-eljamon',
       status: 'ABORTED',
       totalPlanned: null,
       processed: 824,
     });
     const whole = run({
       id: 'run-0',
-      supermarketId: 'sm_deza',
+      supermarketId: 'sm_eljamon',
+      adapterKey: 'eljamon-web',
+      configFingerprint: 'fp-eljamon',
       status: 'COMPLETED',
       totalPlanned: null,
       processed: 2361,
@@ -435,7 +440,10 @@ describe('RunPage, arriving mid run', () => {
     });
 
     it('keeps the form it had before for a walk that processed nothing', async () => {
-      const fixture = await open({ ...going, processed: 0 }, [whole]);
+      const fixture = await open(
+        { ...going, status: 'RUNNING', processed: 0 },
+        [whole]
+      );
 
       expect(count(fixture)).toBe('harvest.run.progress.processed');
       expect(text(fixture)).toContain('harvest.run.progress.unsized');
@@ -481,12 +489,86 @@ describe('RunPage, arriving mid run', () => {
     });
 
     it('keeps the unknown form with no earlier walk', async () => {
-      const fixture = await open(going, []);
+      const fixture = await open({ ...going, status: 'RUNNING' }, []);
 
       expect(count(fixture)).toBe('harvest.run.progress.processed');
       expect(text(fixture)).toContain('harvest.run.progress.unsized');
       fixture.componentInstance.watch.stop();
     });
+
+    /**
+     * Owner decision 131b: the note is for a run still going. An ended run
+     * with no total and no estimate shows its count alone, however it ended.
+     */
+    it.each(['ABORTED', 'FAILED', 'STALE'] as const)(
+      'shows an ended %s walk with no estimate its count alone, no note',
+      async (status) => {
+        const fixture = await open({ ...going, status }, []);
+
+        expect(count(fixture)).toBe('harvest.run.progress.processed');
+        expect(text(fixture)).not.toContain('harvest.run.progress.unsized');
+        expect(
+          fixture.nativeElement.querySelector('[role="progressbar"]')
+        ).toBeNull();
+        fixture.componentInstance.watch.stop();
+      }
+    );
+
+    /**
+     * Owner decision 127b: a DEZA walk shows "4,000 processed" and never "of
+     * about 15,115", and reads nothing for it. So does a run that names no
+     * adapter.
+     */
+    it.each([
+      ['deza-web', 'RUNNING'],
+      ['deza-web', 'ABORTED'],
+      [null, 'RUNNING'],
+    ] as const)(
+      'draws no estimate for a %s walk that is %s, and reads nothing',
+      async (adapterKey, status) => {
+        let reads = 0;
+        const fixture = await render(
+          { ...going, adapterKey, status, presetId: 'preset-1' },
+          undefined,
+          {
+            earlier: [{ ...whole, presetId: 'preset-1', adapterKey }],
+            onList: () => (reads += 1),
+          }
+        );
+        await drain();
+        fixture.detectChanges();
+
+        expect(reads).toBe(0);
+        expect(count(fixture)).toBe('harvest.run.progress.processed');
+        expect(
+          fixture.nativeElement.querySelector('[data-progress-approximate]')
+        ).toBeNull();
+        fixture.componentInstance.watch.stop();
+      }
+    );
+
+    /**
+     * Owner decision 130b: an earlier walk under another config, or one from
+     * before the fingerprint, is no reference.
+     */
+    it.each([
+      ['another config', 'fp-other'],
+      ['no fingerprint', null],
+    ])(
+      'draws no estimate from an earlier walk of %s',
+      async (_name, configFingerprint) => {
+        const fixture = await open({ ...going, status: 'RUNNING' }, [
+          { ...whole, configFingerprint },
+        ]);
+
+        expect(count(fixture)).toBe('harvest.run.progress.processed');
+        expect(text(fixture)).toContain('harvest.run.progress.unsized');
+        expect(
+          fixture.nativeElement.querySelector('[data-progress-approximate]')
+        ).toBeNull();
+        fixture.componentInstance.watch.stop();
+      }
+    );
 
     it('keeps the unknown form when the run has passed the estimate', async () => {
       const fixture = await open({ ...going, processed: 2400 }, [whole]);

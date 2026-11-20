@@ -14,10 +14,10 @@ import { HARVEST_SERVICE, type RunQuery } from './harvest-service';
 const seeded = (id: string) =>
   HARVEST_RUN_SEED.find((run) => run.id === id) as HarvestRun;
 
-const ABORTED = seeded('run-deza-aborted');
-const COMPLETED = seeded('run-deza-completed');
+const ABORTED = seeded('run-eljamon-aborted');
+const COMPLETED = seeded('run-eljamon-completed');
 
-const PRESET = 'preset-deza-weekly';
+const PRESET = 'preset-eljamon-weekly';
 
 /** A runs list that answers the runs given, filtered as the route filters. */
 function listing(runs: readonly HarvestRun[]) {
@@ -52,7 +52,7 @@ describe('EarlierRunTotals', () => {
 
     await totals.resolve(ABORTED);
 
-    expect(totals.of(ABORTED)).toBe(2361);
+    expect(totals.of(ABORTED)).toBe(3402);
   });
 
   it('asks a run with no preset for its chain and mode, completed and standing', async () => {
@@ -63,7 +63,7 @@ describe('EarlierRunTotals', () => {
 
     expect(listRuns).toHaveBeenCalledTimes(1);
     expect(listRuns).toHaveBeenCalledWith({
-      supermarketId: 'sm_deza',
+      supermarketId: 'sm_eljamon',
       mode: 'CATALOG_DISCOVERY',
       status: 'COMPLETED',
       reverted: false,
@@ -111,7 +111,7 @@ describe('EarlierRunTotals', () => {
       expect(totals.of(fromPreset)).toBe(3000);
       expect(listRuns).toHaveBeenCalledTimes(2);
       expect(listRuns).toHaveBeenLastCalledWith({
-        supermarketId: 'sm_deza',
+        supermarketId: 'sm_eljamon',
         mode: 'CATALOG_DISCOVERY',
         status: 'COMPLETED',
         reverted: false,
@@ -167,7 +167,7 @@ describe('EarlierRunTotals', () => {
 
       await totals.resolve(everyChain);
 
-      expect(totals.of(everyChain)).toBe(2361);
+      expect(totals.of(everyChain)).toBe(3402);
       expect(listRuns).toHaveBeenCalledTimes(1);
     });
   });
@@ -285,7 +285,7 @@ describe('EarlierRunTotals', () => {
       totalPlanned: null,
       processed: 2200,
     };
-    const listRuns = listing([{ ...COMPLETED, id: 'before', processed: 2361 }]);
+    const listRuns = listing([{ ...COMPLETED, id: 'before', processed: 3402 }]);
     const totals = setUp(listRuns);
 
     await totals.resolve(done);
@@ -300,7 +300,7 @@ describe('EarlierRunTotals', () => {
     const running = { ...ABORTED, status: 'RUNNING' as const };
 
     await totals.resolve(running);
-    expect(totals.of(running)).toBe(2361);
+    expect(totals.of(running)).toBe(3402);
 
     expect(totals.of({ ...running, status: 'COMPLETED' })).toBeNull();
   });
@@ -310,7 +310,7 @@ describe('EarlierRunTotals', () => {
     const listRuns = jest.fn(async () => ({
       items: [
         { ...ABORTED, processed: 3000 },
-        { ...COMPLETED, id: 'before', processed: 2361 },
+        { ...COMPLETED, id: 'before', processed: 3402 },
       ],
       nextCursor: null,
     }));
@@ -318,7 +318,7 @@ describe('EarlierRunTotals', () => {
 
     await totals.resolve(ABORTED);
 
-    expect(totals.of(ABORTED)).toBe(2361);
+    expect(totals.of(ABORTED)).toBe(3402);
   });
 
   describe('reading again (owner decision 113b)', () => {
@@ -327,13 +327,13 @@ describe('EarlierRunTotals', () => {
       const listRuns = jest.fn((query: RunQuery) => listing(runs)(query));
       const totals = setUp(listRuns);
       await totals.resolve(ABORTED);
-      expect(totals.of(ABORTED)).toBe(2361);
+      expect(totals.of(ABORTED)).toBe(3402);
 
       // The reference run is reverted, and the run's page opens again.
       runs = [{ ...COMPLETED, revertedAt: '2026-09-01T00:00:00Z' }];
       totals.reread(ABORTED.id);
       const lookup = totals.resolve(ABORTED);
-      expect(totals.of(ABORTED)).toBe(2361);
+      expect(totals.of(ABORTED)).toBe(3402);
       await lookup;
 
       expect(listRuns).toHaveBeenCalledTimes(2);
@@ -361,7 +361,7 @@ describe('EarlierRunTotals', () => {
       await Promise.all([first, second]);
 
       expect(listRuns).toHaveBeenCalledTimes(1);
-      expect(totals.of(ABORTED)).toBe(2361);
+      expect(totals.of(ABORTED)).toBe(3402);
     });
 
     /** Owner decision 121b: a failed reread does not clear the number shown. */
@@ -373,13 +373,13 @@ describe('EarlierRunTotals', () => {
         .mockRejectedValue(new Error('down'));
       const totals = setUp(listRuns);
       await totals.resolve(ABORTED);
-      expect(totals.of(ABORTED)).toBe(2361);
+      expect(totals.of(ABORTED)).toBe(3402);
 
       totals.reread(ABORTED.id);
       await totals.resolve(ABORTED);
 
       expect(listRuns).toHaveBeenCalledTimes(3);
-      expect(totals.of(ABORTED)).toBe(2361);
+      expect(totals.of(ABORTED)).toBe(3402);
     });
   });
 
@@ -394,7 +394,7 @@ describe('EarlierRunTotals', () => {
 
       await totals.resolve(ABORTED);
       expect(listRuns).toHaveBeenCalledTimes(2);
-      expect(totals.of(ABORTED)).toBe(2361);
+      expect(totals.of(ABORTED)).toBe(3402);
     });
 
     it('drops an answer that was on its way', async () => {
@@ -464,7 +464,7 @@ describe('EarlierRunTotals', () => {
     await totals.resolve(ABORTED);
 
     expect(listRuns).toHaveBeenCalledTimes(2);
-    expect(totals.of(ABORTED)).toBe(2361);
+    expect(totals.of(ABORTED)).toBe(3402);
   });
 
   /**
@@ -484,27 +484,179 @@ describe('EarlierRunTotals', () => {
     expect(totals.of(ABORTED)).toBeNull();
   });
 
-  /** The memory back end holds the case: a stopped DEZA walk and a whole one. */
-  it('finds the seeded DEZA walk through the memory back end', async () => {
+  /** The memory back end holds the case: a stopped El Jamón walk and a whole one. */
+  it('finds the seeded El Jamón walk through the memory back end', async () => {
     TestBed.resetTestingModule();
     const totals = TestBed.inject(EarlierRunTotals);
 
     await totals.resolve(ABORTED);
 
     expect(ABORTED.totalPlanned).toBeNull();
-    expect(totals.of(ABORTED)).toBe(2361);
+    expect(totals.of(ABORTED)).toBe(3402);
   });
 
-  /** The running DEZA walk names a preset with no completed run of its own. */
-  it('falls back from the seeded DEZA preset to the chain in the memory back end', async () => {
+  it('gives the seeded running El Jamón walk its estimate in the memory back end', async () => {
     TestBed.resetTestingModule();
     const totals = TestBed.inject(EarlierRunTotals);
-    const running = seeded('run-deza-running');
+    const running = seeded('run-eljamon-running');
 
     await totals.resolve(running);
 
-    expect(running.presetId).not.toBeNull();
-    expect(totals.of(running)).toBe(2361);
+    expect(totals.of(running)).toBe(3402);
+  });
+
+  /**
+   * Owner decision 127b: no estimate for a run whose adapter's walk totals
+   * cannot be compared, from its preset or from its chain, and no read for it.
+   */
+  describe('a run whose adapter cannot compare its walk totals', () => {
+    it.each([
+      ['deza-web', PRESET],
+      ['deza-web', null],
+      [null, PRESET],
+      [null, null],
+      [undefined, null],
+      ['not-an-adapter', null],
+    ])(
+      'reads nothing for adapter %s and preset %s',
+      async (adapter, preset) => {
+        const listRuns = listing([
+          { ...COMPLETED, id: 'preset-run', presetId: PRESET },
+          { ...COMPLETED, id: 'chain-run' },
+        ]);
+        const totals = setUp(listRuns);
+        const asked = {
+          ...ABORTED,
+          presetId: preset,
+          adapterKey: adapter as HarvestRun['adapterKey'],
+        };
+
+        await totals.resolve(asked);
+
+        expect(listRuns).not.toHaveBeenCalled();
+        expect(totals.of(asked)).toBeNull();
+      }
+    );
+
+    it('reads nothing for the seeded DEZA walks in the memory back end', async () => {
+      TestBed.resetTestingModule();
+      const totals = TestBed.inject(EarlierRunTotals);
+      const running = seeded('run-deza-running');
+      const aborted = seeded('run-deza-aborted');
+
+      await totals.resolve(running);
+      await totals.resolve(aborted);
+
+      // A completed DEZA walk of the same config processed 2,361.
+      expect(seeded('run-deza-completed').configFingerprint).toBe(
+        running.configFingerprint
+      );
+      expect(totals.of(running)).toBeNull();
+      expect(totals.of(aborted)).toBeNull();
+    });
+  });
+
+  /**
+   * Owner decision 130b: an earlier run is a reference only when it walked
+   * under the same configuration, on the preset read and the chain read alike.
+   */
+  describe('the configuration a run walked under', () => {
+    it('passes over a preset run of another config to an older one of the same', async () => {
+      const fromPreset = { ...ABORTED, presetId: PRESET };
+      const listRuns = listing([
+        {
+          ...COMPLETED,
+          id: 'preset-other',
+          presetId: PRESET,
+          processed: 3000,
+          configFingerprint: 'another',
+        },
+        { ...COMPLETED, id: 'preset-same', presetId: PRESET, processed: 2100 },
+      ]);
+      const totals = setUp(listRuns);
+
+      await totals.resolve(fromPreset);
+
+      expect(totals.of(fromPreset)).toBe(2100);
+      expect(listRuns).toHaveBeenCalledTimes(1);
+    });
+
+    it('falls back to the chain when no preset run shares the config', async () => {
+      const fromPreset = { ...ABORTED, presetId: PRESET };
+      const listRuns = listing([
+        {
+          ...COMPLETED,
+          id: 'preset-other',
+          presetId: PRESET,
+          configFingerprint: 'another',
+        },
+        { ...COMPLETED, id: 'chain-same', processed: 2500 },
+      ]);
+      const totals = setUp(listRuns);
+
+      await totals.resolve(fromPreset);
+
+      expect(totals.of(fromPreset)).toBe(2500);
+      expect(listRuns).toHaveBeenCalledTimes(2);
+    });
+
+    it('passes over chain runs of another config, or of none, like narrowed ones', async () => {
+      const totals = setUp(
+        listing([
+          {
+            ...COMPLETED,
+            id: 'other',
+            processed: 3000,
+            configFingerprint: 'x',
+          },
+          { ...COMPLETED, id: 'before-column', configFingerprint: null },
+          { ...COMPLETED, id: 'absent', configFingerprint: undefined },
+          { ...COMPLETED, id: 'same', processed: 2500 },
+        ])
+      );
+
+      await totals.resolve(ABORTED);
+
+      expect(totals.of(ABORTED)).toBe(2500);
+    });
+
+    it('gives nothing when the only earlier run walked under another config', async () => {
+      const totals = setUp(
+        listing([{ ...COMPLETED, configFingerprint: 'another' }])
+      );
+
+      await totals.resolve(ABORTED);
+
+      expect(totals.of(ABORTED)).toBeNull();
+    });
+
+    it('reads nothing for a run that carries no fingerprint', async () => {
+      const listRuns = listing([{ ...COMPLETED, configFingerprint: null }]);
+      const totals = setUp(listRuns);
+
+      await totals.resolve({ ...ABORTED, configFingerprint: null });
+      await totals.resolve({
+        ...ABORTED,
+        id: 'preset-unprinted',
+        presetId: PRESET,
+        configFingerprint: undefined,
+      });
+
+      expect(listRuns).not.toHaveBeenCalled();
+    });
+
+    it('gives the seeded running DIA walk nothing in the memory back end', async () => {
+      TestBed.resetTestingModule();
+      const totals = TestBed.inject(EarlierRunTotals);
+      const running = seeded('run-dia-running');
+      const before = seeded('run-dia-completed');
+
+      await totals.resolve(running);
+
+      expect(before.processed).toBeGreaterThan(running.processed);
+      expect(before.configFingerprint).not.toBe(running.configFingerprint);
+      expect(totals.of(running)).toBeNull();
+    });
   });
 
   /** The seeded store discovery of two postal codes, beside a whole one. */

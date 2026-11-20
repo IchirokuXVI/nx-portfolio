@@ -2,6 +2,7 @@ import { inject, Injectable, signal } from '@angular/core';
 import {
   earlierTotal,
   isNarrowedRun,
+  walkedUnderSameConfigAs,
   wantsEarlierTotal,
   type HarvestRun,
 } from '@portfolio/luna-shopper-admin/models';
@@ -21,6 +22,10 @@ const REFERENCE_PAGE = 5;
  * with no preset starts at its chain and mode. The run itself never counts
  * (owner decision 98b). The chain and mode answer only for a whole walk, and
  * only from an earlier whole walk (owner decision 112b, {@link isNarrowedRun}).
+ * Both answer only from a run that walked under the same configuration
+ * (owner decision 130b): the same `configFingerprint`. A run whose adapter's
+ * walk totals cannot be compared, a DEZA walk, is read for nothing at all
+ * (owner decision 127b, see `wantsEarlierTotal`).
  *
  * Two differences from the harvester's rule, both because the list route is
  * the read the app already has and no route changes in this PR. The route
@@ -177,6 +182,11 @@ export class EarlierRunTotals {
    * `wholeOnly` is the chain and mode read: an earlier run that was itself
    * narrowed, or whose request is unknown, is no total for a whole walk and is
    * passed over like a run that processed nothing (owner decision 112b).
+   *
+   * On both reads an earlier run that did not walk under this run's
+   * configuration is passed over the same way (owner decision 130b,
+   * `walkedUnderSameConfigAs`), and so is one stored before the fingerprint
+   * existed, which carries none.
    */
   private async _newest(
     run: HarvestRun,
@@ -190,7 +200,11 @@ export class EarlierRunTotals {
       limit: REFERENCE_PAGE,
     });
     for (const item of page.items) {
-      if (item.id === run.id || (wholeOnly && isNarrowedRun(item))) {
+      if (
+        item.id === run.id ||
+        !walkedUnderSameConfigAs(run, item) ||
+        (wholeOnly && isNarrowedRun(item))
+      ) {
         continue;
       }
       const total = earlierTotal(item);
