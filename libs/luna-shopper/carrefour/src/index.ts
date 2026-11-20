@@ -32,6 +32,7 @@ export {
   type CarrefourCappedCategory,
   type CarrefourFrontier,
 } from './lib/categories';
+export { formatCount } from './lib/count';
 export {
   CarrefourBrowserError,
   CarrefourHttpError,
