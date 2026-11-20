@@ -158,7 +158,8 @@ export class HarvestRunStore {
     scheduleId?: string | null;
     /**
      * The digest of the source row's adapter and config the run walks under
-     * (owner decision 130b), null for a run with no source row.
+     * (owner decision 130b), null for a run with no source row. The postal
+     * code queue passes neither field, so its runs store null too.
      */
     configFingerprint?: string | null;
     /** That row's adapter (owner decision 127b), null where the digest is. */

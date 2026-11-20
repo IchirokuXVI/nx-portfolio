@@ -857,14 +857,16 @@ export interface HarvestRunView {
    * path is the example: it lives in `config`, it can shrink a walk, and the
    * request does not state it.
    *
-   * **A digest and never the configuration**, because `config` holds base URLs
-   * and other values that stay in the harvester. Two runs whose digests are
-   * equal walked under the same configuration. The rate (`workers`,
-   * `maxRequestsPerSecond`) and `enabled` are not in it: they change how fast a
-   * walk goes, not what it walks.
+   * **A digest and never the configuration**, because a digest is enough to
+   * compare two runs and it stays small on every run row and list answer. Two
+   * runs whose digests are equal walked under the same configuration. The rate
+   * (`workers`, `maxRequestsPerSecond`) and `enabled` are not in it: they change
+   * how fast a walk goes, not what it walks.
    *
    * Null for a run that used no source row (a file import, an OpenStreetMap
-   * store discovery) and for every run stored before the column existed.
+   * store discovery), for a run the postal code queue started (that worker
+   * stores neither field, even when the run names a source row), and for every
+   * run stored before the column existed.
    * {@link walkedUnderSameConfig} is the one rule that compares two of them,
    * and a null on either side answers no.
    */
@@ -874,8 +876,9 @@ export interface HarvestRunView {
    * spawned (owner decision 127b), so a reader can ask
    * {@link adapterCapabilities} about the run without the sources list.
    *
-   * Null for a run that used no source row and for every run stored before
-   * the column existed. **A reader must treat a null, absent or unknown key as
+   * Null where {@link configFingerprint} is: a run that used no source row, a
+   * run the postal code queue started, and every run stored before the column
+   * existed. **A reader must treat a null, absent or unknown key as
    * an adapter whose walk total is not comparable**: `adapterCapabilities`
    * answers `comparableWalkTotal: false` for it, so no estimate is drawn.
    */
@@ -1555,7 +1558,8 @@ export type HarvestRunPresetInput = Omit<
 export interface HarvestRunInputRecord extends HarvestRunPresetInput {
   /**
    * What the prices of a `FILE_IMPORT` are stamped with: what observed them,
-   * not what uploaded them. One of the three official kinds.
+   * not what uploaded them. The spawn stores one of the three official kinds,
+   * but the schema and the reader accept any `PriceSourceKind`.
    */
   sourceKind?: PriceSourceKind;
   /**

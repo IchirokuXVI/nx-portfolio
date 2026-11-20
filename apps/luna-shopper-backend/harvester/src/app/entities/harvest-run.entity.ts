@@ -267,9 +267,11 @@ export class HarvestRun extends BaseEntity {
   /**
    * What shaped the walk outside its request (owner decision 130b): sha256,
    * hex, over the canonical JSON of the source row's `adapterKey` and `config`
-   * at the spawn (`walkConfigFingerprint`). Never the config itself, which
-   * holds values that stay here. Null for a run that used no source row and
-   * for every run stored before the column existed.
+   * at the spawn (`walkConfigFingerprint`). Never the config itself: a digest
+   * is enough to compare two runs and stays small on every row. Null for a run
+   * that used no source row, for a run the postal code queue started (its
+   * worker stores neither field), and for every run stored before the column
+   * existed.
    */
   @Column({ type: 'varchar', nullable: true })
   configFingerprint!: string | null;
