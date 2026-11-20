@@ -1,4 +1,4 @@
-> **PR:** [#1015](https://github.com/IchirokuXVI/nx-portfolio/pull/1015) (the base and DIA), [#1020](https://github.com/IchirokuXVI/nx-portfolio/pull/1020) (El Jamón), [#1022](https://github.com/IchirokuXVI/nx-portfolio/pull/1022) (Mercadona), [#1024](https://github.com/IchirokuXVI/nx-portfolio/pull/1024) (Carrefour and DEZA), [#1030](https://github.com/IchirokuXVI/nx-portfolio/pull/1030) (a Carrefour category cut short), [#1026](https://github.com/IchirokuXVI/nx-portfolio/pull/1026) (LIDL and the file import)
+> **PR:** [#1015](https://github.com/IchirokuXVI/nx-portfolio/pull/1015) (the base and DIA), [#1020](https://github.com/IchirokuXVI/nx-portfolio/pull/1020) (El Jamón), [#1022](https://github.com/IchirokuXVI/nx-portfolio/pull/1022) (Mercadona), [#1024](https://github.com/IchirokuXVI/nx-portfolio/pull/1024) (Carrefour and DEZA), [#1030](https://github.com/IchirokuXVI/nx-portfolio/pull/1030) (a Carrefour category cut short), [#1026](https://github.com/IchirokuXVI/nx-portfolio/pull/1026) (LIDL and the file import), [#1037](https://github.com/IchirokuXVI/nx-portfolio/pull/1037) (a LIDL page list read in part), [#1038](https://github.com/IchirokuXVI/nx-portfolio/pull/1038) (a Carrefour total past the ceiling)
 
 # 0268: an entry carries every path its chain files it under
 
@@ -529,6 +529,14 @@ leaves the list out, or states a list of which no path can be read falls back to
 row's breadcrumbs. The mode rule above is unchanged: the row's list never makes a call
 `REPLACE`.
 
+**A LIDL page list read in part (owner decision 115b, PR #1037).** A page list that is not
+empty but that the code read only in part gives its readable paths and then the index row's
+paths, with exact repeats left out (`normalizeProduct`,
+`libs/luna-shopper/lidl/src/lib/normalize.ts`). The call is always `ADD`, because such a list
+is not stated in full. Only a page list read in full that yields a path stands alone, and only
+such a list can make a call `REPLACE`. Every other page list (absent, `[]`, or one of which no
+path can be read) gives the row's paths, as under 101b.
+
 **A LIDL product whose page states an empty list never loses an old path by itself.** Its call
 is `ADD` under 95b, whatever else the run reads. Only a curator clears such a path.
 
@@ -545,7 +553,11 @@ at or before its offset is a natural end, because the result set shrank. Such a 
 reported as `LISTING_UNREAD`. Since PR #1034 the end pass asks a category that a 5xx cut short
 once more (owner decision 103b), and a category it then reads in full leaves the unreadable
 list, so a repaired category no longer stops the crawl from being declared whole. The same PR pages a category that grew
-since the frontier was walked (owner decision 104b, recorded on plan `0251`). El Jamón reports a category it read in part as `LISTING_SHORT` (plan `0251`):
+since the frontier was walked (owner decision 104b, recorded on plan `0251`). Since PR #1038, a
+category whose pages state a total past the ceiling of 1008 while it is paged is recorded in
+`truncatedCategories`, and the crawl is not whole, so every call of the run is `ADD` (owner decision 116b,
+recorded on plan `0251`). Before, such a category was read to the ceiling and counted as read
+whole. El Jamón reports a category it read in part as `LISTING_SHORT` (plan `0251`):
 fewer rows than the count the category printed, or no count printed. Note the difference. A
 partial Carrefour category and a partial El Jamón category appear under two different codes.
 

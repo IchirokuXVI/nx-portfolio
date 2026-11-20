@@ -1,4 +1,4 @@
-> **PR:** [#938](https://github.com/IchirokuXVI/nx-portfolio/pull/938)
+> **PR:** [#938](https://github.com/IchirokuXVI/nx-portfolio/pull/938), [#1038](https://github.com/IchirokuXVI/nx-portfolio/pull/1038) (a total past the ceiling, the end pass stop, the plan write)
 
 # 0251: a completed run names what it could not read
 
@@ -164,7 +164,9 @@ above is left as it was written.
   what paging serves (`total_pages * page_size`) is not used. An empty page is a natural end
   only when the page itself states a total at or below its offset. Any other empty page is a
   cut. The end pass starts from the total the first walk learned. The run raises its
-  `totalPlanned` by what a category grew, so `processed` does not pass it. One case is known
+  `totalPlanned` by what a category grew, so growth alone does not take `processed` past it. A
+  page that serves more cards than the total it states can still do so, and so can a plan write
+  that failed (owner decision 122a below). One case is known
   and accepted. If a page ever states more results than paging serves, the category counts as
   cut. It gets a warning and the crawl is not whole. That is the safe error. The case has
   never been recorded, and the shared live run of the round will show whether it occurs.
@@ -172,3 +174,33 @@ above is left as it was written.
   the reading the code gives it today, which never declares a category read whole that may not
   be, until a captured Carrefour page settles what the chain serves there. No code changes for
   this decision.
+- **A total past the ceiling makes the category truncated (owner decision 116b, PR #1038).** A
+  category that the frontier saw at or under the ceiling can state more on its pages while it is
+  paged. The walk still pages it to the ceiling and ends with no error. `walkCategory` now hands
+  `onPage` a fourth argument: the largest total a page of the walk stated, before the ceiling
+  caps it, or null while no page stated one. When that figure is above `CARREFOUR_CEILING`, the
+  runner records the category in `truncatedCategories`, in the shape of a capped frontier node,
+  with the total its pages stated. This happens whether the walk ended or failed, and in the end
+  pass too. A category is recorded once, and a second sighting raises its total. The crawl is
+  then not declared whole (reason `truncated`), so every path call is `ADD`. A stated total of
+  exactly 1008 is not truncated. The products the walk read are reported as before.
+- **The end pass stops after three failures in a row (owner decision 118b, PR #1038).**
+  `END_PASS_FAILURES_IN_A_ROW` is 3. A failure here is an ask that fails with something other
+  than a refusal, a block or an abort. A category that the pass reads sets the count back to
+  zero. A refusal still ends the pass at once. A category that the pass did not ask keeps
+  `askedAgain: false`, so its warning is the one the walk gave it, without "once more at the end
+  of the run", and it is not in `askedAgain` of the report.
+- **A failed write of the planned total costs no category (owner decision 122a, PR #1038).** In
+  the runner's `settle`, a failed `restatePlan` is logged and never thrown. A category that the
+  walk read in full thus stays read, and the crawl can still be whole. When the walk did not
+  throw and the progress report fails, that failure is thrown as before. When the walk threw,
+  a failed progress report is logged and the walk's own error is thrown. A failed plan write is
+  not retried. The planned total is still raised in memory, so the next category that grows
+  writes the full figure.
+- **Three known low points, left in by the review of PR #1038.**
+  - An empty page that states a total past the ceiling is a cut, so the category is unreadable.
+    The walk throws on that page before it counts the page's stated total, so the category is not
+    added to `truncatedCategories`.
+  - A truncated category writes no run warning, as a capped frontier node writes none. The run
+    report entry and one log line are the only record.
+  - The stop of the end pass after three failures is only logged.

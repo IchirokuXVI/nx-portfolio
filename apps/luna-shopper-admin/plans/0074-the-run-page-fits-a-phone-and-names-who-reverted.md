@@ -1,4 +1,4 @@
-> **PR:** [#1014](https://github.com/IchirokuXVI/nx-portfolio/pull/1014)
+> **PR:** [#1014](https://github.com/IchirokuXVI/nx-portfolio/pull/1014), [#1039](https://github.com/IchirokuXVI/nx-portfolio/pull/1039) (a run's own request and the narrowing rule), [#1040](https://github.com/IchirokuXVI/nx-portfolio/pull/1040) (the estimate reads only a whole walk)
 
 # 0074: the run page fits a phone and names who reverted a run
 
@@ -273,3 +273,47 @@ either hides it, as every reverted run does.
 ## Open questions
 
 None. C5 stands unless the owner overrules it.
+
+## Notes of 2026-11-20 (owner decisions of the harvester round)
+
+These notes record what the owner decided since about the estimate on the run page ("N
+processed of about M", PRs #1028 and #1036) and the run view it reads. They change nothing in
+the sections above.
+
+- **A run's view carries its own request (owner decision 114a, PR #1039).** `HarvestRunView`
+  has `input`, on the single read, on every row of the run list and on the dashboard's runs.
+  It is what `harvest_runs.input` stored, in the shape of a preset's input
+  (`readRunInput`, `apps/luna-shopper-backend/harvester/src/app/harvest/run-input.ts`), never
+  the preset's current input. It is a record of what ran. Never send it back as a run request
+  and never save it as a preset, because it states resolved values that the spawn refuses for
+  some chains. It is null when the stored input cannot be read: not an object, a mode this
+  build does not know, or a field of the wrong type.
+- **One rule says whether a request is narrowed (owner decision 114a, PR #1039).**
+  `isNarrowedRunRequest` and `isNarrowedRun` live in
+  `libs/luna-shopper/contracts/src/lib/messages/run-narrowing.ts`, behind the alias
+  `@portfolio/luna-shopper/contracts/run-narrowing`, which the browser build can import. The
+  back office calls them and does not restate the rule. A null or absent request counts as
+  narrowed, and so does a mode the rule does not know.
+
+  | Mode                | Narrowed when                                            |
+  | ------------------- | -------------------------------------------------------- |
+  | `CATALOG_DISCOVERY` | `detailBackfill: true`, or `priceScopeIds` names an id   |
+  | `STORE_DISCOVERY`   | `postalCodes` names a code, or `postalCode` is not blank |
+  | `FILE_IMPORT`       | never                                                    |
+
+- **The sources list takes only a page query (owner decision 119b, PR #1039).**
+  `GET /v1/admin/harvest/sources` binds `PageQueryDto`. The run filters it used to accept and
+  ignore are now refused with 400.
+- **The chain and mode answer only for a whole walk (owner decision 112b, PR #1040).** The
+  estimate reads the runs of the run's own preset first. It reads the completed runs of the same
+  chain and mode only when the run's own request is not narrowed, and from those it takes only a
+  run whose request is not narrowed either (`EarlierRunTotals`,
+  `libs/luna-shopper-admin/data-access/src/lib/harvest/earlier-run-totals.ts`). A narrowed run
+  with no preset thus shows no estimate.
+- **A completed run with no total shows its count alone (owner decision 120b, PR #1040).** The
+  note that the run does not know yet how much work it has is not drawn for a `COMPLETED` run
+  (`unsizedNote`, `libs/luna-shopper-admin/ui/src/lib/harvest/run-progress.ts`). A running,
+  failed, aborted or stale run keeps it.
+- **A failed reread keeps the number shown (owner decision 121b, PR #1040).** When a reread of
+  the earlier total fails twice, the number from the earlier read stays. A reread that succeeds
+  and finds no reference clears it.
