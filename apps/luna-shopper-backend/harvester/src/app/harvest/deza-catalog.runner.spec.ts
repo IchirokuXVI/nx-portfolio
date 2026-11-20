@@ -1948,6 +1948,154 @@ describe('deza: a walk reports what it has read as it goes (plan 0267)', () => {
   });
 });
 
+describe('deza: every path a product is filed under (plan 0268)', () => {
+  let listing: FakeListing | undefined;
+
+  afterEach(async () => {
+    await listing?.close();
+    listing = undefined;
+  });
+
+  const repeated = {
+    description: 'Perlas de perfume LENOR classic 195 g',
+    shops: ['T1'],
+  };
+  const lenor = entryKey('Perlas de perfume LENOR classic', '195 g');
+  const croissants = entryKey('Croissants ALTEZA', '360 g');
+  /**
+   * One product filed under both sections, met twice in Bolleria, and one
+   * product under Bolleria only. The listing of the fake prints no attribute
+   * icon, so a path is the section path alone.
+   */
+  const twoSections = () => [
+    { ...repeated, section: 'W011' },
+    { ...repeated, section: 'W051' },
+    { ...repeated, section: 'W051' },
+    { description: 'Croissants ALTEZA 360 g', section: 'W051', shops: ['T1'] },
+  ];
+  const callOf = (report: RecordingRunReport, externalId: string) =>
+    report.categoryPathCalls.find((call) => call.externalId === externalId);
+
+  async function crawl(): Promise<Built> {
+    listing = await startFakeListing(SECTIONS, twoSections());
+    const built = build(listing);
+    await built.runner.run(
+      built.context,
+      built.report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+    return built;
+  }
+
+  it('gives a product met in two sections both paths, in walk order, and adds them', async () => {
+    const { report } = await crawl();
+
+    expect(callOf(report, lenor)).toEqual({
+      externalId: lenor,
+      paths: [
+        ['FRIO', 'Carniceria'],
+        ['PAN', 'Bolleria'],
+      ],
+      mode: 'ADD',
+    });
+    // The first path is the one `categoryPath` holds, which is unchanged: the
+    // section of the first sighting.
+    const product = report.products.find((p) => p.externalId === lenor);
+    expect(product?.categoryPath).toEqual(['FRIO', 'Carniceria']);
+    expect(callOf(report, lenor)?.paths[0]).toEqual(product?.categoryPath);
+    // A product of one section gets that one path.
+    expect(callOf(report, croissants)).toEqual({
+      externalId: croissants,
+      paths: [['PAN', 'Bolleria']],
+      mode: 'ADD',
+    });
+    // One call a product, in the order the walk first met them.
+    expect(report.categoryPathCalls.map((call) => call.externalId)).toEqual([
+      lenor,
+      croissants,
+    ]);
+  });
+
+  it('never replaces, writes no price, and puts the paths on no observation', async () => {
+    listing = await startFakeListing(SECTIONS, twoSections());
+    const built = build(listing);
+    const events: string[] = [];
+    (built.context.flush as jest.Mock).mockImplementation(async () => {
+      events.push('flush');
+    });
+    const product = built.report.product.bind(built.report);
+    built.report.product = (observation) => {
+      events.push('product');
+      product(observation);
+    };
+    const paths = built.report.categoryPaths.bind(built.report);
+    built.report.categoryPaths = (externalId, list, mode) => {
+      events.push('paths');
+      paths(externalId, list, mode);
+    };
+
+    await built.runner.run(
+      built.context,
+      built.report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+
+    // **Always ADD**: no DEZA walk proves it saw every section a product sits
+    // in, so none can say a stored path is gone.
+    expect(built.report.categoryPathCalls).toHaveLength(2);
+    expect(
+      built.report.categoryPathCalls.every((call) => call.mode === 'ADD')
+    ).toBe(true);
+    for (const observed of built.report.products) {
+      expect(observed).not.toHaveProperty('categoryPaths');
+      // DEZA writes no price, ever.
+      expect(observed.prices).toEqual([]);
+    }
+    expect(events.lastIndexOf('product')).toBeLessThan(events.indexOf('paths'));
+    // The run's own flush comes after every path call, so the paths are with
+    // the sink before the run hands it over.
+    expect(events.filter((event) => event === 'flush')).toHaveLength(1);
+    expect(events.lastIndexOf('paths')).toBeLessThan(events.indexOf('flush'));
+  });
+
+  it('makes no call when the walk dies before its end', async () => {
+    listing = await startFakeListing(SECTIONS, twoSections());
+    const fake = listing;
+    const built = build(listing);
+    // Carniceria ends and reports its products. On the first row of Bolleria
+    // the heartbeat fails, which fails that section, and the run row then
+    // refuses the failure count too, which is what kills a DEZA walk: a
+    // section that fails alone does not.
+    (built.context.heartbeat as jest.Mock).mockImplementation(async () => {
+      if (fake.queries.some((query) => query.startsWith('W051|'))) {
+        throw new Error('The heartbeat did not answer.');
+      }
+    });
+    (built.context.report as jest.Mock).mockRejectedValue(
+      new Error('The run row did not answer.')
+    );
+
+    await expect(
+      built.runner.run(
+        built.context,
+        built.report,
+        { supermarketId: CHAIN },
+        source({ baseUrl: listing.url })
+      )
+    ).rejects.toThrow('The run row did not answer.');
+
+    // The finished section reported its product, which by then had a path
+    // recorded, and Bolleria had listed it again: still no path call.
+    const product = built.report.products.find((p) => p.externalId === lenor);
+    expect(product?.categoryPath).toEqual(['FRIO', 'Carniceria']);
+    expect(carniceria(fake).length).toBeGreaterThan(0);
+    expect(built.context.setTotalPlanned).not.toHaveBeenCalled();
+    expect(built.report.categoryPathCalls).toEqual([]);
+  });
+});
+
 describe('deza keys: a DEZA walk and the stored keys (plan 0272)', () => {
   let listing: FakeListing | undefined;
 

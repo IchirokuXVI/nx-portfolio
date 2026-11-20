@@ -40,7 +40,12 @@ import type { SourceObservation } from './source-ingest';
  * 3. Hand every product to {@link SourceIngest} as an observation carrying the
  *    price the card printed, at its first sighting (plan 0267). The sink writes
  *    a chunk each time `PRODUCT_CHUNK` products wait, so a walk that dies part
- *    way keeps the rows it read, less at most the chunk that was not full.
+ *    way keeps the rows that were written, less what was still queued or in
+ *    flight in the sink when it died.
+ * 4. At the end of the walk, state every category path of each product (plan
+ *    0268): the path of each frontier category that listed it, in walk order.
+ *    They replace the stored paths only for a crawl declared whole, which
+ *    paged every frontier category; any other crawl adds to them.
  *
  * **851 page loads, about 62 minutes.** The run is politeness bound and not
  * latency bound: the storefront tolerates one page every two seconds and
@@ -95,11 +100,12 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       );
       /**
        * The id of every product the walk reported, in the order it was first
-       * seen. The product itself went to the sink at that moment (plan 0267),
-       * so this holds only what {@link declareListing} and {@link describeRun}
-       * read at the end.
+       * seen, with the path of each frontier category that listed it, in walk
+       * order (plan 0268). The product itself went to the sink at its first
+       * sighting (plan 0267), so this holds only what {@link declareListing},
+       * {@link describeRun} and the paths call read at the end.
        */
-      const products = new Set<string>();
+      const products = new Map<string, string[][]>();
       const unreadable = [...frontier.unreadable];
       /**
        * Every frontier category that failed, by its url, in the order they
@@ -183,7 +189,7 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       if (!context.signal.aborted) {
         warnUnread(context, unreadable, lost);
       }
-      declareListing(report, products, {
+      const whole = declareListing(report, products.keys(), {
         switchOn: readDelistCountsCrawl(source.config),
         seedPath: readSeedPath(source.config) !== undefined,
         blocked: blocked !== null,
@@ -191,6 +197,14 @@ export class CarrefourCatalogRunner implements CatalogRunner {
         unreadable: unreadable.length > 0,
         aborted: context.signal.aborted,
       });
+      // Every path of every product, after the walk and before the drain (plan
+      // 0268). Never on an observation: a streamed one was written at the
+      // first sighting, before the later categories were paged.
+      for (const [externalId, paths] of products) {
+        if (paths.length > 0) {
+          report.categoryPaths(externalId, paths, whole ? 'REPLACE' : 'ADD');
+        }
+      }
 
       await context.flush();
       await context.setReport(
@@ -248,14 +262,15 @@ export class CarrefourCatalogRunner implements CatalogRunner {
    * (plan 0090, section 7). A product filed in two frontier categories is
    * listed twice, and the first sighting is the one kept: a product genuinely
    * filed in two places has no one true category, and the first is as good an
-   * answer as the last.
+   * answer as the last. The path of every sighting is kept for its category
+   * paths (plan 0268).
    */
   private async pageCategory(
     context: RunContext,
     client: CarrefourClient,
     report: RunReport,
     category: CarrefourCategory,
-    products: Set<string>,
+    products: Map<string, string[][]>,
     cursor: { page: number }
   ): Promise<void> {
     let seen = 0;
@@ -318,7 +333,7 @@ export class CarrefourCatalogRunner implements CatalogRunner {
     context: RunContext,
     client: CarrefourClient,
     report: RunReport,
-    products: Set<string>,
+    products: Map<string, string[][]>,
     unreadable: string[],
     lost: ReadonlyMap<string, LostCategory>
   ): Promise<unknown> {
@@ -389,7 +404,7 @@ export class CarrefourCatalogRunner implements CatalogRunner {
     client: CarrefourClient,
     report: RunReport,
     entry: LostCategory,
-    products: Set<string>
+    products: Map<string, string[][]>
   ): Promise<void> {
     const { category } = entry;
     const pages = pagesFor(category.totalResults);
@@ -421,17 +436,30 @@ export class CarrefourCatalogRunner implements CatalogRunner {
  * **17,135 is a count of category memberships and not of distinct products**
  * (plan 0090, section 7). The first sighting is the one kept, which is the
  * category path the walk reported when it reported at the end.
+ *
+ * Every sighting keeps the path of its frontier category for the end of the
+ * walk (plan 0268), once, so the first path is the one `categoryPath` holds.
+ * The names are the chain's, verbatim.
  */
 function reportFirstSighting(
   report: RunReport,
-  products: Set<string>,
+  products: Map<string, string[][]>,
   product: CarrefourProduct
 ): void {
-  if (products.has(product.externalId)) {
+  const path = product.categoryPath;
+  const paths = products.get(product.externalId);
+  if (paths) {
+    if (path.length > 0 && !paths.some((other) => sameNames(other, path))) {
+      paths.push([...path]);
+    }
     return;
   }
-  products.add(product.externalId);
+  products.set(product.externalId, path.length > 0 ? [[...path]] : []);
   report.product(observationOf(product, new Date()));
+}
+
+function sameNames(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((name, i) => name === b[i]);
 }
 
 /**
@@ -567,10 +595,14 @@ function warnUnread(
  * that remains is a product filed in no frontier category, which nobody has
  * measured: the switch stays off until two clean crawls were compared. A crawl
  * that is not whole declares nothing and is named with the first reason.
+ *
+ * Answers whether it declared the crawl whole. Only a whole crawl paged every
+ * frontier category a product is filed in, so only then can its category
+ * paths replace the stored ones (plan 0268).
  */
 function declareListing(
   report: RunReport,
-  products: ReadonlySet<string>,
+  products: Iterable<string>,
   crawl: {
     switchOn: boolean;
     seedPath: boolean;
@@ -579,9 +611,9 @@ function declareListing(
     unreadable: boolean;
     aborted: boolean;
   }
-): void {
+): boolean {
   if (crawl.aborted) {
-    return;
+    return false;
   }
   const reason = !crawl.switchOn
     ? 'switch-off'
@@ -596,9 +628,10 @@ function declareListing(
             : null;
   if (reason !== null) {
     report.listingNotWhole(null, reason);
-    return;
+    return false;
   }
   report.listingWhole(null, products);
+  return true;
 }
 
 /** What a run has to say about itself beyond its counters. */

@@ -1242,4 +1242,188 @@ describe('CarrefourCatalogRunner', () => {
       expect(runContext.warn).not.toHaveBeenCalled();
     });
   });
+
+  describe('every path a product is filed under (plan 0268)', () => {
+    const one = link('cat1', 'Bebidas');
+    const two = link('cat2', 'Ofertas');
+    const shared = card('p1', 'Agua CARREFOUR 1,5 l.', '0,39 €');
+    /** Two frontier categories under the default seed, sharing one product. */
+    const states = () => ({
+      '/supermercado/la-despensa/cat20001/c': page({ firstLevel: [one, two] }),
+      [one.url]: page({ totalResults: 2 }),
+      [two.url]: page({ totalResults: 2 }),
+      '/supermercado/x/cat1/c?offset=0': page({
+        totalResults: 2,
+        cards: [shared, card('p2', 'Cola CARREFOUR 33 cl.', '0,35 €')],
+      }),
+      // p1 twice on one page: one category is one path.
+      '/supermercado/x/cat2/c?offset=0': page({
+        totalResults: 3,
+        cards: [shared, shared, card('p3', 'Leche CARREFOUR 1 l.', '0,89 €')],
+      }),
+    });
+    const crawl = (
+      runner: TestRunner,
+      runContext: RunContext,
+      config: Record<string, unknown>
+    ) =>
+      runner.run(
+        runContext,
+        report,
+        { supermarketId: CHAIN, priceScopeId: SCOPE },
+        source(config)
+      );
+    const callOf = (externalId: string) =>
+      report.categoryPathCalls.find((call) => call.externalId === externalId);
+
+    it('gives a product met in two categories both, in walk order, and replaces on a whole crawl', async () => {
+      await crawl(new TestRunner(states()), context(), {
+        delistCountsCrawl: true,
+      });
+
+      expect(report.wholeListings).toHaveLength(1);
+      expect(callOf('p1')).toEqual({
+        externalId: 'p1',
+        paths: [['Bebidas'], ['Ofertas']],
+        mode: 'REPLACE',
+      });
+      // The first path is the one `categoryPath` holds, which is unchanged.
+      expect(report.products[0].categoryPath).toEqual(['Bebidas']);
+      expect(callOf('p1')?.paths[0]).toEqual(report.products[0].categoryPath);
+      // A product of one category gets that one path.
+      expect(callOf('p3')).toEqual({
+        externalId: 'p3',
+        paths: [['Ofertas']],
+        mode: 'REPLACE',
+      });
+      // One call a product, in the order the walk first met them.
+      expect(report.categoryPathCalls.map((call) => call.externalId)).toEqual([
+        'p1',
+        'p2',
+        'p3',
+      ]);
+    });
+
+    it('adds when the crawl is not declared whole', async () => {
+      // The switch is off, so the crawl declares nothing and proves no path
+      // gone.
+      await crawl(new TestRunner(states()), context(), {});
+
+      expect(report.notWhole[0].reason).toBe('switch-off');
+      expect(callOf('p1')).toEqual({
+        externalId: 'p1',
+        paths: [['Bebidas'], ['Ofertas']],
+        mode: 'ADD',
+      });
+      expect(
+        report.categoryPathCalls.every((call) => call.mode === 'ADD')
+      ).toBe(true);
+    });
+
+    it('keeps the path the end pass reads, and replaces once that pass read the refused category', async () => {
+      // Ofertas is refused once and read whole by the end pass, so every
+      // frontier category was paged after all and the crawl is whole.
+      const runner = new RefusingRunner(states(), {
+        '/supermercado/x/cat2/c?offset=0': 1,
+      });
+      await crawl(runner, context(), { delistCountsCrawl: true });
+
+      expect(report.wholeListings).toHaveLength(1);
+      expect(callOf('p1')).toEqual({
+        externalId: 'p1',
+        paths: [['Bebidas'], ['Ofertas']],
+        mode: 'REPLACE',
+      });
+      expect(callOf('p3')?.paths).toEqual([['Ofertas']]);
+    });
+
+    it('adds when a category stays unread', async () => {
+      // Ofertas is refused on both asks, so a category the crawl did not read
+      // may list p1 and p2 too.
+      const runner = new RefusingRunner(states(), {
+        '/supermercado/x/cat2/c?offset=0': 2,
+      });
+      await crawl(runner, context(), { delistCountsCrawl: true });
+
+      expect(report.notWhole[0].reason).toBe('unreadable');
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: 'p1', paths: [['Bebidas']], mode: 'ADD' },
+        { externalId: 'p2', paths: [['Bebidas']], mode: 'ADD' },
+      ]);
+    });
+
+    it('adds for every product of an aborted crawl, and never replaces', async () => {
+      const runner = new TestRunner(states());
+      const controller = new AbortController();
+      const runContext = context(controller.signal);
+      (runContext.report as jest.Mock).mockImplementation(async () => {
+        if (runner.asked.includes('/supermercado/x/cat1/c?offset=0')) {
+          controller.abort();
+        }
+      });
+
+      await crawl(runner, runContext, { delistCountsCrawl: true });
+
+      expect(runContext.signal.aborted).toBe(true);
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: 'p1', paths: [['Bebidas']], mode: 'ADD' },
+        { externalId: 'p2', paths: [['Bebidas']], mode: 'ADD' },
+      ]);
+    });
+
+    it('puts the paths on no observation, and makes every call after the last product and before the run flushes', async () => {
+      const events: string[] = [];
+      const runContext = context();
+      (runContext.flush as jest.Mock).mockImplementation(async () => {
+        events.push('flush');
+      });
+      const product = report.product.bind(report);
+      report.product = (observation) => {
+        events.push('product');
+        product(observation);
+      };
+      const paths = report.categoryPaths.bind(report);
+      report.categoryPaths = (externalId, list, mode) => {
+        events.push('paths');
+        paths(externalId, list, mode);
+      };
+
+      await crawl(new TestRunner(states()), runContext, {
+        delistCountsCrawl: true,
+      });
+
+      for (const observed of report.products) {
+        expect(observed).not.toHaveProperty('categoryPaths');
+      }
+      expect(events.lastIndexOf('product')).toBeLessThan(
+        events.indexOf('paths')
+      );
+      expect(events.filter((event) => event === 'paths')).toHaveLength(3);
+      // The run's own flush comes after every path call, so the paths are
+      // with the sink before the run hands it over.
+      expect(events.filter((event) => event === 'flush')).toHaveLength(1);
+      expect(events.lastIndexOf('paths')).toBeLessThan(events.indexOf('flush'));
+    });
+
+    it('makes no call when the walk dies before its end', async () => {
+      // The run row stops taking writes once the categories are paged, so the
+      // run throws before the end of its walk, as a dying pod would.
+      const runContext = context();
+      (runContext.setStage as jest.Mock).mockImplementation(
+        async (stage: string) => {
+          if (stage === 'INGEST') {
+            throw new Error('The run row did not answer.');
+          }
+        }
+      );
+
+      await expect(
+        crawl(new TestRunner(states()), runContext, { delistCountsCrawl: true })
+      ).rejects.toThrow('The run row did not answer.');
+
+      // Every product was reported at its first sighting, and no path.
+      expect(report.products).toHaveLength(3);
+      expect(report.categoryPathCalls).toEqual([]);
+    });
+  });
 });
