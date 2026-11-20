@@ -1,10 +1,10 @@
-# 0027 (backlog) A body boolean reads only a JSON boolean
-
 > **Status: backlog. Not scheduled for development.**
 > Plans in `plans/backlog/` are designed and agreed but are not part of the build order, and
 > nothing in them has been built. They carry their own numbering starting at `0001`, separate
 > from the sequence in `plans/`. When one is picked up it moves into `plans/` and takes the next
 > free number there, so parking a design never burns a number in the build sequence.
+
+# 0027 (backlog) A body boolean reads only a JSON boolean
 
 > Found while PR #1031 was built and reviewed (merged on 2026-11-20). PR #1031 made every boolean
 > query flag of the gateway read its raw text through `asQueryFlag`. It left body booleans alone
@@ -40,7 +40,8 @@ does. A real `true` or `false` reads as itself, and an absent field stays absent
 - Some body fields already read the value as sent, and are safe: the inline
   `({ obj }) => obj?.['switchAccount']` transforms (`auth/auth.dto.ts`, and `askIfAmbiguous` in
   `baskets/basket.dto.ts` and `lists/list.dto.ts`), `asSent` and `asSpelled`
-  (`harvest/harvest.dto.ts`), and `MergeFlag` (`catalog/catalog-admin.dto.ts`).
+  (`harvest/harvest.dto.ts`), `MergeFlag` (`catalog/catalog-admin.dto.ts`), and
+  `RequireRegisteredBrandsProperty()` (`catalog/catalog.dto.ts`, for `requireRegisteredBrands`).
 - The comment of `asQueryFlag` already states the trap for a body in one sentence.
 
 ### Target state
@@ -90,8 +91,8 @@ it did not change.
 ## 1. The fields
 
 Every boolean property of a gateway body DTO with no raw reader, scanned on `origin/dev` on
-2026-11-20. PR #1031 listed most of them. Two that it listed, `switchAccount` and
-`askIfAmbiguous`, already read `obj[key]` and are not here.
+2026-11-20. PR #1031 listed most of them. Three that it listed, `switchAccount`,
+`askIfAmbiguous` and `requireRegisteredBrands`, already read `obj[key]` and are not here.
 
 | File | DTO | Field |
 | --- | --- | --- |
@@ -109,7 +110,6 @@ Every boolean property of a gateway body DTO with no raw reader, scanned on `ori
 | `lists/list.dto.ts` | `UpdateLineDto` | `confirmMerge` |
 | `baskets/basket.dto.ts` | `ChangeBasketLinesProductDto` | `keep` |
 | `baskets/basket.dto.ts` | `RenameBasketRowDto` | `confirmMerge` |
-| `catalog/catalog.dto.ts` | `CreateItemsDto`, `UpdateItemsDto` | `requireRegisteredBrands` |
 | `catalog/catalog.dto.ts` | `AvailabilityEntryDto` | `available` |
 | `catalog/catalog.dto.ts` | `UpdatePricePolicyDto` | `enabled` |
 | `catalog/shop-walks.dto.ts` | `UpdateShopWalkDto` | `shown` |

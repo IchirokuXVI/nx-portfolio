@@ -27,7 +27,10 @@ setupSwagger(app, { title, description });     // gateway only
   `ValidationPipe`. Log level comes from the validated `LOG_LEVEL` env var.
   The pipe (`createValidationPipe`) converts implicitly, and that conversion
   turns the query text `false` into `true`. A boolean query flag thus reads its
-  raw text through `asQueryFlag` from this library (PRs #1029 and #1031).
+  raw text through `asQueryFlag` from this library. PR #1029 fixed the first two
+  harvest flags, and the helper came in PR #1031. Only the texts `true` and
+  `false` are accepted. A bare flag, any other text or a repeated flag answers
+  400, and an absent flag keeps the route's default (PR #1032).
 - **`bootstrapPlatform`** routes Nest's logs through pino, installs the
   correlation middleware before the router, optionally enables URI versioning, and
   enables shutdown hooks.
