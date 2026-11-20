@@ -1879,10 +1879,10 @@ describe('CarrefourCatalogRunner', () => {
           source({ delistCountsCrawl: true })
         );
 
-      it('asks a third page when a page states 49 and serves 48, and reads whole when it is empty', async () => {
-        // The stated 49 grows the walk to a third page. It answers empty,
-        // stating 49 and two pages served, so its offset is at what paging
-        // serves: the natural end, one request more, and no cut.
+      it('cuts a category whose third page is empty while it still states 49, and the crawl is not whole', async () => {
+        // The stated 49 grows the walk to a third page. It answers empty and
+        // still states 49. The paging figure is never read, so that is a cut
+        // and not an end: a false cut is the safe error, a false whole is not.
         const pages = grown(49, 2);
         pages[at(48)] = {
           ...page({ totalResults: 49 }),
@@ -1892,16 +1892,58 @@ describe('CarrefourCatalogRunner', () => {
         const runContext = context();
         await run(runner, runContext);
 
+        // An empty page cut is not asked again in the end pass.
         expect(
           runner.asked.filter((path) => path.includes('?offset='))
         ).toEqual([at(0), at(24), at(48)]);
-        expect(runContext.warn).not.toHaveBeenCalled();
-        expect(report.wholeListings).toHaveLength(1);
+        expect(report.wholeListings).toEqual([]);
+        expect(report.notWhole[0].reason).toBe('unreadable');
+        expect(runContext.warn).toHaveBeenCalledWith(
+          expect.objectContaining({
+            code: HarvestWarningCode.LISTING_UNREAD,
+            name: 'Bebidas',
+            message: expect.stringContaining(
+              'Carrefour answered an empty page that states 49 results at offset 48'
+            ),
+          })
+        );
         expect(runContext.setReport).toHaveBeenCalledWith(
-          expect.objectContaining({ unreadableCategories: [] })
+          expect.objectContaining({ unreadableCategories: [bebidas.url] })
         );
         // The bound grew from 48 to 49, so the plan rose by one.
         expect(runContext.setTotalPlanned).toHaveBeenLastCalledWith(49);
+      });
+
+      it('pages the end pass to the total the first walk learned, when the pages it reads state none', async () => {
+        // Frontier 48. The first walk read two pages stating 96 and met a 503
+        // at the third. The pages from there on serve cards and state no
+        // total, so only the total the first walk learned asks the fourth.
+        const pages = grown(96, 2);
+        for (const offset of [48, 72]) {
+          const unstated = page({
+            cards: [card(`p${offset}`, `Agua ${offset} 1,5 l.`, '0,39 €')],
+          });
+          delete (
+            (unstated['productCardList'] as Record<string, unknown>)[
+              'results'
+            ] as Record<string, unknown>
+          )['total_results'];
+          pages[at(offset)] = unstated;
+        }
+        const runner = new StatusRunner(pages, { [at(48)]: [503] });
+        const runContext = context();
+        await run(runner, runContext);
+
+        expect(asksOf(runner, at(48))).toBe(2);
+        expect(asksOf(runner, at(72))).toBe(1);
+        expect(runContext.warn).not.toHaveBeenCalled();
+        expect(report.wholeListings).toHaveLength(1);
+        expect(runContext.setReport).toHaveBeenCalledWith(
+          expect.objectContaining({
+            unreadableCategories: [],
+            askedAgain: [{ id: 'cat1', name: 'Bebidas', read: true }],
+          })
+        );
       });
 
       it('raises the planned total to the grown one, so progress never passes it', async () => {
@@ -1981,6 +2023,67 @@ describe('CarrefourCatalogRunner', () => {
               'of 96, were not read.',
           })
         );
+      });
+
+      it('keeps the walk’s SourceBlockedError when the plan write and the progress report both fail', async () => {
+        // A walk that grew the category to 96 and then met the block. Both
+        // writes after it fail; the caller must still see the block, or the
+        // run would go on crawling a source that is blocking it.
+        const blockedError = new SourceBlockedError({
+          at: 0,
+          cause: 'trip',
+          trip: {
+            at: 0,
+            rule: 'consecutive',
+            refusals: 3,
+            of: null,
+            status: 403,
+            url: at(24),
+            pauseMs: null,
+          },
+          probesRefused: 0,
+          pausedMs: null,
+          status: 403,
+          url: at(24),
+        });
+        const client = {
+          async *walkCategory(
+            _category: unknown,
+            onPage?: (listing: unknown, page: number, total: number) => void
+          ) {
+            onPage?.({}, 0, 96);
+            yield* [];
+            throw blockedError;
+          },
+        } as unknown as CarrefourClient;
+        const runContext = context();
+        (runContext.setTotalPlanned as jest.Mock).mockRejectedValue(
+          new Error('the database is down')
+        );
+        (runContext.report as jest.Mock).mockRejectedValue(
+          new Error('the database is still down')
+        );
+        const runner = new TestRunner({});
+
+        await expect(
+          runner['pageCategory'](
+            runContext,
+            client,
+            report,
+            {
+              id: 'cat1',
+              name: 'Bebidas',
+              url: bebidas.url,
+              path: ['Bebidas'],
+              totalResults: 48,
+            },
+            new Map(),
+            { page: 0, total: 48 },
+            { total: 48 }
+          )
+        ).rejects.toBe(blockedError);
+        expect(runContext.setTotalPlanned).toHaveBeenCalledWith(96);
+        expect(runContext.report).toHaveBeenCalledWith({ processed: 0 });
       });
     });
   });

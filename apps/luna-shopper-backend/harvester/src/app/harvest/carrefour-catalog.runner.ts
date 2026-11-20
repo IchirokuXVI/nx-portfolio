@@ -317,11 +317,15 @@ export class CarrefourCatalogRunner implements CatalogRunner {
    * then the walk's own error, if it threw.
    *
    * The plan is written before the progress, so `processed` never passes it.
-   * **The walk's error wins.** A failed plan write must not replace an error
-   * the walk is already throwing, because a caller tells a block from a cut
-   * by that error's class, and must not skip the progress of the listings the
-   * walk did page. It is logged then. When the walk did not throw, a failed
-   * plan write is thrown, after the progress.
+   * **The walk's error wins.** Neither a failed plan write nor a failed
+   * progress report may replace an error the walk is already throwing,
+   * because a caller tells a block from a cut by that error's class: a
+   * `SourceBlockedError` that turned into a database error would leave the
+   * run crawling a source that is blocking it. A failed plan write also must
+   * not skip the progress of the listings the walk did page. Each such
+   * failure is logged, and the walk's error is thrown. When the walk did not
+   * throw, a failed progress report is thrown as it comes, and a failed plan
+   * write is thrown after the progress.
    */
   private async settle(
     context: RunContext,
@@ -337,7 +341,18 @@ export class CarrefourCatalogRunner implements CatalogRunner {
     } catch (error) {
       planFailure = { error };
     }
-    await context.report({ processed: seen });
+    if (failure === null) {
+      await context.report({ processed: seen });
+    } else {
+      try {
+        await context.report({ processed: seen });
+      } catch (error) {
+        this.logger.warn(
+          `Run ${context.runId}: the progress was not reported: ` +
+            String(error)
+        );
+      }
+    }
     if (failure !== null) {
       if (planFailure !== null) {
         this.logger.warn(
@@ -483,14 +498,17 @@ export class CarrefourCatalogRunner implements CatalogRunner {
     const { category } = entry;
     let seen = 0;
     const before = entry.total;
-    // The page after the last one that answered is the page that failed.
+    // The page after the last one that answered is the page that failed. The
+    // walk starts bounded by the total the first walk learned, not only the
+    // frontier's: the pages it now reads may state none, and a category that
+    // grew must still be paged to the end that walk saw (owner decision 104b).
     const walk = client.walkCategory(
       category,
       (_listing, page, total) => {
         entry.page = page + 1;
         entry.total = Math.max(entry.total, total);
       },
-      { fromPage: entry.page }
+      { fromPage: entry.page, knownTotal: entry.total }
     );
     let failure: { error: unknown } | null = null;
     try {
