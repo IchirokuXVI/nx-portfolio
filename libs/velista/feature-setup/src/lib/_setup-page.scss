@@ -35,6 +35,9 @@
   padding-block-start: calc(var(--app-space-5) + var(--app-safe-top));
   padding-block-end: calc(var(--app-space-6) + var(--app-safe-bottom));
   overflow-y: auto;
+  // A containing block, so a hidden helper inside it scrolls with it rather than
+  // with the document (scroll-containers-are-positioned.spec.ts).
+  position: relative;
 }
 
 // The heading takes focus on arrival (section 9), so it must not draw a ring for it:

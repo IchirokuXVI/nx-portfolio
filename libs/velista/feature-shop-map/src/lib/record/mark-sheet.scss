@@ -33,6 +33,9 @@
   flex: 1 1 auto;
   min-block-size: 0;
   overflow-y: auto;
+  // A containing block, so a hidden helper inside it scrolls with it rather than
+  // with the document (scroll-containers-are-positioned.spec.ts).
+  position: relative;
   padding-block-end: var(--app-space-4);
   box-shadow: none;
 
