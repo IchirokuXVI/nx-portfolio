@@ -254,6 +254,14 @@ function guardedContext(controller = new AbortController()): RunContext {
 const source = (config: Record<string, unknown> = {}): SupermarketSource =>
   ({ adapterKey: 'carrefour-web', config, workers: 1 }) as SupermarketSource;
 
+/** `failed` as the run row would hold it: the sum of every report. */
+const failedOf = (runContext: RunContext): number =>
+  (runContext.report as jest.Mock).mock.calls.reduce(
+    (sum: number, [counters]: [{ failed?: number }]) =>
+      sum + (counters.failed ?? 0),
+    0
+  );
+
 describe('CarrefourCatalogRunner', () => {
   // A recording report and nothing else: the runner fetches and reports, so
   // there is no ingest to fake here any more (plan 0103, section 9).
@@ -663,6 +671,9 @@ describe('CarrefourCatalogRunner', () => {
     expect(
       runner.asked.filter((path) => path.includes('?offset=0'))
     ).toHaveLength(4);
+    // The block skips the end pass, so the two refused before it are counted
+    // as unread beside the one that blocked: each once.
+    expect(failedOf(runContext)).toBe(3);
   });
 
   describe('a category refused once (plan 0251)', () => {
@@ -871,7 +882,7 @@ describe('CarrefourCatalogRunner', () => {
     });
 
     it('skips the pass after an abort', async () => {
-      const { runner } = await crawl(
+      const { runner, runContext } = await crawl(
         { '/supermercado/x/cat2/c?offset=24': 1 },
         { abortAfter: '/supermercado/x/cat4/c?offset=0' }
       );
@@ -882,6 +893,71 @@ describe('CarrefourCatalogRunner', () => {
         '/supermercado/x/cat2/c?offset=24',
         '/supermercado/x/cat4/c?offset=0',
       ]);
+      // The refused category stays unread and is counted once, as before.
+      expect(failedOf(runContext)).toBe(1);
+    });
+
+    describe('failed counts the categories left unread', () => {
+      it('counts nothing for a category refused on the walk and read by the end pass', async () => {
+        const { runContext } = await crawl({
+          '/supermercado/x/cat2/c?offset=24': 1,
+        });
+
+        expect(runContext.setReport).toHaveBeenCalledWith(
+          expect.objectContaining({
+            unreadableCategories: [],
+            askedAgain: [{ id: 'cat2', name: 'Pastas', read: true }],
+          })
+        );
+        expect(failedOf(runContext)).toBe(0);
+      });
+
+      it('counts one when the pass reads one category and not the other', async () => {
+        const { runContext } = await crawl({
+          '/supermercado/x/cat2/c?offset=24': 1,
+          '/supermercado/x/cat3/c?offset=0': 2,
+        });
+
+        expect(failedOf(runContext)).toBe(1);
+      });
+
+      it('counts once a category the pass did not ask because it stopped at a refusal', async () => {
+        // Pastas is refused again and ends the pass. Caldos is never asked.
+        const { runContext } = await crawl({
+          '/supermercado/x/cat2/c?offset=24': 2,
+          '/supermercado/x/cat3/c?offset=0': 1,
+        });
+
+        expect(failedOf(runContext)).toBe(2);
+      });
+
+      it('counts each once when the pass cannot start after a refusal in a row', async () => {
+        const { runContext } = await crawl(
+          {
+            '/supermercado/x/cat2/c?offset=24': 1,
+            '/supermercado/x/cat3/c?offset=0': 1,
+          },
+          { seed: [good, pastas, between, caldos] }
+        );
+
+        expect(failedOf(runContext)).toBe(2);
+      });
+
+      it('leaves processed and products as they were', async () => {
+        const { runContext } = await crawl({
+          '/supermercado/x/cat2/c?offset=24': 1,
+          '/supermercado/x/cat3/c?offset=0': 2,
+        });
+
+        const processed = (runContext.report as jest.Mock).mock.calls.reduce(
+          (sum: number, [counters]: [{ processed?: number }]) =>
+            sum + (counters.processed ?? 0),
+          0
+        );
+        // p1, p2, p4, p6 on the walk, p3 in the end pass; Caldos read none.
+        expect(processed).toBe(5);
+        expect(report.products).toHaveLength(5);
+      });
     });
   });
 
@@ -1618,7 +1694,8 @@ describe('CarrefourCatalogRunner', () => {
           askedAgain: [],
         })
       );
-      expect(runContext.report).toHaveBeenCalledWith({ failed: 1 });
+      // Bebidas and Ofertas, each once, though the pass asked neither.
+      expect(failedOf(runContext)).toBe(2);
     });
 
     it('does not declare a crawl whole when a page answered 404 part way, and does not ask it again', async () => {
@@ -1644,6 +1721,26 @@ describe('CarrefourCatalogRunner', () => {
           ),
         })
       );
+      // Never asked again, so counted once and at once: before Ofertas, the
+      // next category, reports its progress.
+      expect(failedOf(runContext)).toBe(1);
+      const calls = (runContext.report as jest.Mock).mock.calls.map(
+        ([counters]) => counters
+      );
+      expect(calls).toEqual([
+        { processed: 1 },
+        { failed: 1 },
+        { processed: 1 },
+      ]);
+    });
+
+    it('counts nothing for a page a 503 cut that the end pass reads', async () => {
+      const runner = new StatusRunner(states(), {
+        '/supermercado/x/cat1/c?offset=24': [503],
+      });
+      const runContext = await crawl(runner);
+
+      expect(failedOf(runContext)).toBe(0);
     });
 
     it('does not declare a crawl whole when an empty page still states rows', async () => {
@@ -2347,6 +2444,25 @@ describe('CarrefourCatalogRunner', () => {
           })
         );
         expect(report.notWhole[0].reason).toBe('unreadable');
+        // The three asked and the one the stop left, each once.
+        expect(failedOf(runContext)).toBe(4);
+      });
+
+      it('counts once a category the stop left unasked, and not one the pass read before it', async () => {
+        // The pass reads cat1, fails cat2 to cat4 and stops before cat5.
+        const categories = lostOf(5);
+        const runner = new StatusRunner(pagesOf(categories), {
+          [first('cat1')]: [503],
+          [first('cat2')]: [503, 503],
+          [first('cat3')]: [503, 503],
+          [first('cat4')]: [503, 503],
+          [first('cat5')]: [503],
+        });
+        const runContext = await crawl(runner);
+
+        expect(asksOf(runner, first('cat1'))).toBe(2);
+        expect(asksOf(runner, first('cat5'))).toBe(1);
+        expect(failedOf(runContext)).toBe(4);
       });
 
       it('counts again from nothing after a category the pass reads', async () => {

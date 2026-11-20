@@ -181,6 +181,10 @@ export class CarrefourCatalogRunner implements CatalogRunner {
               `failed: ${String(error)}`
           );
           unreadable.push(category.url);
+          // One the end pass will never ask is counted now. One it may ask
+          // waits for {@link countUnread}, so a category it reads is never
+          // counted and no count is taken back.
+          const counted = !askable(error);
           lost.set(category.url, {
             category,
             page: cursor.page,
@@ -188,8 +192,11 @@ export class CarrefourCatalogRunner implements CatalogRunner {
             stated: cursor.stated,
             error,
             askedAgain: false,
+            counted,
           });
-          await context.report({ failed: 1 });
+          if (counted) {
+            await context.report({ failed: 1 });
+          }
         } finally {
           // Whether the walk ended or failed: a page that stated a total past
           // the ceiling says rows go unserved however the walk ended.
@@ -210,6 +217,9 @@ export class CarrefourCatalogRunner implements CatalogRunner {
           truncated
         );
       }
+      // After the pass, or in its place when a block, an abort or a refusal
+      // in a row kept it from starting: every lost category still unread.
+      await countUnread(context, lost);
 
       // --- 3. What only the whole walk can say -----------------------------
       // Every product was reported at its first sighting (plan 0267), and the
@@ -559,8 +569,8 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       } finally {
         this.noteCeiling(context, truncated, entry.category, entry.stated);
       }
-      // Read this time: it is no longer unread. Its first failure stays
-      // counted in `failed`, because that page did fail.
+      // Read this time: it is no longer unread, and so it is never counted
+      // in `failed`, which counts the categories the run did not read.
       failuresInARow = 0;
       entry.error = null;
       unreadable.splice(unreadable.indexOf(entry.category.url), 1);
@@ -787,6 +797,38 @@ interface LostCategory {
   error: unknown;
   /** Whether the end pass asked for it once more. */
   askedAgain: boolean;
+  /**
+   * Whether it is in `failed` yet. A category the end pass will never ask is
+   * counted when it fails; one it may ask, when the pass has settled it.
+   */
+  counted: boolean;
+}
+
+/**
+ * Count in `failed` every lost category the end pass left unread and that is
+ * not counted yet, once (plan 0251).
+ *
+ * `failed` counts categories the run did not read, and it feeds the failure
+ * ratio the executor reads when the run ends. A category the pass read is
+ * not one of them, so the count of an askable category waits for the pass
+ * rather than being taken back: the counters only ever add. A category the
+ * pass did not reach, because a refusal, three failures in a row, an abort
+ * or a block stopped it, is counted here as unread.
+ */
+async function countUnread(
+  context: RunContext,
+  lost: ReadonlyMap<string, LostCategory>
+): Promise<void> {
+  let unread = 0;
+  for (const entry of lost.values()) {
+    if (!entry.counted && entry.error !== null) {
+      entry.counted = true;
+      unread += 1;
+    }
+  }
+  if (unread > 0) {
+    await context.report({ failed: unread });
+  }
 }
 
 /**
