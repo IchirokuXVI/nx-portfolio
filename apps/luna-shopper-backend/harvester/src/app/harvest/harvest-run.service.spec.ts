@@ -42,6 +42,7 @@ import type { PlatformAdminService } from './platform-admin.service';
 import type { RunExecutor } from './run-executor.service';
 import type { SourceEntryService } from './source-entry.service';
 import type { SupermarketSourceService } from './supermarket-source.service';
+import { walkConfigFingerprint } from './walk-fingerprint';
 
 const ADMIN = 'owner-1';
 const SUPERMARKET = '5efa0000-0000-4000-a000-000000000001';
@@ -2591,5 +2592,101 @@ describe('deza keys: the guard asks only about a DEZA catalog walk (plan 0272)',
       subject.refusal(deza, HarvestRunMode.CATALOG_DISCOVERY)
     ).resolves.toBe(dezaKeysRefusal(1));
     expect(query).toHaveBeenCalledWith(expect.any(String), [SUPERMARKET]);
+  });
+});
+
+/**
+ * What a walk ran under outside its request (owner decisions 130b and 127b).
+ * The spawn stores a digest of the source row's adapter and config, and the
+ * adapter itself, on the run, and never the config.
+ */
+describe('HarvestRunService.spawn, the walk configuration', () => {
+  it('stores the fingerprint of the source row and its adapter on a walk', async () => {
+    const config = { seedPath: '/supermercado/frescos/cat20002/c' };
+    const { service, store } = build({
+      source: { adapterKey: 'carrefour-web', config },
+    });
+
+    const view = await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.CATALOG_DISCOVERY,
+      supermarketId: SUPERMARKET,
+      priceScopeId: 'a-scope',
+    });
+
+    const expected = walkConfigFingerprint({
+      adapterKey: 'carrefour-web',
+      config,
+    });
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceId: 'src-1',
+        configFingerprint: expected,
+        adapterKey: 'carrefour-web',
+      })
+    );
+    expect(view.configFingerprint).toBe(expected);
+    expect(view.adapterKey).toBe('carrefour-web');
+    // The digest and never the config: nothing of it reaches the view.
+    expect(JSON.stringify(view)).not.toContain('cat20002');
+  });
+
+  it('stores a different fingerprint for a different config, and the same one for another rate', async () => {
+    const spawnWith = async (source: Partial<SupermarketSource>) => {
+      const { service, store } = build({ source });
+      await service.spawn({
+        userId: ADMIN,
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
+        priceScopeIds: [SCOPE],
+      });
+      return (store.create as jest.Mock).mock.calls[0][0].configFingerprint;
+    };
+    const base = await spawnWith({ config: { warehouse: '4661' } });
+    expect(await spawnWith({ config: { warehouse: '4661' }, workers: 1 })).toBe(
+      base
+    );
+    expect(await spawnWith({ config: { warehouse: '9999' } })).not.toBe(base);
+  });
+
+  it('stores neither on a file import, which uses no source row', async () => {
+    const { service, store } = build({
+      source: { adapterKey: 'mercadona-api' },
+    });
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.FILE_IMPORT,
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+      supermarketId: SUPERMARKET,
+      priceScopeId: SCOPE,
+      document: harvestDocument(),
+    });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceId: null,
+        configFingerprint: null,
+        adapterKey: null,
+      })
+    );
+  });
+
+  it('stores neither on an OpenStreetMap store discovery, which names no chain', async () => {
+    const { service, store } = build();
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.STORE_DISCOVERY,
+      postalCode: '14013',
+    });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceId: null,
+        configFingerprint: null,
+        adapterKey: null,
+      })
+    );
   });
 });

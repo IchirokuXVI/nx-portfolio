@@ -44,7 +44,26 @@ describe('adapterCapabilities', () => {
       stockIndicator: null,
       provesDelisting: false,
       refreshesOneProduct: false,
+      comparableWalkTotal: false,
     });
+  });
+
+  it('states that every walk total compares between runs but DEZA (owner decision 127b)', () => {
+    const notComparable = ADAPTER_KEYS.filter(
+      (key) => !ADAPTER_CAPABILITIES[key].comparableWalkTotal
+    );
+    expect(notComparable).toEqual(['deza-web']);
+    for (const key of ADAPTER_KEYS) {
+      expect(typeof ADAPTER_CAPABILITIES[key].comparableWalkTotal).toBe(
+        'boolean'
+      );
+    }
+    // A run whose adapter is unknown or absent draws no estimate.
+    expect(adapterCapabilities('not-an-adapter').comparableWalkTotal).toBe(
+      false
+    );
+    expect(adapterCapabilities(null).comparableWalkTotal).toBe(false);
+    expect(adapterCapabilities(undefined).comparableWalkTotal).toBe(false);
   });
 
   it('states which adapters can refresh one product alone (plan 0216, section 6)', () => {

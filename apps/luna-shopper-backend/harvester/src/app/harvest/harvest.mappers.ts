@@ -146,6 +146,11 @@ export function toHarvestRunView(row: HarvestRun): HarvestRunView {
     // Owner decision 114a. The run's own request, read back from what it
     // stored, and null when that cannot be read.
     input: readRunInput(row.mode, row.input),
+    // Owner decisions 130b and 127b. What the walk ran under outside its
+    // request, as a digest, and the adapter of its row. A run stored before
+    // the columns reads null in both, which draws no estimate from it.
+    configFingerprint: row.configFingerprint ?? null,
+    adapterKey: row.adapterKey ?? null,
     // Plan 0206. The schedule that started it, and whether a shutdown or the
     // reaper ended it rather than a person.
     scheduleId: row.scheduleId ?? null,

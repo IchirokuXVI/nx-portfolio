@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   HarvestRunMode,
   HarvestRunStatus,
+  type AdapterKey,
   type HarvestRunStopReason,
   type HarvestRunTrigger,
   type HarvestRunWarning,
@@ -155,6 +156,13 @@ export class HarvestRunStore {
     presetId?: string | null;
     /** The schedule that started the run (plan 0206), null for every other. */
     scheduleId?: string | null;
+    /**
+     * The digest of the source row's adapter and config the run walks under
+     * (owner decision 130b), null for a run with no source row.
+     */
+    configFingerprint?: string | null;
+    /** That row's adapter (owner decision 127b), null where the digest is. */
+    adapterKey?: AdapterKey | null;
   }): Promise<HarvestRun> {
     try {
       return await this.runs.save(
@@ -170,6 +178,8 @@ export class HarvestRunStore {
           documentSha256: input.documentSha256 ?? null,
           presetId: input.presetId ?? null,
           scheduleId: input.scheduleId ?? null,
+          configFingerprint: input.configFingerprint ?? null,
+          adapterKey: input.adapterKey ?? null,
           status: HarvestRunStatus.PENDING,
           requestedAt: new Date(),
         })

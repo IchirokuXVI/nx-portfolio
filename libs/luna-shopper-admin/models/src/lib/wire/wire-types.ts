@@ -4514,7 +4514,7 @@ export type GatewayLegalSettingsView = {
 /**
  * `harvest.AdapterCapabilityTable` in the gateway's OpenAPI document.
  *
- * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. `stockIndicator` is how the source tells stock: `per-shop` when it names the shops that carry a product, `per-scope` when each listed row or a scoped answer states it, and null when it says nothing about stock. `provesDelisting` means a walk can read the whole listing of a scope, so a product the listing did not name counts as a miss. A reader that does not know an adapter must answer no to every boolean, null to the language, null to the band and null to the stock indicator rather than throw.
+ * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. `stockIndicator` is how the source tells stock: `per-shop` when it names the shops that carry a product, `per-scope` when each listed row or a scoped answer states it, and null when it says nothing about stock. `provesDelisting` means a walk can read the whole listing of a scope, so a product the listing did not name counts as a miss. `comparableWalkTotal` means the count of one finished walk says about how big the next walk of the source is, so an earlier total may be drawn as an estimate; false for `deza-web`, whose capped queries can count different totals for one assortment. A reader that does not know an adapter must answer no to every boolean, null to the language, null to the band and null to the stock indicator rather than throw.
  */
 export const HarvestAdapterCapabilityTable = {
   'mercadona-api': {
@@ -4531,6 +4531,7 @@ export const HarvestAdapterCapabilityTable = {
     stockIndicator: 'per-scope',
     provesDelisting: true,
     refreshesOneProduct: true,
+    comparableWalkTotal: true,
   },
   'deza-web': {
     writesPrices: false,
@@ -4543,6 +4544,7 @@ export const HarvestAdapterCapabilityTable = {
     stockIndicator: 'per-shop',
     provesDelisting: false,
     refreshesOneProduct: false,
+    comparableWalkTotal: false,
   },
   'carrefour-web': {
     writesPrices: true,
@@ -4555,6 +4557,7 @@ export const HarvestAdapterCapabilityTable = {
     stockIndicator: null,
     provesDelisting: false,
     refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
   'lidl-api': {
     writesPrices: true,
@@ -4567,6 +4570,7 @@ export const HarvestAdapterCapabilityTable = {
     stockIndicator: null,
     provesDelisting: false,
     refreshesOneProduct: true,
+    comparableWalkTotal: true,
   },
   'eljamon-web': {
     writesPrices: true,
@@ -4579,6 +4583,7 @@ export const HarvestAdapterCapabilityTable = {
     stockIndicator: null,
     provesDelisting: true,
     refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
   'dia-api': {
     writesPrices: true,
@@ -4594,6 +4599,7 @@ export const HarvestAdapterCapabilityTable = {
     stockIndicator: 'per-scope',
     provesDelisting: true,
     refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
   'osm-places': {
     writesPrices: false,
@@ -4606,6 +4612,7 @@ export const HarvestAdapterCapabilityTable = {
     stockIndicator: null,
     provesDelisting: false,
     refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
   manual: {
     writesPrices: false,
@@ -4618,13 +4625,14 @@ export const HarvestAdapterCapabilityTable = {
     stockIndicator: null,
     provesDelisting: false,
     refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
 } as const;
 
 /**
  * `harvest.AdapterCapabilityTable` in the gateway's OpenAPI document.
  *
- * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. `stockIndicator` is how the source tells stock: `per-shop` when it names the shops that carry a product, `per-scope` when each listed row or a scoped answer states it, and null when it says nothing about stock. `provesDelisting` means a walk can read the whole listing of a scope, so a product the listing did not name counts as a miss. A reader that does not know an adapter must answer no to every boolean, null to the language, null to the band and null to the stock indicator rather than throw.
+ * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. `stockIndicator` is how the source tells stock: `per-shop` when it names the shops that carry a product, `per-scope` when each listed row or a scoped answer states it, and null when it says nothing about stock. `provesDelisting` means a walk can read the whole listing of a scope, so a product the listing did not name counts as a miss. `comparableWalkTotal` means the count of one finished walk says about how big the next walk of the source is, so an earlier total may be drawn as an estimate; false for `deza-web`, whose capped queries can count different totals for one assortment. A reader that does not know an adapter must answer no to every boolean, null to the language, null to the band and null to the stock indicator rather than throw.
  */
 export type HarvestAdapterCapabilityTable =
   typeof HarvestAdapterCapabilityTable;
@@ -4755,6 +4763,30 @@ export type HarvestHarvestDocument = {
 };
 
 /**
+ * `harvest.HarvestRunInputRecord` in the gateway's OpenAPI document.
+ */
+export type HarvestHarvestRunInputRecord = {
+  mode: EnumsHarvestRunMode;
+  priceScopeId?: string;
+  priceScopeIds?: string[];
+  postalCode?: string;
+  country?: string;
+  radiusMetres?: number;
+  brandKeys?: string[];
+  postalCodes?: string[];
+  detailBackfill?: boolean;
+  scopeCopies?: {
+    from: string;
+    to: string[];
+  }[];
+  writes?: EnumsHarvestRunWrites;
+  details?: EnumsHarvestDetailFetch;
+  sourceKind?: EnumsPriceSourceKind;
+  validFrom?: string;
+  validUntil?: string;
+};
+
+/**
  * `harvest.HarvestRunPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -4855,7 +4887,9 @@ export type HarvestHarvestRunView = {
   revertedByUserId: string | null;
   revertedPriceCount: number | null;
   presetId?: string | null;
-  input?: HarvestHarvestRunPresetInput | null;
+  input?: HarvestHarvestRunInputRecord | null;
+  configFingerprint?: string | null;
+  adapterKey?: EnumsAdapterKey | null;
   scheduleId?: string | null;
   interrupted?: boolean;
   stopReason?: EnumsHarvestRunStopReason | null;

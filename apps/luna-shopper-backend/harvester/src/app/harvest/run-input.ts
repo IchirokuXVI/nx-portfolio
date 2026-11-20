@@ -2,6 +2,8 @@ import {
   HarvestDetailFetch,
   HarvestRunMode,
   HarvestRunWrites,
+  PriceSourceKind,
+  type HarvestRunInputRecord,
   type HarvestRunPresetInput,
   type ScopeCopy,
 } from '@portfolio/luna-shopper/contracts';
@@ -11,7 +13,8 @@ class Unreadable extends Error {}
 
 /**
  * The run's own request, read back from `harvest_runs.input` in a preset's
- * input shape (owner decision 114a), or null when it cannot be read.
+ * input shape (owner decision 114a), with a file import's source kind and
+ * window (owner decision 129b), or null when it cannot be read.
  *
  * **A record of what ran, not a request.** It has a preset's input type for
  * its shape only, and it states resolved values (`writes` and `details` are
@@ -26,14 +29,14 @@ class Unreadable extends Error {}
  * stored it ran. Null is the honest answer then: a run whose request is
  * partly read would be drawn as a run that asked for less.
  *
- * What the spawn stores beside the request and a preset does not hold is left
- * out: the chain (the run's own column), a file import's document (its digest
- * is the run's `documentSha256`), source kind and window.
+ * Two things the spawn stores beside the request are left out: the chain (the
+ * run's own column) and a file import's document (its digest is the run's
+ * `documentSha256`).
  */
 export function readRunInput(
   mode: HarvestRunMode,
   stored: unknown
-): HarvestRunPresetInput | null {
+): HarvestRunInputRecord | null {
   if (!isBag(stored)) {
     return null;
   }
@@ -44,10 +47,7 @@ export function readRunInput(
       case HarvestRunMode.STORE_DISCOVERY:
         return readStoreInput(stored);
       case HarvestRunMode.FILE_IMPORT:
-        return {
-          mode,
-          ...optionalId('priceScopeId', stored['priceScopeId']),
-        };
+        return readFileImportInput(stored);
       default:
         // A mode this build does not know, such as a row of a mode a plan
         // deleted.
@@ -88,6 +88,30 @@ function readCatalogInput(
       Object.values(HarvestDetailFetch),
       HarvestDetailFetch.ALL
     ),
+  };
+}
+
+/**
+ * What `validateFileImport` stores, less the document: the scope, the source
+ * kind and the window as resolved instants. A file import stored without a
+ * source kind or a window reads with that field absent, never null; the spawn
+ * stores both instants or neither.
+ */
+function readFileImportInput(
+  stored: Record<string, unknown>
+): HarvestRunInputRecord {
+  const sourceKind = optionalEnum(
+    stored['sourceKind'],
+    Object.values(PriceSourceKind)
+  );
+  const validFrom = optionalString(stored['validFrom']);
+  const validUntil = optionalString(stored['validUntil']);
+  return {
+    mode: HarvestRunMode.FILE_IMPORT,
+    ...optionalId('priceScopeId', stored['priceScopeId']),
+    ...(sourceKind !== undefined ? { sourceKind } : {}),
+    ...(validFrom !== undefined ? { validFrom } : {}),
+    ...(validUntil !== undefined ? { validUntil } : {}),
   };
 }
 
@@ -176,6 +200,20 @@ function copyList(value: unknown): ScopeCopy[] {
     }
     return { from: copy['from'], to: stringList(copy['to']) };
   });
+}
+
+/** An enum value that may be absent, and is refused when it is not one. */
+function optionalEnum<T extends string>(
+  value: unknown,
+  allowed: readonly T[]
+): T | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (!allowed.includes(value as T)) {
+    throw new Unreadable();
+  }
+  return value as T;
 }
 
 function enumValue<T extends string>(
