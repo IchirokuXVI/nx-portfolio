@@ -174,12 +174,18 @@ export function normalizeProduct(
   // The product's own breadcrumbs are on its page; the row's are the fall
   // back, as the row's need world path is (plan 0268). A page list that yields
   // no path, the empty `[]` included, is read as no list at all, so the row's
-  // list is used (owner decision 101b).
+  // list is used (owner decision 101b). A page list read only in part may hide
+  // a path the row names, so the row's list is added to its readable paths
+  // (owner decision 115b). Only a page list read in full stands alone.
   const readBreadcrumbs = readCategoryBreadcrumbs(state);
   const pageBreadcrumbs =
     readBreadcrumbs !== null && readBreadcrumbs.paths.length > 0
       ? readBreadcrumbs
       : null;
+  const breadcrumbs =
+    pageBreadcrumbs?.wholly === true
+      ? pageBreadcrumbs.paths
+      : [...(pageBreadcrumbs?.paths ?? []), ...(row.categoryBreadcrumbs ?? [])];
   const identifiers = readIdentifiers(readArray(state, 'eans'));
   const sizeFormat =
     readString(readRecord(readRecord(state, 'price'), 'packaging'), 'text') ??
@@ -203,14 +209,12 @@ export function normalizeProduct(
     siteCategory: readString(state, 'category') ?? row.siteCategory,
     categoryPath,
     categorySlug: resolveCategory(categoryPath),
-    categoryPaths: categoryPathsOf(
-      categoryPath,
-      pageBreadcrumbs?.paths ?? row.categoryBreadcrumbs ?? []
-    ),
+    categoryPaths: categoryPathsOf(categoryPath, breadcrumbs),
     // Only a page list that is not empty and was read in full states every
     // path (plan 0268): a part the code could not read may name a path a
     // REPLACE would drop, and an empty list states nothing (owner decision
-    // 95b). The row's list never makes the paths stated.
+    // 95b). This is the same test that keeps the row's list out of
+    // `breadcrumbs` above, so the row's list never meets a stated list.
     categoryPathsStated:
       pagePrimary.length > 0 && pageBreadcrumbs?.wholly === true,
     // A weight the chain does not promise is no size (plan 0244, section
@@ -474,7 +478,8 @@ function pickPath(fromPage: string[], fromRow: string[]): string[] {
  * empty list `[]` is read wholly and stays a list of no path. For an index
  * row that is kept as it is. {@link normalizeProduct} reads a page list of no
  * path as no list at all: it does not hide the row's list (owner decision
- * 101b) and it is no statement (owner decision 95b).
+ * 101b) and it is no statement (owner decision 95b). A page list that is not
+ * read wholly adds the row's list to its readable paths (owner decision 115b).
  */
 function readCategoryBreadcrumbs(
   holder: Json

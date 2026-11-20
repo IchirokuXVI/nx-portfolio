@@ -136,10 +136,12 @@ export interface LidlProduct {
   /**
    * Every category path the chain files the product under (plan 0268): the
    * need world path {@link categoryPath} first, when there is one, then each
-   * path of `wonCategoryBreadcrumbs`, without repeats. Names verbatim. The
-   * page's list is used when it yields at least one path; a page that leaves
-   * the list out, states it empty, or states one of which no path can be read
-   * falls back to the index row's list (owner decision 101b).
+   * path of `wonCategoryBreadcrumbs`, without repeats. Names verbatim. A page
+   * list read in full that yields at least one path is used alone. A page that
+   * leaves the list out, states it empty, or states one of which no path can
+   * be read falls back to the index row's list (owner decision 101b). A page
+   * list read only in part gives its readable paths and then the row's paths
+   * (owner decision 115b).
    */
   categoryPaths: string[][];
   /**

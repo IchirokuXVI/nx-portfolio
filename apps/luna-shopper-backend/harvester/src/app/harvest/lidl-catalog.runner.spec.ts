@@ -1038,6 +1038,61 @@ describe('LidlCatalogRunner', () => {
       ]);
     });
 
+    it('adds the breadcrumbs of the index row to a page list read only in part, as ADD (owner decision 115b)', async () => {
+      const runner = new TestRunner({
+        index: [
+          row({
+            id: '1',
+            title: 'Queso',
+            category: 'Food',
+            breadcrumbs: [AUTUMN, SHOP],
+          }),
+        ],
+        products: {
+          '/p/x/p1': product({
+            id: '1',
+            groups: priced,
+            rawBreadcrumbs: [
+              [
+                { id: '1', name: 'Alimentación' },
+                { id: '2', name: 'Quesos' },
+              ],
+              [{ id: '3' }],
+            ],
+          }),
+        },
+      });
+
+      await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+      // SHOP is on both lists and is written once.
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: '1', paths: [QUESO, SHOP, AUTUMN], mode: 'ADD' },
+      ]);
+    });
+
+    it('leaves the breadcrumbs of the index row out beside a page list read in full, as REPLACE', async () => {
+      const runner = new TestRunner({
+        index: [
+          row({
+            id: '1',
+            title: 'Queso',
+            category: 'Food',
+            breadcrumbs: [AUTUMN],
+          }),
+        ],
+        products: {
+          '/p/x/p1': product({ id: '1', groups: priced, breadcrumbs: [SHOP] }),
+        },
+      });
+
+      await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: '1', paths: [QUESO, SHOP], mode: 'REPLACE' },
+      ]);
+    });
+
     it('says ADD for a page that states an empty list, so a path stored earlier survives (owner decision 95b)', async () => {
       const runner = new TestRunner({
         index: [row({ id: '1', title: 'Queso', category: 'Food' })],

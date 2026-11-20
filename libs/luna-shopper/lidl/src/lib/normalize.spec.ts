@@ -492,6 +492,103 @@ describe('every path a product is filed under (plan 0268)', () => {
     expect(product?.categoryPathsStated).toBe(false);
   });
 
+  describe('a page list read only in part (owner decision 115b)', () => {
+    const partPage = {
+      keyfacts: { wonCategoryPrimary: NEED_WORLD_QUESO.join('/') },
+      wonCategoryBreadcrumbs: [[{ name: 'Alimentación' }], [{ id: 'x' }]],
+    };
+
+    it('adds the row list to the readable paths of the page list', () => {
+      const product = normalizeProduct(partPage, {
+        row: {
+          ...emptyRow('1'),
+          categoryBreadcrumbs: [['Hogar y decoración', 'Cocina']],
+        },
+        observedAt: OBSERVED_AT,
+      });
+
+      expect(product?.categoryPaths).toEqual([
+        NEED_WORLD_QUESO,
+        ['Alimentación'],
+        ['Hogar y decoración', 'Cocina'],
+      ]);
+      // The row's list proves nothing, and the page's list was not read in
+      // full: the paths are not stated.
+      expect(product?.categoryPathsStated).toBe(false);
+    });
+
+    it('adds no path from a row whose own list is empty', () => {
+      const product = normalizeProduct(partPage, {
+        row: { ...emptyRow('1'), categoryBreadcrumbs: [] },
+        observedAt: OBSERVED_AT,
+      });
+
+      expect(product?.categoryPaths).toEqual([
+        NEED_WORLD_QUESO,
+        ['Alimentación'],
+      ]);
+      expect(product?.categoryPathsStated).toBe(false);
+    });
+
+    it('adds no path from a row whose own list is unreadable', () => {
+      const row = normalizeListRow(
+        { productId: '1' },
+        { wonCategoryBreadcrumbs: [[{ id: '1', label: 'Cocina' }]] }
+      );
+      if (!row) {
+        throw new Error('the row has an id');
+      }
+      const product = normalizeProduct(partPage, {
+        row,
+        observedAt: OBSERVED_AT,
+      });
+
+      expect(product?.categoryPaths).toEqual([
+        NEED_WORLD_QUESO,
+        ['Alimentación'],
+      ]);
+      expect(product?.categoryPathsStated).toBe(false);
+    });
+
+    it('drops a row path the page list already names', () => {
+      const product = normalizeProduct(partPage, {
+        row: {
+          ...emptyRow('1'),
+          categoryBreadcrumbs: [['Alimentación'], ['Hogar y decoración']],
+        },
+        observedAt: OBSERVED_AT,
+      });
+
+      expect(product?.categoryPaths).toEqual([
+        NEED_WORLD_QUESO,
+        ['Alimentación'],
+        ['Hogar y decoración'],
+      ]);
+    });
+
+    it('still ignores the row list beside a page list read in full', () => {
+      const product = normalizeProduct(
+        {
+          keyfacts: { wonCategoryPrimary: NEED_WORLD_QUESO.join('/') },
+          wonCategoryBreadcrumbs: [[{ name: 'Alimentación' }]],
+        },
+        {
+          row: {
+            ...emptyRow('1'),
+            categoryBreadcrumbs: [['Hogar y decoración', 'Cocina']],
+          },
+          observedAt: OBSERVED_AT,
+        }
+      );
+
+      expect(product?.categoryPaths).toEqual([
+        NEED_WORLD_QUESO,
+        ['Alimentación'],
+      ]);
+      expect(product?.categoryPathsStated).toBe(true);
+    });
+  });
+
   it('reads a list that is not empty and of which nothing is readable as no list', () => {
     // A renamed field: every node is of another shape.
     const product = normalizeProduct(
