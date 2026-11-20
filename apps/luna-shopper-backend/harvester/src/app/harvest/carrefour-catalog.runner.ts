@@ -86,6 +86,12 @@ export class CarrefourCatalogRunner implements CatalogRunner {
         0
       );
       await context.setTotalPlanned(planned);
+      /**
+       * The plan as the run states it. It starts as the frontier's sum and is
+       * raised when a category is found to have grown (owner decision 104b),
+       * so `processed` never passes `totalPlanned` (plan 0217).
+       */
+      const plan = { total: planned };
       this.logger.log(
         `Run ${context.runId}: ${frontier.categories.length} category(ies) ` +
           `holding ${planned} listing(s), found in ${frontier.loads} load(s)`
@@ -118,7 +124,7 @@ export class CarrefourCatalogRunner implements CatalogRunner {
         if (context.signal.aborted) {
           break;
         }
-        const cursor = { page: 0 };
+        const cursor = { page: 0, total: category.totalResults };
         try {
           await this.pageCategory(
             context,
@@ -126,7 +132,8 @@ export class CarrefourCatalogRunner implements CatalogRunner {
             report,
             category,
             products,
-            cursor
+            cursor,
+            plan
           );
         } catch (error) {
           // **The block is the one failure a category may not swallow** (plan
@@ -151,7 +158,8 @@ export class CarrefourCatalogRunner implements CatalogRunner {
           // in the report, which is the same shape an unreadable node produces
           // and reads the same way to an operator. A category the walk ended
           // early on a 5xx, a 404 or an empty page that still states rows
-          // lands here too, so it is never counted as read.
+          // lands here too, so it is not counted as read. Only the end pass
+          // can change that, for a refusal or a 5xx it reads the second time.
           this.logger.warn(
             `Run ${context.runId}: category ${category.id} (${category.name}) ` +
               `failed: ${String(error)}`
@@ -160,6 +168,7 @@ export class CarrefourCatalogRunner implements CatalogRunner {
           lost.set(category.url, {
             category,
             page: cursor.page,
+            total: cursor.total,
             error,
             askedAgain: false,
           });
@@ -167,7 +176,7 @@ export class CarrefourCatalogRunner implements CatalogRunner {
         }
       }
 
-      // --- 2b. Once more, at the end, for a category refused once ----------
+      // --- 2b. Once more, at the end, for a refusal or a 5xx --------------
       if (blocked === null && !context.signal.aborted) {
         blocked = await this.askAgain(
           context,
@@ -175,16 +184,18 @@ export class CarrefourCatalogRunner implements CatalogRunner {
           report,
           products,
           unreadable,
-          lost
+          lost,
+          plan
         );
       }
 
       // --- 3. What only the whole walk can say -----------------------------
-      // Every product was reported at its first sighting (plan 0267). The sink
-      // writes what is left of the last chunk when the run drains.
+      // Every product was reported at its first sighting (plan 0267), and the
+      // sink wrote a chunk each time one filled. What is left of the last
+      // chunk is written when the run drains, so the stage says "writing".
       await context.setStage(
         'INGEST',
-        `Finishing the walk: ${products.size} product(s) recorded as they were read`
+        `Finishing the walk: writing the last of ${products.size} product(s) read`
       );
       if (!context.signal.aborted) {
         warnUnread(context, unreadable, lost);
@@ -271,41 +282,111 @@ export class CarrefourCatalogRunner implements CatalogRunner {
     report: RunReport,
     category: CarrefourCategory,
     products: Map<string, string[][]>,
-    cursor: { page: number }
+    cursor: { page: number; total: number },
+    plan: { total: number }
   ): Promise<void> {
     let seen = 0;
+    const before = cursor.total;
     // The page after the last one that answered is the page that failed, and
-    // the one the end pass starts from (plan 0251).
-    const walk = client.walkCategory(category, (_listing, page) => {
+    // the one the end pass starts from (plan 0251). The total is the one that
+    // bounds the walk's last page (owner decision 104b).
+    const walk = client.walkCategory(category, (_listing, page, total) => {
       cursor.page = page + 1;
+      cursor.total = Math.max(cursor.total, total);
     });
+    let failure: { error: unknown } | null = null;
     try {
       for await (const product of walk) {
         seen += 1;
         reportFirstSighting(report, products, product);
       }
-    } finally {
-      // **Progress, and a heartbeat with it.** The first crawl reported
-      // nothing between the frontier and the snapshot, so an hour of paging
-      // looked identical to a run that had stopped, and it was a stopped run
-      // that showed it. A category is the smallest unit worth a row: 86 of
-      // them over an hour is a number that moves, without a write per page.
-      // A category that failed part way counts the listings it did page.
+    } catch (error) {
+      failure = { error };
+    }
+    // **Progress, and a heartbeat with it.** The first crawl reported nothing
+    // between the frontier and the snapshot, so an hour of paging looked
+    // identical to a run that had stopped, and it was a stopped run that
+    // showed it. A category is the smallest unit worth a row: 86 of them over
+    // an hour is a number that moves, without a write per page. A category
+    // that failed part way counts the listings it did page.
+    await this.settle(context, plan, before, cursor.total, seen, failure);
+  }
+
+  /**
+   * The end of one walk of a category: the plan restated, then its progress,
+   * then the walk's own error, if it threw.
+   *
+   * The plan is written before the progress, so `processed` never passes it.
+   * **The walk's error wins.** Neither a failed plan write nor a failed
+   * progress report may replace an error the walk is already throwing,
+   * because a caller tells a block from a cut by that error's class: a
+   * `SourceBlockedError` that turned into a database error would leave the
+   * run crawling a source that is blocking it. A failed plan write also must
+   * not skip the progress of the listings the walk did page. Each such
+   * failure is logged, and the walk's error is thrown. When the walk did not
+   * throw, a failed progress report is thrown as it comes, and a failed plan
+   * write is thrown after the progress.
+   */
+  private async settle(
+    context: RunContext,
+    plan: { total: number },
+    before: number,
+    after: number,
+    seen: number,
+    failure: { error: unknown } | null
+  ): Promise<void> {
+    let planFailure: { error: unknown } | null = null;
+    try {
+      await restatePlan(context, plan, before, after);
+    } catch (error) {
+      planFailure = { error };
+    }
+    if (failure === null) {
       await context.report({ processed: seen });
+    } else {
+      try {
+        await context.report({ processed: seen });
+      } catch (error) {
+        this.logger.warn(
+          `Run ${context.runId}: the progress was not reported: ` +
+            String(error)
+        );
+      }
+    }
+    if (failure !== null) {
+      if (planFailure !== null) {
+        this.logger.warn(
+          `Run ${context.runId}: the planned total was not restated: ` +
+            String(planFailure.error)
+        );
+      }
+      throw failure.error;
+    }
+    if (planFailure !== null) {
+      throw planFailure.error;
     }
   }
 
   /**
    * The end pass of plan 0251 (D1 a): every category one isolated refusal
    * cost, asked for once more, after every other category, in the order they
-   * failed.
+   * failed. A category a 5xx cut short is asked in the same pass, in the same
+   * order, by the same rules (owner decision 103b): a 5xx is usually a passing
+   * blip, and the guard was never told of a refusal for it, so asking it again
+   * minutes later costs no more than any other page.
+   *
+   * **Each category is asked once in the pass and no more.** `askedAgain` is
+   * set before the ask, the list is fixed before the first one, and a
+   * category the pass cuts short again stays unread. So the pass asks at most
+   * one walk per lost category, each from the page that failed to at most the
+   * ceiling's 42 pages.
    *
    * **This is not the retry plan 0090 section 13 forbids.** That retry asks
    * the refused page again at once, inside the paging loop, which is how a
-   * refusal deepens into a block. This is one request per refused category,
-   * minutes later, through the same guard and pacing as every other page. A
-   * category is paged from the page that failed, and the products it gives
-   * are reported as the walk reports them.
+   * refusal deepens into a block. This is one more walk per category, from
+   * the page that failed, minutes later, through the same guard and pacing as
+   * every other page. A category is paged from the page that failed, and the
+   * products it gives are reported as the walk reports them.
    *
    * **A retry must never deepen a block** (plan 0090, section 13), and the
    * pass keeps two rules so that it cannot:
@@ -317,17 +398,22 @@ export class CarrefourCatalogRunner implements CatalogRunner {
    *   refusal was not isolated after all, and the next ask is the request
    *   that reaches the stop.
    *
-   * So the guard never stops the run inside the pass. A stop there would turn
-   * a completed walk into a `FAILED` run, send the refusal mail of plan 0218,
-   * count toward the three failures that stop the chain's schedules, and lose
-   * the `LISTING_UNREAD` warnings, which only a run that was not stopped
-   * writes. A category the pass did not ask keeps the warning the walk gave
-   * it, and the one refused again keeps its warning with the offset of the
-   * second refusal.
+   * So a guard that stops on two or more refusals in a row, as
+   * `CARREFOUR_REFUSAL_POLICY` does with three, never stops the run inside
+   * the pass: the pass meets at most one refusal, after a count of none. A
+   * guard with a window rule can still stop on that one refusal, when the walk
+   * left enough refusals inside its window, and then the pass answers the
+   * block. A stop there turns a completed walk into a `FAILED` run, sends the
+   * refusal mail of plan 0218, counts toward the three failures that stop the
+   * chain's schedules, and loses the `LISTING_UNREAD` warnings, which only a
+   * run that was not stopped writes. A category the pass did not ask keeps
+   * the warning the walk gave it, and the one refused again keeps its warning
+   * with the offset of the second refusal.
    *
-   * Only a refusal is asked again. A browser that stopped answering is a
-   * different failure, and a node the frontier walk could not open was never
-   * paged at all. Answers the block, when one stopped the pass.
+   * Only a refusal and a 5xx are asked again ({@link askable}). A browser that
+   * stopped answering is a different failure, and a node the frontier walk
+   * could not open was never paged at all. Answers the block, when one stopped
+   * the pass.
    */
   private async askAgain(
     context: RunContext,
@@ -335,33 +421,32 @@ export class CarrefourCatalogRunner implements CatalogRunner {
     report: RunReport,
     products: Map<string, string[][]>,
     unreadable: string[],
-    lost: ReadonlyMap<string, LostCategory>
+    lost: ReadonlyMap<string, LostCategory>,
+    plan: { total: number }
   ): Promise<unknown> {
-    const refused = [...lost.values()].filter(
-      (entry) => entry.error instanceof CarrefourHttpError
-    );
-    if (refused.length === 0) {
+    const again = [...lost.values()].filter((entry) => askable(entry.error));
+    if (again.length === 0) {
       return null;
     }
     const inARow = context.guard?.consecutiveRefusals ?? 0;
     if (inARow > 0) {
       this.logger.warn(
         `Run ${context.runId}: the walk ended on ${inARow} refusal(s) in a ` +
-          `row, so ${refused.length} refused category(ies) are not asked again`
+          `row, so ${again.length} category(ies) are not asked again`
       );
       return null;
     }
     await context.setStage(
       'ENUMERATE',
-      `Asking once more for ${refused.length} refused category(ies)`
+      `Asking once more for ${again.length} category(ies) the walk could not finish`
     );
-    for (const entry of refused) {
+    for (const entry of again) {
       if (context.signal.aborted) {
         return null;
       }
       entry.askedAgain = true;
       try {
-        await this.pageFrom(context, client, report, entry, products);
+        await this.pageFrom(context, client, report, entry, products, plan);
       } catch (error) {
         if (error instanceof SourceBlockedError) {
           this.logger.warn(`Run ${context.runId}: ${String(error)}`);
@@ -381,6 +466,8 @@ export class CarrefourCatalogRunner implements CatalogRunner {
           // one keeps the warning the walk gave it.
           return null;
         }
+        // Cut short again, by a 5xx or anything else: it stays unread and is
+        // not asked a third time, and the pass goes on to the next one.
         continue;
       }
       // Read this time: it is no longer unread. Its first failure stays
@@ -405,26 +492,34 @@ export class CarrefourCatalogRunner implements CatalogRunner {
     client: CarrefourClient,
     report: RunReport,
     entry: LostCategory,
-    products: Map<string, string[][]>
+    products: Map<string, string[][]>,
+    plan: { total: number }
   ): Promise<void> {
     const { category } = entry;
     let seen = 0;
-    // The page after the last one that answered is the page that failed.
+    const before = entry.total;
+    // The page after the last one that answered is the page that failed. The
+    // walk starts bounded by the total the first walk learned, not only the
+    // frontier's: the pages it now reads may state none, and a category that
+    // grew must still be paged to the end that walk saw (owner decision 104b).
     const walk = client.walkCategory(
       category,
-      (_listing, page) => {
+      (_listing, page, total) => {
         entry.page = page + 1;
+        entry.total = Math.max(entry.total, total);
       },
-      { fromPage: entry.page }
+      { fromPage: entry.page, knownTotal: entry.total }
     );
+    let failure: { error: unknown } | null = null;
     try {
       for await (const product of walk) {
         seen += 1;
         reportFirstSighting(report, products, product);
       }
-    } finally {
-      await context.report({ processed: seen });
+    } catch (error) {
+      failure = { error };
     }
+    await this.settle(context, plan, before, entry.total, seen, failure);
   }
 }
 
@@ -433,8 +528,8 @@ export class CarrefourCatalogRunner implements CatalogRunner {
  * the walk (plan 0267). A later sighting reports nothing.
  *
  * **17,135 is a count of category memberships and not of distinct products**
- * (plan 0090, section 7). The first sighting is the one kept, which is the
- * category path the walk reported when it reported at the end.
+ * (plan 0090, section 7). The first sighting is the one kept, so its category
+ * path is the one the observation carries.
  *
  * Every sighting keeps the path of its frontier category for the end of the
  * walk (plan 0268), once, so the first path is the one `categoryPath` holds.
@@ -457,6 +552,28 @@ function reportFirstSighting(
   report.product(observationOf(product, new Date()));
 }
 
+/**
+ * Raise the run's planned total by what one category was found to have grown
+ * (owner decision 104b), and write it before the category's progress.
+ *
+ * The plan is the frontier's sum of totals, and a walk now reads past a total
+ * that grew, so without this `processed` could pass `totalPlanned` (plan 0217,
+ * section 4). Only ever raised: a category that shrank keeps its planned
+ * share, as it did before.
+ */
+async function restatePlan(
+  context: RunContext,
+  plan: { total: number },
+  before: number,
+  after: number
+): Promise<void> {
+  if (after <= before) {
+    return;
+  }
+  plan.total += after - before;
+  await context.setTotalPlanned(plan.total);
+}
+
 function sameNames(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((name, i) => name === b[i]);
 }
@@ -475,7 +592,7 @@ function sameNames(a: readonly string[], b: readonly string[]): boolean {
  * It states no completeness here. A Carrefour crawl walks a frontier of
  * categories, and a product filed nowhere in it is unseen for a reason that
  * says nothing about stock. The crawl is handed over as a whole listing only
- * under the five conditions of {@link declareListing}.
+ * under the six conditions of {@link declareListing}.
  *
  * `observedAt` is the time the card was read (plan 0267). The price writer
  * needs no one value per run: it compares the values, and moves the clock of
@@ -532,10 +649,33 @@ interface LostCategory {
   category: CarrefourCategory;
   /** The page that failed, from 0. The end pass starts there. */
   page: number;
+  /**
+   * The largest total a walk of it was bounded by: the frontier's, or larger
+   * when a page stated that the category grew (owner decision 104b), and
+   * never above the ceiling, so a category whose pages state 1,200 warns "of
+   * 1008".
+   */
+  total: number;
   /** What it failed with, or null once the end pass read it. */
   error: unknown;
   /** Whether the end pass asked for it once more. */
   askedAgain: boolean;
+}
+
+/**
+ * Whether the end pass asks a lost category once more (plan 0251, owner
+ * decision 103b).
+ *
+ * A refusal, a 403 or a 429, and a category a 5xx cut short. A category a 404
+ * or an empty page cut short is not asked: those are answers about the page
+ * rather than a passing failure, and minutes later they are expected to answer
+ * the same. A browser that stopped answering is not asked either.
+ */
+function askable(error: unknown): boolean {
+  return (
+    error instanceof CarrefourHttpError ||
+    (error instanceof CarrefourShortCategoryError && error.transient)
+  );
 }
 
 /**
@@ -580,7 +720,7 @@ function warnUnread(
         category.name,
         `Category ${category.id} ${category.name}: ${cost} at offset ` +
           `${offset}${again}. The listings from there on, of ` +
-          `${category.totalResults}, were not read.`
+          `${entry.total}, were not read.`
       )
     );
   }
@@ -666,9 +806,9 @@ function describeRun(
     })),
     unreadableCategories: [...unreadable],
     /**
-     * The categories one refusal cost, asked for once more at the end (plan
-     * 0251), and whether that read them. A category read the second time is
-     * no longer in `unreadableCategories`.
+     * The categories one refusal or one 5xx cost, asked for once more at the
+     * end (plan 0251, owner decision 103b), and whether that read them. A
+     * category read the second time is no longer in `unreadableCategories`.
      */
     askedAgain: askedAgain.map((entry) => ({
       id: entry.category.id,

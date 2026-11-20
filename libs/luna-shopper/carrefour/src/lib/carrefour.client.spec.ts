@@ -135,6 +135,17 @@ describe('CarrefourClient', () => {
   const ok = (state: unknown) => () => ({ status: 200, state });
   const refused = () => ({ status: 403 });
 
+  /**
+   * The recorded listing page with its total restated. The recording states
+   * 1,726 results, and a walk now pages to the total a page states (owner
+   * decision 104b), so a test of a smaller category states its own.
+   */
+  const stating = (total: number): Record<string, unknown> => {
+    const state = JSON.parse(JSON.stringify(listingPage));
+    state.productCardList.results.total_results = total;
+    return state;
+  };
+
   it('reads a listing page through the session it was given', async () => {
     const listing = await clientOn(
       new FakeBrowser(ok(listingPage))
@@ -167,7 +178,7 @@ describe('CarrefourClient', () => {
     };
     // The same page twice: 30 products is two pages, and the second repeats the
     // first, which is what a product filed twice looks like.
-    const browser = new FakeBrowser(ok(listingPage));
+    const browser = new FakeBrowser(ok(stating(30)));
     const products = [];
     for await (const product of clientOn(browser).walkCategory(category)) {
       products.push(product);
@@ -247,6 +258,10 @@ describe('CarrefourClient', () => {
           page: 1,
           cost: `Carrefour answered ${status}`,
           url: second,
+          status,
+          // Only a 5xx is worth one more ask at the end (owner decision
+          // 103b); a 404 is an answer about the page.
+          transient: status >= 500,
         });
         // A gap is not a refusal: the guard is not told of a block, and the
         // walk may step over it like any other page that failed.
@@ -262,6 +277,8 @@ describe('CarrefourClient', () => {
       expect(error).toMatchObject({
         page: 1,
         cost: 'Carrefour answered a page with no page state',
+        status: null,
+        transient: false,
       });
     });
 
@@ -300,7 +317,7 @@ describe('CarrefourClient', () => {
     });
 
     it('ends without error at its last page', async () => {
-      const browser = new FakeBrowser(ok(listingPage));
+      const browser = new FakeBrowser(ok(stating(72)));
       const { products, pages, error } = await walk(browser);
       expect(error).toBeNull();
       // The same page three times, deduplicated within the category.
@@ -323,13 +340,269 @@ describe('CarrefourClient', () => {
     });
 
     it('starts from a later page when asked to', async () => {
-      const browser = new FakeBrowser(ok(listingPage));
+      const browser = new FakeBrowser(ok(stating(72)));
       const { pages } = await walk(browser, { fromPage: 1 });
       expect(pages).toEqual([1, 2]);
       expect(browser.asked).toEqual([
         second,
         'https://www.carrefour.es/supermercado/x/cat20003/c?offset=48',
       ]);
+    });
+
+    it('reads the rest from the page a 503 cut, when asked from it later (owner decision 103b)', async () => {
+      // The walk the end pass makes: the first ask met a 503 on the second
+      // page, and the second ask starts there and reaches the last page.
+      let blips = 1;
+      const browser = new FakeBrowser((url) => {
+        if (url === second && blips > 0) {
+          blips -= 1;
+          return { status: 503 };
+        }
+        return { status: 200, state: stating(72) };
+      });
+      const first = await walk(browser);
+      expect(first.error).toMatchObject({ page: 1, status: 503 });
+
+      const again = await walk(browser, {
+        fromPage: (first.error as CarrefourShortCategoryError).page,
+      });
+      expect(again.error).toBeNull();
+      expect(again.pages).toEqual([1, 2]);
+    });
+  });
+
+  describe('a category that grew since the frontier (owner decision 104b)', () => {
+    /** The frontier saw two pages. */
+    const category: CarrefourCategory = {
+      id: 'cat20003',
+      name: 'Bebidas',
+      url: '/supermercado/x/cat20003/c',
+      path: ['Bebidas'],
+      totalResults: 48,
+    };
+    const at = (offset: number) =>
+      `https://www.carrefour.es/supermercado/x/cat20003/c?offset=${offset}`;
+
+    /** A browser whose page at an offset states the total a test names. */
+    const totals = (byOffset: (offset: number) => number) =>
+      new FakeBrowser((url) => {
+        const offset = Number(new URL(url).searchParams.get('offset'));
+        return { status: 200, state: stating(byOffset(offset)) };
+      });
+
+    async function walk(
+      browser: FakeBrowser,
+      over: CarrefourCategory = category,
+      options: { fromPage?: number } = {}
+    ) {
+      const pages: number[] = [];
+      for await (const _product of clientOn(browser).walkCategory(
+        over,
+        (_listing, page) => pages.push(page),
+        options
+      )) {
+        // Only the pages matter here.
+      }
+      return pages;
+    }
+
+    it('pages to the total the page states when it is larger', async () => {
+      // 48 when the tree was walked, 60 when paged: three pages, not two.
+      const browser = totals(() => 60);
+      expect(await walk(browser)).toEqual([0, 1, 2]);
+      expect(browser.asked).toEqual([at(0), at(24), at(48)]);
+    });
+
+    it('pages further when a later page states a still larger total', async () => {
+      // The first page agrees with the frontier, the second states 72.
+      const browser = totals((offset) => (offset === 0 ? 48 : 72));
+      expect(await walk(browser)).toEqual([0, 1, 2]);
+    });
+
+    it('removes no page when a page states a smaller total', async () => {
+      const browser = totals(() => 30);
+      expect(await walk(browser)).toEqual([0, 1]);
+    });
+
+    it('stops at the ceiling however large the stated total grows', async () => {
+      // 1,000 fits under the ceiling of 1,008, so the frontier paged it; it
+      // now states 5,000, and the walk still asks no page past offset 984.
+      const browser = totals(() => 5000);
+      const pages = await walk(browser, { ...category, totalResults: 1000 });
+      expect(pages).toHaveLength(42);
+      expect(browser.asked.at(-1)).toBe(at(984));
+    });
+
+    /** A page stating `total` results and `servedPages` pages of 24. */
+    const serving = (total: number, servedPages: number) => {
+      const state = stating(total);
+      (state['pagination'] as Record<string, unknown>)['total_pages'] =
+        servedPages;
+      return state;
+    };
+
+    /** {@link serving} with its cards removed. */
+    const servingEmpty = (total: number, servedPages: number) => {
+      const state = serving(total, servedPages);
+      (
+        (state['productCardList'] as Record<string, unknown>)[
+          'results'
+        ] as Record<string, unknown>
+      )['items'] = [];
+      return state;
+    };
+
+    /** {@link servingEmpty} with its pagination zeroed. */
+    const zeroedEmpty = (total: number) => {
+      const state = servingEmpty(total, 0);
+      (state['pagination'] as Record<string, unknown>)['page_size'] = 0;
+      return state;
+    };
+
+    /** The pages that held cards, the totals `onPage` was handed, the error. */
+    async function walkWithTotals(
+      browser: FakeBrowser,
+      over: CarrefourCategory = category,
+      options: { fromPage?: number; knownTotal?: number } = {}
+    ) {
+      const pages: number[] = [];
+      const totals: number[] = [];
+      let error: unknown = null;
+      try {
+        for await (const _product of clientOn(browser).walkCategory(
+          over,
+          (_listing, page, total) => {
+            pages.push(page);
+            totals.push(total);
+          },
+          options
+        )) {
+          // Only the pages matter here.
+        }
+      } catch (caught) {
+        error = caught;
+      }
+      return { pages, totals, error };
+    }
+
+    it('cuts a category whose third page is empty while it still states 49', async () => {
+      // 49 stated and 48 served. The stated total grows the walk to a third
+      // page, which answers empty and still states 49. The paging figure is
+      // never read, so that is a cut and not an end: the safe direction.
+      const browser = new FakeBrowser((url) => ({
+        status: 200,
+        state: url === at(48) ? servingEmpty(49, 2) : serving(49, 2),
+      }));
+      const { pages, totals, error } = await walkWithTotals(browser);
+      expect(pages).toEqual([0, 1]);
+      expect(browser.asked).toEqual([at(0), at(24), at(48)]);
+      expect(totals).toEqual([49, 49]);
+      expect(error).toBeInstanceOf(CarrefourShortCategoryError);
+      expect(error).toMatchObject({
+        page: 2,
+        cost: 'Carrefour answered an empty page that states 49 results',
+      });
+    });
+
+    it.each([0, 2, 3])(
+      'reads pages stating 72 through page three when total_pages is %i',
+      async (servedPages) => {
+        const browser = new FakeBrowser(() => ({
+          status: 200,
+          state: serving(72, servedPages),
+        }));
+        const { pages, totals, error } = await walkWithTotals(browser);
+        expect(error).toBeNull();
+        expect(pages).toEqual([0, 1, 2]);
+        expect(browser.asked).toEqual([at(0), at(24), at(48)]);
+        expect(totals).toEqual([72, 72, 72]);
+      }
+    );
+
+    it('keeps the stated total as the bound when the page states no pages', async () => {
+      const browser = new FakeBrowser(() => {
+        const state = stating(60);
+        delete (state['pagination'] as Record<string, unknown>)['total_pages'];
+        return { status: 200, state };
+      });
+      expect(await walk(browser)).toEqual([0, 1, 2]);
+    });
+
+    it.each([0, 48])(
+      'cuts at an empty page with zeroed pagination that states 72 at offset %i',
+      async (emptyAt) => {
+        const browser = new FakeBrowser((url) => ({
+          status: 200,
+          state: url === at(emptyAt) ? zeroedEmpty(72) : serving(72, 3),
+        }));
+        const { error } = await walkWithTotals(browser);
+        expect(error).toBeInstanceOf(CarrefourShortCategoryError);
+        expect(error).toMatchObject({
+          page: emptyAt / 24,
+          cost: 'Carrefour answered an empty page that states 72 results',
+        });
+      }
+    );
+
+    it.each([48, 30])(
+      'ends clean at an empty third page that states %i, at or below its offset',
+      async (stated) => {
+        // The second page grew the walk to 49; the third answers empty and
+        // states a total that ends at or before offset 48.
+        const browser = new FakeBrowser((url) => ({
+          status: 200,
+          state:
+            url === at(48)
+              ? zeroedEmpty(stated)
+              : serving(url === at(0) ? 48 : 49, 2),
+        }));
+        const { pages, error } = await walkWithTotals(browser);
+        expect(error).toBeNull();
+        expect(pages).toEqual([0, 1]);
+        expect(browser.asked).toEqual([at(0), at(24), at(48)]);
+      }
+    );
+
+    it('ends clean at a first page that states the category is now empty', async () => {
+      const browser = new FakeBrowser(() => ({
+        status: 200,
+        state: zeroedEmpty(0),
+      }));
+      const { pages, error } = await walkWithTotals(browser);
+      expect(error).toBeNull();
+      expect(pages).toEqual([]);
+      expect(browser.asked).toEqual([at(0)]);
+    });
+
+    it('stays bounded by a known total when the pages it reads state none', async () => {
+      // The end pass: the frontier saw 48, the first walk learned 96 and was
+      // cut at page 2. The pages from 2 on serve cards but state no total, so
+      // only the known total makes the walk ask page 3.
+      const browser = new FakeBrowser(() => {
+        const state = stating(96);
+        delete (
+          (state['productCardList'] as Record<string, unknown>)[
+            'results'
+          ] as Record<string, unknown>
+        )['total_results'];
+        return { status: 200, state };
+      });
+      const { pages, totals, error } = await walkWithTotals(browser, category, {
+        fromPage: 2,
+        knownTotal: 96,
+      });
+      expect(error).toBeNull();
+      expect(pages).toEqual([2, 3]);
+      expect(browser.asked).toEqual([at(48), at(72)]);
+      expect(totals).toEqual([96, 96]);
+    });
+
+    it('follows the same rule from a later page', async () => {
+      // The end pass asks from page 2, which only a stated total added: the
+      // frontier's two pages end before it, and the pages state 96.
+      const browser = totals(() => 96);
+      expect(await walk(browser, category, { fromPage: 2 })).toEqual([2, 3]);
+      expect(browser.asked).toEqual([at(48), at(72)]);
     });
   });
 

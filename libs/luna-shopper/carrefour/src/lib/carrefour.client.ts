@@ -338,22 +338,66 @@ export class CarrefourClient {
    * a 404 or no page state is a gap. So is an empty card list while the page
    * still states rows at its own offset. A walk that ended there in silence
    * read as a category read whole, and a crawl of categories read whole may
-   * replace paths and delist. The natural ends are the last page of
-   * {@link pagesFor}, and an empty page whose own stated total ends at or
-   * before its offset, which is the result set having shrunk since the
-   * frontier was walked. `onPage` is called for every page that held cards.
+   * replace paths and delist. The natural ends are the last page, bounded as
+   * the next paragraph says, and an empty page whose offset is at or past the
+   * smaller of the total that same page states and {@link CARREFOUR_CEILING}:
+   * the result set having shrunk since the frontier was walked, or a category
+   * that is truly empty. Every other empty page is a gap, and so is an empty
+   * page that states no total. `onPage` is called for every page that held
+   * cards.
+   *
+   * **The paging figure (`total_pages * page_size`) plays no part in the
+   * walk.** A false whole, a category counted read while rows went unread, is
+   * the dangerous error, because a crawl of categories read whole may delist;
+   * a false cut only leaves a crawl not whole. No recorded page shows how the
+   * paging figure behaves below the ceiling, and each use of it tried so far
+   * opened a false whole. So a page that states 49 results while paging
+   * serves 48 leads the walk to ask a third page; when that page answers
+   * empty and still states 49, the category is cut (`LISTING_UNREAD`, the
+   * crawl not whole). That case has never been recorded; the shared live run
+   * of this round will show whether it occurs.
+   *
+   * **A category that grew since the frontier was walked is paged to its new
+   * end** (owner decision 104b). The last page is the larger of the starting
+   * total and the largest total a page of this walk stated, capped at
+   * {@link CARREFOUR_CEILING} by {@link pagesFor}. The starting total is the
+   * frontier's, or `knownTotal` when the caller passes a larger one. The
+   * bound is evaluated again on every page that holds cards, so a later page
+   * that states a still larger total adds pages, and a smaller one removes
+   * none: a shrunk set ends on the empty page rule above. The ceiling keeps
+   * the loop bounded at 42 pages however large a page says the set is.
+   *
+   * `onPage` is also handed the total that bounds the walk after the page:
+   * the starting total or the largest a page stated, never above the ceiling,
+   * so a caller can name it and plan by it.
    *
    * `fromPage` starts the walk on a later page, for a caller that read the
-   * pages before it already.
+   * pages before it already. That page is asked even when the starting total
+   * ends before it: the caller names the page a walk was about to ask, which a
+   * total stated by an earlier page may have added, and the pages after it
+   * follow the same rule as a walk from the start. `knownTotal` is the total
+   * such a caller already learned from those earlier pages, so the walk is
+   * bounded by it even when the pages it now reads state none.
    */
   async *walkCategory(
     category: CarrefourCategory,
-    onPage?: (listing: CarrefourListing, page: number) => void,
-    options: { fromPage?: number } = {}
+    onPage?: (listing: CarrefourListing, page: number, total: number) => void,
+    options: { fromPage?: number; knownTotal?: number } = {}
   ): AsyncIterable<CarrefourProduct> {
-    const pages = pagesFor(category.totalResults);
+    const fromPage = options.fromPage ?? 0;
+    let total = Math.min(
+      Math.max(category.totalResults, options.knownTotal ?? 0),
+      CARREFOUR_CEILING
+    );
+    let pages = pagesFor(total);
+    if (options.fromPage !== undefined) {
+      pages = Math.max(
+        pages,
+        Math.min(fromPage + 1, pagesFor(CARREFOUR_CEILING))
+      );
+    }
     const seen = new Set<string>();
-    for (let page = options.fromPage ?? 0; page < pages; page += 1) {
+    for (let page = fromPage; page < pages; page += 1) {
       this.options.signal?.throwIfAborted();
       const offset = page * CARREFOUR_PAGE_SIZE;
       const {
@@ -376,15 +420,18 @@ export class CarrefourClient {
           status === 200
             ? 'Carrefour answered a page with no page state'
             : `Carrefour answered ${status}`,
-          url
+          url,
+          status === 200 ? null : status
         );
       }
       const listing = readListing(state);
+      const stated = statedTotalResults(state);
       if (listing.cards.length === 0) {
-        const stated = statedTotalResults(state);
         // Paging past the end answers an empty item list rather than an
-        // error, so an empty page is the end when the page itself says the
-        // result set stops at or before this offset.
+        // error, so an empty page is the end when the page itself states a
+        // total that stops at or before this offset (or the ceiling does).
+        // Its paging figure is never read: an empty page that still states
+        // rows past its offset is a cut, the safe direction.
         if (stated !== null && offset >= Math.min(stated, CARREFOUR_CEILING)) {
           return;
         }
@@ -397,7 +444,13 @@ export class CarrefourClient {
           url
         );
       }
-      onPage?.(listing, page);
+      // The category may have grown since the frontier saw it. Only ever
+      // larger, and never past the ceiling, so the loop stays bounded.
+      if (stated !== null) {
+        total = Math.max(total, Math.min(stated, CARREFOUR_CEILING));
+        pages = Math.max(pages, pagesFor(total));
+      }
+      onPage?.(listing, page, total);
       for (const product of readCards(listing.cards, category.path)) {
         if (!seen.has(product.externalId)) {
           seen.add(product.externalId);
