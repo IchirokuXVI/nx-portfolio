@@ -50,7 +50,10 @@ import type {
  *    parallel, because the session is server state: start a session, confirm
  *    it holds the scope's own store, and walk every leaf, page by page.
  * 3. `INGEST`. Report every product once, with one regular price per walked
- *    scope that listed it, and its availability per walked scope.
+ *    scope that listed it, and its availability per walked scope. This is at
+ *    the end of the walk and not as it goes (plan 0267, section 4): an
+ *    observation is final only after the last scope, so a report per scope
+ *    would write a product twice and count it twice.
  *
  * **The price written is the regular one, never the Club Dia price** (section
  * 4). The club price goes in `extra.loyalty`, which no shopper reads.

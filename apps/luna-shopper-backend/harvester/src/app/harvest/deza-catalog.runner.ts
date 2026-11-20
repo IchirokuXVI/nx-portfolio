@@ -51,9 +51,11 @@ export { entryKey } from './matching';
  *    automatic match is a `CANDIDATE` and none of them writes anything a shopper
  *    reads. A product goes when the section that saw it first ends, after its
  *    split queries (plan 0267, section 6), and the sink writes a chunk each
- *    time `PRODUCT_CHUNK` products wait. A walk that dies part way thus keeps
- *    the rows that were written, less what was still queued or in flight in
- *    the sink when it died.
+ *    time `PRODUCT_CHUNK` products wait. A walk that ends part way thus keeps
+ *    the rows that were written. An abort by a person or a deploy also writes
+ *    the chunk that was not full, at the drain. A runner that throws loses
+ *    that chunk, and a process that dies loses it too, with what was still
+ *    queued or in flight in the sink (plan 0267, notes of 2026-11-20).
  * 4. Read back which catalog item each product resolved to, from the outcomes.
  * 5. Resolve the shop codes through `source_locations` (plan 0084, section 6),
  *    and store a claim for every product at every shop, positive **and**

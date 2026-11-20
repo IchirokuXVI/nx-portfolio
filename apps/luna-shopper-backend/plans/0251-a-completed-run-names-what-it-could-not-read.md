@@ -145,3 +145,30 @@ Walk Carrefour, El Jamón and DEZA on an ephemeral slot and quote the `warnings`
 - **D3 (owner): a status of its own.** (a) keep `COMPLETED`; (b) a new `PARTIAL`. Recommended:
   (a), because the schedule rules and the failure count read `COMPLETED` and the warning says
   the rest.
+
+## Notes of 2026-11-20 (owner decisions of the harvester round)
+
+Section 3 and the Constraints above ask again only a category that a refusal cost. These notes
+record what the owner decided since. Where the text above disagrees, these notes hold. The text
+above is left as it was written.
+
+- **A 5xx is asked again too (owner decision 103b, PR #1034).** The end pass asks a category
+  that a 5xx cut short once more, in the same pass, in the same order and by the same rules as a
+  refused one. A category that a 404, an empty page or a page with no page state cut short is
+  not asked again, because those answers are expected to be the same minutes later. Each
+  category is asked once in the pass and no more, and one that is cut short again stays unread
+  with its warning. A category that the pass reads in full is no longer unread.
+- **A category that grew is paged to its new end (owner decision 104b, PR #1034).** The walk
+  reads up to the larger of the total the first pass saw and the largest total a page of the
+  walk states, capped at the storefront ceiling (`CARREFOUR_CEILING`, 1008 rows). The figure of
+  what paging serves (`total_pages * page_size`) is not used. An empty page is a natural end
+  only when the page itself states a total at or below its offset. Any other empty page is a
+  cut. The end pass starts from the total the first walk learned. The run raises its
+  `totalPlanned` by what a category grew, so `processed` does not pass it. One case is known
+  and accepted. If a page ever states more results than paging serves, the category counts as
+  cut. It gets a warning and the crawl is not whole. That is the safe error. The case has
+  never been recorded, and the shared live run of the round will show whether it occurs.
+- **A page past a shrunk end keeps the safe reading (owner decision 105a).** Such a page keeps
+  the reading the code gives it today, which never declares a category read whole that may not
+  be, until a captured Carrefour page settles what the chain serves there. No code changes for
+  this decision.

@@ -1,4 +1,4 @@
-> **PR:** [#973](https://github.com/IchirokuXVI/nx-portfolio/pull/973)
+> **PR:** [#973](https://github.com/IchirokuXVI/nx-portfolio/pull/973) (Carrefour and El Jamón), [#1021](https://github.com/IchirokuXVI/nx-portfolio/pull/1021) (DEZA), [#1023](https://github.com/IchirokuXVI/nx-portfolio/pull/1023) (LIDL)
 
 # 0267: a catalog walk writes what it has read as it goes
 
@@ -336,3 +336,55 @@ does not usually write 10,000 products at once, except the very first walk. To w
 `PRODUCT_CHUNK` products for every chain means that nothing is written all at once at the end,
 and that also removes the problem of a pod that restarts. X is `PRODUCT_CHUNK`, 400 today. A
 different number is a decision to bring to the owner.
+
+## Notes after the build (2026-11-20)
+
+These notes record what the runners do on `origin/dev` after the build, and the owner's
+decisions of the harvester round on what is left. Where the text above disagrees, these notes
+hold.
+
+No PR made DIA write as it goes. DIA still reports at the end of its walk, by the owner's
+decision 94c below.
+
+**What a walk that dies keeps (owner decision 85a).** Target state 3 promised "less at most the
+last chunk that was not full". The words now follow the code (`run-report.sink.ts`,
+`run-executor.service.ts`):
+
+- **The runner throws, and nobody aborted the run.** The executor aborts the signal, so the
+  other workers stop, and calls `sink.settle()`. `settle()` waits until every chunk already
+  queued is written. It queues no partial chunk, closes no session, and writes no availability
+  and no path. The partial chunk is lost. The run ends `FAILED`.
+- **The run completed, or a person or a deploy aborted it.** The executor calls `sink.drain()`.
+  `drain()` queues the partial chunk, then does the work of the whole run, and writes the
+  category paths of plan `0268` last. An aborted run writes every path call as `ADD`.
+- **The process dies** (`kill -9`, a power cut, a pod killed after its grace period). The rows
+  of every chunk that was written stay. A chunk that was still queued or in flight is lost, and
+  so is the partial chunk. No path is written, because only `drain()` writes paths.
+
+**`PRODUCT_CHUNK` stays at 400 (owner decision 87a).** A LIDL walk is about a hundred and fifty
+products, which is less than one chunk. A LIDL walk thus still writes all its products at the
+end, and a LIDL walk that dies or throws keeps none of them. That is accepted.
+
+**DIA reports at the end of its walk (owner decision 94c).** Section 4 allows this stop, and
+option (b) is what the code does. A DIA observation is final only after the last scope: it
+carries one regular price for each walked scope that listed the product, the name and brand of
+one row (the national store's row when that store listed the product, otherwise the row of the
+first walked scope that did), and every leaf the product appeared under. To report it as it goes
+would write a product more than once in one run and count it more than once. The owner waits
+for the shared run of the round. A plan to stream DIA follows only if that DIA walk is much
+longer than the 4 minutes of 2026-11-06.
+
+**LIDL sends no heartbeat while its pages answer (owner decision 88a).** A product page that
+answers calls no counter and no heartbeat, so a LIDL walk whose pages all answer moves no
+heartbeat while it reads them. This is left as it is for now. Backend backlog `0026` is about a run call that
+hangs, and it does not cover the heartbeat of a runner that fetches, so this note is the only
+record.
+
+**A dead DEZA run does not know its total (owner decision 86a).** A DEZA walk has no
+`totalPlanned` while it crawls, because DEZA knows its product set only after its split queries.
+It sets the total when the crawl ends (`setTotalPlanned(crawl.products.size)` in
+`deza-catalog.runner.ts`), so a run that dies during the crawl has none. The back office shows
+such a run an approximate total, taken from the latest completed run of the same kind (PR
+#1028). PR #1036 narrows that: a completed run shows only its count, an aborted, failed or stale
+run keeps the approximate line, and the estimates are dropped at sign out and read again when a
+run page opens.

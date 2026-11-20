@@ -1,4 +1,4 @@
-> **PR:** [#1015](https://github.com/IchirokuXVI/nx-portfolio/pull/1015)
+> **PR:** [#1015](https://github.com/IchirokuXVI/nx-portfolio/pull/1015) (the base and DIA), [#1020](https://github.com/IchirokuXVI/nx-portfolio/pull/1020) (El Jamón), [#1022](https://github.com/IchirokuXVI/nx-portfolio/pull/1022) (Mercadona), [#1024](https://github.com/IchirokuXVI/nx-portfolio/pull/1024) (Carrefour and DEZA), [#1030](https://github.com/IchirokuXVI/nx-portfolio/pull/1030) (a Carrefour category cut short), [#1026](https://github.com/IchirokuXVI/nx-portfolio/pull/1026) (LIDL and the file import)
 
 # 0268: an entry carries every path its chain files it under
 
@@ -42,12 +42,19 @@
 >   `fieldsOf` is near line 2380 of `source-ingest.ts`, and `sizesDisprovedExamples` is near
 >   line 1073 of `run-executor.service.ts`.
 >
-> **Note of 2026-11-19 (owner decision 75a).** The Constraints line that says the first path of
-> `categoryPaths` is the path that `categoryPath` holds is true for a `REPLACE` write only. An
-> `ADD` write keeps the stored paths as they are and in their order, except that an element that
-> is not a path (not a non empty list of strings) is removed, and appends each run path that is
-> not stored yet, so its first path can differ from `categoryPath`. An aborted run thus
-> removes no stored path and reorders none.
+> **Note of 2026-11-19 (owner decision 75a), made exact on 2026-11-20.** The Constraints line
+> that says the first path of `categoryPaths` is the path that `categoryPath` holds can be true
+> for a `REPLACE` write only. `mergeCategoryPaths` (`harvest/category-paths.ts`) does this:
+>
+> - `REPLACE` writes the run's own paths, with each repeat and each path that is a prefix of a
+>   longer path of the same product left out, in the order the runner stated them. Its first
+>   path is the runner's first path, unless a longer path of that product starts with it. It
+>   equals `categoryPath` when the runner states the path of `categoryPath` first and no longer
+>   path covers it.
+> - `ADD` keeps the stored paths as they are and in their order, except that an element that is
+>   not a path (not a non empty list of strings) is removed. It then appends each run path that
+>   is not stored yet. A stored path that a longer run path now covers stays. Its first path can
+>   thus differ from `categoryPath`. An aborted run removes no stored path and reorders none.
 >
 > Prerequisite reading: plan `0173` (our tree is a copy of DIA's), plan `0174` (a DIA row is
 > filed by its leaf ids), plan `0254` (PR #964, not merged on 2026-11-11: the leaves left with no
@@ -503,3 +510,70 @@ builds DIA last, so PR 1 conflicts with nothing that plan `0267` builds first. A
 `0267` moves the report calls of a runner, and the adapter PR of this plan then adds one end of
 walk call to code that has stopped moving. Plan `0267` starts with Carrefour and El Jamón, the
 longest walks, so their data loss is fixed first.
+
+## Notes after the build (2026-11-20)
+
+These notes record the mode of each adapter as built, and the owner's decisions of the
+harvester round. Where the table of section 3 or the text above disagrees, these notes hold.
+
+**LIDL (owner decision 95b).** The row of section 3 says "`REPLACE` when the page answered".
+The code says less. A LIDL call is `REPLACE` only when the run was not aborted and the product's
+own page states a need world path and a `wonCategoryBreadcrumbs` list that is not empty and
+that the code read in full (`categoryPathsStated`, `libs/luna-shopper/lidl/src/lib/normalize.ts`).
+Every other case is `ADD`: a path taken from the index row, a page that leaves the list out, a
+list with a part the code cannot read, and an empty list, because an empty list proves nothing.
+A product whose page did not answer gets no call.
+
+**Where a LIDL path comes from (owner decision 101b, PR #1033).** A page that states `[]`,
+leaves the list out, or states a list of which no path can be read falls back to the index
+row's breadcrumbs. The mode rule above is unchanged: the row's list never makes a call
+`REPLACE`.
+
+**A LIDL product whose page states an empty list never loses an old path by itself.** Its call
+is `ADD` under 95b, whatever else the run reads. Only a curator clears such a path.
+
+**Carrefour (owner decisions 90b and 91a).** A call is `REPLACE` only when `declareListing`
+declares the crawl whole. That needs the chain's `delistCountsCrawl` switch on, and the switch
+reads false unless the chain's config sets it to `true`. While the switch is off, every
+Carrefour call is `ADD`, so Carrefour paths only grow. A category cut short counts as
+unreadable, so the crawl is not whole (PR
+[#1030](https://github.com/IchirokuXVI/nx-portfolio/pull/1030), `walkCategory` in
+`libs/luna-shopper/carrefour/src/lib/carrefour.client.ts`). A cut is a page that answers any
+status other than 200, or a page with no page state. An empty page is a cut only when it states
+no total, or when it still states rows at its own offset. An empty page whose stated total ends
+at or before its offset is a natural end, because the result set shrank. Such a category is
+reported as `LISTING_UNREAD`. Since PR #1034 the end pass asks a category that a 5xx cut short
+once more (owner decision 103b), and a category it then reads in full leaves the unreadable
+list, so a repaired category no longer stops the crawl from being declared whole. The same PR pages a category that grew
+since the frontier was walked (owner decision 104b, recorded on plan `0251`). El Jamón reports a category it read in part as `LISTING_SHORT` (plan `0251`):
+fewer rows than the count the category printed, or no count printed. Note the difference. A
+partial Carrefour category and a partial El Jamón category appear under two different codes.
+
+**DEZA (owner decision 92a).** Every call is `ADD`, because no walk can prove that it saw every
+section. A path is the section path followed by the attribute icons of the row
+(`[...section.path, ...row.attributes]`), so the icons are part of the path. Two sightings of one
+product with different icons give two paths that differ only in their icons, and such near
+duplicates can accumulate over runs.
+
+**El Jamón (owner decision 84a).** Both paths are kept. The breadcrumb of the page and the top
+level category of the listing name one shelf in different words (`La despensa` and `DESPENSA`),
+and neither is a prefix of the other, so the entry holds both.
+
+**The file import.** The row "Leaflet and file import" of section 3 is not quite true. One run
+mode does it, `FILE_IMPORT`, which was `LEAFLET_IMPORT` before plan `0086`. A leaflet is one of
+the producers of its document. The runner makes no `RunReport` call: after the ingest, it writes
+the paths through `SourceIngest.writeCategoryPaths` itself, always as `ADD`. A product of the
+document with an empty `category_path` writes nothing. Two products of one document that resolve
+to one row (`DUPLICATE_KEY`) add their paths to that row together, so one import can give a row
+more than one path.
+
+- **A revert does not take the paths back.** A row that the revert keeps holds the paths the
+  import added to it. A row that the revert deletes (an undecided row that this import created
+  and no later run saw) goes with its paths.
+- **A step that fails after the ingest ends the run `FAILED` (owner decisions 96c and 102b, PR
+  #1033).** The steps are the recording of the outcomes, the path write and the final flush. The
+  rows and prices of the ingest are saved, and the report of the run keeps the counters of the
+  ingest and the count of paths written before the failure. One error type,
+  `FileImportFailedAfterIngestError`, carries them and names the step that failed.
+- **An abort and then a failed path write end the run `ABORTED`.** This is the existing rule for
+  a failure after an abort (backlog `0026`, section 7), not a rule of this plan.

@@ -38,11 +38,11 @@ export const WITHOUT_PRICE_FILTER = 'withoutPriceAtScopeId';
  * - **No price** (`noPrice`) is here: the product read takes
  *   {@link WITHOUT_PRICE_FILTER} (backend plan 0187), and answers how many
  *   products match beside the page.
- * - **Not sold here** is not. The price read declares `available`, and it
- *   reads `available=false` as true: the validation pipe converts the text
- *   to a boolean before the route's own reading of it runs, and any text that
- *   is not empty converts to true. So the read answers the products that are
- *   sold. A state the gateway cannot answer is not drawn. A row still says
+ * - **Not sold here** is not. It was left out because the price read took
+ *   `available=false` as true: the validation pipe converted the text to a
+ *   boolean before the route's own reading of it ran. Since PR #1031 the
+ *   gateway reads the text as sent, so that reason is gone, and the state
+ *   waits for a plan of its own (owner decision 108b). A row still says
  *   "Not sold here", from the `available` the gateway gives on it.
  */
 export const PRICE_STATES = ['stale', 'noPrice'] as const;
