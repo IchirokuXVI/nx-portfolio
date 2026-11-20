@@ -82,14 +82,7 @@ export class AddedSheet {
   /** The record, one section for each list, the chosen list first. */
   protected readonly sections = computed<readonly VisitAddedSection[]>(() => {
     const lists = this._adds.lists();
-    // What each line counts, off the store's held lines (velista `0182`).
-    const units = new Map(
-      this._adds.held().map((line) => [line.lineId, line.unit])
-    );
-    // And the step its product says (velista `0186`), off the same lines.
-    const steps = new Map(
-      this._adds.held().map((line) => [line.lineId, line.step ?? null])
-    );
+    const held = new Map(this._adds.held().map((line) => [line.lineId, line]));
     return visitSections(
       this._adds.visit(),
       this._adds.target()?.listId ?? null
@@ -102,9 +95,14 @@ export class AddedSheet {
         name: entry.name,
         detail: entry.detail,
         imageUrl: entry.imageUrl,
-        quantity: entry.quantity,
-        unit: units.get(entry.lineId) ?? 'UNIT',
-        step: steps.get(entry.lineId) ?? null,
+        // The amount drawn, off the store's held line: a run a stepper opened is
+        // in it at once, and the record has it only once the run is written
+        // (velista 0188 S12). A sheet opened inside that wait drew the record's
+        // older amount, and its minus at 1 took a line at 2 back.
+        quantity: held.get(entry.lineId)?.quantity ?? entry.quantity,
+        // What it counts (velista `0182`) and its product's step (`0186`).
+        unit: held.get(entry.lineId)?.unit ?? 'UNIT',
+        step: held.get(entry.lineId)?.step ?? null,
         // A line the visit made goes to 0 and is taken back there, a weight as a
         // count (velista 0188 S14); one that was there before stops at what it held.
         min: entry.created ? 0 : entry.before,

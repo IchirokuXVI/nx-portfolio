@@ -456,6 +456,32 @@ describe('AddedSheet', () => {
     expect(quantityOf(fixture, 'item-rice')).toBe('1');
   });
 
+  it('draws a run still open on the catalog row, so its minus is one fewer and not a take back', async () => {
+    // The catalog row's plus raised the line, and the sheet opened inside the
+    // quiet beat, before the run was written (the velista-luna gate, 2026-11-20).
+    const { fixture, store, lines } = await render({ added: [OIL] });
+    const product = {
+      listId: 'list-weekly',
+      itemId: 'item-oil',
+      detail: null,
+      imageUrl: null,
+    };
+    store.step(product, lineIdOf(OIL), { from: 1, to: 2, repeat: false });
+    await settle(fixture);
+
+    expect(lines.addQuantity).not.toHaveBeenCalled();
+    expect(quantityOf(fixture, 'item-oil')).toBe('2');
+    expect(stepper(fixture, 'item-oil').minus?.classList).not.toContain(
+      'is-clear'
+    );
+
+    stepper(fixture, 'item-oil').minus?.click();
+    await quiet(fixture);
+
+    expect(lines.deleteLine).not.toHaveBeenCalled();
+    expect(quantityOf(fixture, 'item-oil')).toBe('1');
+  });
+
   it('hands the detail and the photo the record keeps back with a step, so the row still says it', async () => {
     const { fixture, store } = await render({
       added: [{ ...OIL, imageUrl: 'https://img.test/oil.png' }],
