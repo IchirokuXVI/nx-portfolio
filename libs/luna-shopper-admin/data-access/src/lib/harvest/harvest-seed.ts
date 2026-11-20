@@ -266,9 +266,13 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
         code: 'LISTING_UNREAD',
         offerId: null,
         page: null,
-        name: null,
+        name: 'Congelados',
+        // The sentence the Carrefour walk writes, counts grouped (owner
+        // decision 139b).
         message:
-          'Category cat21449123 Congelados was refused twice and was not read.',
+          'Category cat21449123 Congelados: Carrefour answered 403 at offset ' +
+          '480, once more at the end of the run. The listings from there on, ' +
+          'of 1,008, were not read.',
       },
       {
         // A category past the paging ceiling (owner decision 124b), so the

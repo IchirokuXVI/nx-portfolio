@@ -292,7 +292,7 @@ describe('CarrefourClient', () => {
       expect(error).toBeInstanceOf(CarrefourShortCategoryError);
       expect(error).toMatchObject({
         page: 1,
-        cost: 'Carrefour answered an empty page that states 1726 results',
+        cost: 'Carrefour answered an empty page that states 1,726 results',
       });
     });
 

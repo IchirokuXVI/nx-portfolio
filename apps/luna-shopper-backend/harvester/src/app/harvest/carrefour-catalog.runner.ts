@@ -6,6 +6,7 @@ import {
   CarrefourClient,
   CarrefourHttpError,
   CarrefourShortCategoryError,
+  formatCount,
   photoAddressRead,
   type CarrefourCappedCategory,
   type CarrefourCategory,
@@ -120,7 +121,7 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       // --- 2. Every category, page by page --------------------------------
       await context.setStage(
         'ENUMERATE',
-        `Paging ${frontier.categories.length} category(ies)`
+        `Paging ${formatCount(frontier.categories.length)} category(ies)`
       );
       /**
        * The id of every product the walk reported, in the order it was first
@@ -235,7 +236,8 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       // chunk is written when the run drains, so the stage says "writing".
       await context.setStage(
         'INGEST',
-        `Finishing the walk: writing the last of ${products.size} product(s) read`
+        `Finishing the walk: writing the last of ${formatCount(products.size)} ` +
+          `product(s) read`
       );
       if (!context.signal.aborted) {
         warnUnread(context, unreadable, lost);
@@ -539,7 +541,8 @@ export class CarrefourCatalogRunner implements CatalogRunner {
     }
     await context.setStage(
       'ENUMERATE',
-      `Asking once more for ${again.length} category(ies) the walk could not finish`
+      `Asking once more for ${formatCount(again.length)} category(ies) the ` +
+        `walk could not finish`
     );
     let failuresInARow = 0;
     for (const [index, entry] of again.entries()) {
@@ -805,7 +808,7 @@ interface LostCategory {
    * The largest total a walk of it was bounded by: the frontier's, or larger
    * when a page stated that the category grew (owner decision 104b), and
    * never above the ceiling, so a category whose pages state 1,200 warns "of
-   * 1008".
+   * 1,008".
    */
   total: number;
   /** What it failed with, or null once the end pass read it. */
@@ -903,8 +906,8 @@ function warnUnread(
         HarvestWarningCode.LISTING_UNREAD,
         category.name,
         `Category ${category.id} ${category.name}: ${cost} at offset ` +
-          `${offset}${again}. The listings from there on, of ` +
-          `${entry.total}, were not read.`
+          `${formatCount(offset)}${again}. The listings from there on, of ` +
+          `${formatCount(entry.total)}, were not read.`
       )
     );
   }
@@ -935,14 +938,14 @@ function warnTruncated(
       category.path.length > 0 ? category.path.join(' > ') : category.name;
     const stated =
       `Category ${category.id} ${where}: Carrefour states ` +
-      `${count(category.totalResults)} products in ${category.name}`;
+      `${formatCount(category.totalResults)} products in ${category.name}`;
     // A capped node is never paged (`walkFrontier` keeps it out of the
     // categories), so none of its rows were read; a category truncated while
     // paged had its first rows read.
     const message = cappedIds.has(category.id)
-      ? `${stated}, more than the ${count(CARREFOUR_CEILING)} it serves, ` +
+      ? `${stated}, more than the ${formatCount(CARREFOUR_CEILING)} it serves, ` +
         `and it has no smaller category to page, so none of them were read.`
-      : `${stated} and serves only the first ${count(CARREFOUR_CEILING)}. ` +
+      : `${stated} and serves only the first ${formatCount(CARREFOUR_CEILING)}. ` +
         `The rest were not read.`;
     context.warn({
       code: HarvestWarningCode.LISTING_TRUNCATED,
@@ -952,11 +955,6 @@ function warnTruncated(
       message,
     });
   }
-}
-
-/** A count as an English sentence prints it, 1,100 and not 1100. */
-function count(value: number): string {
-  return value.toLocaleString('en-US');
 }
 
 /**

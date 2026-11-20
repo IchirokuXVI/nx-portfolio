@@ -2645,5 +2645,90 @@ describe('CarrefourCatalogRunner', () => {
         );
       });
     });
+
+    describe('every count a person reads is grouped (owner decision 139b)', () => {
+      const at = (offset: number) => `/supermercado/x/cat1/c?offset=${offset}`;
+
+      /** The stage labels the run wrote, in order. */
+      const labels = (runContext: RunContext): string[] =>
+        (runContext.setStage as jest.Mock).mock.calls.map(
+          ([, label]: [string, string]) => label
+        );
+
+      /** Bebidas holding 1,008 listings, 24 distinct cards a page, and Ofertas. */
+      const full = () => {
+        const pages = states();
+        pages[bebidas.url] = page({ totalResults: 1008 });
+        for (let offset = 0; offset < 1008; offset += 24) {
+          pages[at(offset)] = page({
+            totalResults: 1008,
+            cards: Array.from({ length: 24 }, (_, i) =>
+              card(`b${offset + i}`, `Agua ${offset + i} 1,5 l.`, '0,39 €')
+            ),
+          });
+        }
+        return pages;
+      };
+
+      it('groups the products the last stage names', async () => {
+        const runContext = await crawl(new TestRunner(full()));
+
+        // Bebidas' 1,008 and Ofertas' one.
+        expect(report.products).toHaveLength(1009);
+        expect(labels(runContext)).toContain(
+          'Finishing the walk: writing the last of 1,009 product(s) read'
+        );
+      });
+
+      it('groups the listings of a category it did not read', async () => {
+        // The last page of Bebidas answers 404, at offset 984 of 1,008.
+        const pages = full();
+        delete pages[at(984)];
+        const runContext = await crawl(new TestRunner(pages));
+
+        expect(warnings(runContext)).toEqual([
+          {
+            code: HarvestWarningCode.LISTING_UNREAD,
+            name: 'Bebidas',
+            offerId: null,
+            page: null,
+            message:
+              'Category cat1 Bebidas: Carrefour answered 404 at offset 984. ' +
+              'The listings from there on, of 1,008, were not read.',
+          },
+        ]);
+      });
+
+      it('groups the categories it pages and asks once more for', async () => {
+        // A thousand categories of one card each, and every first page
+        // answers 503 once, so the end pass asks for all of them.
+        const categories = Array.from({ length: 1000 }, (_, i) =>
+          link(`cat${i + 1}`, `Cat ${i + 1}`)
+        );
+        const pages: Record<string, Record<string, unknown>> = {
+          '/supermercado/la-despensa/cat20001/c': page({
+            firstLevel: categories,
+          }),
+        };
+        const statuses: Record<string, number[]> = {};
+        for (const category of categories) {
+          const first = `/supermercado/x/${category.id}/c?offset=0`;
+          pages[category.url] = page({ totalResults: 1 });
+          pages[first] = page({
+            totalResults: 1,
+            cards: [card(`p-${category.id}`, `${category.id} 1 l.`, '1,00 €')],
+          });
+          statuses[first] = [503];
+        }
+        const runContext = await crawl(new StatusRunner(pages, statuses));
+
+        expect(labels(runContext)).toEqual(
+          expect.arrayContaining([
+            'Paging 1,000 category(ies)',
+            'Asking once more for 1,000 category(ies) the walk could not finish',
+          ])
+        );
+      });
+    });
   });
 });
