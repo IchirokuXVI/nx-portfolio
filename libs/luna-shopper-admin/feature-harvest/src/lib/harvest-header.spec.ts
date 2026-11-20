@@ -253,6 +253,91 @@ describe('HarvestHeader', () => {
     });
   });
 
+  /**
+   * A walk that does not know its total reads an approximate one from the
+   * last completed run of its chain and mode (decision 86 of the harvester
+   * round). The memory back end holds a completed DEZA walk of 2,361.
+   */
+  describe('a run that does not know its total', () => {
+    const DEZA_GOING: HarvestRun = {
+      ...(HARVEST_RUN_SEED.find(
+        (run) => run.id === 'run-deza-aborted'
+      ) as HarvestRun),
+      id: 'run-deza-going',
+      status: 'RUNNING',
+      finishedAt: null,
+      abortRequestedAt: null,
+    };
+
+    it('says "of about" the earlier run’s count, with a bar', async () => {
+      const { fixture } = await render(HarvestHeader, { running: DEZA_GOING });
+      const run = one(fixture, '[data-running="header"]');
+
+      expect(run?.querySelector('.count')?.textContent).toContain(
+        'harvest.run.progress.ofAbout'
+      );
+      expect(run?.querySelector('.bar')).not.toBeNull();
+    });
+
+    /** The screen reader hears "about" too, not the raw count alone. */
+    it('labels the link with the estimate line, not the bare count', async () => {
+      const { fixture } = await render(HarvestHeader, { running: DEZA_GOING });
+
+      expect(
+        one(fixture, '[data-running="header"]')?.getAttribute('aria-label')
+      ).toBe('harvest.running.openAbout');
+      expect(fixture.componentInstance.label()).toEqual({
+        key: 'harvest.running.openAbout',
+        args: { what: expect.any(String), processed: '824', total: '2,361' },
+      });
+    });
+
+    it('keeps the label it had for a run with a known total', async () => {
+      const { fixture } = await render(HarvestHeader);
+
+      expect(fixture.componentInstance.label()).toEqual({
+        key: 'harvest.running.open',
+        args: { what: expect.any(String), processed: 1907 },
+      });
+    });
+
+    it('shows no estimate for a run that has processed nothing', async () => {
+      const { fixture } = await render(HarvestHeader, {
+        running: { ...DEZA_GOING, id: 'run-deza-zero', processed: 0 },
+      });
+      const run = one(fixture, '[data-running="header"]');
+
+      expect(run?.querySelector('.count')?.textContent).toContain(
+        'harvest.run.progress.processed'
+      );
+      expect(run?.getAttribute('aria-label')).toBe('harvest.running.open');
+      expect(run?.querySelector('.bar')).toBeNull();
+    });
+
+    it('keeps the unknown form once the run has passed the estimate', async () => {
+      const { fixture } = await render(HarvestHeader, {
+        running: { ...DEZA_GOING, id: 'run-deza-past', processed: 2400 },
+      });
+      const run = one(fixture, '[data-running="header"]');
+
+      expect(run?.querySelector('.count')?.textContent).toContain(
+        'harvest.run.progress.processed'
+      );
+      expect(run?.querySelector('.bar')).toBeNull();
+    });
+
+    it('keeps a known total', async () => {
+      const { fixture } = await render(HarvestHeader);
+
+      expect(
+        one(fixture, '[data-running="header"] .count')?.textContent
+      ).toContain('harvest.run.progress.of');
+      expect(
+        one(fixture, '[data-running="header"] .count')?.textContent
+      ).not.toContain('ofAbout');
+    });
+  });
+
   /** While a tab is open the dashboard is read at the cadence of a run. */
   describe('the cadence of the read', () => {
     it('follows the run while the header is on screen', async () => {

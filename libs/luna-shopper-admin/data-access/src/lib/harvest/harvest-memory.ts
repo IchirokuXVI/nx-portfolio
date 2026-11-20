@@ -126,11 +126,21 @@ export class HarvestMemory implements HarvestServiceI {
   async spawnRun(
     input: Wire.SpawnHarvestRunDto
   ): Promise<Wire.HarvestHarvestRunView> {
-    // The real service answers 409 carrying the active run's id, because one
-    // harvester runs one thing at a time. Refusing here too keeps the screen's
-    // conflict branch reachable with no backend.
+    // The real service answers 409 carrying the active run's id. Its database
+    // holds two rules, and this mirrors both. `uq_harvest_run_active`: a run of
+    // a chain is refused while that chain has a PENDING or RUNNING run of any
+    // mode. `uq_harvest_run_active_store_discovery`: a store discovery is
+    // refused while any store discovery is PENDING or RUNNING, of any chain or
+    // of none. A run with no chain is held by the second rule only, so one that
+    // is not a store discovery is never refused. The seed can thus hold a
+    // Mercadona walk and a DEZA walk at once. Refusing here too keeps the
+    // screen's conflict branch reachable with no backend.
+    const chain = input.supermarketId ?? null;
     const active = this._runs.find(
-      (run) => run.status === 'PENDING' || run.status === 'RUNNING'
+      (run) =>
+        (run.status === 'PENDING' || run.status === 'RUNNING') &&
+        ((chain !== null && run.supermarketId === chain) ||
+          (input.mode === 'STORE_DISCOVERY' && run.mode === 'STORE_DISCOVERY'))
     );
     if (active !== undefined) {
       throw new GatewayError({
@@ -1511,9 +1521,14 @@ export class HarvestMemory implements HarvestServiceI {
       return;
     }
 
+    // A run that does not know its total (a DEZA walk) still counts up; it
+    // used to be pinned at zero against a total of nothing.
     const total = run.totalPlanned ?? 0;
     run.heartbeatAt = new Date().toISOString();
-    run.processed = Math.min(total, run.processed + 137);
+    run.processed =
+      run.totalPlanned === null
+        ? run.processed + 137
+        : Math.min(total, run.processed + 137);
     run.created += 61;
     run.unchanged += 76;
 

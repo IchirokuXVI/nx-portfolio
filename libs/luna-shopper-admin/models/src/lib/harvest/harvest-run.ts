@@ -151,39 +151,202 @@ export function canRevert(run: HarvestRun | null): boolean {
   );
 }
 
-/** How far along a run is, in the three numbers the screen draws. */
+/** How far along a run is, in the numbers the screen draws. */
 export interface RunProgress {
   readonly processed: number;
   /** What the run expects to do, once it knows. Null before the tree walk. */
   readonly total: number | null;
-  /** 0 to 100, or null when nothing yet says what the whole is. */
+  /**
+   * 0 to 100, or null when nothing yet says what the whole is. Against
+   * {@link about} while the run is still going, and then never 100. Null for
+   * an ended run measured against {@link about}, because a bar on a run that
+   * has stopped reads as progress.
+   */
   readonly percent: number | null;
+  /**
+   * A total taken from another run, for a run that does not know its own
+   * (decision 86 of the harvester round). Null or absent when the run knows
+   * its total, when no other run gives one, when the run processed nothing,
+   * and when the run has already done more than it says. Never a promise: the
+   * screen says "about" and calls it an estimate.
+   */
+  readonly about?: number | null;
+  /**
+   * Whether the run has ended, so the estimate is worded in the past and drawn
+   * with no bar. Only meaningful beside {@link about}.
+   */
+  readonly ended?: boolean;
 }
 
 /**
- * A run's progress, with the unknown case kept unknown.
+ * The highest percentage a bar drawn against an approximate total shows.
+ *
+ * Below full, so a bar measured against an earlier run never says that this
+ * run is done. Only the run's own end says that.
+ */
+export const APPROXIMATE_PERCENT_CAP = 99;
+
+/**
+ * A run's progress, with the unknown case kept unknown unless an earlier run
+ * gives an approximate total.
  *
  * `totalPlanned` is null until the catalog walk has finished counting, which is
- * several minutes into an eighteen minute run. A screen that filled that gap
- * with a guess would show a bar moving against a denominator nobody chose, so
- * the percentage stays null and the screen says how many rather than how far.
+ * several minutes into an eighteen minute run, and a DEZA walk never knows it
+ * while it runs (backend plan 0267). The percentage stays null then, and the
+ * screen says how many rather than how far.
+ *
+ * `earlier` is what the latest completed run of the same preset, or else of
+ * the same chain and mode, processed ({@link earlierTotal}). It is used only
+ * while the run's own total is unknown, so a known total is never replaced;
+ * never while the run has processed nothing, because "0 of about 2,361" says
+ * nothing a bare count does not; and never when the run has already passed
+ * it, because "900 of about 824" would print a whole smaller than its part.
+ * The screen then says how many, as it does with no earlier run.
+ *
+ * An ended run keeps the estimate, worded in the past, and gets no bar
+ * (owner decision 97b): "824 of about 2,361" says how far a stopped walk got,
+ * and a bar on it would read as progress.
  *
  * The percentage stops at 100. A Carrefour catalog, DIA catalog or DIA store
  * discovery run from before backend plan 0217 counted two units in `processed`
  * and keeps a count above `totalPlanned`, which no migration can correct
  * exactly. Its bar is drawn full and no more.
  */
-export function runProgress(run: HarvestRun): RunProgress {
+export function runProgress(
+  run: HarvestRun,
+  earlier: number | null = null
+): RunProgress {
   const total = run.totalPlanned;
   const usable = total !== null && total > 0;
 
+  if (usable) {
+    return {
+      processed: run.processed,
+      total,
+      percent: Math.min(100, Math.round((run.processed / total) * 100)),
+    };
+  }
+
+  const about =
+    total === null &&
+    run.processed > 0 &&
+    earlier !== null &&
+    earlier > 0 &&
+    earlier >= run.processed
+      ? earlier
+      : null;
+
+  if (about === null) {
+    return { processed: run.processed, total, percent: null };
+  }
+
+  const ended = isTerminalRun(run);
   return {
     processed: run.processed,
     total,
-    percent: usable
-      ? Math.min(100, Math.round((run.processed / total) * 100))
-      : null,
+    percent: ended
+      ? null
+      : Math.min(
+          APPROXIMATE_PERCENT_CAP,
+          Math.round((run.processed / about) * 100)
+        ),
+    about,
+    ended,
   };
+}
+
+/** The words of a run's progress line: a translation key and its values. */
+export interface RunProgressLine {
+  readonly key:
+    | 'harvest.run.progress.of'
+    | 'harvest.run.progress.processed'
+    | 'harvest.run.progress.ofAbout'
+    | 'harvest.run.progress.ofAboutEnded';
+  /**
+   * The values. Raw numbers on the lines with no estimate, exactly as they
+   * were drawn before the estimate existed (owner decision 99b); strings
+   * grouped for the reader's language on the estimate line only.
+   */
+  readonly args: {
+    readonly processed: number | string;
+    readonly total?: number | string | null;
+  };
+  /** Whether this is the estimate line, which must say it is approximate. */
+  readonly approximate: boolean;
+}
+
+/**
+ * "N of T", "N processed", or the estimate line, as the header strip and the
+ * progress panel draw it. One function for both, so the two cannot word one
+ * run two ways.
+ *
+ * Only the estimate line is formatted with the locale's grouping ("824 of
+ * about 2,361"). The two lines that existed before keep their raw numbers
+ * ("1907 of 4383"), the way every other count on the run page is drawn
+ * (owner decision 99b).
+ */
+export function runProgressLine(
+  progress: RunProgress,
+  locale: string
+): RunProgressLine {
+  const about = progress.about ?? null;
+  if (progress.total !== null || about === null) {
+    return progress.total !== null
+      ? {
+          key: 'harvest.run.progress.of',
+          args: { processed: progress.processed, total: progress.total },
+          approximate: false,
+        }
+      : {
+          key: 'harvest.run.progress.processed',
+          args: { processed: progress.processed },
+          approximate: false,
+        };
+  }
+  const format = new Intl.NumberFormat(locale);
+  return {
+    key: progress.ended
+      ? 'harvest.run.progress.ofAboutEnded'
+      : 'harvest.run.progress.ofAbout',
+    args: {
+      processed: format.format(progress.processed),
+      total: format.format(about),
+    },
+    approximate: true,
+  };
+}
+
+/**
+ * Whether a run's progress is drawn against nothing it knows, so that another
+ * run is worth reading for an approximate total. A run that has processed
+ * nothing shows no estimate, so it is not read for one either; nor is a run
+ * with neither a preset nor a chain, which has nothing to compare with.
+ */
+export function wantsEarlierTotal(run: HarvestRun | null): run is HarvestRun {
+  return (
+    run !== null &&
+    run.totalPlanned === null &&
+    run.processed > 0 &&
+    ((run.presetId ?? '') !== '' || (run.supermarketId ?? '') !== '')
+  );
+}
+
+/**
+ * What an earlier run says the whole is: what it processed, when it completed
+ * and still stands. A failed, aborted or stale run stopped short, and a
+ * reverted run's writes were taken back, so neither says how big the walk is.
+ * Null for those and for a run that processed nothing.
+ */
+export function earlierTotal(
+  run: HarvestRun | null | undefined
+): number | null {
+  return run !== null &&
+    run !== undefined &&
+    run.status === 'COMPLETED' &&
+    run.revertedAt === null &&
+    run.processed > 0
+    ? run.processed
+    : null;
 }
 
 /**

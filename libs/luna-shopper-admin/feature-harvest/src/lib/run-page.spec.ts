@@ -142,6 +142,8 @@ interface Around {
    * translator answers the key and ignores the values.
    */
   readonly words?: (key: string, values?: Record<string, unknown>) => string;
+  /** What the runs list answers, which the approximate total is read from. */
+  readonly earlier?: readonly HarvestRun[];
 }
 
 async function render(
@@ -154,6 +156,7 @@ async function render(
     abortRun: async () => answer,
     revertRun: async () => reverted ?? answer,
     exportRun: async () => exported,
+    listRuns: async () => ({ items: around.earlier ?? [], nextCursor: null }),
   } as unknown as HarvestServiceI;
 
   TestBed.resetTestingModule();
@@ -268,6 +271,126 @@ describe('RunPage, arriving mid run', () => {
     ).toBeNull();
     expect(text(fixture)).toContain('harvest.run.progress.unsized');
     fixture.componentInstance.watch.stop();
+  });
+
+  /**
+   * A DEZA walk never knows its total while it runs (backend plan 0267), so
+   * the screen reads one from the last completed walk of the chain (decision
+   * 86 of the harvester round).
+   */
+  describe('a walk that does not know its total', () => {
+    const going = run({
+      supermarketId: 'sm_deza',
+      status: 'ABORTED',
+      totalPlanned: null,
+      processed: 824,
+    });
+    const whole = run({
+      id: 'run-0',
+      supermarketId: 'sm_deza',
+      status: 'COMPLETED',
+      totalPlanned: null,
+      processed: 2361,
+    });
+    // The earlier run is read once the run has arrived, so one more pass.
+    async function open(answer: HarvestRun, earlier: readonly HarvestRun[]) {
+      const fixture = await render(answer, undefined, { earlier });
+      await drain();
+      fixture.detectChanges();
+      return fixture;
+    }
+    const count = (fixture: ComponentFixture<RunPage>) =>
+      (
+        fixture.nativeElement.querySelector('[data-progress-count]')
+          ?.textContent ?? ''
+      ).trim();
+
+    it('says "of about" the earlier walk while it runs, against a bar short of full', async () => {
+      const fixture = await open({ ...going, status: 'RUNNING' }, [whole]);
+
+      expect(fixture.componentInstance.progress()).toEqual({
+        processed: 824,
+        total: null,
+        percent: 35,
+        about: 2361,
+        ended: false,
+      });
+      expect(count(fixture)).toBe('harvest.run.progress.ofAbout');
+      const bar = fixture.nativeElement.querySelector('[role="progressbar"]');
+      expect(bar?.getAttribute('aria-valuenow')).toBe('35');
+      expect(bar?.getAttribute('aria-valuetext')).toBe(
+        'harvest.run.progress.ofAbout'
+      );
+      expect(text(fixture)).toContain('harvest.run.progress.approximate');
+      expect(text(fixture)).not.toContain('harvest.run.progress.unsized');
+      fixture.componentInstance.watch.stop();
+    });
+
+    /** Owner decision 97b: the number stays, in the past, and no bar. */
+    it('keeps the estimate on an ended walk, in the past tense, with no bar', async () => {
+      const fixture = await open(going, [whole]);
+
+      expect(count(fixture)).toBe('harvest.run.progress.ofAboutEnded');
+      expect(
+        fixture.nativeElement.querySelector('[role="progressbar"]')
+      ).toBeNull();
+      expect(
+        fixture.nativeElement
+          .querySelector('[data-progress-approximate]')
+          ?.textContent.trim()
+      ).toBe('harvest.run.progress.approximateEnded');
+      expect(text(fixture)).not.toContain('harvest.run.progress.unsized');
+      fixture.componentInstance.watch.stop();
+    });
+
+    it('keeps the form it had before for a walk that processed nothing', async () => {
+      const fixture = await open({ ...going, processed: 0 }, [whole]);
+
+      expect(count(fixture)).toBe('harvest.run.progress.processed');
+      expect(text(fixture)).toContain('harvest.run.progress.unsized');
+      expect(
+        fixture.nativeElement.querySelector('[data-progress-approximate]')
+      ).toBeNull();
+      fixture.componentInstance.watch.stop();
+    });
+
+    it('keeps the unknown form with no earlier walk', async () => {
+      const fixture = await open(going, []);
+
+      expect(count(fixture)).toBe('harvest.run.progress.processed');
+      expect(text(fixture)).toContain('harvest.run.progress.unsized');
+      fixture.componentInstance.watch.stop();
+    });
+
+    it('keeps the unknown form when the run has passed the estimate', async () => {
+      const fixture = await open({ ...going, processed: 2400 }, [whole]);
+
+      expect(count(fixture)).toBe('harvest.run.progress.processed');
+      expect(
+        fixture.nativeElement.querySelector('[role="progressbar"]')
+      ).toBeNull();
+      fixture.componentInstance.watch.stop();
+    });
+
+    it.each([
+      ['reverted', { revertedAt: '2026-09-01T11:20:00.000Z' }],
+      ['failed', { status: 'FAILED' as const }],
+    ])('takes nothing from a %s earlier walk', async (_name, over) => {
+      const fixture = await open(going, [{ ...whole, ...over }]);
+
+      expect(count(fixture)).toBe('harvest.run.progress.processed');
+      fixture.componentInstance.watch.stop();
+    });
+
+    it('never replaces a known total', async () => {
+      const fixture = await open(
+        { ...going, status: 'RUNNING', totalPlanned: 4383 },
+        [whole]
+      );
+
+      expect(count(fixture)).toBe('harvest.run.progress.of');
+      fixture.componentInstance.watch.stop();
+    });
   });
 
   it('offers the abort on a run still going', async () => {
