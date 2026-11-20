@@ -3,7 +3,7 @@
  * raises them and the walk that has to tell them apart can import them without
  * importing each other.
  *
- * There are three, and the difference between them is what a caller is allowed
+ * There are three that a page load raises, and the difference between them is what a caller is allowed
  * to do next:
  *
  * - {@link CarrefourHttpError}: this page was refused. Skip it, record it, and
@@ -13,6 +13,9 @@
  *   not this library's, so every adapter stops the same way.
  * - {@link CarrefourBrowserError}: the browser stopped answering. The session is
  *   dropped and the next page gets a fresh one.
+ *
+ * A category walk raises a fourth, {@link CarrefourShortCategoryError}, when
+ * a page that is no refusal ended the category before its end.
  */
 
 import { SourceBlockedError } from '@portfolio/luna-shopper/source-guard';
@@ -43,6 +46,38 @@ export class CarrefourBrowserError extends Error {
   constructor(what: string) {
     super(`The browser stopped answering (${what})`);
     this.name = 'CarrefourBrowserError';
+  }
+}
+
+/**
+ * Thrown by a category walk that ended before the category did.
+ *
+ * A page that answered a 5xx, a 404 or no page state, or answered an empty
+ * card list while it still states rows at its own offset, is a gap and not the
+ * end. Ending the walk there in silence counted the category as read, and a
+ * crawl whose every category read is the crawl that may be declared whole: it
+ * then replaced category paths and could delist from a walk that never saw
+ * the rest of the category. The products read before the gap were yielded
+ * already and stay valid. The walk raises this so its caller names the
+ * category as not fully read.
+ *
+ * **It is not a refusal.** A 403 or a 429 is {@link CarrefourHttpError}, which
+ * the guard counts and an end pass may ask again; this is the page saying
+ * nothing about a block.
+ */
+export class CarrefourShortCategoryError extends Error {
+  constructor(
+    readonly categoryId: string,
+    /** The page that ended the walk, from 0. */
+    readonly page: number,
+    /** What the page answered, for an operator: `Carrefour answered 503`. */
+    readonly cost: string,
+    readonly url: string
+  ) {
+    super(
+      `${cost} for ${url}, so category ${categoryId} ended at page ${page + 1}`
+    );
+    this.name = 'CarrefourShortCategoryError';
   }
 }
 

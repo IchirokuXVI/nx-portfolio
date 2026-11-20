@@ -16,6 +16,7 @@ import {
 import {
   CarrefourBrowserError,
   CarrefourHttpError,
+  CarrefourShortCategoryError,
   isSkippable,
 } from './errors';
 import {
@@ -180,32 +181,156 @@ describe('CarrefourClient', () => {
     expect(products[0].categoryPath).toEqual(['Bebidas']);
   });
 
-  it('stops a category at a page that came back empty', async () => {
-    // Paging past the result set answers an empty item list rather than an
-    // error, so an empty page is where the category stopped.
+  describe('a category cut short (owner decision 90b)', () => {
+    /** Three pages, of which the recorded listing page is the first. */
     const category: CarrefourCategory = {
-      id: 'cat1',
-      name: 'A category',
-      url: '/x',
-      path: [],
-      totalResults: 1000,
+      id: 'cat20003',
+      name: 'Bebidas',
+      url: '/supermercado/x/cat20003/c',
+      path: ['Bebidas'],
+      totalResults: 72,
     };
-    const empty = {
-      productCardList: { results: { items: [], total_results: 1000 } },
-      pagination: { page_size: 24, total_pages: 42 },
+    const second =
+      'https://www.carrefour.es/supermercado/x/cat20003/c?offset=24';
+
+    /** The recorded page with its cards removed and its total restated. */
+    const emptied = (total: unknown): Record<string, unknown> => {
+      const state = JSON.parse(JSON.stringify(listingPage));
+      state.productCardList.results.items = [];
+      if (total === undefined) {
+        delete state.productCardList.results.total_results;
+      } else {
+        state.productCardList.results.total_results = total;
+      }
+      return state;
     };
-    let calls = 0;
-    const browser = new FakeBrowser(() => {
-      calls += 1;
-      return { status: 200, state: calls === 1 ? listingPage : empty };
+
+    /** The first page from the fixture, and the second as a test states. */
+    const secondAnswers = (answer: Answer) =>
+      new FakeBrowser((url) =>
+        url === second ? answer : { status: 200, state: listingPage }
+      );
+
+    async function walk(
+      browser: FakeBrowser,
+      options: { fromPage?: number } = {}
+    ) {
+      const products = [];
+      const pages: number[] = [];
+      let error: unknown = null;
+      try {
+        for await (const product of clientOn(browser).walkCategory(
+          category,
+          (_listing, page) => pages.push(page),
+          options
+        )) {
+          products.push(product);
+        }
+      } catch (caught) {
+        error = caught;
+      }
+      return { products, pages, error };
+    }
+
+    it.each([503, 500, 404])(
+      'raises after the products it read when a page answers %i',
+      async (status) => {
+        const browser = secondAnswers({ status });
+        const { products, pages, error } = await walk(browser);
+
+        // What the first page held is still handed over.
+        expect(products).toHaveLength(24);
+        expect(pages).toEqual([0]);
+        expect(error).toBeInstanceOf(CarrefourShortCategoryError);
+        expect(error).toMatchObject({
+          categoryId: 'cat20003',
+          page: 1,
+          cost: `Carrefour answered ${status}`,
+          url: second,
+        });
+        // A gap is not a refusal: the guard is not told of a block, and the
+        // walk may step over it like any other page that failed.
+        expect(error).not.toBeInstanceOf(CarrefourHttpError);
+        expect(isSkippable(error)).toBe(true);
+        // No page after the gap is asked for.
+        expect(browser.asked).toHaveLength(2);
+      }
+    );
+
+    it('raises when a page answers 200 with no page state', async () => {
+      const { error } = await walk(secondAnswers({ status: 200 }));
+      expect(error).toMatchObject({
+        page: 1,
+        cost: 'Carrefour answered a page with no page state',
+      });
     });
 
-    const products = [];
-    for await (const product of clientOn(browser).walkCategory(category)) {
-      products.push(product);
-    }
-    expect(products).toHaveLength(24);
-    expect(calls).toBe(2);
+    it('raises when an empty page still states rows at its offset', async () => {
+      // The recorded page states 1,726 results, so offset 24 is inside the
+      // set and an empty card list there is a gap and not the end.
+      const { products, error } = await walk(
+        secondAnswers({ status: 200, state: emptied(1726) })
+      );
+      expect(products).toHaveLength(24);
+      expect(error).toBeInstanceOf(CarrefourShortCategoryError);
+      expect(error).toMatchObject({
+        page: 1,
+        cost: 'Carrefour answered an empty page that states 1726 results',
+      });
+    });
+
+    it('raises when an empty page states no total at all', async () => {
+      const { error } = await walk(
+        secondAnswers({ status: 200, state: emptied(undefined) })
+      );
+      expect(error).toMatchObject({
+        page: 1,
+        cost: 'Carrefour answered an empty page that states no total',
+      });
+    });
+
+    it('ends without error at an empty page that states the set ended before it', async () => {
+      // The category shrank to 24 since the tree was walked, and the page
+      // itself says so. Paging past the end answers an empty list.
+      const browser = secondAnswers({ status: 200, state: emptied(24) });
+      const { products, error } = await walk(browser);
+      expect(error).toBeNull();
+      expect(products).toHaveLength(24);
+      expect(browser.asked).toHaveLength(2);
+    });
+
+    it('ends without error at its last page', async () => {
+      const browser = new FakeBrowser(ok(listingPage));
+      const { products, pages, error } = await walk(browser);
+      expect(error).toBeNull();
+      // The same page three times, deduplicated within the category.
+      expect(products).toHaveLength(24);
+      expect(pages).toEqual([0, 1, 2]);
+      expect(browser.asked).toHaveLength(3);
+    });
+
+    it('loads nothing for a category that is truly empty', async () => {
+      const browser = new FakeBrowser(ok(listingPage));
+      const products = [];
+      for await (const product of clientOn(browser).walkCategory({
+        ...category,
+        totalResults: 0,
+      })) {
+        products.push(product);
+      }
+      expect(products).toEqual([]);
+      expect(browser.asked).toEqual([]);
+    });
+
+    it('starts from a later page when asked to', async () => {
+      const browser = new FakeBrowser(ok(listingPage));
+      const { pages } = await walk(browser, { fromPage: 1 });
+      expect(pages).toEqual([1, 2]);
+      expect(browser.asked).toEqual([
+        second,
+        'https://www.carrefour.es/supermercado/x/cat20003/c?offset=48',
+      ]);
+    });
   });
 
   describe('a refusal', () => {

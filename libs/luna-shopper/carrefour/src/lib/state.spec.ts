@@ -1,7 +1,7 @@
 import overTheCeiling from './__fixtures__/listing-over-the-ceiling.json';
 import listingPage from './__fixtures__/listing-page.json';
 import productPage from './__fixtures__/product-page.json';
-import { readDetail, readListing } from './state';
+import { readDetail, readListing, statedTotalResults } from './state';
 import { CARREFOUR_CEILING, CARREFOUR_PAGE_SIZE } from './types';
 
 const state = (fixture: unknown): Record<string, unknown> =>
@@ -51,6 +51,26 @@ describe('readListing', () => {
     expect(empty.cards).toEqual([]);
     expect(empty.totalResults).toBe(0);
     expect(empty.firstLevelCategories).toEqual([]);
+  });
+});
+
+describe('statedTotalResults', () => {
+  it('reads the total the recorded page states', () => {
+    expect(statedTotalResults(state(listingPage))).toBe(1726);
+  });
+
+  it('tells a page that states 0 from a page that states nothing', () => {
+    // A stated 0 is an empty set. Nothing stated is not an end a walk may
+    // read, which is why this is null where `readListing` answers 0.
+    expect(
+      statedTotalResults({ productCardList: { results: { total_results: 0 } } })
+    ).toBe(0);
+    expect(statedTotalResults({})).toBeNull();
+    expect(
+      statedTotalResults({
+        productCardList: { results: { total_results: 'n/a' } },
+      })
+    ).toBeNull();
   });
 });
 

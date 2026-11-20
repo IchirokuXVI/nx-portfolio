@@ -35,6 +35,7 @@ export {
 export {
   CarrefourBrowserError,
   CarrefourHttpError,
+  CarrefourShortCategoryError,
   isSkippable,
 } from './lib/errors';
 export { readCard, readCards, splitCardName } from './lib/listing';

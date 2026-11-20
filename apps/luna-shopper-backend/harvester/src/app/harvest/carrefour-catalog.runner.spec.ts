@@ -1426,4 +1426,222 @@ describe('CarrefourCatalogRunner', () => {
       expect(report.categoryPathCalls).toEqual([]);
     });
   });
+
+  describe('a category cut short is not read (owner decision 90b)', () => {
+    const bebidas = link('cat1', 'Bebidas');
+    const ofertas = link('cat2', 'Ofertas');
+    const shared = card('p1', 'Agua CARREFOUR 1,5 l.', '0,39 €');
+    /**
+     * Bebidas holds two pages and Ofertas one. p1 sits in both, and p2 sits
+     * on the second page of Bebidas only.
+     */
+    const states = (): Record<string, Record<string, unknown>> => ({
+      '/supermercado/la-despensa/cat20001/c': page({
+        firstLevel: [bebidas, ofertas],
+      }),
+      [bebidas.url]: page({ totalResults: 30 }),
+      [ofertas.url]: page({ totalResults: 1 }),
+      '/supermercado/x/cat1/c?offset=0': page({
+        totalResults: 30,
+        cards: [card('p3', 'Cola CARREFOUR 33 cl.', '0,35 €')],
+      }),
+      '/supermercado/x/cat1/c?offset=24': page({
+        totalResults: 30,
+        cards: [shared, card('p2', 'Leche CARREFOUR 1 l.', '0,89 €')],
+      }),
+      '/supermercado/x/cat2/c?offset=0': page({
+        totalResults: 1,
+        cards: [shared],
+      }),
+    });
+
+    /**
+     * The same runner, over a session that answers the statuses a test names
+     * for a path, one an ask, and the page's state once they run out.
+     */
+    class StatusRunner extends TestRunner {
+      constructor(
+        states: Record<string, Record<string, unknown>>,
+        private readonly statuses: Record<string, number[]>
+      ) {
+        super(states);
+      }
+
+      protected override createClient(): CarrefourClient {
+        return new CarrefourClient({
+          userAgent: 'LunaShopperBot/1.0',
+          sleepImpl: async () => undefined,
+          openSession: async () => ({
+            goto: async (url: string) => {
+              const path = url.replace('https://www.carrefour.es', '');
+              this.asked.push(path);
+              const status = this.statuses[path]?.shift();
+              if (status !== undefined) {
+                return { status, state: null };
+              }
+              const state = this.states[path];
+              return state
+                ? { status: 200, state }
+                : { status: 404, state: null };
+            },
+            close: async () => undefined,
+          }),
+        });
+      }
+    }
+
+    async function crawl(runner: TestRunner) {
+      const runContext = context();
+      await runner.run(
+        runContext,
+        report,
+        { supermarketId: CHAIN, priceScopeId: SCOPE },
+        source({ delistCountsCrawl: true })
+      );
+      return runContext;
+    }
+
+    const callOf = (externalId: string) =>
+      report.categoryPathCalls.find((call) => call.externalId === externalId);
+
+    it('does not declare a crawl whole when a page answered 503 part way, and adds', async () => {
+      const runContext = await crawl(
+        new StatusRunner(states(), {
+          '/supermercado/x/cat1/c?offset=24': [503],
+        })
+      );
+
+      // What the first page held is kept.
+      expect(
+        report.products.map((product) => product.externalId).sort()
+      ).toEqual(['p1', 'p3']);
+      // Not whole, so nothing is delisted and no path is replaced: p1 keeps
+      // the Bebidas path the walk never got to see.
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole).toEqual([
+        { scopeKey: null, reason: 'unreadable', detail: [], listed: null },
+      ]);
+      expect(callOf('p1')).toEqual({
+        externalId: 'p1',
+        paths: [['Ofertas']],
+        mode: 'ADD',
+      });
+      expect(
+        report.categoryPathCalls.every((call) => call.mode === 'ADD')
+      ).toBe(true);
+      // Named the way an unreadable category is.
+      expect(runContext.warn).toHaveBeenCalledWith({
+        code: HarvestWarningCode.LISTING_UNREAD,
+        name: 'Bebidas',
+        offerId: null,
+        page: null,
+        message:
+          'Category cat1 Bebidas: Carrefour answered 503 at offset 24. The ' +
+          'listings from there on, of 30, were not read.',
+      });
+      expect(runContext.setReport).toHaveBeenCalledWith(
+        expect.objectContaining({ unreadableCategories: [bebidas.url] })
+      );
+      expect(runContext.report).toHaveBeenCalledWith({ failed: 1 });
+    });
+
+    it('does not declare a crawl whole when a page answered 404 part way', async () => {
+      const pages = states();
+      delete pages['/supermercado/x/cat1/c?offset=24'];
+      const runContext = await crawl(new TestRunner(pages));
+
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole[0].reason).toBe('unreadable');
+      expect(callOf('p1')?.mode).toBe('ADD');
+      expect(runContext.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Bebidas',
+          message: expect.stringContaining(
+            'Carrefour answered 404 at offset 24'
+          ),
+        })
+      );
+    });
+
+    it('does not declare a crawl whole when an empty page still states rows', async () => {
+      const pages = states();
+      pages['/supermercado/x/cat1/c?offset=24'] = page({ totalResults: 30 });
+      const runContext = await crawl(new TestRunner(pages));
+
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole[0].reason).toBe('unreadable');
+      expect(runContext.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Bebidas',
+          message: expect.stringContaining(
+            'Carrefour answered an empty page that states 30 results at offset 24'
+          ),
+        })
+      );
+    });
+
+    it('declares a crawl whole when an empty page states the set ended before it', async () => {
+      // The category shrank to 24 between the tree walk and the paging, and
+      // the page says so: that is the end, not a gap.
+      const pages = states();
+      pages['/supermercado/x/cat1/c?offset=24'] = page({ totalResults: 24 });
+      const runContext = await crawl(new TestRunner(pages));
+
+      expect(report.wholeListings).toEqual([
+        { scopeKey: null, listed: ['p3', 'p1'] },
+      ]);
+      expect(callOf('p1')).toEqual({
+        externalId: 'p1',
+        paths: [['Ofertas']],
+        mode: 'REPLACE',
+      });
+      expect(runContext.warn).not.toHaveBeenCalled();
+    });
+
+    it('declares a crawl whole that paged every category to its last page', async () => {
+      await crawl(new TestRunner(states()));
+
+      expect(report.wholeListings).toHaveLength(1);
+      expect(callOf('p1')).toEqual({
+        externalId: 'p1',
+        paths: [['Bebidas'], ['Ofertas']],
+        mode: 'REPLACE',
+      });
+    });
+
+    it('keeps a refused category unread when the end pass meets a 503 in it', async () => {
+      // The second page is refused on the walk, and the end pass asks it once
+      // more and meets a page after it that answers 503. Bebidas now has
+      // three pages so the pass has a page after the refused one to fail on.
+      const pages = states();
+      pages[bebidas.url] = page({ totalResults: 60 });
+      const runner = new StatusRunner(pages, {
+        '/supermercado/x/cat1/c?offset=24': [403],
+        '/supermercado/x/cat1/c?offset=48': [503],
+      });
+      const runContext = await crawl(runner);
+
+      // The end pass read the refused page this time.
+      expect(
+        runner.asked.filter(
+          (path) => path === '/supermercado/x/cat1/c?offset=24'
+        )
+      ).toHaveLength(2);
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole[0].reason).toBe('unreadable');
+      expect(runContext.setReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          unreadableCategories: [bebidas.url],
+          askedAgain: [{ id: 'cat1', name: 'Bebidas', read: false }],
+        })
+      );
+      expect(runContext.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining(
+            'Carrefour answered 503 at offset 48, once more at the end of the run'
+          ),
+        })
+      );
+    });
+  });
 });
