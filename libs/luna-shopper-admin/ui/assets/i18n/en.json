@@ -1029,6 +1029,7 @@
       "APPROX_WEIGHT_ROWS_DISAGREE": "Two weights for one piece",
       "LISTING_UNREAD": "A part was not read",
       "LISTING_SHORT": "A part was read short",
+      "LISTING_TRUNCATED": "A part was past the paging ceiling",
       "DETAIL_UNREAD": "Product pages stopped answering"
     },
     "status": {

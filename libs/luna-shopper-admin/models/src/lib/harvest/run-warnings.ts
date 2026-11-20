@@ -23,8 +23,8 @@ export interface RunWarningRow {
   readonly page: string;
   /**
    * What the leaflet printed, where the warning carries it. `''` for a blank
-   * name and for `LISTING_UNREAD` and `LISTING_SHORT`, whose sentence always
-   * names the part.
+   * name and for `LISTING_UNREAD`, `LISTING_SHORT` and `LISTING_TRUNCATED`,
+   * whose sentence always names the part.
    */
   readonly name: string;
   /** The harvester's own sentence, shown as it came. */
@@ -50,7 +50,7 @@ export function isFileImportRun(run: HarvestRun | null): boolean {
  * same rule the run's own facts follow.
  *
  * The name is decided by code, never by reading the sentence (admin plan
- * 0071, D7). The two walk warnings in `CODES_WHOSE_SENTENCE_NAMES_THE_PART`
+ * 0071, D7). The three walk warnings in `CODES_WHOSE_SENTENCE_NAMES_THE_PART`
  * always state their subject in the sentence ("Section 07 Mascotas failed"),
  * and a runner may or may not also set `name`, so their name is `''` either
  * way and the row reads the same on every run. Every other warning keeps its
@@ -85,7 +85,11 @@ export function runWarningRows(
  * runtime enum to import.
  */
 const CODES_WHOSE_SENTENCE_NAMES_THE_PART: ReadonlySet<Wire.EnumsHarvestWarningCode> =
-  new Set<Wire.EnumsHarvestWarningCode>(['LISTING_UNREAD', 'LISTING_SHORT']);
+  new Set<Wire.EnumsHarvestWarningCode>([
+    'LISTING_UNREAD',
+    'LISTING_SHORT',
+    'LISTING_TRUNCATED',
+  ]);
 
 /**
  * How many products this run put in front of a person.
