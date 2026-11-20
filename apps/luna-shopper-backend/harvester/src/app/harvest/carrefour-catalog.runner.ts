@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  CARREFOUR_CEILING,
   CARREFOUR_PAGE_SIZE,
   CarrefourClient,
   CarrefourHttpError,
@@ -89,7 +90,10 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       /**
        * The plan as the run states it. It starts as the frontier's sum and is
        * raised when a category is found to have grown (owner decision 104b),
-       * so `processed` never passes `totalPlanned` (plan 0217).
+       * so growth alone does not take `processed` past `totalPlanned` (plan
+       * 0217). Two things still can: a page that serves more cards than the
+       * total it states, and a plan write that failed, which is logged and not
+       * retried until the next category that grows.
        */
       const plan = { total: planned };
       this.logger.log(
@@ -117,6 +121,14 @@ export class CarrefourCatalogRunner implements CatalogRunner {
        * here with no error and leaves `unreadable`.
        */
       const lost = new Map<string, LostCategory>();
+      /**
+       * Every category the ceiling truncated: the frontier's capped nodes,
+       * then each frontier category whose pages stated a total past the
+       * ceiling while it was paged (owner decision 116b). Both are the same
+       * fact, rows the storefront will not serve, so both land in the one
+       * record and both keep the crawl from being declared whole.
+       */
+      const truncated: CarrefourCappedCategory[] = [...frontier.capped];
       let blocked: unknown = null;
       for (const category of frontier.categories) {
         // An abort, a person's or the refusal guard's (plan 0215), ends the
@@ -124,7 +136,11 @@ export class CarrefourCatalogRunner implements CatalogRunner {
         if (context.signal.aborted) {
           break;
         }
-        const cursor = { page: 0, total: category.totalResults };
+        const cursor: WalkCursor = {
+          page: 0,
+          total: category.totalResults,
+          stated: null,
+        };
         try {
           await this.pageCategory(
             context,
@@ -169,10 +185,15 @@ export class CarrefourCatalogRunner implements CatalogRunner {
             category,
             page: cursor.page,
             total: cursor.total,
+            stated: cursor.stated,
             error,
             askedAgain: false,
           });
           await context.report({ failed: 1 });
+        } finally {
+          // Whether the walk ended or failed: a page that stated a total past
+          // the ceiling says rows go unserved however the walk ended.
+          this.noteCeiling(context, truncated, category, cursor.stated);
         }
       }
 
@@ -185,7 +206,8 @@ export class CarrefourCatalogRunner implements CatalogRunner {
           products,
           unreadable,
           lost,
-          plan
+          plan,
+          truncated
         );
       }
 
@@ -204,7 +226,7 @@ export class CarrefourCatalogRunner implements CatalogRunner {
         switchOn: readDelistCountsCrawl(source.config),
         seedPath: readSeedPath(source.config) !== undefined,
         blocked: blocked !== null,
-        truncated: frontier.capped.length > 0,
+        truncated: truncated.length > 0,
         unreadable: unreadable.length > 0,
         aborted: context.signal.aborted,
       });
@@ -221,7 +243,7 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       await context.setReport(
         describeRun(
           frontier.categories,
-          frontier.capped,
+          truncated,
           unreadable,
           [...lost.values()].filter((entry) => entry.askedAgain),
           products.size,
@@ -282,18 +304,23 @@ export class CarrefourCatalogRunner implements CatalogRunner {
     report: RunReport,
     category: CarrefourCategory,
     products: Map<string, string[][]>,
-    cursor: { page: number; total: number },
+    cursor: WalkCursor,
     plan: { total: number }
   ): Promise<void> {
     let seen = 0;
     const before = cursor.total;
     // The page after the last one that answered is the page that failed, and
     // the one the end pass starts from (plan 0251). The total is the one that
-    // bounds the walk's last page (owner decision 104b).
-    const walk = client.walkCategory(category, (_listing, page, total) => {
-      cursor.page = page + 1;
-      cursor.total = Math.max(cursor.total, total);
-    });
+    // bounds the walk's last page (owner decision 104b), and the stated one
+    // is uncapped, so the caller can tell the ceiling bound (116b).
+    const walk = client.walkCategory(
+      category,
+      (_listing, page, total, stated) => {
+        cursor.page = page + 1;
+        cursor.total = Math.max(cursor.total, total);
+        cursor.stated = largerStated(cursor.stated, stated);
+      }
+    );
     let failure: { error: unknown } | null = null;
     try {
       for await (const product of walk) {
@@ -316,16 +343,22 @@ export class CarrefourCatalogRunner implements CatalogRunner {
    * The end of one walk of a category: the plan restated, then its progress,
    * then the walk's own error, if it threw.
    *
-   * The plan is written before the progress, so `processed` never passes it.
-   * **The walk's error wins.** Neither a failed plan write nor a failed
-   * progress report may replace an error the walk is already throwing,
-   * because a caller tells a block from a cut by that error's class: a
-   * `SourceBlockedError` that turned into a database error would leave the
-   * run crawling a source that is blocking it. A failed plan write also must
-   * not skip the progress of the listings the walk did page. Each such
-   * failure is logged, and the walk's error is thrown. When the walk did not
-   * throw, a failed progress report is thrown as it comes, and a failed plan
-   * write is thrown after the progress.
+   * The plan is written before the progress, so a category that grew does not
+   * take `processed` past it.
+   *
+   * **A failed plan write is logged and never thrown** (owner decision 122a).
+   * It concerns a progress figure only. Thrown after a walk that read every
+   * page, it reached the caller as the category's failure, and a category
+   * read whole was counted unreadable and lost and kept the crawl from being
+   * declared whole. It never skips the progress report either.
+   *
+   * **The walk's error wins.** A failed progress report may not replace an
+   * error the walk is already throwing, because a caller tells a block from a
+   * cut by that error's class: a `SourceBlockedError` that turned into a
+   * database error would leave the run crawling a source that is blocking it.
+   * So when the walk threw, a failed progress report is logged and the walk's
+   * error is thrown. When the walk did not throw, a failed progress report is
+   * thrown as it comes.
    */
   private async settle(
     context: RunContext,
@@ -335,36 +368,72 @@ export class CarrefourCatalogRunner implements CatalogRunner {
     seen: number,
     failure: { error: unknown } | null
   ): Promise<void> {
-    let planFailure: { error: unknown } | null = null;
     try {
       await restatePlan(context, plan, before, after);
     } catch (error) {
-      planFailure = { error };
+      this.logger.warn(
+        `Run ${context.runId}: the planned total was not restated: ` +
+          String(error)
+      );
     }
     if (failure === null) {
       await context.report({ processed: seen });
-    } else {
-      try {
-        await context.report({ processed: seen });
-      } catch (error) {
-        this.logger.warn(
-          `Run ${context.runId}: the progress was not reported: ` +
-            String(error)
-        );
-      }
+      return;
     }
-    if (failure !== null) {
-      if (planFailure !== null) {
-        this.logger.warn(
-          `Run ${context.runId}: the planned total was not restated: ` +
-            String(planFailure.error)
-        );
-      }
-      throw failure.error;
+    try {
+      await context.report({ processed: seen });
+    } catch (error) {
+      this.logger.warn(
+        `Run ${context.runId}: the progress was not reported: ` + String(error)
+      );
     }
-    if (planFailure !== null) {
-      throw planFailure.error;
+    throw failure.error;
+  }
+
+  /**
+   * Name a frontier category in `truncatedCategories` when a page of its walk
+   * stated a total past the ceiling (owner decision 116b).
+   *
+   * The frontier keeps a node over the ceiling out of the paging and names it
+   * `capped`. A category the frontier saw under the ceiling can still state
+   * more while it is paged, 900 at the frontier and 1,100 on its pages; the
+   * walk then reads its 1,008 rows and ends with no error. Counted as read
+   * whole, it would let the crawl be declared whole, delist and replace
+   * paths with rows unseen. So it gets the same record as a capped node, with
+   * the total its pages stated, and the same consequence: the crawl is
+   * `truncated` and not whole. The products it did read are reported as
+   * every other category's are.
+   *
+   * Once per category: the end pass of the same category raises the recorded
+   * total and adds no second entry.
+   */
+  private noteCeiling(
+    context: RunContext,
+    truncated: CarrefourCappedCategory[],
+    category: CarrefourCategory,
+    stated: number | null
+  ): void {
+    if (stated === null || stated <= CARREFOUR_CEILING) {
+      return;
     }
+    const known = truncated.find((entry) => entry.id === category.id);
+    if (known) {
+      known.totalResults = Math.max(known.totalResults, stated);
+      return;
+    }
+    this.logger.warn(
+      `Run ${context.runId}: category ${category.id} (${category.name}) ` +
+        `states ${stated} results, past the paging ceiling of ` +
+        `${CARREFOUR_CEILING}, so it is truncated: the rows past the ceiling ` +
+        `were not read`
+    );
+    truncated.push({
+      id: category.id,
+      name: category.name,
+      url: category.url,
+      path: [...category.path],
+      totalResults: stated,
+    });
   }
 
   /**
@@ -410,6 +479,12 @@ export class CarrefourCatalogRunner implements CatalogRunner {
    * the warning the walk gave it, and the one refused again keeps its warning
    * with the offset of the second refusal.
    *
+   * **It also stops after {@link END_PASS_FAILURES_IN_A_ROW} failures in a
+   * row that are not refusals** (owner decision 118b). A storefront that is
+   * down fails every ask, and the pass would otherwise walk every lost
+   * category into it. A category read resets the count. A category the pass
+   * did not ask keeps the warning the walk gave it, without "once more".
+   *
    * Only a refusal and a 5xx are asked again ({@link askable}). A browser that
    * stopped answering is a different failure, and a node the frontier walk
    * could not open was never paged at all. Answers the block, when one stopped
@@ -422,7 +497,8 @@ export class CarrefourCatalogRunner implements CatalogRunner {
     products: Map<string, string[][]>,
     unreadable: string[],
     lost: ReadonlyMap<string, LostCategory>,
-    plan: { total: number }
+    plan: { total: number },
+    truncated: CarrefourCappedCategory[]
   ): Promise<unknown> {
     const again = [...lost.values()].filter((entry) => askable(entry.error));
     if (again.length === 0) {
@@ -440,8 +516,17 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       'ENUMERATE',
       `Asking once more for ${again.length} category(ies) the walk could not finish`
     );
-    for (const entry of again) {
+    let failuresInARow = 0;
+    for (const [index, entry] of again.entries()) {
       if (context.signal.aborted) {
+        return null;
+      }
+      if (failuresInARow >= END_PASS_FAILURES_IN_A_ROW) {
+        this.logger.warn(
+          `Run ${context.runId}: the end pass failed ${failuresInARow} ` +
+            `time(s) in a row, so ${again.length - index} category(ies) ` +
+            `are not asked again`
+        );
         return null;
       }
       entry.askedAgain = true;
@@ -467,11 +552,16 @@ export class CarrefourCatalogRunner implements CatalogRunner {
           return null;
         }
         // Cut short again, by a 5xx or anything else: it stays unread and is
-        // not asked a third time, and the pass goes on to the next one.
+        // not asked a third time, and the pass goes on to the next one,
+        // unless this was the failure that ends it (owner decision 118b).
+        failuresInARow += 1;
         continue;
+      } finally {
+        this.noteCeiling(context, truncated, entry.category, entry.stated);
       }
       // Read this time: it is no longer unread. Its first failure stays
       // counted in `failed`, because that page did fail.
+      failuresInARow = 0;
       entry.error = null;
       unreadable.splice(unreadable.indexOf(entry.category.url), 1);
     }
@@ -504,9 +594,10 @@ export class CarrefourCatalogRunner implements CatalogRunner {
     // grew must still be paged to the end that walk saw (owner decision 104b).
     const walk = client.walkCategory(
       category,
-      (_listing, page, total) => {
+      (_listing, page, total, stated) => {
         entry.page = page + 1;
         entry.total = Math.max(entry.total, total);
+        entry.stated = largerStated(entry.stated, stated);
       },
       { fromPage: entry.page, knownTotal: entry.total }
     );
@@ -644,11 +735,47 @@ function observationOf(
   };
 }
 
+/**
+ * How many asks of the end pass may fail in a row, with something other than
+ * a refusal, before the pass stops (owner decision 118b).
+ *
+ * A refusal already ends the pass at once (plan 0251). A 5xx does not, so a
+ * storefront that is down would be asked for every lost category, 86 in the
+ * worst case, each one failing. Three in a row says the failures are no
+ * longer isolated blips that a second ask repairs, and every ask after that
+ * is load on a site that is not answering. One failure, or two, is still
+ * what the pass exists to repair, which is why the number is not one.
+ */
+const END_PASS_FAILURES_IN_A_ROW = 3;
+
+/** Where a walk of one category got to, as its pages told it. */
+interface WalkCursor {
+  /** The page after the last one that held cards. */
+  page: number;
+  /** The total that bounds the walk, never above the ceiling. */
+  total: number;
+  /**
+   * The largest total a page stated, uncapped, or null while none stated
+   * one. Past the ceiling, the category is truncated (owner decision 116b).
+   */
+  stated: number | null;
+}
+
+/** The larger of two stated totals, where null is a page that stated none. */
+function largerStated(a: number | null, b: number | null): number | null {
+  if (a === null) {
+    return b;
+  }
+  return b === null ? a : Math.max(a, b);
+}
+
 /** A frontier category the crawl did not finish, and what cost it. */
 interface LostCategory {
   category: CarrefourCategory;
   /** The page that failed, from 0. The end pass starts there. */
   page: number;
+  /** The largest total a page of a walk of it stated, uncapped (116b). */
+  stated: number | null;
   /**
    * The largest total a walk of it was bounded by: the frontier's, or larger
    * when a page stated that the category grew (owner decision 104b), and
@@ -732,7 +859,7 @@ function warnUnread(
  *
  * Whole only when the chain's own `delistCountsCrawl` is on, no seed path
  * narrowed the walk, nothing blocked it, no category was capped at the paging
- * ceiling, no category was unreadable or cut short by a page that failed part
+ * ceiling (by the frontier, or by a total its pages stated), no category was unreadable or cut short by a page that failed part
  * way through it, and the run was not aborted. The doubt
  * that remains is a product filed in no frontier category, which nobody has
  * measured: the switch stays off until two clean crawls were compared. A crawl
@@ -796,7 +923,9 @@ function describeRun(
      * ceiling with no children cannot be enumerated, none was found on
      * 2026-09-06, and that is a measurement rather than a guarantee. Named
      * rather than counted: "3 categories truncated" tells an operator that
-     * something is missing and nothing about what.
+     * something is missing and nothing about what. A frontier category whose
+     * pages stated a total past the ceiling while it was paged is named here
+     * too, with that stated total (owner decision 116b).
      */
     truncatedCategories: capped.map((category) => ({
       id: category.id,
