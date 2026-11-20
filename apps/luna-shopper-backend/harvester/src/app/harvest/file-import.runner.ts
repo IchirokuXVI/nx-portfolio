@@ -47,23 +47,32 @@ export interface FileImportCounters extends SourceIngestCounters {
 }
 
 /**
- * The write of the category paths failed after the ingest wrote its rows and
- * prices (plan 0268, owner decision 96c).
+ * The steps of an import that run after the ingest wrote its rows and prices:
+ * the warnings and the skipped count of the outcomes, the write of the
+ * category paths, and the last flush of the run's counters and warnings.
+ */
+export type FileImportStepAfterIngest = 'OUTCOMES' | 'CATEGORY_PATHS' | 'FLUSH';
+
+/**
+ * A step after the ingest failed, once the ingest had written its rows and
+ * prices (plan 0268, owner decisions 96c and 102b).
  *
  * The run still fails, but those rows and prices are saved, so the report of
  * the failed run states them, as a walk whose drain failed states what its
  * chunks wrote (plan 0269, D9). {@link counters} is what the ingest counted,
- * and `categoryPathsWritten` the rows whose paths changed before the failure.
- * The message is that of {@link failure}, the error the write threw, so the
- * run's sentence is the one the write gave.
+ * and `categoryPathsWritten` the rows whose paths changed before the failure
+ * (zero when the step that failed comes before the path write). {@link step}
+ * names the step. The message is that of {@link failure}, the error the step
+ * threw, so the run's sentence is the one the step gave.
  */
-export class FileImportPathsFailedError extends Error {
+export class FileImportFailedAfterIngestError extends Error {
   constructor(
+    readonly step: FileImportStepAfterIngest,
     readonly counters: FileImportCounters,
     readonly failure: unknown
   ) {
     super(failure instanceof Error ? failure.message : String(failure));
-    this.name = 'FileImportPathsFailedError';
+    this.name = 'FileImportFailedAfterIngestError';
   }
 }
 
@@ -224,20 +233,35 @@ export class FileImportRunner {
       observations,
     });
 
-    await this.recordOutcomes(context, document.products, outcomes);
+    // From here on the ingest has written rows and prices. A step below that
+    // throws still fails the run, and the error carries what was written so
+    // the report of the failed run states it (owner decision 102b). An ingest
+    // that throws above wrote nothing this has to carry.
     // Counted as each row lands, so a failure midway leaves the true count.
     let categoryPathsWritten = 0;
-    try {
-      await this.writeCategoryPaths(document.products, outcomes, () => {
+    const afterIngest = async (
+      step: FileImportStepAfterIngest,
+      work: () => Promise<void>
+    ): Promise<void> => {
+      try {
+        await work();
+      } catch (error) {
+        throw new FileImportFailedAfterIngestError(
+          step,
+          { ...counters, categoryPathsWritten },
+          error
+        );
+      }
+    };
+    await afterIngest('OUTCOMES', () =>
+      this.recordOutcomes(context, document.products, outcomes)
+    );
+    await afterIngest('CATEGORY_PATHS', () =>
+      this.writeCategoryPaths(document.products, outcomes, () => {
         categoryPathsWritten += 1;
-      });
-    } catch (error) {
-      throw new FileImportPathsFailedError(
-        { ...counters, categoryPathsWritten },
-        error
-      );
-    }
-    await context.flush();
+      })
+    );
+    await afterIngest('FLUSH', () => context.flush());
     return { ...counters, categoryPathsWritten };
   }
 
@@ -255,7 +279,7 @@ export class FileImportRunner {
    * walk writes its paths at the drain after the last chunk. An ingest that
    * throws reaches no line here, so a failed import writes no path. A write
    * here that throws fails the run, which {@link run} raises as a
-   * {@link FileImportPathsFailedError} carrying what the ingest wrote. A product
+   * {@link FileImportFailedAfterIngestError} carrying what the ingest wrote. A product
    * with no path makes no write. Two products of the document that resolve to
    * one row (`DUPLICATE_KEY`) add their paths to it together.
    *

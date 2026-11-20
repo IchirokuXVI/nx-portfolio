@@ -172,8 +172,14 @@ export function normalizeProduct(
   );
   const categoryPath = pickPath(pagePrimary, row.categoryPath);
   // The product's own breadcrumbs are on its page; the row's are the fall
-  // back, as the row's need world path is (plan 0268).
-  const pageBreadcrumbs = readCategoryBreadcrumbs(state);
+  // back, as the row's need world path is (plan 0268). A page list that yields
+  // no path, the empty `[]` included, is read as no list at all, so the row's
+  // list is used (owner decision 101b).
+  const readBreadcrumbs = readCategoryBreadcrumbs(state);
+  const pageBreadcrumbs =
+    readBreadcrumbs !== null && readBreadcrumbs.paths.length > 0
+      ? readBreadcrumbs
+      : null;
   const identifiers = readIdentifiers(readArray(state, 'eans'));
   const sizeFormat =
     readString(readRecord(readRecord(state, 'price'), 'packaging'), 'text') ??
@@ -201,13 +207,12 @@ export function normalizeProduct(
       categoryPath,
       pageBreadcrumbs?.paths ?? row.categoryBreadcrumbs ?? []
     ),
-    // Only a list that is not empty and was read in full states every path
-    // (plan 0268): a part the code could not read may name a path a REPLACE
-    // would drop, and an empty list states nothing (owner decision 95b).
+    // Only a page list that is not empty and was read in full states every
+    // path (plan 0268): a part the code could not read may name a path a
+    // REPLACE would drop, and an empty list states nothing (owner decision
+    // 95b). The row's list never makes the paths stated.
     categoryPathsStated:
-      pagePrimary.length > 0 &&
-      pageBreadcrumbs?.wholly === true &&
-      pageBreadcrumbs.paths.length > 0,
+      pagePrimary.length > 0 && pageBreadcrumbs?.wholly === true,
     // A weight the chain does not promise is no size (plan 0244, section
     // 5.2): it travels as `approxWeight`, and the row has neither a size nor
     // a unit.
@@ -466,9 +471,10 @@ function pickPath(fromPage: string[], fromRow: string[]): string[] {
  * still returned, but they are not every path the page names, so they cannot
  * disprove a path stored before. A list that is not empty and of which no
  * path can be read is null, as an absent list is: it proves nothing. The
- * empty list `[]` is read wholly and stays a list of no path, which
- * {@link normalizeProduct} does not take as a statement either (owner
- * decision 95b).
+ * empty list `[]` is read wholly and stays a list of no path. For an index
+ * row that is kept as it is. {@link normalizeProduct} reads a page list of no
+ * path as no list at all: it does not hide the row's list (owner decision
+ * 101b) and it is no statement (owner decision 95b).
  */
 function readCategoryBreadcrumbs(
   holder: Json

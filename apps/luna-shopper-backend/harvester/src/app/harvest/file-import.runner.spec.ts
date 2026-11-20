@@ -15,9 +15,10 @@ import type {
 import eljamon from './__fixtures__/eljamon.vision.harvest-document.json';
 import type { CatalogClient } from './catalog-client.service';
 import {
-  FileImportPathsFailedError,
+  FileImportFailedAfterIngestError,
   FileImportRunner,
   unpayableForOne,
+  type FileImportStepAfterIngest,
 } from './file-import.runner';
 import { entryKey } from './matching';
 import { PriceScopeResolver } from './price-scope-resolver';
@@ -869,9 +870,12 @@ describe('FileImportRunner (plan 0086)', () => {
       expect(saved).toHaveLength(1);
       expect(saved[0].categoryPaths).toEqual([DAIRY, ['Desayuno']]);
     });
+  });
 
-    it('carries what the ingest wrote on an error when the path write fails after it (owner decision 96c)', async () => {
-      const { runner, context, ingest, saved, priceRows } = build({
+  describe('a step that fails after the ingest wrote (owner decisions 96c and 102b)', () => {
+    const DAIRY = ['Lácteos', 'Leche'];
+    const twoPriced = () =>
+      build({
         document: document({
           products: [
             {
@@ -889,31 +893,89 @@ describe('FileImportRunner (plan 0086)', () => {
           ],
         }),
       });
-      // One row lands, then the database goes away.
-      jest
-        .spyOn(ingest, 'writeCategoryPaths')
-        .mockImplementation(async (_writes, onWritten = () => undefined) => {
-          onWritten();
-          throw new Error('connection terminated');
-        });
-
-      const failure = await runner.run(context, input).then(
+    type Built = ReturnType<typeof twoPriced>;
+    const failing = (built: Built) =>
+      built.runner.run(built.context, input).then(
         () => null,
         (error: unknown) => error
       );
 
-      expect(failure).toBeInstanceOf(FileImportPathsFailedError);
-      const error = failure as FileImportPathsFailedError;
-      // The run's sentence is the write's own.
-      expect(error.message).toBe('connection terminated');
-      // The ingest wrote both rows and both prices before the paths.
-      expect(saved).toHaveLength(2);
-      expect(priceRows).toHaveLength(2);
-      expect(error.counters).toMatchObject({
-        created: 2,
-        pricesRecorded: 2,
+    it.each<{
+      step: FileImportStepAfterIngest;
+      breaks: (built: Built) => void;
+      categoryPathsWritten: number;
+    }>([
+      {
+        // Both products matched nothing, so both are skipped, and the count
+        // of skipped rows does not land. The ingest's own counts did.
+        step: 'OUTCOMES',
+        breaks: ({ context }) =>
+          (context.report as jest.Mock).mockImplementation(
+            async (counters: Record<string, number>) => {
+              if ('skipped' in counters) {
+                throw new Error('connection terminated');
+              }
+            }
+          ),
+        categoryPathsWritten: 0,
+      },
+      {
+        // One row lands, then the database goes away.
+        step: 'CATEGORY_PATHS',
+        breaks: ({ ingest }) =>
+          jest
+            .spyOn(ingest, 'writeCategoryPaths')
+            .mockImplementation(
+              async (_writes, onWritten = () => undefined) => {
+                onWritten();
+                throw new Error('connection terminated');
+              }
+            ),
         categoryPathsWritten: 1,
-      });
+      },
+      {
+        // Every path landed; the last flush of the counters does not.
+        step: 'FLUSH',
+        breaks: ({ context }) =>
+          (context.flush as jest.Mock).mockRejectedValueOnce(
+            new Error('connection terminated')
+          ),
+        categoryPathsWritten: 2,
+      },
+    ])(
+      'carries what was written on an error when $step fails',
+      async ({ step, breaks, categoryPathsWritten }) => {
+        const built = twoPriced();
+        breaks(built);
+
+        const failure = await failing(built);
+
+        expect(failure).toBeInstanceOf(FileImportFailedAfterIngestError);
+        const error = failure as FileImportFailedAfterIngestError;
+        expect(error.step).toBe(step);
+        // The run's sentence is the step's own.
+        expect(error.message).toBe('connection terminated');
+        // The ingest wrote both rows and both prices before the step.
+        expect(built.saved).toHaveLength(2);
+        expect(built.priceRows).toHaveLength(2);
+        expect(error.counters).toMatchObject({
+          created: 2,
+          pricesRecorded: 2,
+          categoryPathsWritten,
+        });
+      }
+    );
+
+    it('raises the error of an ingest that fails as it is, with nothing to carry', async () => {
+      const built = twoPriced();
+      const broken = new Error('connection refused');
+      jest.spyOn(built.ingest, 'ingest').mockRejectedValueOnce(broken);
+
+      const failure = await failing(built);
+
+      expect(failure).toBe(broken);
+      expect(built.context.report).not.toHaveBeenCalled();
+      expect(built.context.flush).not.toHaveBeenCalled();
     });
   });
 

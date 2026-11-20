@@ -1060,6 +1060,28 @@ describe('LidlCatalogRunner', () => {
       ]);
     });
 
+    it('takes the breadcrumbs of the index row for a page that states an empty list, as ADD (owner decision 101b)', async () => {
+      const runner = new TestRunner({
+        index: [
+          row({
+            id: '1',
+            title: 'Queso',
+            category: 'Food',
+            breadcrumbs: [SHOP],
+          }),
+        ],
+        products: {
+          '/p/x/p1': product({ id: '1', groups: priced, rawBreadcrumbs: [] }),
+        },
+      });
+
+      await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: '1', paths: [QUESO, SHOP], mode: 'ADD' },
+      ]);
+    });
+
     it('says REPLACE for a page that states a real list read in full, so a path it no longer names goes', async () => {
       const runner = new TestRunner({
         index: [row({ id: '1', title: 'Queso', category: 'Food' })],
