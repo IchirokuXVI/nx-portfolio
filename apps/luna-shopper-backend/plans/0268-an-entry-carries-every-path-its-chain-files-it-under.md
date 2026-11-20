@@ -537,6 +537,13 @@ is not stated in full. Only a page list read in full that yields a path stands a
 such a list can make a call `REPLACE`. Every other page list (absent, `[]`, or one of which no
 path can be read) gives the row's paths, as under 101b.
 
+**Decisions that keep what is built.** No code changed for these.
+
+- 123a: a LIDL index row path that is a prefix of a page path travels with the product.
+  `categoryPathsOf` (`libs/luna-shopper/lidl/src/lib/normalize.ts`) leaves out exact repeats
+  only, and the sink drops the shorter path (`distinctCategoryPaths`,
+  `apps/luna-shopper-backend/harvester/src/app/harvest/category-paths.ts`).
+
 **A LIDL product whose page states an empty list never loses an old path by itself.** Its call
 is `ADD` under 95b, whatever else the run reads. Only a curator clears such a path.
 

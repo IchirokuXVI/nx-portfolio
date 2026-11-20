@@ -1,4 +1,4 @@
-> **PR:** [#938](https://github.com/IchirokuXVI/nx-portfolio/pull/938), [#1038](https://github.com/IchirokuXVI/nx-portfolio/pull/1038) (a total past the ceiling, the end pass stop, the plan write), [#1042](https://github.com/IchirokuXVI/nx-portfolio/pull/1042) (a category counts in `failed` only if it stays unread)
+> **PR:** [#938](https://github.com/IchirokuXVI/nx-portfolio/pull/938), [#1038](https://github.com/IchirokuXVI/nx-portfolio/pull/1038) (a total past the ceiling, the end pass stop, the plan write), [#1042](https://github.com/IchirokuXVI/nx-portfolio/pull/1042) (a category counts in `failed` only if it stays unread), [#1051](https://github.com/IchirokuXVI/nx-portfolio/pull/1051) (a category past the ceiling warns), [#1056](https://github.com/IchirokuXVI/nx-portfolio/pull/1056) (grouped counts)
 
 # 0251: a completed run names what it could not read
 
@@ -202,7 +202,8 @@ above is left as it was written.
     The walk throws on that page before it counts the page's stated total, so the category is not
     added to `truncatedCategories`.
   - A truncated category writes no run warning, as a capped frontier node writes none. The run
-    report entry and one log line are the only record.
+    report entry and one log line are the only record. PR #1051 changed this: both now write
+    `LISTING_TRUNCATED` (owner decision 124b, below).
   - The stop of the end pass after three failures is only logged.
 - **A Carrefour category counts in `failed` only if it stays unread (PR #1042).** Found by the
   shared run of 2026-11-20: the end pass read two refused categories whole, but the run kept
@@ -218,3 +219,22 @@ above is left as it was written.
 - **`failed` counts categories, the failure ratio divides by listings (owner decision 134a).**
   The executor compares `failed / totalPlanned` with `HARVEST_FAILURE_RATIO`, and the Carrefour
   `totalPlanned` counts listings. The owner keeps this. No code changed.
+- **A category past the ceiling writes a run warning (owner decision 124b, PR #1051).**
+  `HarvestWarningCode.LISTING_TRUNCATED` is written once for each category in
+  `truncatedCategories`, with the category name in `name` and a null `offerId` and `page`. Two
+  cases have two sentences. A category whose pages stated a total past the ceiling while it was
+  paged had its first 1,008 rows read, and its sentence says the rest were not read. A capped
+  frontier node with no smaller category is never paged, so its sentence says none of its rows
+  were read. The runner writes the warnings in its `finally`, at the end of the run, with the
+  largest total each category stated. So a category seen twice warns once, and an aborted or
+  blocked run writes them too (`warnTruncated`, `carrefour-catalog.runner.ts`). The warning
+  raises no alert, because `runAlertFor` reads no warning. The back office label is "A part was
+  past the paging ceiling", and the row hides the bold name, as for `LISTING_UNREAD` and
+  `LISTING_SHORT`. The stop of the end pass after three failures is still only a log line.
+- **The counts in a Carrefour sentence are grouped (owner decision 139b, PR #1056).** Every
+  sentence the Carrefour walk writes for a person (a run warning, a stage, what a page cost)
+  prints its counts through one function, `formatCount`
+  (`libs/luna-shopper/carrefour/src/lib/count.ts`). So "of 1008" now reads "of 1,008". A
+  category id, an HTTP status code, a run id and every server log line are not grouped.
+- **Decisions that keep what is built.** No code changed for these.
+  - 125a: three failures in a row end the end pass (`END_PASS_FAILURES_IN_A_ROW`, 118b above).
