@@ -1,4 +1,4 @@
-import { isNarrowedRunRequest } from '@portfolio/luna-shopper/contracts/run-narrowing';
+import { isNarrowedRun as isNarrowedRunByContract } from '@portfolio/luna-shopper/contracts/run-narrowing';
 import type * as Wire from '../wire/wire-types';
 
 /**
@@ -326,17 +326,12 @@ export function runProgressLine(
  * Whether a run read less than its chain's whole walk, by its own request
  * (owner decision 112b): a store discovery of two postal codes, a catalog walk
  * of named scopes, a detail backfill. The rule is the contracts' own
- * {@link isNarrowedRunRequest}, called and not restated.
- *
- * A run whose request is unknown answers true: `input` is null when the
- * harvester could not read what it stored, and absent from a gateway older
- * than the field. True is the direction that draws no estimate rather than a
- * wrong one. The run's own `mode` is the one read, so a request that names
- * another cannot move the run to another rule.
+ * `isNarrowedRun`, called and not restated, which also holds that a request
+ * the run cannot state (`input` null, or absent from an older gateway) counts
+ * as narrowed: the direction that draws no estimate rather than a wrong one.
  */
 export function isNarrowedRun(run: HarvestRun): boolean {
-  const input = run.input ?? null;
-  return input === null || isNarrowedRunRequest({ ...input, mode: run.mode });
+  return isNarrowedRunByContract(run);
 }
 
 /**
