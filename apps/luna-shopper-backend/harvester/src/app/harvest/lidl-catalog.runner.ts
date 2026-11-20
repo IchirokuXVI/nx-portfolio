@@ -249,7 +249,9 @@ function reportProduct(
  * name no longer holds. Anything less has disproved nothing, and says
  * `ADD`: a path taken from the index row, a page that left the list out, an
  * empty list (owner decision 95b), or a list with a part that could not be
- * read. `categoryPathsStated` of the product holds that test.
+ * read. `categoryPathsStated` of the product holds that test. The index
+ * row's paths are among a product's paths only when the page's list was not
+ * read in full (owner decisions 101b and 115b), so they always go as `ADD`.
  *
  * **The rolling window does not change that.** What LIDL publishes is a week
  * of offers, so a run proves nothing about a product it did not meet, and
