@@ -33,7 +33,7 @@ import { SCHEDULES } from './schedules';
  * a run started from it, so the list has a summary and a latest run to draw.
  */
 
-const MERCADONA = '11111111-1111-4111-8111-111111111111';
+const MERCADONA = 'sm_mercadona';
 const NATIONAL = '55555555-5555-4555-8555-555555555551';
 const W4661 = '55555555-5555-4555-8555-555555555554';
 const W4804 = '55555555-5555-4555-8555-555555555555';
@@ -80,7 +80,7 @@ interface Recorded {
 }
 
 /** A second chain, which the seed holds no preset for. */
-const CARREFOUR = '22222222-2222-4222-8222-222222222222';
+const CARREFOUR = 'sm_carrefour';
 
 /**
  * Where the panel is opened, and whether a chain is chosen by hand afterwards.
@@ -566,7 +566,7 @@ describe('the presets panel, schedules', () => {
  * the two cases.
  */
 describe('the presets panel, a red probe', () => {
-  const DEZA = '33333333-3333-4333-8333-333333333333';
+  const DEZA = 'sm_deza';
 
   async function onDeza() {
     const rendered = await render({ choose: false });

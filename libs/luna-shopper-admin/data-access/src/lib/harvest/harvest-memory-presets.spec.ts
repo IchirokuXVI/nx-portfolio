@@ -8,8 +8,8 @@ import { MERCADONA_WEEKLY_PRESET } from './harvest-seed';
  * The screens draw the duplicate name refusal and the preset a run came from,
  * so both have to be reachable with nothing listening.
  */
-const MERCADONA = '11111111-1111-4111-8111-111111111111';
-const DEZA = '33333333-3333-4333-8333-333333333333';
+const MERCADONA = 'sm_mercadona';
+const DEZA = 'sm_deza';
 
 describe('HarvestMemory, presets', () => {
   it('lists a chain presets by name, each with its latest run', async () => {

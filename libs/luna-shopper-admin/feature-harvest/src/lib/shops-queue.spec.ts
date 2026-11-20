@@ -39,8 +39,8 @@ import { ShopsQueuePage } from './shops-queue-page';
  * until one is chosen and there is no route that lists every source's shops.
  */
 
-const MERCADONA = '11111111-1111-4111-8111-111111111111';
-const CARREFOUR = '22222222-2222-4222-8222-222222222222';
+const MERCADONA = 'sm_mercadona';
+const CARREFOUR = 'sm_carrefour';
 
 const drain = async () => {
   for (let i = 0; i < 12; i++) {

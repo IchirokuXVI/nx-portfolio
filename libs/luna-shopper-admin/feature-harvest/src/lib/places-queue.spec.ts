@@ -50,8 +50,8 @@ const OESTE = 'place-mercadona-oeste';
 const TRASSIERRA = 'place-mercadona-trassierra';
 /** A place that names Carrefour, a chain the catalog holds no shop of. */
 const CARREFOUR = 'place-carrefour-1';
-/** A place that names Dia, a chain the catalog does not hold. */
-const DIA = 'place-dia-1';
+/** A place that names ALDI, by key and by name, a chain the catalog does not hold. */
+const ALDI = 'place-aldi-1';
 
 const drain = async () => {
   for (let i = 0; i < 12; i++) {
@@ -440,7 +440,7 @@ describe('the places queue, with an OpenStreetMap place and no chain', () => {
 
     expect(page.queue.current()?.id).toBe(UNBRANDED);
     expect(page.creatingChain()).toBe(true);
-    expect(page.newChainName()).toBe('Deza');
+    expect(page.newChainName()).toBe('Aldi');
     expect(page.errorKey()).toBe('harvest.places.error.needsChain');
     expect(
       fixture.nativeElement.querySelector('#places-new-chain-name')
@@ -451,13 +451,13 @@ describe('the places queue, with an OpenStreetMap place and no chain', () => {
     const { fixture, page, calls } = await render(UNBRANDED);
 
     page.startNewChain(front(page));
-    page.newChainName.set('Supermercados Deza');
+    page.newChainName.set('Aldi Supermercados');
     page.newChainLocale.set('es');
     fixture.detectChanges();
     await page.importPlace();
 
     expect(named(calls, 'importPlace')[0][1]).toEqual({
-      newChain: { name: 'Supermercados Deza', locale: 'es' },
+      newChain: { name: 'Aldi Supermercados', locale: 'es' },
     });
     expect(page.queue.items().some((place) => place.id === UNBRANDED)).toBe(
       false
@@ -473,7 +473,7 @@ describe('the places queue, with an OpenStreetMap place and no chain', () => {
     await page.importPlace();
 
     expect(named(calls, 'importPlace')[0][1]).toEqual({
-      newChain: { name: 'Deza', locale: 'es' },
+      newChain: { name: 'Aldi', locale: 'es' },
     });
   });
 });
@@ -738,7 +738,7 @@ describe('the places queue, a place that says which shop it may be', () => {
     const of = (name: string) =>
       drawn.find((line) => line.text.includes(name)) ?? null;
 
-    expect(drawn.length).toBe(7);
+    expect(drawn.length).toBe(9);
     expect(of('Mercadona Libertador')?.mark?.textContent).toContain(
       'harvest.places.mark.probable'
     );
@@ -747,6 +747,8 @@ describe('the places queue, a place that says which shop it may be', () => {
     );
     expect(of('Dia Market')?.mark).toBeNull();
     expect(of('Supermercado Deza')?.mark).toBeNull();
+    expect(of('ALDI')?.mark).toBeNull();
+    expect(of('Supermercado Aldi')?.mark).toBeNull();
     expect(drawn.filter((line) => line.mark !== null)).toHaveLength(3);
   });
 
@@ -856,7 +858,7 @@ describe('the places queue, a place that says which shop it may be', () => {
   });
 
   it('draws no candidates panel for a place with none', async () => {
-    const { fixture, page } = await render(DIA);
+    const { fixture, page } = await render(ALDI);
 
     expect(page.candidates()).toBeNull();
     expect(fixture.nativeElement.querySelector('.matches')).toBeNull();
@@ -889,7 +891,7 @@ describe('the places queue, linking to a shop a person picks', () => {
     pickers(fixture).find((found) => found.controlId() === id) ?? null;
 
   it('offers the control on every open place, and opens no picker until it is pressed', async () => {
-    const { fixture, page } = await render(DIA);
+    const { fixture, page } = await render(ALDI);
 
     expect(page.linking()).toBeNull();
     expect(picker(fixture, 'places-link-shop')).toBeNull();
@@ -899,7 +901,7 @@ describe('the places queue, linking to a shop a person picks', () => {
   });
 
   it('asks for a chain first when nothing names one', async () => {
-    const { fixture, page } = await render(DIA);
+    const { fixture, page } = await render(ALDI);
 
     fixture.nativeElement.querySelector('[data-link-start]').click();
     fixture.detectChanges();
@@ -913,7 +915,7 @@ describe('the places queue, linking to a shop a person picks', () => {
   });
 
   it('opens the shop picker of the chain that is named, and no other chain', async () => {
-    const { fixture, page } = await render(DIA);
+    const { fixture, page } = await render(ALDI);
 
     page.startLinking();
     page.chooseLinkChain(MERCADONA);
@@ -953,6 +955,23 @@ describe('the places queue, linking to a shop a person picks', () => {
     });
   });
 
+  /**
+   * Dia and Maxi Dia share the key of Dia, and the catalog holds that chain.
+   * The place prints `Maxi Dia`, a name no chain carries, so only the key
+   * finds the chain.
+   */
+  it('opens on the held chain of Dia, found by the key of a Maxi Dia place', async () => {
+    const { fixture, page } = await render('place-dia-2');
+
+    page.startLinking();
+    await settle(fixture);
+
+    expect(page.linkChain()).toBe('sm_dia');
+    expect(picker(fixture, 'places-link-shop')?.scope()).toEqual({
+      supermarketId: 'sm_dia',
+    });
+  });
+
   it('opens on the chain the chain picker holds, before the candidate', async () => {
     const { page } = await render(OESTE);
 
@@ -963,7 +982,7 @@ describe('the places queue, linking to a shop a person picks', () => {
   });
 
   it('shows the picked shop with its address, and sends nothing', async () => {
-    const { fixture, page, calls } = await render(DIA);
+    const { fixture, page, calls } = await render(ALDI);
 
     page.startLinking();
     page.chooseLinkChain(MERCADONA);
@@ -976,11 +995,11 @@ describe('the places queue, linking to a shop a person picks', () => {
     expect(picked.textContent).toContain('Carretera de Trassierra km 8');
     expect(picked.textContent).toContain('harvest.places.link.submit');
     expect(named(calls, 'linkPlace')).toHaveLength(0);
-    expect(page.queue.current()?.id).toBe(DIA);
+    expect(page.queue.current()?.id).toBe(ALDI);
   });
 
   it('links to the picked shop when "Link" is pressed', async () => {
-    const { fixture, page, calls } = await render(DIA);
+    const { fixture, page, calls } = await render(ALDI);
 
     page.startLinking();
     page.chooseLinkChain(MERCADONA);
@@ -990,13 +1009,13 @@ describe('the places queue, linking to a shop a person picks', () => {
     await drain();
 
     expect(named(calls, 'linkPlace')).toEqual([
-      [DIA, { supermarketLocationId: 'loc_sierra' }],
+      [ALDI, { supermarketLocationId: 'loc_sierra' }],
     ]);
-    expect(page.queue.items().some((place) => place.id === DIA)).toBe(false);
+    expect(page.queue.items().some((place) => place.id === ALDI)).toBe(false);
   });
 
   it('forgets the picked shop when the chain changes', async () => {
-    const { page } = await render(DIA);
+    const { page } = await render(ALDI);
 
     page.startLinking();
     page.chooseLinkChain(MERCADONA);
@@ -1007,18 +1026,18 @@ describe('the places queue, linking to a shop a person picks', () => {
   });
 
   it('clears the link form when another place comes up', async () => {
-    const { page } = await render(DIA);
+    const { page } = await render(ALDI);
 
     page.startLinking();
     page.chooseLinkChain(MERCADONA);
     await page.pickShop('loc_sierra');
     page.skip();
 
-    expect(page.queue.current()?.id).not.toBe(DIA);
+    expect(page.queue.current()?.id).not.toBe(ALDI);
     expect(page.linking()).toBeNull();
 
     // And it is not the form of the place when it comes back in front.
-    page.open(DIA);
+    page.open(ALDI);
     expect(page.linking()).toBeNull();
   });
 });
@@ -1036,7 +1055,7 @@ describe('the places queue, linking from the nearby panel', () => {
   };
 
   it('draws a link button on each nearby shop, and links to that shop', async () => {
-    const { fixture, page, calls } = await render(DIA);
+    const { fixture, page, calls } = await render(ALDI);
     page.catalogNear.set([NEAR_SHOP]);
     fixture.detectChanges();
 
@@ -1050,9 +1069,9 @@ describe('the places queue, linking from the nearby panel', () => {
     await drain();
 
     expect(named(calls, 'linkPlace')).toEqual([
-      [DIA, { supermarketLocationId: 'loc_consum_centro' }],
+      [ALDI, { supermarketLocationId: 'loc_consum_centro' }],
     ]);
-    expect(page.queue.items().some((place) => place.id === DIA)).toBe(false);
+    expect(page.queue.items().some((place) => place.id === ALDI)).toBe(false);
   });
 
   it('does not list a shop that is a candidate above', async () => {
@@ -1544,7 +1563,7 @@ describe('the places queue, linking the places that shops were made from', () =>
     expect(named(calls, 'listPlaces').length).toBe(reads + 1);
     expect(dashboardReads).toBe(counts + 1);
     expect(page.queue.items().some((place) => place.id === OESTE)).toBe(false);
-    expect(page.queue.items()).toHaveLength(6);
+    expect(page.queue.items()).toHaveLength(8);
     expect(page.byRefOpen()).toBe(false);
     expect(page.notice()).toEqual(
       expect.objectContaining({
@@ -2215,7 +2234,7 @@ describe('the places queue, a candidate with every field null', () => {
       return {
         ...read,
         items: read.items.map((place) =>
-          place.id === DIA
+          place.id === ALDI
             ? {
                 ...place,
                 candidates: [
@@ -2238,7 +2257,7 @@ describe('the places queue, a candidate with every field null', () => {
   });
 
   it('reads as a shop of its chain with no address', async () => {
-    const { fixture, page } = await render(DIA, undefined, {
+    const { fixture, page } = await render(ALDI, undefined, {
       overrides: bare(MERCADONA),
     });
     await settle(fixture);
@@ -2264,7 +2283,7 @@ describe('the places queue, a candidate with every field null', () => {
   });
 
   it('reads as a shop with no address when the candidate names no chain', async () => {
-    const { fixture } = await render(DIA, undefined, { overrides: bare('') });
+    const { fixture } = await render(ALDI, undefined, { overrides: bare('') });
 
     expect(
       fixture.nativeElement.querySelector('.matches li strong')?.textContent
@@ -2273,7 +2292,7 @@ describe('the places queue, a candidate with every field null', () => {
   });
 
   it('still links to that shop by its id, and names it in words in the notice', async () => {
-    const { fixture, page, calls } = await render(DIA, undefined, {
+    const { fixture, page, calls } = await render(ALDI, undefined, {
       overrides: {
         ...bare(''),
         linkPlace: async (id) => ({
@@ -2287,7 +2306,7 @@ describe('the places queue, a candidate with every field null', () => {
     await drain();
 
     expect(named(calls, 'linkPlace')).toEqual([
-      [DIA, { supermarketLocationId: ID }],
+      [ALDI, { supermarketLocationId: ID }],
     ]);
     expect(page.notice()?.args).toEqual(
       expect.objectContaining({ shop: 'harvest.places.shop.unnamed' })
@@ -2309,7 +2328,7 @@ describe('the places queue, where the focus goes', () => {
   });
 
   it('moves to the chain picker when a chain must be named first', async () => {
-    const { fixture } = await render(DIA);
+    const { fixture } = await render(ALDI);
 
     fixture.nativeElement.querySelector('[data-link-start]').click();
     await settle(fixture);
@@ -2329,7 +2348,7 @@ describe('the places queue, where the focus goes', () => {
   });
 
   it('returns to that button after a link from the form closed it', async () => {
-    const { fixture, page } = await render(DIA);
+    const { fixture, page } = await render(ALDI);
     page.startLinking();
     page.chooseLinkChain(MERCADONA);
     await page.pickShop('loc_sierra');

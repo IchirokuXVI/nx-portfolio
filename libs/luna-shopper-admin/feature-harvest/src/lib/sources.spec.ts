@@ -35,7 +35,7 @@ import { SourcesGateway, type Source } from './sources-gateway';
  * not from a spy alone. The translator double answers a key with the key.
  */
 
-const MERCADONA = '11111111-1111-4111-8111-111111111111';
+const MERCADONA = 'sm_mercadona';
 /** A chain the seed gives no source. */
 const NEW_CHAIN = '99999999-9999-4999-8999-999999999999';
 

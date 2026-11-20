@@ -31,7 +31,7 @@ import { SOURCES } from './sources';
  * router as the app mounts it. The translator double answers a key with the
  * key, so a case reads which sentence was drawn.
  */
-const MERCADONA = '11111111-1111-4111-8111-111111111111';
+const MERCADONA = 'sm_mercadona';
 const SCHEDULE = '77777777-7777-4777-8777-77777777aaaa';
 
 type View = Wire.HarvestHarvestScheduleView;

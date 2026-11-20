@@ -8,8 +8,8 @@ import { CARREFOUR_ACEITE_ENTRY, CARREFOUR_YOGUR_ENTRY } from './harvest-seed';
  * every other filter still applies, and with no status the default of the two
  * waiting statuses is not added.
  */
-const CARREFOUR = '22222222-2222-4222-8222-222222222222';
-const MERCADONA = '11111111-1111-4111-8111-111111111111';
+const CARREFOUR = 'sm_carrefour';
+const MERCADONA = 'sm_mercadona';
 
 describe('HarvestMemory, one entry by its id', () => {
   it('answers the row with no status given, an ACTIVE row included', async () => {

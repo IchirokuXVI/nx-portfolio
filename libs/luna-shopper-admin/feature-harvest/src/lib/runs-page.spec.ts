@@ -42,8 +42,8 @@ import { RunsPage } from './runs-page';
  * "Running now", the drop zone, and the list with its filters.
  */
 
-const MERCADONA = '11111111-1111-4111-8111-111111111111';
-const DEZA = '33333333-3333-4333-8333-333333333333';
+const MERCADONA = 'sm_mercadona';
+const DEZA = 'sm_deza';
 
 /** What the directory calls each chain, whatever id it is asked about. */
 const CHAINS: Readonly<Record<string, string>> = {
