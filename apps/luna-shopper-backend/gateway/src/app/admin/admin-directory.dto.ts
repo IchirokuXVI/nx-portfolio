@@ -5,7 +5,7 @@ import {
   UserKind,
   type AccountRole,
 } from '@portfolio/luna-shopper/contracts';
-import { PageQueryDto } from '@portfolio/luna-shopper/platform';
+import { asQueryFlag, PageQueryDto } from '@portfolio/luna-shopper/platform';
 import { DEFAULT_NEARBY_RADIUS_METRES } from '@portfolio/luna-shopper/postal-codes';
 import { Transform, Type } from 'class-transformer';
 import {
@@ -24,45 +24,6 @@ import {
   Min,
 } from 'class-validator';
 import { IsUuidOrNone, referenceFilterDescription } from './reference-none';
-
-/**
- * A query string boolean.
- *
- * `?verified` with no value means true, which is how a checkbox that is simply
- * present reads, and the two spellings are accepted so a client can be explicit.
- * Anything else falls through unchanged and `@IsBoolean` refuses it, rather than
- * being silently coerced to false, which would answer a different question from
- * the one asked.
- */
-const asBoolean = ({ value }: { value: unknown }) => {
-  if (value === '' || value === 'true' || value === true) {
-    return true;
-  }
-  return value === 'false' || value === false ? false : value;
-};
-
-/**
- * A query string boolean, read from the text the address carried.
- *
- * The pipe converts a value to the declared type before a transform sees it,
- * and every text but the empty one converts to true. So `value` is already
- * `true` for `?flag=false`, and {@link asBoolean} cannot tell the two apart.
- * This reads the request's own text instead, which is the only place the word
- * `false` still exists (admin plan 0045, section 2).
- */
-const asFlag = ({
-  obj,
-  key,
-}: {
-  obj: Record<string, unknown>;
-  key: string;
-}) => {
-  const raw = obj[key];
-  if (raw === '' || raw === 'true' || raw === true) {
-    return true;
-  }
-  return raw === 'false' || raw === false ? false : raw;
-};
 
 /**
  * The filters on the user directory (plan 0074, section 2).
@@ -97,10 +58,10 @@ export class ListAdminUsersQueryDto extends PageQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'True for confirmed addresses only. False is unconfirmed **and** absent: an account with no address has not confirmed one, and an operator looking for unconfirmed accounts wants it in the answer.',
+      'True for confirmed addresses only. False is unconfirmed **and** absent: an account with no address has not confirmed one, and an operator looking for unconfirmed accounts wants it in the answer. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.',
   })
   @IsOptional()
-  @Transform(asBoolean)
+  @Transform(asQueryFlag)
   @IsBoolean()
   verified?: boolean;
 
@@ -190,10 +151,10 @@ export class ListAdminZonesQueryDto extends PageQueryDto {
    */
   @ApiPropertyOptional({
     description:
-      'True for the zones with at least one pending join request. False is the same as absent: it narrows nothing.',
+      'True for the zones with at least one pending join request. False is the same as absent: it narrows nothing. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.',
   })
   @IsOptional()
-  @Transform(asFlag)
+  @Transform(asQueryFlag)
   @IsBoolean()
   hasPending?: boolean;
 
@@ -292,10 +253,10 @@ export class ListAdminPostalCodesQueryDto extends PageQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'True for codes with at least one shop, false for those with none. Omitted is every code, which is the default because a listing that hid the empty ones would hide the coverage gap it exists to show.',
+      'True for codes with at least one shop, false for those with none. Omitted is every code, which is the default because a listing that hid the empty ones would hide the coverage gap it exists to show. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.',
   })
   @IsOptional()
-  @Transform(asBoolean)
+  @Transform(asQueryFlag)
   @IsBoolean()
   served?: boolean;
 }

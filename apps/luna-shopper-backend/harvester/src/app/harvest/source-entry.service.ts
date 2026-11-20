@@ -59,7 +59,7 @@ import { PlatformAdminService } from './platform-admin.service';
 import { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { acceptedName } from './source-entry-name';
 import { SourceEntrySettler } from './source-entry-settle';
-import { createdSize } from './source-entry-size';
+import { createdSize, createdWeight } from './source-entry-size';
 import {
   bindFields,
   chainEanCounts,
@@ -280,9 +280,15 @@ export class SourceEntryService {
     if (req.supermarketId) {
       qb.andWhere('e."supermarketId" = :sid', { sid: req.supermarketId });
     }
+    // Admin plan 0073: the id is how the back office addresses one entry, and
+    // the row a link names can be decided already, so an id with no `status`
+    // adds no default status clause. A `status` given beside it still applies.
+    if (req.entryId) {
+      qb.andWhere('e.id = :entryId', { entryId: req.entryId });
+    }
     if (req.status) {
       qb.andWhere('e.status = :status', { status: req.status });
-    } else {
+    } else if (!req.entryId) {
       qb.andWhere('e.status IN (:...queued)', { queued: QUEUED });
     }
     if (req.sourceKind) {
@@ -313,6 +319,13 @@ export class SourceEntryService {
       qb.andWhere('e."delistedAt" IS NOT NULL');
     } else if (req.delisted === false) {
       qb.andWhere('e."delistedAt" IS NULL');
+    }
+    // Admin plan 0072: true is the rows whose size their own prices disprove
+    // (plan 0249), false leaves them out, and absent lists both.
+    if (req.sizeDoubt === true) {
+      qb.andWhere('e."sizeDoubtImplied" IS NOT NULL');
+    } else if (req.sizeDoubt === false) {
+      qb.andWhere('e."sizeDoubtImplied" IS NULL');
     }
     if (cursor) {
       qb.andWhere('(e."lastSeenAt", e.id) < (:cv, :cid)', {
@@ -560,6 +573,15 @@ export class SourceEntryService {
   ): Promise<SourceEntryAcceptResult> {
     await this.admin.requireAdmin(req);
     const entry = await this.load(req.entryId);
+    // The row's size in a base unit, unless the request names its own (plan
+    // 0183): a row of 0.25 `KILOGRAM` creates a product of 250 `GRAM`. The
+    // unit the row states comes before the guess from the printed text (plan
+    // 0177): `75 cl` is held as 750 `MILLILITER`, and the text alone maps to
+    // nothing, which made the product 750 units. Asked first, because a
+    // named `KILOGRAM` beside a size is refused (plan 0237, section 3.3), and
+    // the refusal reads only the row and the request: it costs no lookup in
+    // catalog and no request to the chain, and the row stays undecided.
+    const size = createdSize(entry, req);
     // Read before the bind, which overwrites it.
     const left = leftItemOf(entry, null);
     // A real barcode or none (plan 0184). The row keeps what the chain
@@ -617,12 +639,6 @@ export class SourceEntryService {
       }
     }
 
-    // The row's size in a base unit, unless the request names its own (plan
-    // 0183): a row of 0.25 `KILOGRAM` creates a product of 250 `GRAM`. The
-    // unit the row states comes before the guess from the printed text (plan
-    // 0177): `75 cl` is held as 750 `MILLILITER`, and the text alone maps to
-    // nothing, which made the product 750 units.
-    const size = createdSize(entry, req);
     const item: ItemView = await this.catalog.createItem({
       // Plan 0079 reverses plan 0038 section 11: a product the source does not
       // translate gets no `en` key rather than a copy of the Spanish string. A
@@ -646,6 +662,8 @@ export class SourceEntryService {
       sku: null,
       categoryIds,
       defaultUnit: size.unit,
+      // The weight of one piece the row states, as the source's (plan 0244).
+      ...createdWeight(size),
     });
 
     const bound = await this.bind(entry, item.id);

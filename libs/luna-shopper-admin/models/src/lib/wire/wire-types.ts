@@ -36,6 +36,7 @@ export type AddBasketLineDto = {
   targetListId: string;
   content: string;
   quantity?: number;
+  unit?: 'UNIT' | 'GRAM' | 'MILLILITER';
   itemIds?: string[];
   named?: boolean;
   askIfAmbiguous?: boolean;
@@ -93,6 +94,7 @@ export type AddItemPriceDto = {
 export type AddLineDto = {
   content: string;
   quantity?: number;
+  unit?: 'UNIT' | 'GRAM' | 'MILLILITER';
   itemIds?: string[];
   named?: boolean;
   productGroupId?: string;
@@ -106,6 +108,7 @@ export type AddLineDto = {
  */
 export type AddLineQuantityDto = {
   delta: number;
+  unit: 'UNIT' | 'GRAM' | 'MILLILITER';
 };
 
 /**
@@ -121,6 +124,7 @@ export type AddLinesDto = {
 export type AddLinesItemDto = {
   content: string;
   quantity?: number;
+  unit?: 'UNIT' | 'GRAM' | 'MILLILITER';
   itemIds?: string[];
   named?: boolean;
 };
@@ -325,6 +329,8 @@ export type CreateItemDto = {
   sku?: string | null;
   ean?: string | null;
   unitSize?: number | null;
+  approxWeight?: number | null;
+  quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount?: number | null;
   categoryIds?: string[];
   categorySlugs?: string[];
@@ -521,9 +527,18 @@ export type ItemExpectationDto = {
   name?: LocalizedTextDto;
   brand?: string | null;
   unitSize?: number | null;
+  approxWeight?: number | null;
+  quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
   packCount?: number | null;
   categorySlugs?: string[];
+};
+
+/**
+ * `ItemRefreshBodyDto` in the gateway's OpenAPI document.
+ */
+export type ItemRefreshBodyDto = {
+  priceScopeId: string;
 };
 
 /**
@@ -688,6 +703,9 @@ export type ProblemDetails = {
     | 'line_merge_needs_approval'
     | 'line_merge_too_many_products'
     | 'line_add_needs_choice'
+    | 'line_unit_mismatch'
+    | 'line_unit_differs'
+    | 'line_unit_not_offered'
     | 'brand_label_empty'
     | 'brand_key_taken'
     | 'brand_link_to_self'
@@ -710,6 +728,8 @@ export type ProblemDetails = {
     | 'item_expectation_failed'
     | 'item_unit_not_base'
     | 'item_kilogram_has_size'
+    | 'item_approx_weight_beside_size'
+    | 'item_quantity_step_not_allowed'
     | 'item_merged'
     | 'item_merge_two_articles_one_chain'
     | 'item_merge_format_differs'
@@ -740,6 +760,7 @@ export type ProblemDetails = {
     | 'invalid_google_token'
     | 'google_sign_in_needs_consent'
     | 'assistant_allowance_reached'
+    | 'price_not_refreshable'
     | 'internal';
   detail?: string;
   message: string;
@@ -959,6 +980,7 @@ export type SetApprovalDto = {
 export type SetBasketRowDemandDto = {
   lineId: string;
   quantity: number;
+  unit: 'UNIT' | 'GRAM' | 'MILLILITER';
   from: number;
 };
 
@@ -1051,6 +1073,7 @@ export type SettleBasketRowDto = {
   lineIds: string[];
   outcome: SettlementOutcome;
   quantity?: number;
+  unit: 'UNIT' | 'GRAM' | 'MILLILITER';
   from: number;
   itemId?: string;
   priceScopeId?: string;
@@ -1072,6 +1095,7 @@ export type SettleItemAtChainDto = {
 export type SettleLineDto = {
   outcome: 'BOUGHT' | 'NOT_AVAILABLE';
   quantity?: number;
+  unit: 'UNIT' | 'GRAM' | 'MILLILITER';
   itemId?: string;
   priceScopeId?: string;
   supermarketLocationId?: string;
@@ -1159,6 +1183,7 @@ export type TurnScopeDto = {
 export type UpdateAdminLineDto = {
   content?: string;
   quantity?: number;
+  unit?: 'UNIT' | 'GRAM' | 'MILLILITER';
   itemIds?: string[];
 };
 
@@ -1259,6 +1284,8 @@ export type UpdateItemBatchEntryDto = {
   sku?: string | null;
   ean?: string | null;
   unitSize?: number | null;
+  approxWeight?: number | null;
+  quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount?: number | null;
   categoryIds?: string[];
   categorySlugs?: string[];
@@ -1278,6 +1305,8 @@ export type UpdateItemDto = {
   sku?: string | null;
   ean?: string | null;
   unitSize?: number | null;
+  approxWeight?: number | null;
+  quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount?: number | null;
   categoryIds?: string[];
   categorySlugs?: string[];
@@ -1300,6 +1329,7 @@ export type UpdateItemsDto = {
 export type UpdateLineDto = {
   content?: string;
   quantity?: number;
+  unit?: 'UNIT' | 'GRAM' | 'MILLILITER';
   from?: number;
   itemIds?: string[];
   adoptItemIds?: string[];
@@ -1545,6 +1575,7 @@ export type AdminCoreAdminBasketPage = {
 export type AdminCoreAdminBasketRowView = {
   rowKey: string;
   content: string;
+  unit: EnumsLineUnit;
   left: number;
   bought: number;
   asked: number;
@@ -1560,6 +1591,7 @@ export type AdminCoreAdminBasketSettlementView = {
   itemId: string | null;
   outcome: EnumsSettlementOutcome;
   quantity: number;
+  unit: EnumsLineUnit;
   pricePaidCents: number | null;
   pricePaidCurrency: string | null;
   priceScopeId: string | null;
@@ -1622,6 +1654,7 @@ export type AdminCoreAdminListLineView = {
   listName: string;
   content: string;
   quantity: number;
+  unit: EnumsLineUnit;
   approvalStatus: EnumsLineApprovalStatus;
   createdByUserId: string;
   createdAt: string;
@@ -2417,6 +2450,9 @@ export type BasketBasketProductView = {
   ean: string | null;
   eans: string[];
   unitSize: number | null;
+  approxWeight?: number | null;
+  approxWeightSetBy?: 'SOURCE' | 'ADMIN' | null;
+  quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount: number | null;
   categories: CatalogItemCategoryView[];
   defaultUnit: EnumsUnitOfMeasure;
@@ -2493,6 +2529,7 @@ export type BasketBasketRowResult = {
   entries: BasketBasketRowEntryView[];
   progress: BasketBasketProgress;
   skippedCount?: number;
+  addOutcome?: EnumsAddLineOutcome;
 };
 
 /**
@@ -2511,6 +2548,7 @@ export type BasketBasketRowView = {
   rowKey: string;
   content: string;
   productId: string | null;
+  unit: EnumsLineUnit;
   left: number;
   bought: number;
   asked: number;
@@ -2670,7 +2708,9 @@ export type CatalogAdminSupermarketItemView = {
   currency: string | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;
-  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
+  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | null;
+  comparablePrice?: number | null;
+  comparableBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | null;
   observedAt: string | null;
   sourceKind: EnumsPriceSourceKind | null;
   priceCopiedFromScopeId?: string | null;
@@ -2680,6 +2720,7 @@ export type CatalogAdminSupermarketItemView = {
   available: boolean;
   delistedAt?: string | null;
   outOfStockAt?: string | null;
+  piecePrice?: number | null;
   itemName: CatalogLocalizedText | null;
 };
 
@@ -2884,12 +2925,15 @@ export type CatalogItemOfferView = {
   currency: string | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;
-  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
+  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | null;
+  comparablePrice?: number | null;
+  comparableBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | null;
   observedAt: string | null;
   sourceKind: EnumsPriceSourceKind | null;
   priceCopiedFromScopeId?: string | null;
   stale: boolean;
   outOfStockAt?: string | null;
+  piecePrice?: number | null;
 };
 
 /**
@@ -2962,7 +3006,7 @@ export type CatalogItemPricePointView = {
   currency: string | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;
-  unitBasis: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
+  unitBasis: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | null;
 };
 
 /**
@@ -2986,7 +3030,7 @@ export type CatalogItemPriceView = {
   currency: string | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;
-  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
+  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | null;
   observedAt: string;
   lastObservedAt: string;
   validFrom: string | null;
@@ -3053,6 +3097,7 @@ export type CatalogItemSnapshot = {
   unitSize: number | null;
   packCount: number | null;
   defaultUnit: EnumsUnitOfMeasure;
+  approxWeight?: number | null;
 };
 
 /**
@@ -3071,6 +3116,9 @@ export type CatalogItemView = {
   ean: string | null;
   eans: string[];
   unitSize: number | null;
+  approxWeight?: number | null;
+  approxWeightSetBy?: 'SOURCE' | 'ADMIN' | null;
+  quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount: number | null;
   categories: CatalogItemCategoryView[];
   defaultUnit: EnumsUnitOfMeasure;
@@ -3706,7 +3754,9 @@ export type CatalogSupermarketItemView = {
   currency: string | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;
-  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
+  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | null;
+  comparablePrice?: number | null;
+  comparableBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | null;
   observedAt: string | null;
   sourceKind: EnumsPriceSourceKind | null;
   priceCopiedFromScopeId?: string | null;
@@ -3716,6 +3766,7 @@ export type CatalogSupermarketItemView = {
   available: boolean;
   delistedAt?: string | null;
   outOfStockAt?: string | null;
+  piecePrice?: number | null;
 };
 
 /**
@@ -3875,6 +3926,11 @@ export type EnumsAdapterKey =
   | 'manual';
 
 /**
+ * `enums.AddLineOutcome` in the gateway's OpenAPI document.
+ */
+export type EnumsAddLineOutcome = 'CREATED' | 'RAISED' | 'ALREADY_ON_LIST';
+
+/**
  * `enums.AiTextProvider` in the gateway's OpenAPI document.
  */
 export type EnumsAiTextProvider = 'anthropic';
@@ -4020,7 +4076,8 @@ export type EnumsHarvestScheduleBlock =
   | 'HARVEST_DISABLED'
   | 'SCHEDULER_DISABLED'
   | 'SOURCE_DISABLED'
-  | 'SOURCE_FAILING';
+  | 'SOURCE_FAILING'
+  | 'PROBE_NOT_PASSED';
 
 /**
  * `enums.HarvestScheduleOutcome` in the gateway's OpenAPI document.
@@ -4030,7 +4087,8 @@ export type EnumsHarvestScheduleOutcome =
   | 'SKIPPED_LATE'
   | 'SKIPPED_FAILING'
   | 'REFUSED'
-  | 'SKIPPED_BUSY';
+  | 'SKIPPED_BUSY'
+  | 'SKIPPED_PROBE_FAILED';
 
 /**
  * `enums.HarvestWarningCode` in the gateway's OpenAPI document.
@@ -4050,7 +4108,11 @@ export type EnumsHarvestWarningCode =
   | 'DETAIL_SKIPPED_UNKNOWN'
   | 'PRICE_SOLD_ANOTHER_WAY'
   | 'SOURCE_PAUSED'
-  | 'SOURCE_RESUMED';
+  | 'SOURCE_RESUMED'
+  | 'APPROX_WEIGHT_ROWS_DISAGREE'
+  | 'LISTING_UNREAD'
+  | 'LISTING_SHORT'
+  | 'DETAIL_UNREAD';
 
 /**
  * `enums.ItemImageSource` in the gateway's OpenAPI document.
@@ -4070,7 +4132,8 @@ export type EnumsItemSourceMatch =
   | 'NAME_BRAND_SIZE'
   | 'NAME_SIZE'
   | 'MANUAL'
-  | 'SHARED_EAN';
+  | 'SHARED_EAN'
+  | 'NAME_WORDS_SIZE';
 
 /**
  * `enums.LineApprovalStatus` in the gateway's OpenAPI document.
@@ -4094,6 +4157,11 @@ export type EnumsLineChangeKind =
  * `enums.LineSuggestionReason` in the gateway's OpenAPI document.
  */
 export type EnumsLineSuggestionReason = 'PERIOD' | 'STAPLE';
+
+/**
+ * `enums.LineUnit` in the gateway's OpenAPI document.
+ */
+export type EnumsLineUnit = 'UNIT' | 'GRAM' | 'MILLILITER';
 
 /**
  * `enums.ListPermission` in the gateway's OpenAPI document.
@@ -4186,6 +4254,29 @@ export type EnumsPostalCodeDiscoveryStatus =
  * `enums.PostalCodeSource` in the gateway's OpenAPI document.
  */
 export type EnumsPostalCodeSource = 'SOURCE' | 'DERIVED' | 'MANUAL';
+
+/**
+ * `enums.PriceRefreshRefusal` in the gateway's OpenAPI document.
+ */
+export type EnumsPriceRefreshRefusal =
+  | 'REFRESH_OFF'
+  | 'NOT_HARVESTED'
+  | 'AMBIGUOUS'
+  | 'SOURCE_OFF'
+  | 'NO_SINGLE_FETCH'
+  | 'CHAIN_REFUSING'
+  | 'FRESH';
+
+/**
+ * `enums.PriceRefreshStatus` in the gateway's OpenAPI document.
+ */
+export type EnumsPriceRefreshStatus =
+  | 'FRESH'
+  | 'PENDING'
+  | 'DONE'
+  | 'NOT_STOCKED'
+  | 'FAILED'
+  | 'BLOCKED';
 
 /**
  * `enums.PriceScopeKind` in the gateway's OpenAPI document.
@@ -4304,6 +4395,18 @@ export type EnumsSourceEntryStatus =
 export type EnumsSourceLocationStatus = 'ACTIVE' | 'UNMAPPED' | 'IGNORED';
 
 /**
+ * `enums.SourceProbeStatus` in the gateway's OpenAPI document.
+ */
+export type EnumsSourceProbeStatus =
+  | 'RUNNING'
+  | 'PASSED'
+  | 'SHAPE_CHANGED'
+  | 'BLOCKED'
+  | 'UNREACHABLE'
+  | 'ERROR'
+  | 'ABORTED';
+
+/**
  * `enums.TripKind` in the gateway's OpenAPI document.
  */
 export type EnumsTripKind = 'BASKET' | 'SESSION';
@@ -4411,7 +4514,7 @@ export type GatewayLegalSettingsView = {
 /**
  * `harvest.AdapterCapabilityTable` in the gateway's OpenAPI document.
  *
- * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. `stockIndicator` is how the source tells stock: `per-shop` when it names the shops that carry a product, `per-scope` when each listed row or a scoped answer states it, and null when it says nothing about stock. `provesDelisting` means a walk can read the whole listing of a scope, so a product the listing did not name counts as a miss. A reader that does not know an adapter must answer no to every boolean, null to the language, null to the band and null to the stock indicator rather than throw.
+ * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. `stockIndicator` is how the source tells stock: `per-shop` when it names the shops that carry a product, `per-scope` when each listed row or a scoped answer states it, and null when it says nothing about stock. `provesDelisting` means a walk can read the whole listing of a scope, so a product the listing did not name counts as a miss. `comparableWalkTotal` means the count of one finished walk says about how big the next walk of the source is, so an earlier total may be drawn as an estimate; false for `deza-web`, whose capped queries can count different totals for one assortment. A reader that does not know an adapter must answer no to every boolean, null to the language, null to the band and null to the stock indicator rather than throw.
  */
 export const HarvestAdapterCapabilityTable = {
   'mercadona-api': {
@@ -4427,28 +4530,34 @@ export const HarvestAdapterCapabilityTable = {
     },
     stockIndicator: 'per-scope',
     provesDelisting: true,
+    refreshesOneProduct: true,
+    comparableWalkTotal: true,
   },
   'deza-web': {
     writesPrices: false,
     scopesItsOwn: false,
-    listsItsOwnStores: false,
+    listsItsOwnStores: true,
     hasProductPages: false,
     skipsKnownDetails: false,
     printedLocale: 'es',
     walkablePriorities: null,
     stockIndicator: 'per-shop',
     provesDelisting: false,
+    refreshesOneProduct: false,
+    comparableWalkTotal: false,
   },
   'carrefour-web': {
     writesPrices: true,
     scopesItsOwn: false,
-    listsItsOwnStores: false,
+    listsItsOwnStores: true,
     hasProductPages: true,
     skipsKnownDetails: false,
     printedLocale: 'es',
     walkablePriorities: null,
     stockIndicator: null,
     provesDelisting: false,
+    refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
   'lidl-api': {
     writesPrices: true,
@@ -4460,6 +4569,8 @@ export const HarvestAdapterCapabilityTable = {
     walkablePriorities: null,
     stockIndicator: null,
     provesDelisting: false,
+    refreshesOneProduct: true,
+    comparableWalkTotal: true,
   },
   'eljamon-web': {
     writesPrices: true,
@@ -4471,6 +4582,8 @@ export const HarvestAdapterCapabilityTable = {
     walkablePriorities: null,
     stockIndicator: null,
     provesDelisting: true,
+    refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
   'dia-api': {
     writesPrices: true,
@@ -4485,6 +4598,8 @@ export const HarvestAdapterCapabilityTable = {
     },
     stockIndicator: 'per-scope',
     provesDelisting: true,
+    refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
   'osm-places': {
     writesPrices: false,
@@ -4496,6 +4611,8 @@ export const HarvestAdapterCapabilityTable = {
     walkablePriorities: null,
     stockIndicator: null,
     provesDelisting: false,
+    refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
   manual: {
     writesPrices: false,
@@ -4507,13 +4624,15 @@ export const HarvestAdapterCapabilityTable = {
     walkablePriorities: null,
     stockIndicator: null,
     provesDelisting: false,
+    refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
 } as const;
 
 /**
  * `harvest.AdapterCapabilityTable` in the gateway's OpenAPI document.
  *
- * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. `stockIndicator` is how the source tells stock: `per-shop` when it names the shops that carry a product, `per-scope` when each listed row or a scoped answer states it, and null when it says nothing about stock. `provesDelisting` means a walk can read the whole listing of a scope, so a product the listing did not name counts as a miss. A reader that does not know an adapter must answer no to every boolean, null to the language, null to the band and null to the stock indicator rather than throw.
+ * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. `stockIndicator` is how the source tells stock: `per-shop` when it names the shops that carry a product, `per-scope` when each listed row or a scoped answer states it, and null when it says nothing about stock. `provesDelisting` means a walk can read the whole listing of a scope, so a product the listing did not name counts as a miss. `comparableWalkTotal` means the count of one finished walk says about how big the next walk of the source is, so an earlier total may be drawn as an estimate; false for `deza-web`, whose capped queries can count different totals for one assortment. A reader that does not know an adapter must answer no to every boolean, null to the language, null to the band and null to the stock indicator rather than throw.
  */
 export type HarvestAdapterCapabilityTable =
   typeof HarvestAdapterCapabilityTable;
@@ -4644,6 +4763,30 @@ export type HarvestHarvestDocument = {
 };
 
 /**
+ * `harvest.HarvestRunInputRecord` in the gateway's OpenAPI document.
+ */
+export type HarvestHarvestRunInputRecord = {
+  mode: EnumsHarvestRunMode;
+  priceScopeId?: string;
+  priceScopeIds?: string[];
+  postalCode?: string;
+  country?: string;
+  radiusMetres?: number;
+  brandKeys?: string[];
+  postalCodes?: string[];
+  detailBackfill?: boolean;
+  scopeCopies?: {
+    from: string;
+    to: string[];
+  }[];
+  writes?: EnumsHarvestRunWrites;
+  details?: EnumsHarvestDetailFetch;
+  sourceKind?: EnumsPriceSourceKind;
+  validFrom?: string;
+  validUntil?: string;
+};
+
+/**
  * `harvest.HarvestRunPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -4744,6 +4887,9 @@ export type HarvestHarvestRunView = {
   revertedByUserId: string | null;
   revertedPriceCount: number | null;
   presetId?: string | null;
+  input?: HarvestHarvestRunInputRecord | null;
+  configFingerprint?: string | null;
+  adapterKey?: EnumsAdapterKey | null;
   scheduleId?: string | null;
   interrupted?: boolean;
   stopReason?: EnumsHarvestRunStopReason | null;
@@ -4805,6 +4951,16 @@ export type HarvestHarvestScheduleView = {
 };
 
 /**
+ * `harvest.HarvestTestAlertView` in the gateway's OpenAPI document.
+ */
+export type HarvestHarvestTestAlertView = {
+  id: string;
+  queuedAt: string;
+  recipientConfigured: boolean;
+  smtpConfigured: boolean;
+};
+
+/**
  * `harvest.ItemSourceEntryPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -4828,9 +4984,12 @@ export type HarvestItemSourceEntryView = {
   unitSize: number | null;
   sizeUnit: 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'UNIT' | null;
   soldByWeight: boolean;
+  approxWeight?: number | null;
   sizeFormat: string | null;
+  packaging?: string | null;
   packCount: number | null;
   categoryPath: string[];
+  categoryPaths?: string[][];
   url: string | null;
   imageUrl: string | null;
   extra: {
@@ -4849,6 +5008,13 @@ export type HarvestItemSourceEntryView = {
   decidedAt: string | null;
   delistedAt?: string | null;
   prices: HarvestSourceEntryPriceView[];
+  sizeDoubt?: {
+    implied: number;
+    unit: EnumsUnitOfMeasure;
+    ratio: number;
+    label: string | null;
+    runId: string;
+  } | null;
   eanSharedBy: number | null;
   scopeSharedWith: string[];
 };
@@ -4961,6 +5127,30 @@ export type HarvestPostalCodeDiscoverySummaryView = {
 };
 
 /**
+ * `harvest.PriceRefreshCheckView` in the gateway's OpenAPI document.
+ */
+export type HarvestPriceRefreshCheckView = {
+  refreshable: boolean;
+  reason: EnumsPriceRefreshRefusal | null;
+  retryAfterSeconds: number;
+  pendingRefreshId: string | null;
+  observedAt: string | null;
+};
+
+/**
+ * `harvest.PriceRefreshView` in the gateway's OpenAPI document.
+ */
+export type HarvestPriceRefreshView = {
+  id: string | null;
+  itemId: string;
+  priceScopeId: string;
+  status: EnumsPriceRefreshStatus;
+  observedAt: string | null;
+  requestedAt: string | null;
+  finishedAt: string | null;
+};
+
+/**
  * `harvest.QueuedSourceEntryPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -4984,9 +5174,12 @@ export type HarvestQueuedSourceEntryView = {
   unitSize: number | null;
   sizeUnit: 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'UNIT' | null;
   soldByWeight: boolean;
+  approxWeight?: number | null;
   sizeFormat: string | null;
+  packaging?: string | null;
   packCount: number | null;
   categoryPath: string[];
+  categoryPaths?: string[][];
   url: string | null;
   imageUrl: string | null;
   extra: {
@@ -5005,6 +5198,13 @@ export type HarvestQueuedSourceEntryView = {
   decidedAt: string | null;
   delistedAt?: string | null;
   prices: HarvestSourceEntryPriceView[];
+  sizeDoubt?: {
+    implied: number;
+    unit: EnumsUnitOfMeasure;
+    ratio: number;
+    label: string | null;
+    runId: string;
+  } | null;
   brandMatches: CatalogBrandMatchView[];
 };
 
@@ -5075,9 +5275,12 @@ export type HarvestSourceCatalogEntryView = {
   unitSize: number | null;
   sizeUnit: 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'UNIT' | null;
   soldByWeight: boolean;
+  approxWeight?: number | null;
   sizeFormat: string | null;
+  packaging?: string | null;
   packCount: number | null;
   categoryPath: string[];
+  categoryPaths?: string[][];
   url: string | null;
   imageUrl: string | null;
   extra: {
@@ -5096,6 +5299,13 @@ export type HarvestSourceCatalogEntryView = {
   decidedAt: string | null;
   delistedAt?: string | null;
   prices: HarvestSourceEntryPriceView[];
+  sizeDoubt?: {
+    implied: number;
+    unit: EnumsUnitOfMeasure;
+    ratio: number;
+    label: string | null;
+    runId: string;
+  } | null;
 };
 
 /**
@@ -5142,7 +5352,7 @@ export type HarvestSourceEntryPriceView = {
   currency: string;
   unitPrice: number | null;
   unitPriceLabel: string | null;
-  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
+  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | null;
   validFrom: string | null;
   validUntil: string | null;
   details: {
@@ -5172,6 +5382,7 @@ export type HarvestSourceLocationCandidate = {
   postalCode: string | null;
   score: number;
   strong: boolean;
+  sameCode?: boolean;
 };
 
 /**
@@ -5203,6 +5414,66 @@ export type HarvestSourceLocationView = {
 };
 
 /**
+ * `harvest.SourceProbePage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type HarvestSourceProbePage = {
+  items: HarvestSourceProbeView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `harvest.SourceProbeStepView` in the gateway's OpenAPI document.
+ */
+export type HarvestSourceProbeStepView = {
+  name: string;
+  url: string | null;
+  ok: boolean;
+  httpStatus: number | null;
+  error: string | null;
+  problems: string[];
+  sample: {
+    [key: string]: string | number | boolean | null;
+  };
+  durationMs: number;
+};
+
+/**
+ * `harvest.SourceProbeSummary` in the gateway's OpenAPI document.
+ */
+export type HarvestSourceProbeSummary = {
+  id: string;
+  status: EnumsSourceProbeStatus;
+  startedAt: string;
+  finishedAt: string | null;
+  changed: boolean;
+};
+
+/**
+ * `harvest.SourceProbeView` in the gateway's OpenAPI document.
+ */
+export type HarvestSourceProbeView = {
+  id: string;
+  sourceId: string;
+  supermarketId: string;
+  adapterKey: EnumsAdapterKey;
+  trigger: EnumsHarvestRunTrigger;
+  status: EnumsSourceProbeStatus;
+  previousStatus: EnumsSourceProbeStatus | null;
+  changed: boolean;
+  attempt: number;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  requests: number;
+  steps: HarvestSourceProbeStepView[];
+  error: string | null;
+  requestedByUserId: string | null;
+  scheduleId: string | null;
+};
+
+/**
  * `harvest.SupermarketSourcePage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -5229,6 +5500,7 @@ export type HarvestSupermarketSourceView = {
   lastRunAt: string | null;
   lastSuccessAt: string | null;
   consecutiveFailures: number;
+  lastProbe?: HarvestSourceProbeSummary | null;
 };
 
 /**
@@ -5255,6 +5527,8 @@ export type ImpersonationStartImpersonationView = {
 export type ListAddLineResult = {
   line: ListLineView;
   merged: boolean;
+  outcome: EnumsAddLineOutcome;
+  alreadyOnList: ListLineView[];
 };
 
 /**
@@ -5301,6 +5575,7 @@ export type ListItemLineView = {
   id: string;
   content: string;
   quantity: number;
+  unit: EnumsLineUnit;
   approvalStatus: EnumsLineApprovalStatus;
 };
 
@@ -5324,6 +5599,8 @@ export type ListLineSettlementHistoryView = {
   itemId: string | null;
   outcome: EnumsSettlementOutcome;
   quantity: number;
+  unit: EnumsLineUnit;
+  estimated: boolean;
   settledByUserId: string;
   settledByParticipantId: string | null;
   settledAt: string;
@@ -5363,6 +5640,8 @@ export type ListLineSettlementView = {
   itemId: string | null;
   outcome: EnumsSettlementOutcome;
   quantity: number;
+  unit: EnumsLineUnit;
+  estimated: boolean;
   settledByUserId: string;
   settledByParticipantId: string | null;
   settledAt: string;
@@ -5401,6 +5680,7 @@ export type ListLineView = {
   listId: string;
   content: string;
   quantity: number;
+  unit: EnumsLineUnit;
   itemIds: string[];
   itemSetHash: string | null;
   productGroupId: string | null;
@@ -5549,6 +5829,7 @@ export type ListUpdateLineResult = {
   listId: string;
   content: string;
   quantity: number;
+  unit: EnumsLineUnit;
   itemIds: string[];
   itemSetHash: string | null;
   productGroupId: string | null;
@@ -5807,6 +6088,12 @@ export type PurchasePurchaseEntryView = {
   anyBoughtLineCount: number;
   lineCount: number;
   boughtLineCount: number;
+  bought: {
+    UNIT?: number;
+    GRAM?: number;
+    MILLILITER?: number;
+  };
+  estimated: boolean;
   spent: PurchaseMoneyView | null;
   unpricedCount: number;
 };
@@ -5830,6 +6117,8 @@ export type PurchasePurchaseRowView = {
   itemSnapshot: CatalogItemSnapshot | null;
   outcome: EnumsSettlementOutcome;
   quantity: number;
+  unit: EnumsLineUnit;
+  estimated: boolean;
   pricePaid: PurchaseMoneyView | null;
   priceScopeId: string | null;
   supermarketLocationId: string | null;

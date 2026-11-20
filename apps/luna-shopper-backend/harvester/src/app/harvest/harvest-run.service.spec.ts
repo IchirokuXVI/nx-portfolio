@@ -19,13 +19,17 @@ import {
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
+import type { Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
 import type {
   HarvestRun,
   HarvestRunPreset,
+  SourceCatalogEntry,
   SupermarketSource,
 } from '../entities';
+import { dezaKeysRefusal, type StoredRow } from '../release-tasks/deza-keys';
 import type { CatalogClient } from './catalog-client.service';
+import { DezaKeyGuard } from './deza-key-guard';
 import type { HarvestRunPresetStore } from './harvest-run-preset.store';
 import { HarvestRunService } from './harvest-run.service';
 import {
@@ -33,10 +37,12 @@ import {
   DocumentAlreadyImportedError,
   type HarvestRunStore,
 } from './harvest-run.store';
+import { entryKey } from './matching';
 import type { PlatformAdminService } from './platform-admin.service';
 import type { RunExecutor } from './run-executor.service';
 import type { SourceEntryService } from './source-entry.service';
 import type { SupermarketSourceService } from './supermarket-source.service';
+import { walkConfigFingerprint } from './walk-fingerprint';
 
 const ADMIN = 'owner-1';
 const SUPERMARKET = '5efa0000-0000-4000-a000-000000000001';
@@ -172,6 +178,8 @@ function build(
     activeOfChain?: HarvestRun | null;
     /** The store discovery in flight anywhere, for the busy cases. */
     activeDiscovery?: HarvestRun | null;
+    /** The stored rows of the chain the DEZA key guard reads (plan 0272). */
+    dezaRows?: StoredRow[];
   } = {}
 ) {
   const admin = {
@@ -303,6 +311,12 @@ function build(
     }),
   } as unknown as HarvestRunPresetStore;
 
+  // The real guard over a repository that answers the chain's rows.
+  const dezaQuery = jest.fn(async () => overrides.dezaRows ?? []);
+  const dezaKeys = new DezaKeyGuard({
+    query: dezaQuery,
+  } as unknown as Repository<SourceCatalogEntry>);
+
   const service = new HarvestRunService(
     store,
     executor,
@@ -311,9 +325,19 @@ function build(
     catalog,
     admin,
     config,
-    presets
+    presets,
+    dezaKeys
   );
-  return { service, store, executor, sources, rows, catalog, created };
+  return {
+    service,
+    store,
+    executor,
+    sources,
+    rows,
+    catalog,
+    created,
+    dezaQuery,
+  };
 }
 
 /**
@@ -801,11 +825,29 @@ describe('HarvestRunService.spawn', () => {
     );
   });
 
+  it('starts a DEZA store discovery with no postal code', async () => {
+    // `/centros/` names every shop with its code (plan 0222).
+    const { service, store } = build({ source: { adapterKey: 'deza-web' } });
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.STORE_DISCOVERY,
+      supermarketId: SUPERMARKET,
+    });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: HarvestRunMode.STORE_DISCOVERY,
+        supermarketId: SUPERMARKET,
+      })
+    );
+  });
+
   it('refuses a store discovery for a chain whose shops it cannot read', async () => {
-    // A chain that publishes an assortment and no store list is still a radius
-    // over OpenStreetMap and still needs a centre. Mercadona was this case
-    // until plan 0106 read its own store finder.
-    const { service } = build({ source: { adapterKey: 'deza-web' } });
+    // A chain that publishes no store list is still a radius over
+    // OpenStreetMap and still needs a centre. Mercadona was this case until
+    // plan 0106 read its own store finder, and DEZA until plan 0222.
+    const { service } = build({ source: { adapterKey: 'manual' } });
     await expect(
       service.spawn({
         userId: ADMIN,
@@ -2187,6 +2229,161 @@ describe('HarvestRunService.startScheduled (plan 0206)', () => {
   });
 });
 
+describe('HarvestRunService.startScheduled with a gate (plan 0247)', () => {
+  const PRESET = '5efa0000-0000-4000-a000-0000000000e1';
+  const SCHEDULE = { id: 'schedule-1', presetId: PRESET };
+  const catalogPreset = {
+    id: PRESET,
+    supermarketId: SUPERMARKET,
+    name: 'Weekly Mercadona',
+    input: {
+      mode: HarvestRunMode.CATALOG_DISCOVERY,
+      priceScopeIds: [SCOPE],
+    },
+  } as HarvestRunPreset;
+  const skipped = {
+    outcome: HarvestScheduleOutcome.SKIPPED_PROBE_FAILED,
+    note: 'probe p-1 BLOCKED: listing: HTTP 403',
+    runId: null,
+  };
+
+  it('asks the gate with the source and the mode, then inserts the run when it answers null', async () => {
+    const { service, store } = build({ preset: catalogPreset });
+    const gate = jest.fn(async () => null);
+
+    const started = await service.startScheduled(SCHEDULE, gate);
+
+    expect(gate).toHaveBeenCalledTimes(1);
+    expect(gate).toHaveBeenCalledWith({
+      source: expect.objectContaining({ id: 'src-1' }),
+      mode: HarvestRunMode.CATALOG_DISCOVERY,
+    });
+    expect(started.outcome).toBe(HarvestScheduleOutcome.STARTED);
+    expect(store.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers what the gate answers and inserts nothing', async () => {
+    const { service, store, executor } = build({ preset: catalogPreset });
+
+    await expect(
+      service.startScheduled(SCHEDULE, async () => skipped)
+    ).resolves.toEqual(skipped);
+    expect(store.create).not.toHaveBeenCalled();
+    expect(executor.start).not.toHaveBeenCalled();
+  });
+
+  it('never asks the gate for a row that is off, a failing source or a refused preset', async () => {
+    const gate = jest.fn(async () => null);
+    for (const options of [
+      { preset: catalogPreset, source: { enabled: false } },
+      { preset: catalogPreset, source: { consecutiveFailures: 3 } },
+      {
+        preset: {
+          ...catalogPreset,
+          input: {
+            mode: HarvestRunMode.CATALOG_DISCOVERY,
+            priceScopeIds: ['5efa0000-0000-4000-a000-0000000000e2'],
+          },
+        } as HarvestRunPreset,
+      },
+    ]) {
+      const { service } = build(options);
+      const started = await service.startScheduled(SCHEDULE, gate);
+      expect(started.runId).toBeNull();
+    }
+    expect(gate).not.toHaveBeenCalled();
+  });
+
+  it('answers a busy chain before the gate, so a busy chain gets no probe', async () => {
+    const { service, store } = build({
+      preset: catalogPreset,
+      activeOfChain: { id: 'run-of-chain' } as HarvestRun,
+    });
+    const gate = jest.fn(async () => null);
+
+    await expect(service.startScheduled(SCHEDULE, gate)).resolves.toEqual({
+      outcome: HarvestScheduleOutcome.SKIPPED_BUSY,
+      note: 'A run of this chain is in progress: run-of-chain.',
+      runId: null,
+    });
+    expect(gate).not.toHaveBeenCalled();
+    expect(store.create).not.toHaveBeenCalled();
+  });
+
+  it('answers a store discovery busy behind another source before the gate', async () => {
+    const { service } = build({
+      preset: {
+        ...catalogPreset,
+        input: { mode: HarvestRunMode.STORE_DISCOVERY },
+      } as HarvestRunPreset,
+      source: { adapterKey: 'lidl-api' },
+      activeDiscovery: { id: 'run-of-the-queue' } as HarvestRun,
+    });
+    const gate = jest.fn(async () => null);
+
+    const started = await service.startScheduled(SCHEDULE, gate);
+
+    expect(started.outcome).toBe(HarvestScheduleOutcome.SKIPPED_BUSY);
+    expect(gate).not.toHaveBeenCalled();
+  });
+
+  it('reads no run in flight before the insert when no gate is passed', async () => {
+    const { service, store } = build({ preset: catalogPreset });
+
+    await service.startScheduled(SCHEDULE);
+
+    expect(store.findActiveBySupermarket).not.toHaveBeenCalled();
+    expect(store.findActiveStoreDiscovery).not.toHaveBeenCalled();
+  });
+
+  it('reads the source row once when no gate is passed', async () => {
+    const { service, sources } = build({ preset: catalogPreset });
+
+    await service.startScheduled(SCHEDULE);
+
+    expect(sources.findBySupermarket).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts nothing when the row is turned off while the gate runs', async () => {
+    const { service, store, executor, sources } = build({
+      preset: catalogPreset,
+    });
+    const read = sources.findBySupermarket as jest.Mock;
+    const gate = jest.fn(async () => {
+      // A person turns the row off during the gate's probe.
+      const fresh = { ...(await read.getMockImplementation()?.()) };
+      read.mockResolvedValueOnce({ ...fresh, enabled: false });
+      return null;
+    });
+
+    const started = await service.startScheduled(SCHEDULE, gate);
+
+    expect(started).toEqual({
+      outcome: HarvestScheduleOutcome.REFUSED,
+      note: 'That source is disabled. Enable it with supermarketSource.setEnabled.',
+      runId: null,
+    });
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(store.create).not.toHaveBeenCalled();
+    expect(executor.start).not.toHaveBeenCalled();
+  });
+
+  it('answers SKIPPED_FAILING when the source reached three failures while the gate ran', async () => {
+    const { service, store, sources } = build({ preset: catalogPreset });
+    const read = sources.findBySupermarket as jest.Mock;
+    const gate = jest.fn(async () => {
+      const fresh = { ...(await read.getMockImplementation()?.()) };
+      read.mockResolvedValueOnce({ ...fresh, consecutiveFailures: 3 });
+      return null;
+    });
+
+    const started = await service.startScheduled(SCHEDULE, gate);
+
+    expect(started.outcome).toBe(HarvestScheduleOutcome.SKIPPED_FAILING);
+    expect(store.create).not.toHaveBeenCalled();
+  });
+});
+
 describe('HarvestRunService.reapStale', () => {
   it('reaps runs whose heartbeat stopped', async () => {
     const { service, store } = build();
@@ -2199,5 +2396,297 @@ describe('HarvestRunService.reapStale', () => {
     const { service, store } = build();
     (store.reapStale as jest.Mock).mockRejectedValueOnce(new Error('db gone'));
     await expect(service.reapStale()).resolves.toBeUndefined();
+  });
+});
+
+/** A walk row stored under the key of its stored text. */
+function storedRow(
+  id: string,
+  name: string,
+  sizeFormat: string | null
+): StoredRow {
+  return {
+    id,
+    externalId: entryKey(name, sizeFormat),
+    name,
+    sizeFormat,
+    status: 'ACTIVE',
+    sourceKind: 'OFFICIAL_WEB',
+  };
+}
+
+describe('deza keys: the spawn refuses a DEZA walk while a row waits for its key (plan 0272)', () => {
+  const PRESET = '5efa0000-0000-4000-a000-0000000002e1';
+  const SCHEDULE = { id: 'schedule-1', presetId: PRESET };
+
+  /** The whole description as the name, which the split now reads. */
+  const moving = storedRow('e-1', 'Calcetines 3 pares', null);
+  /** The same row after the task. */
+  const rekeyed = storedRow('e-1', 'Calcetines', '3 pares');
+
+  const walk = {
+    mode: HarvestRunMode.CATALOG_DISCOVERY,
+    supermarketId: SUPERMARKET,
+  };
+
+  it('refuses a DEZA CATALOG_DISCOVERY with the validation code and the sentence', async () => {
+    const { service, store } = build({
+      source: { adapterKey: 'deza-web' },
+      dezaRows: [moving],
+    });
+
+    const refusal = service.validateRequest(walk, {
+      supermarketId: SUPERMARKET,
+      adapterKey: 'deza-web',
+    } as SupermarketSource);
+    await expect(refusal).rejects.toBeInstanceOf(ValidationException);
+    await expect(refusal).rejects.toThrow(dezaKeysRefusal(1));
+    await expect(
+      service.spawn({ userId: ADMIN, ...walk })
+    ).rejects.toBeInstanceOf(ValidationException);
+    expect(store.create).not.toHaveBeenCalled();
+  });
+
+  it('accepts it once the task re-keyed the row', async () => {
+    const { service, store } = build({
+      source: { adapterKey: 'deza-web' },
+      dezaRows: [rekeyed],
+    });
+
+    await service.spawn({ userId: ADMIN, ...walk });
+
+    expect(store.create).toHaveBeenCalled();
+  });
+
+  it('does not count a collision or an unkeyed row', async () => {
+    const holder = storedRow('e-2', 'Calcetines', '3 pares');
+    const unkeyed = {
+      ...storedRow('e-3', 'Toalla 2 u', null),
+      externalId: 'not-its-key',
+    };
+    const { service, store } = build({
+      source: { adapterKey: 'deza-web' },
+      dezaRows: [moving, holder, unkeyed],
+    });
+
+    await service.spawn({ userId: ADMIN, ...walk });
+
+    expect(store.create).toHaveBeenCalled();
+  });
+
+  it('counts a chain of moves as pending before the task, and none after it', async () => {
+    // `end` moves to a key nobody holds, `middle` to the key `end` holds:
+    // the task re-keys both in one run, so both wait for it.
+    const end = storedRow('e-4', 'Zumo', '3 x 187 ml,');
+    const middle = storedRow('e-5', 'Zumo 3 x', '187 ml');
+    const deza = {
+      supermarketId: SUPERMARKET,
+      adapterKey: 'deza-web',
+    } as SupermarketSource;
+
+    const waiting = build({
+      source: { adapterKey: 'deza-web' },
+      dezaRows: [middle, end],
+    });
+    await expect(waiting.service.validateRequest(walk, deza)).rejects.toThrow(
+      dezaKeysRefusal(2)
+    );
+
+    const done = build({
+      source: { adapterKey: 'deza-web' },
+      dezaRows: [
+        storedRow('e-4', 'Zumo 3 x 187 ml,', null),
+        storedRow('e-5', 'Zumo', '3 x 187 ml'),
+      ],
+    });
+    await expect(
+      done.service.validateRequest(walk, deza)
+    ).resolves.toBeDefined();
+  });
+
+  it('lets a DEZA leaflet import through validateRequest while a row waits', async () => {
+    const { service, store, dezaQuery } = build({
+      source: { adapterKey: 'deza-web' },
+      dezaRows: [moving],
+    });
+    const leaflet = {
+      mode: HarvestRunMode.FILE_IMPORT,
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+      supermarketId: SUPERMARKET,
+      priceScopeId: SCOPE,
+      document: harvestDocument(),
+    };
+
+    await expect(
+      service.validateRequest(leaflet, {
+        supermarketId: SUPERMARKET,
+        adapterKey: 'deza-web',
+      } as SupermarketSource)
+    ).resolves.toBeDefined();
+    await service.spawn({ userId: ADMIN, ...leaflet });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: HarvestRunMode.FILE_IMPORT })
+    );
+    expect(dezaQuery).not.toHaveBeenCalled();
+  });
+
+  it('never reads for a Mercadona walk', async () => {
+    const { service, store, dezaQuery } = build({ dezaRows: [moving] });
+
+    await service.spawn({ userId: ADMIN, ...walk, priceScopeIds: [SCOPE] });
+
+    expect(store.create).toHaveBeenCalled();
+    expect(dezaQuery).not.toHaveBeenCalled();
+  });
+
+  it('records a scheduled slot REFUSED and writes no run', async () => {
+    const { service, store } = build({
+      source: { adapterKey: 'deza-web' },
+      dezaRows: [moving],
+      preset: {
+        id: PRESET,
+        supermarketId: SUPERMARKET,
+        name: 'Weekly DEZA',
+        input: { mode: HarvestRunMode.CATALOG_DISCOVERY },
+      } as HarvestRunPreset,
+    });
+
+    await expect(service.startScheduled(SCHEDULE)).resolves.toEqual({
+      outcome: HarvestScheduleOutcome.REFUSED,
+      note: `The preset "Weekly DEZA" (${PRESET}) cannot start a run: ${dezaKeysRefusal(1)}`,
+      runId: null,
+    });
+    expect(store.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('deza keys: the guard asks only about a DEZA catalog walk (plan 0272)', () => {
+  const deza = {
+    supermarketId: SUPERMARKET,
+    adapterKey: 'deza-web',
+  } as SupermarketSource;
+
+  function guard() {
+    const query = jest.fn(async () => [
+      storedRow('e-1', 'Calcetines 3 pares', null),
+    ]);
+    const subject = new DezaKeyGuard({
+      query,
+    } as unknown as Repository<SourceCatalogEntry>);
+    return { subject, query };
+  }
+
+  it.each([HarvestRunMode.FILE_IMPORT, HarvestRunMode.STORE_DISCOVERY])(
+    'lets a DEZA %s through without reading',
+    async (mode) => {
+      const { subject, query } = guard();
+      await expect(subject.refusal(deza, mode)).resolves.toBeNull();
+      expect(query).not.toHaveBeenCalled();
+    }
+  );
+
+  it('reads the chain of the source it is asked about', async () => {
+    const { subject, query } = guard();
+    await expect(
+      subject.refusal(deza, HarvestRunMode.CATALOG_DISCOVERY)
+    ).resolves.toBe(dezaKeysRefusal(1));
+    expect(query).toHaveBeenCalledWith(expect.any(String), [SUPERMARKET]);
+  });
+});
+
+/**
+ * What a walk ran under outside its request (owner decisions 130b and 127b).
+ * The spawn stores a digest of the source row's adapter and config, and the
+ * adapter itself, on the run, and never the config.
+ */
+describe('HarvestRunService.spawn, the walk configuration', () => {
+  it('stores the fingerprint of the source row and its adapter on a walk', async () => {
+    const config = { seedPath: '/supermercado/frescos/cat20002/c' };
+    const { service, store } = build({
+      source: { adapterKey: 'carrefour-web', config },
+    });
+
+    const view = await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.CATALOG_DISCOVERY,
+      supermarketId: SUPERMARKET,
+      priceScopeId: 'a-scope',
+    });
+
+    const expected = walkConfigFingerprint({
+      adapterKey: 'carrefour-web',
+      config,
+    });
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceId: 'src-1',
+        configFingerprint: expected,
+        adapterKey: 'carrefour-web',
+      })
+    );
+    expect(view.configFingerprint).toBe(expected);
+    expect(view.adapterKey).toBe('carrefour-web');
+    // The digest and never the config: nothing of it reaches the view.
+    expect(JSON.stringify(view)).not.toContain('cat20002');
+  });
+
+  it('stores a different fingerprint for a different config, and the same one for another rate', async () => {
+    const spawnWith = async (source: Partial<SupermarketSource>) => {
+      const { service, store } = build({ source });
+      await service.spawn({
+        userId: ADMIN,
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
+        priceScopeIds: [SCOPE],
+      });
+      return (store.create as jest.Mock).mock.calls[0][0].configFingerprint;
+    };
+    const base = await spawnWith({ config: { warehouse: '4661' } });
+    expect(await spawnWith({ config: { warehouse: '4661' }, workers: 1 })).toBe(
+      base
+    );
+    expect(await spawnWith({ config: { warehouse: '9999' } })).not.toBe(base);
+  });
+
+  it('stores neither on a file import, which uses no source row', async () => {
+    const { service, store } = build({
+      source: { adapterKey: 'mercadona-api' },
+    });
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.FILE_IMPORT,
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+      supermarketId: SUPERMARKET,
+      priceScopeId: SCOPE,
+      document: harvestDocument(),
+    });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceId: null,
+        configFingerprint: null,
+        adapterKey: null,
+      })
+    );
+  });
+
+  it('stores neither on an OpenStreetMap store discovery, which names no chain', async () => {
+    const { service, store } = build();
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.STORE_DISCOVERY,
+      postalCode: '14013',
+    });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceId: null,
+        configFingerprint: null,
+        adapterKey: null,
+      })
+    );
   });
 });

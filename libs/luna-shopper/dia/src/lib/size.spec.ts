@@ -230,6 +230,7 @@ describe('splitSize', () => {
         sizeUnit: null,
         packCount: null,
         approximate: false,
+        approxWeight: null,
       });
     });
 
@@ -278,6 +279,7 @@ describe('splitSize', () => {
       sizeUnit: null,
       packCount: null,
       approximate: false,
+      approxWeight: null,
     });
   });
 
@@ -303,6 +305,197 @@ describe('splitSize', () => {
     expect(splitSize('  Coca-Cola   2  L ')).toMatchObject({
       name: 'Coca-Cola',
       sizeFormat: '2 L',
+    });
+  });
+
+  describe('the approximate weight of a piece (plan 0244)', () => {
+    it.each([
+      ['Manzana roja granel 800 g aprox.', 800],
+      ['Manzana reineta granel 1 Kg aprox.', 1000],
+      [
+        'Pechuga de pollo entera formato familiar Selección de Dia 1.3 Kg aprox.',
+        1300,
+      ],
+      ['Pollo entero Selección de Dia 2.1 Kg aprox.', 2100],
+      ['Pechugas fileteadas Selección de Dia bandeja 650 g aprox.', 650],
+    ])('%s weighs %d g', (printed, grams) => {
+      expect(splitSize(printed)).toMatchObject({
+        approximate: true,
+        approxWeight: grams,
+      });
+    });
+
+    it.each([
+      // A size the chain promises is a size and no weight.
+      'Pera conferencia bandeja 700 g',
+      'Manzana roja dulce 1 Kg',
+      'Coca-Cola 2 L',
+      // An approximate volume is not a weight.
+      'Sopa casera 1 L aprox.',
+    ])('%s states no weight', (printed) => {
+      expect(splitSize(printed).approxWeight).toBeNull();
+    });
+  });
+
+  describe('count words, a wash and a capital X (plan 0270)', () => {
+    it.each([
+      [
+        'Calcetines deportivos Dia 3 pares',
+        'Calcetines deportivos Dia',
+        '3 pares',
+        3,
+      ],
+      ['Manzanilla Dia 20 bolsitas', 'Manzanilla Dia', '20 bolsitas', 20],
+      [
+        'Queso en porciones Dia 8 porciones',
+        'Queso en porciones Dia',
+        '8 porciones',
+        8,
+      ],
+    ])('%s states a count', (printed, name, sizeFormat, unitSize) => {
+      expect(splitSize(printed)).toMatchObject({
+        name,
+        sizeFormat,
+        unitSize,
+        sizeUnit: 'UNIT',
+        packCount: null,
+      });
+    });
+
+    it('reads 2 x 3 pares as six pairs in a pack of two', () => {
+      expect(splitSize('Calcetines Dia 2 x 3 pares')).toMatchObject({
+        sizeFormat: '2 x 3 pares',
+        unitSize: 6,
+        sizeUnit: 'UNIT',
+        packCount: 2,
+      });
+    });
+
+    it.each([
+      ['Detergente líquido Dia 40 lavados', '40 lavados'],
+      ['Detergente líquido Dia 2 x 40 lavados', '2 x 40 lavados'],
+    ])(
+      '%s keeps the wash split off and states no size and no pack',
+      (printed, sizeFormat) => {
+        expect(splitSize(printed)).toEqual({
+          name: 'Detergente líquido Dia',
+          sizeFormat,
+          unitSize: null,
+          sizeUnit: null,
+          packCount: null,
+          approximate: false,
+          approxWeight: null,
+        });
+      }
+    );
+
+    it('reads a capital X as a small one', () => {
+      expect(splitSize('Yogur natural Dia 2X125 g')).toMatchObject({
+        name: 'Yogur natural Dia',
+        sizeFormat: '2X125 g',
+        unitSize: 250,
+        sizeUnit: 'GRAM',
+        packCount: 2,
+      });
+    });
+
+    describe('hostile names', () => {
+      const unsplit = (name: string) => ({
+        name,
+        sizeFormat: null,
+        unitSize: null,
+        sizeUnit: null,
+        packCount: null,
+        approximate: false,
+        approxWeight: null,
+      });
+
+      it.each([
+        'Pañales Dodot talla 6 XL',
+        'Camiseta térmica hombre 2XL',
+        'Maquinilla Gillette Mach3 MAX',
+        'Pilas alcalinas Dia AA X2',
+        'Bombilla halógena 2X60 w',
+      ])('does not split %p, whose capital X multiplies nothing', (printed) => {
+        expect(splitSize(printed)).toEqual(unsplit(printed));
+      });
+
+      it('splits a length with a capital X and states no size and no pack', () => {
+        expect(splitSize('Mantel Dia 55X60 cm')).toEqual({
+          name: 'Mantel Dia',
+          sizeFormat: '55X60 cm',
+          unitSize: null,
+          sizeUnit: null,
+          packCount: null,
+          approximate: false,
+          approxWeight: null,
+        });
+      });
+
+      it('does not split a decimal length with a capital X', () => {
+        expect(splitSize('Toalla de playa 1.2X1.8 m')).toEqual(
+          unsplit('Toalla de playa 1.2X1.8 m')
+        );
+      });
+
+      it.each([
+        [
+          'Detergente líquido Dia 40 lavados 2 L',
+          'Detergente líquido Dia 40 lavados',
+          '2 L',
+          2,
+          'LITER',
+        ],
+        [
+          'Calcetines Dia 3 pares 40 g',
+          'Calcetines Dia 3 pares',
+          '40 g',
+          40,
+          'GRAM',
+        ],
+        [
+          'Té verde Dia 10 bolsitas 1,5 g',
+          'Té verde Dia 10 bolsitas',
+          '1,5 g',
+          1.5,
+          'GRAM',
+        ],
+      ])(
+        'takes the last size of %p and leaves the count or the wash in the name',
+        (printed, name, sizeFormat, unitSize, sizeUnit) => {
+          expect(splitSize(printed)).toMatchObject({
+            name,
+            sizeFormat,
+            unitSize,
+            sizeUnit,
+            packCount: null,
+          });
+        }
+      );
+
+      it.each([
+        ['Queso fundido Dia 1 PORCIÓN', 'Queso fundido Dia', '1 PORCIÓN', 1],
+        ['Calcetines Dia 3 Pares.', 'Calcetines Dia', '3 Pares.', 3],
+      ])(
+        'reads the count word of %p in capitals or with a stop',
+        (printed, name, sizeFormat, unitSize) => {
+          expect(splitSize(printed)).toMatchObject({
+            name,
+            sizeFormat,
+            unitSize,
+            sizeUnit: 'UNIT',
+            packCount: null,
+          });
+        }
+      );
+
+      it.each([
+        'Detergente para lavado a mano Dia',
+        'Par de calcetines Dia',
+        'Calcetines 1 par de deporte',
+      ])('does not split %p, where lavado or par ends no size', (printed) => {
+        expect(splitSize(printed)).toEqual(unsplit(printed));
+      });
     });
   });
 });

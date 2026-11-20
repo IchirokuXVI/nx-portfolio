@@ -121,7 +121,7 @@ export const TOUR_STOPS: readonly TourStop[] = [
       firstList === null || !voice
         ? null
         : ['zones', firstList.zoneId, 'lists', firstList.listId],
-    placement: 'above',
+    placement: 'below',
     titleKey: 'tour.voice.title',
     bodyKey: 'tour.voice.body',
   },

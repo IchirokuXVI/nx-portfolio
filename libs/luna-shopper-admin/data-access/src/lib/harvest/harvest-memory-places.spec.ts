@@ -14,7 +14,17 @@ const LIBERTADOR = 'place-mercadona-libertador';
 const OESTE = 'place-mercadona-oeste';
 const TRASSIERRA = 'place-mercadona-trassierra';
 const CARREFOUR = 'place-carrefour-1';
+/** A place that names ALDI by key and by name, a chain the catalog does not hold. */
+const ALDI = 'place-aldi-1';
+/** A place that carries the key of Dia, a chain the catalog holds. */
 const DIA = 'place-dia-1';
+/**
+ * A place that carries the key of Dia and prints `Maxi Dia`, a name no chain
+ * of the catalog carries. Only the key resolves it.
+ */
+const MAXI_DIA = 'place-dia-2';
+/** A place with no key that prints Deza, the name of a chain the catalog holds. */
+const DEZA = 'place-osm-deza';
 
 const refusal = (promise: Promise<unknown>) =>
   promise.then(
@@ -192,8 +202,9 @@ describe('HarvestMemory, a link', () => {
   });
 
   it('links a place that names no chain to the shop that is named', async () => {
-    // Dia is a chain the memory catalog does not hold.
-    const result = await new HarvestMemory().linkPlace(DIA, {
+    // Neither the key nor the name the place prints resolves to a chain of the
+    // memory catalog.
+    const result = await new HarvestMemory().linkPlace(ALDI, {
       supermarketLocationId: 'loc_consum_centro',
     });
 
@@ -216,6 +227,34 @@ describe('HarvestMemory, a link', () => {
     });
     const page = await memory.listPlaces({ status: 'NEW', limit: 100 });
     expect(page.items.some((place) => place.id === CARREFOUR)).toBe(true);
+  });
+
+  it('resolves the chain of a place by its key', async () => {
+    const error = await refusal(
+      new HarvestMemory().linkPlace(MAXI_DIA, {
+        supermarketLocationId: 'loc_sierra',
+      })
+    );
+
+    expect(error?.code).toBe('place_names_another_chain');
+    expect(error?.details['chain']).toEqual({
+      id: 'sm_dia',
+      name: { en: 'Dia', es: 'Dia' },
+    });
+  });
+
+  it('resolves the chain of a place with no key by the name it prints', async () => {
+    const error = await refusal(
+      new HarvestMemory().linkPlace(DEZA, {
+        supermarketLocationId: 'loc_sierra',
+      })
+    );
+
+    expect(error?.code).toBe('place_names_another_chain');
+    expect(error?.details['chain']).toEqual({
+      id: 'sm_deza',
+      name: { en: 'Deza', es: 'Deza' },
+    });
   });
 
   it('links across chains when the request says so', async () => {
@@ -261,7 +300,7 @@ describe('HarvestMemory, a link', () => {
     );
 
     // The shop still has no reference: the next link fills it.
-    const next = await memory.linkPlace(DIA, {
+    const next = await memory.linkPlace(ALDI, {
       supermarketLocationId: 'loc_consum_centro',
     });
     expect(next.filled).toEqual(['EXTERNAL_REF']);
@@ -270,7 +309,7 @@ describe('HarvestMemory, a link', () => {
 
   it('refuses a shop the catalog does not hold', async () => {
     const error = await refusal(
-      new HarvestMemory().linkPlace(DIA, { supermarketLocationId: 'nowhere' })
+      new HarvestMemory().linkPlace(ALDI, { supermarketLocationId: 'nowhere' })
     );
 
     expect(error?.code).toBe('not_found');

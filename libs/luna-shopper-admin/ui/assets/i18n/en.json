@@ -215,6 +215,9 @@
       "itemNeedsACategory": "A product needs at least one category.",
       "categoryInUse": "This category still holds categories or products, or a shop section covers it. Move them, or take it off the section, before deleting it.",
       "categoryNotFound": "That category does not exist any more. Somebody may have deleted it.",
+      "itemKilogramHasSize": "A product sold by the kilo has no size. Give it an approximate weight instead, or choose grams.",
+      "itemApproxWeightBesideSize": "A product has a size or an approximate weight, not both. Clear one of them.",
+      "itemQuantityStepNotAllowed": "Only a loose product sold by the kilo has a step. Choose the default, or sell it loose by the kilo.",
       "sectionNotFound": "That section does not exist any more. Somebody may have deleted it.",
       "sectionOfAnotherShop": "That section belongs to another shop. A shop can only order its own sections. Read the screen again and try once more.",
       "sectionSlugTaken": "This shop already has a section with that slug. Choose another one.",
@@ -463,6 +466,20 @@
       "defaultUnit": "Sold by",
       "unitSize": "Size",
       "unitSizeHelp": "Without it the unit says nothing: a liter is not a size.",
+      "approxWeight": "Approximate weight (g)",
+      "approxWeightFrom": {
+        "source": "From the chain, updated by each run",
+        "admin": "Typed by a person. Runs do not change it",
+        "useChain": "Use the chain’s weight"
+      },
+      "quantityStep": "Step",
+      "quantityStepHelp": "How far one press moves a shopper’s amount of this product, at every amount",
+      "quantityStepDefault": {
+        "gram": "Default: 25 g",
+        "milliliter": "Default: 25 ml"
+      },
+      "quantityStepSet": "Set for this product. A run does not give it a weight while it has a step.",
+      "pricesPerKilo": "The prices of this product are per kilo",
       "productGroupId": "Product group",
       "productGroupIdHelp": "What makes this product comparable with another. Empty is the ordinary state of a newly harvested product, and nothing is wrong with it.",
       "imageUrl": "Our photo",
@@ -965,7 +982,8 @@
       "setup": "Setup"
     },
     "running": {
-      "open": "Open the run in progress: {{what}}, {{processed}} processed"
+      "open": "Open the run in progress: {{what}}, {{processed}} processed",
+      "openAbout": "Open the run in progress: {{what}}, {{processed}} of about {{total}}, an estimate"
     },
     "review": {
       "queues": "Queue",
@@ -1001,7 +1019,17 @@
       "EXTRACTOR": "From the extractor",
       "COPY_TARGET_GONE": "A copy target was deleted",
       "COPY_SOURCE_NOT_WRITTEN": "Nothing to copy",
-      "DETAIL_SKIPPED_UNKNOWN": "A skipped product was unknown"
+      "DETAIL_SKIPPED_UNKNOWN": "A skipped product was unknown",
+      "UNKNOWN_PRICE_SCOPE": "A price named an unknown scope",
+      "NO_PRICE_SCOPE": "A price had no scope",
+      "SCOPE_KIND_MISMATCH": "A scope of another kind",
+      "PRICE_SOLD_ANOTHER_WAY": "Sold another way",
+      "SOURCE_PAUSED": "The chain refused, the run paused",
+      "SOURCE_RESUMED": "The chain answered again",
+      "APPROX_WEIGHT_ROWS_DISAGREE": "Two weights for one piece",
+      "LISTING_UNREAD": "A part was not read",
+      "LISTING_SHORT": "A part was read short",
+      "DETAIL_UNREAD": "Product pages stopped answering"
     },
     "status": {
       "PENDING": "Pending",
@@ -1191,8 +1219,12 @@
       "progress": {
         "label": "Run progress",
         "of": "{{processed}} of {{total}}",
+        "ofAbout": "{{processed}} of about {{total}}",
+        "ofAboutEnded": "{{processed}} processed of about {{total}}",
         "processed": "{{processed}} processed",
-        "unsized": "The run does not know yet how much work it has."
+        "unsized": "The run does not know yet how much work it has.",
+        "approximate": "This run does not know its total. About {{total}} is an estimate taken from the latest completed run of the same kind.",
+        "approximateEnded": "This run did not know its total. About {{total}} is an estimate taken from the latest completed run of the same kind."
       },
       "counter": {
         "created": "Created",
@@ -1224,6 +1256,53 @@
           "prices": "Prices copied",
           "availability": "Availability copied",
           "more": "{{count}} more"
+        },
+        "unreadable": "Not read",
+        "askedAgain": "Asked again at the end",
+        "askedAgainRead": "read the second time",
+        "askedAgainLost": "still not read",
+        "blockedAfter": "Stopped because the chain refused",
+        "sections": {
+          "caption": "Sections",
+          "name": "Section",
+          "products": "Products",
+          "queries": "Queries",
+          "queriesNotStated": "Not stated by the run",
+          "stoppedBy": "Why it stopped",
+          "openQueries": "Still at the ceiling"
+        },
+        "stoppedBy": {
+          "BUDGET": "Out of queries",
+          "BARREN": "Nothing new to find",
+          "GROWTH": "Stopped growing",
+          "NO_TERM": "No term left to narrow by",
+          "COMPLETE": "Finished",
+          "FAILED": "Failed"
+        },
+        "categories": {
+          "caption": "Categories, read against printed",
+          "name": "Category",
+          "printed": "Printed",
+          "read": "Read",
+          "repeated": "Repeated"
+        },
+        "detail": "Product pages: {{pages}} asked, {{failed}} failed, {{timeouts}} timed out",
+        "sizesDisproved": "Sizes their own price disproves: {{count}}",
+        "probablePackCounts": "Of them, probably a pack: {{count}} (a guess)",
+        "sizes": {
+          "name": "Product",
+          "stated": "Stated",
+          "implied": "Implied",
+          "unit": "Unit",
+          "label": "Label"
+        },
+        "unslottedOnly": {
+          "heading": "Products only in chain categories we do not map",
+          "count_one": "{{count}} product sits only in chain categories with no category of ours. It waits as uncategorised.",
+          "count_other": "{{count}} products sit only in chain categories with no category of ours. They wait as uncategorised.",
+          "leaf_one": "{{root}} / {{name}}: {{count}} product",
+          "leaf_other": "{{root}} / {{name}}: {{count}} products",
+          "examples": "For example: {{names}}"
         }
       },
       "queue": {
@@ -1256,6 +1335,8 @@
         "revertedBy": "Reverted by",
         "correlationId": "Correlation identifier"
       },
+      "revertedByUnknown": "An admin no longer listed",
+      "revertedByUnread": "Could not be read",
       "tabs": {
         "label": "Views of this run",
         "overview": "Overview",
@@ -1444,6 +1525,11 @@
     "entries": {
       "heading": "Source products",
       "empty": "Every product a source named here has been decided.",
+      "entry": {
+        "one": "Showing one entry.",
+        "all": "Show the whole queue",
+        "empty": "No entry has this address."
+      },
       "accept": "Yes, it is this product",
       "openSibling": "Open the row it points at",
       "reject": "Not a product we track",
@@ -1453,7 +1539,8 @@
         "heading": "The source says",
         "openAtChain": "Open the product page at the chain"
       },
-      "timesSeen": "Seen {{count}} times",
+      "timesSeen_one": "Seen once",
+      "timesSeen_other": "Seen {{count}} times",
       "extra": "Everything else the source sent",
       "lastRun": "The run that last saw it",
       "filter": {
@@ -1462,6 +1549,7 @@
         "sourceKind": "What named it",
         "anyKind": "Anything",
         "brand": "Brand",
+        "sizeDoubt": "Size in doubt",
         "brandKey": "Filtering on the key {{key}}.",
         "brandNoKey": "This text makes no key, so nothing matches it."
       },
@@ -1473,7 +1561,9 @@
       },
       "proposal": {
         "heading": "Proposed product",
+        "boundHeading": "Bound product",
         "item": "The match is {{confidence}}% sure. Nothing is written until you accept.",
+        "bound": "This entry is bound to this product. A change here moves or withdraws its prices at this chain.",
         "sibling": "This looks like {{name}}, another row of this chain. That row is the one with the barcode, so it is the one to create the product from.",
         "siblingElsewhere": "The row it points at ({{id}}) is not in this queue, which usually means somebody has already decided it. Accept or create here instead.",
         "none": "Nothing in the catalog looked like it, so find the product or create it."
@@ -1505,9 +1595,17 @@
         "brand": "Brand",
         "size": "Size",
         "ean": "Barcode",
-        "categoryPath": "Its category",
+        "categoryPath": "Its categories",
         "externalId": "Its id",
         "lastSeen": "Last seen"
+      },
+      "sizeDoubt": {
+        "chip": "Size in doubt",
+        "sentence": "States {{stated}}, its price per {{label}} implies {{implied}}.",
+        "sentenceNoLabel": "States {{stated}}, its prices imply {{implied}}.",
+        "pack": "Perhaps a pack of {{count}} (a guess).",
+        "units_one": "{{figure}} unit",
+        "units_other": "{{figure}} units"
       },
       "bind": {
         "heading": "Point it at a product we have",
@@ -1522,6 +1620,8 @@
         "brand": "Brand",
         "ean": "Barcode",
         "unitSize": "Size",
+        "approxWeight": "Approximate weight (g)",
+        "approxWeightHelp": "From the chain’s row. A size you type, or another unit, replaces it.",
         "categories": "Categories",
         "categoriesHelp": "Empty uses the categories the row’s own path resolves to. Pick one or more to override them, first one first.",
         "defaultUnit": "Sold by",
@@ -1530,6 +1630,7 @@
       },
       "proposalBadge": {
         "item": "Has a proposal",
+        "bound": "Bound",
         "sibling": "Points at another row",
         "none": "No proposal"
       },
@@ -1727,7 +1828,8 @@
       "section": {
         "source": "Source",
         "speed": "How fast",
-        "may": "What it may do"
+        "may": "What it may do",
+        "probe": "Last probe"
       },
       "state": {
         "fetched": "Fetched",
@@ -1961,7 +2063,8 @@
         "HARVEST_DISABLED": "This cluster cannot start harvest runs.",
         "SCHEDULER_DISABLED": "Schedules do not start by themselves on this cluster. Only production starts them.",
         "SOURCE_DISABLED": "{{chain}} may not be fetched. Turn its source on and leave it on.",
-        "SOURCE_FAILING": "{{chain}} failed three runs in a row. Start the preset by hand. When it completes, the schedule runs again."
+        "SOURCE_FAILING": "{{chain}} failed three runs in a row. Start the preset by hand. When it completes, the schedule runs again.",
+        "PROBE_NOT_PASSED": "{{chain}}'s last probe did not pass. The next slot runs a probe first and is skipped if it fails again."
       },
       "blockLink": {
         "source": "Open the source",
@@ -1973,6 +2076,7 @@
         "SKIPPED_FAILING": "Skipped, the chain is failing",
         "REFUSED": "Refused",
         "SKIPPED_BUSY": "Skipped, a run was already going",
+        "SKIPPED_PROBE_FAILED": "Skipped, the probe did not pass",
         "none": "No slot has come yet"
       },
       "next": {
@@ -1993,6 +2097,24 @@
         "label": "Schedules of {{name}}",
         "deleteRefused_one": "A schedule runs this preset: {{when}}. Delete the schedule first, then the preset.",
         "deleteRefused_other": "{{count}} schedules run this preset: {{when}}. Delete the schedules first, then the preset."
+      }
+    },
+    "probeNotice": {
+      "text": "{{chain}}'s last probe, {{age}}, was {{status}}: {{sentence}}. A run may store little or mark products wrong.",
+      "textNoSentence": "{{chain}}'s last probe, {{age}}, was {{status}}. A run may store little or mark products wrong.",
+      "sourceText": "{{chain}}'s last probe, {{age}}, was {{status}}: {{sentence}}. Until a probe passes, a run may store little or mark products wrong.",
+      "sourceTextNoSentence": "{{chain}}'s last probe, {{age}}, was {{status}}. Until a probe passes, a run may store little or mark products wrong.",
+      "thisChain": "This chain",
+      "justNow": "just now",
+      "question": {
+        "heading": "Start the run anyway?",
+        "confirm": "Start anyway"
+      },
+      "status": {
+        "SHAPE_CHANGED": "a shape change",
+        "BLOCKED": "refused",
+        "UNREACHABLE": "unreachable",
+        "ERROR": "a fault on our side"
       }
     }
   },
@@ -2458,6 +2580,14 @@
       "listNameHelp": "The list this line was written on.",
       "content": "What it says",
       "quantity": "How many",
+      "quantityHelp": "In the unit beside it: pieces, grams or millilitres. 750 g is 750 and 1.5 l is 1500.",
+      "unit": "Counted in",
+      "unitHelp": "What the quantity counts. Changing it changes what the number means, so give the quantity in the new unit in the same edit.",
+      "unitOption": {
+        "UNIT": "Pieces",
+        "GRAM": "Grams",
+        "MILLILITER": "Millilitres"
+      },
       "approvalStatus": "Approval",
       "approvalStatusHelp": "Fixed here. “Approve” and “Reject” beside the line on its list’s page are how it moves, because each tells the zone. Correcting the wording above leaves an approved line approved.",
       "createdByUserId": "Written by",

@@ -54,3 +54,6 @@ export type {
   MercadonaProduct,
 } from './lib/types';
 export { isImportableSizeFormat, mapSizeFormat } from './lib/units';
+// A probe per chain checks the storefront shape (plan 0219).
+export { MERCADONA_PROBE_POSTAL_CODE, probeMercadona } from './lib/probe';
+export type { MercadonaProbeOptions } from './lib/probe';

@@ -245,7 +245,8 @@ export class BasketRevertService {
             zoneLine.id,
             before,
             zoneLine.quantity,
-            actor
+            actor,
+            zoneLine.unit
           );
           if (wrote) {
             recorded.add(zoneLine.id);

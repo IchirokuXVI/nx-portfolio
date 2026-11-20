@@ -17,11 +17,12 @@ import {
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import { In, Repository } from 'typeorm';
-import { SourceLocation } from '../entities';
+import { In, IsNull, Not, Repository } from 'typeorm';
+import { DiscoveredPlace, SourceLocation } from '../entities';
 import { CatalogClient } from './catalog-client.service';
 import { toSourceLocationView } from './harvest.mappers';
 import {
+  LOCATION_CANDIDATES_MAX,
   LocationNameIndex,
   rankLocations,
   type LocationCandidate,
@@ -33,6 +34,14 @@ interface SourceLocationCursor {
   value: string;
   id: string;
 }
+
+/**
+ * The place providers whose `externalRef` is the chain's own shop code, the
+ * same string a product popup names and a `source_locations` row is keyed on
+ * (plan 0222, section 7). A place of these providers that a person linked to
+ * a shop proposes that shop for the row of the same code.
+ */
+export const SHOP_CODE_PROVIDERS: readonly string[] = ['DEZA'];
 
 /** One shop as a source named it, for {@link SourceLocationService.observe}. */
 export interface ObservedShop {
@@ -64,7 +73,10 @@ export class SourceLocationService {
     private readonly shops: Repository<SourceLocation>,
     private readonly catalog: CatalogClient,
     private readonly admin: PlatformAdminService,
-    private readonly availability: SourceEntryAvailabilityWriter
+    private readonly availability: SourceEntryAvailabilityWriter,
+    // Read only, for the code candidate (plan 0222, section 7).
+    @InjectRepository(DiscoveredPlace)
+    private readonly places: Repository<DiscoveredPlace>
   ) {}
 
   /**
@@ -257,6 +269,12 @@ export class SourceLocationService {
    * The rows as the queue shows them, with the proposals an `UNMAPPED` row
    * carries (plan 0154). Catalog is asked once per chain, and not at all when no
    * row needs a proposal.
+   *
+   * **The shop of the same code comes first** (plan 0222, section 7). When the
+   * chain's own shop list named a place with this row's code and a person
+   * linked that place to one of this chain's shops, that shop leads the list
+   * with `sameCode: true`. It is a proposal like the others: nothing here maps
+   * a row, and `map` stays the one act that binds one.
    */
   private async views(rows: SourceLocation[]): Promise<SourceLocationView[]> {
     const locations = new Map<string, Promise<LocationCandidate[]>>();
@@ -268,28 +286,77 @@ export class SourceLocationService {
       }
       return held;
     };
+    const linkedByCode = await this.linkedByCode(rows);
 
     const views: SourceLocationView[] = [];
     for (const row of rows) {
-      const candidates =
-        row.status === SourceLocationStatus.UNMAPPED
-          ? rankLocations(
-              row.printedName,
-              await locationsOf(row.supermarketId)
-            ).map(
-              ({ location, score, strong }): SourceLocationCandidate => ({
-                supermarketLocationId: location.id,
-                label: location.label,
-                address: location.address,
-                postalCode: location.postalCode,
-                score,
-                strong,
-              })
-            )
-          : [];
+      let candidates: SourceLocationCandidate[] = [];
+      if (row.status === SourceLocationStatus.UNMAPPED) {
+        const chain = await locationsOf(row.supermarketId);
+        // Only a shop of this row's chain: that check is what keeps one
+        // chain's code off another chain's queue.
+        const byCode = (linkedByCode.get(row.externalId) ?? [])
+          .map((id) => chain.find((location) => location.id === id))
+          .find((location): location is LocationCandidate => !!location);
+        const byName = rankLocations(row.printedName, chain)
+          .filter(({ location }) => location.id !== byCode?.id)
+          .map(
+            ({ location, score, strong }): SourceLocationCandidate => ({
+              ...candidateOf(location),
+              score,
+              strong,
+            })
+          );
+        candidates = byCode
+          ? [
+              {
+                ...candidateOf(byCode),
+                score: 1,
+                strong: true,
+                sameCode: true,
+              },
+              ...byName,
+            ].slice(0, LOCATION_CANDIDATES_MAX)
+          : byName;
+      }
       views.push(toSourceLocationView(row, candidates));
     }
     return views;
+  }
+
+  /**
+   * The catalog shop each code's place is linked to, for the `UNMAPPED` rows
+   * of one page, in one query. A code may name places of several providers,
+   * so each code answers a list.
+   */
+  private async linkedByCode(
+    rows: readonly SourceLocation[]
+  ): Promise<Map<string, string[]>> {
+    const codes = [
+      ...new Set(
+        rows
+          .filter((row) => row.status === SourceLocationStatus.UNMAPPED)
+          .map((row) => row.externalId)
+      ),
+    ];
+    const linked = new Map<string, string[]>();
+    if (codes.length === 0) {
+      return linked;
+    }
+    const places = await this.places.find({
+      where: {
+        provider: In([...SHOP_CODE_PROVIDERS]),
+        externalRef: In(codes),
+        supermarketLocationId: Not(IsNull()),
+      },
+      order: { provider: 'ASC' },
+    });
+    for (const place of places) {
+      const ids = linked.get(place.externalRef) ?? [];
+      ids.push(place.supermarketLocationId as string);
+      linked.set(place.externalRef, ids);
+    }
+    return linked;
   }
 
   /** Every shop catalog holds for this chain, as the name match reads them. */
@@ -323,4 +390,19 @@ export class SourceLocationService {
     }
     return row;
   }
+}
+
+/** The fields of a candidate that describe the shop, whatever proposed it. */
+function candidateOf(
+  location: LocationCandidate
+): Pick<
+  SourceLocationCandidate,
+  'supermarketLocationId' | 'label' | 'address' | 'postalCode'
+> {
+  return {
+    supermarketLocationId: location.id,
+    label: location.label,
+    address: location.address,
+    postalCode: location.postalCode,
+  };
 }

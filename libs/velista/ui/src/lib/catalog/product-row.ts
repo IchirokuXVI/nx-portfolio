@@ -8,10 +8,16 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import type {
+  LineUnit,
+  PriceWords,
+  QuantityStep,
+} from '@portfolio/velista/models';
 import {
   BasketIcon,
   ChevronDownIcon,
   ClockIcon,
+  InfoIcon,
   PlusIcon,
 } from '../icons/icons';
 import { ProductPicture } from '../list/product-picture';
@@ -48,13 +54,17 @@ export interface ProductRowView {
   readonly caption: string | null;
   /** Null draws the product glyph. */
   readonly imageUrl: string | null;
-  /** The price, formatted, or null for a card with none. */
-  readonly price: string | null;
+  /**
+   * The price as two words, the number and what it is per (velista `0179`), or
+   * null for a card with none. `per` is drawn smaller, muted, close after it.
+   */
+  readonly price: PriceWords | null;
   /**
    * The line under the price: the price per litre or kilo when it differs from
-   * the price, or the chain that has the price (the line detail sheet), or null.
+   * the price, always for a kilo piece, or the chain that has the price (the line
+   * detail sheet, as an amount with no `per`), or null.
    */
-  readonly unitPrice: string | null;
+  readonly unitPrice: PriceWords | null;
   /** Under a stale price, how long ago it was seen ("18 days ago"), or null. */
   readonly seen: string | null;
   /** The server judged the price old. Drawn muted, with its age and the clock. */
@@ -69,6 +79,18 @@ export interface ProductRowView {
    * detail nor a price.
    */
   readonly summary: string | null;
+  /**
+   * What a line of this product counts in (velista `0182`), which an add from the
+   * card sends: `GRAM` for a product sold by the kilo, `UNIT` for everything else.
+   * Absent is a count.
+   */
+  readonly lineUnit?: LineUnit;
+  /**
+   * What a line's amount costs with this product, "2 × ~700 g · ≈ 2,78 €", or
+   * the words for a product that cannot serve the line's unit (velista `0183`).
+   * Drawn under the caption. Absent or null draws nothing.
+   */
+  readonly lineCost?: string | null;
 }
 
 /** One line under a card that holds its product, with its own stepper. */
@@ -77,6 +99,10 @@ export interface ProductRowHeldLine {
   /** The line's own words, so a renamed line says what it was renamed to. */
   readonly name: string;
   readonly quantity: number;
+  /** What {@link quantity} counts (velista `0182`). Absent is a count. */
+  readonly unit?: LineUnit;
+  /** The step its stepper presses by, `lineStepOf` (velista `0186`). Absent is the default. */
+  readonly step?: number | null;
   /** Whether the person may move its quantity. */
   readonly editable: boolean;
   /** The line waits for an owner's approval. */
@@ -86,8 +112,11 @@ export interface ProductRowHeldLine {
    * lines come from several lists (the shopping list's search).
    */
   readonly list?: string | null;
-  /** The stepper's name, when the host words it. Absent: "How many of X in L". */
-  readonly stepperLabel?: string;
+  /**
+   * What the stepper's amount is of, when the host words it (velista `0188`).
+   * Absent: "X on L", the line on the list of the card.
+   */
+  readonly stepperName?: string;
 }
 
 /**
@@ -107,7 +136,32 @@ export interface ProductRowAdd {
   readonly label?: string;
   /** The heading over the lines, when the host words it. Absent: "On L". */
   readonly title?: string;
+  /**
+   * Present when the list already asks for this product on a line (velista
+   * `0185`, C1): the plus is switched off, and in place of the heading of the
+   * lines the card says so, with a link that opens the list at that line. The
+   * lines keep their steppers. `lineId` is the first such line in the order the
+   * card draws them, and `path` the list's own URL; the link adds `?line=`.
+   */
+  readonly onList?: ProductRowOnList;
+  /**
+   * Present when every saved line of the list that holds this product stands at
+   * zero, one line or several, in any unit (the owner's decisions 51 to 53 of
+   * 2026-11-16): the plus is switched off as for {@link onList}, and the card says
+   * to raise the line under it with its own stepper. No link, because the list
+   * hides its lines at zero.
+   */
+  readonly atZero?: true;
 }
+
+/** Where a product already on the list is: the line, and the list's URL. */
+export interface ProductRowOnList {
+  readonly lineId: string;
+  readonly path: string;
+}
+
+/** Numbers each card's sentence, so two cards on a page never share an id. */
+let onListCount = 0;
 
 /**
  * The radio of a card in the catalog that chooses one product (velista `0140`,
@@ -125,8 +179,12 @@ export interface ProductRowChoice {
 /** A stepper in the control slot, for a compact card in a sheet (velista `0163`). */
 export interface ProductRowStepper {
   readonly value: number;
-  /** Its accessible name, naming the product. */
-  readonly label: string;
+  /** What {@link value} counts (velista `0182`). Absent is a count. */
+  readonly unit?: LineUnit;
+  /** The product's step (velista `0186`). Absent is the unit's default. */
+  readonly step?: number | null;
+  /** What its amount is of, naming the product (velista `0188`). */
+  readonly name: string;
   /** The lowest it goes. Absent is the stepper's own floor. */
   readonly min?: number;
   readonly disabled?: boolean;
@@ -136,8 +194,11 @@ export interface ProductRowStepper {
 export interface ProductRowShop {
   readonly id: string;
   readonly name: string;
-  /** Null for a chain that carries the product with no price on it. */
-  readonly price: string | null;
+  /**
+   * The chain's price as two words (velista `0179`), or null for a chain that
+   * carries the product with no price on it.
+   */
+  readonly price: PriceWords | null;
   /** "seen 12 days ago" when the server marked this price stale, else null. */
   readonly note: string | null;
   /** The cheapest, which carries the number at the top of the card. */
@@ -166,10 +227,10 @@ export interface ProductRowGroup {
   readonly more: string | null;
 }
 
-/** A press on the stepper of one line under a card. */
+/** A step of the stepper of one line under a card, as the stepper drew it. */
 export interface ProductRowLineStep {
   readonly lineId: string;
-  readonly by: 1 | -1;
+  readonly step: QuantityStep;
 }
 
 /** The plus was pressed, and the button that was pressed. */
@@ -230,6 +291,7 @@ export type ProductRowExpanded = 'shops' | 'members';
     BasketIcon,
     ChevronDownIcon,
     ClockIcon,
+    InfoIcon,
     NgTemplateOutlet,
     PlusIcon,
     ProductPicture,
@@ -273,6 +335,9 @@ export type ProductRowExpanded = 'shops' | 'members';
         @if (row().caption; as caption) {
           <span class="caption">{{ caption }}</span>
         }
+        @if (row().lineCost; as lineCost) {
+          <span class="line-cost">{{ lineCost }}</span>
+        }
         @if (row().chains !== null && !chainsPress()) {
           <span class="chains">
             <ng-container [ngTemplateOutlet]="marks" />
@@ -285,10 +350,21 @@ export type ProductRowExpanded = 'shops' | 'members';
           @if (group() !== null) {
             <span class="unit">{{ 'list.add.card.from' | rokuT }}</span>
           }
-          <span class="amount">{{ price }}</span>
+          <span class="amount"
+            ><span>{{ price.amount }}</span>
+            @if (price.per; as per) {
+              <span class="per">{{ per }}</span>
+            }
+          </span>
           @if (row().unitPrice; as unit) {
-            <span class="unit">{{ unit }}</span>
-          } @else if (row().seen; as seen) {
+            <span class="unit"
+              ><span>{{ unit.amount }}</span>
+              @if (unit.per; as per) {
+                <span class="per">{{ per }}</span>
+              }
+            </span>
+          }
+          @if (row().seen; as seen) {
             <span class="unit seen">
               <lib-clock-icon aria-hidden="true" class="clock" />
               {{ seen }}
@@ -464,7 +540,12 @@ export type ProductRowExpanded = 'shops' | 'members';
                   <span class="shop-note">{{ note }}</span>
                 }
                 @if (shop.price; as price) {
-                  <span class="shop-price">{{ price }}</span>
+                  <span class="shop-price"
+                    ><span>{{ price.amount }}</span>
+                    @if (price.per; as per) {
+                      <span class="per">{{ per }}</span>
+                    }
+                  </span>
                 }
               </li>
             }
@@ -504,8 +585,18 @@ export type ProductRowExpanded = 'shops' | 'members';
 
       @if (slot() === 'add' && add(); as adding) {
         <div [attr.role]="grid() ? 'gridcell' : null" class="cell">
+          <!--
+            Switched off for a product the list already asks for (velista 0185,
+            decision G): still a button in its place, with its name, and the
+            sentence under the card that says why as its description. Inert by
+            aria-disabled, not disabled: the first add of a product switches it
+            off under a keyboard's focus, and a disabled button would drop that
+            focus to the page.
+          -->
           <button
-            (click)="pressAdd($event)"
+            (click)="pressAdd($event, adding)"
+            [attr.aria-describedby]="switchedOff(adding) ? onListId : null"
+            [attr.aria-disabled]="switchedOff(adding) ? 'true' : null"
             [attr.aria-label]="
               adding.label ??
               ('catalog.add.label'
@@ -521,14 +612,14 @@ export type ProductRowExpanded = 'shops' | 'members';
         <div [attr.role]="grid() ? 'gridcell' : null" class="cell">
           <lib-quantity-stepper
             (stepped)="stepped.emit($event)"
-            [accent]="stepping.value > 0"
-            [compact]="true"
-            [controlled]="true"
             [disabled]="stepping.disabled === true"
-            [label]="stepping.label"
             [min]="stepping.min ?? 0"
+            [name]="stepping.name"
+            [step]="stepping.step ?? null"
+            [unit]="stepping.unit ?? 'UNIT'"
             [value]="stepping.value"
             class="control stepper"
+            variant="row"
           />
         </div>
       }
@@ -536,10 +627,45 @@ export type ProductRowExpanded = 'shops' | 'members';
       @if (slot() === 'add' && heldLines().length > 0) {
         <div [attr.role]="grid() ? 'gridcell' : null" class="cell">
           <div class="held">
-            <span class="held-title">{{
-              add()?.title ??
-                ('catalog.held.title' | rokuT: { list: add()?.list })
-            }}</span>
+            @if (add()?.onList; as onList) {
+              <!--
+                Why the plus is off, and the way to the line (velista 0185, C1).
+                Real text, read without a press, and a real link, so it opens in
+                a new tab and is said as one. The plus is described by the reason
+                alone, not by the link's words after it.
+              -->
+              <p class="held-onlist">
+                <lib-info-icon aria-hidden="true" class="held-onlist-icon" />
+                <span class="held-onlist-text"
+                  ><span [id]="onListId">{{
+                    'catalog.held.alreadyOn' | rokuT: { list: add()?.list }
+                  }}</span
+                  >&ngsp;<a
+                    [queryParams]="{ line: onList.lineId }"
+                    [routerLink]="onList.path"
+                    class="held-onlist-link"
+                    >{{ 'catalog.held.openLine' | rokuT }}</a
+                  ></span
+                >
+              </p>
+            } @else if (add()?.atZero) {
+              <!--
+                Every line that holds it stands at zero, and the plus is off
+                (the owner's decision 51 of 2026-11-16): the line is raised with
+                its own stepper below. No link: the list hides its lines at zero.
+              -->
+              <p class="held-onlist">
+                <lib-info-icon aria-hidden="true" class="held-onlist-icon" />
+                <span [id]="onListId" class="held-onlist-text">{{
+                  'catalog.held.atZero' | rokuT: { list: add()?.list }
+                }}</span>
+              </p>
+            } @else {
+              <span class="held-title">{{
+                add()?.title ??
+                  ('catalog.held.title' | rokuT: { list: add()?.list })
+              }}</span>
+            }
             <ul class="held-lines">
               @for (line of heldLines(); track line.lineId) {
                 <li [attr.data-line]="line.lineId" class="held-line">
@@ -556,18 +682,18 @@ export type ProductRowExpanded = 'shops' | 'members';
                   </span>
                   <lib-quantity-stepper
                     (stepped)="
-                      lineStepped.emit({ lineId: line.lineId, by: $event })
+                      lineStepped.emit({ lineId: line.lineId, step: $event })
                     "
-                    [accent]="line.quantity > 0"
-                    [compact]="true"
-                    [controlled]="true"
                     [disabled]="!line.editable"
-                    [label]="
-                      line.stepperLabel ??
-                      ('catalog.held.stepper'
-                        | rokuT: { line: line.name, list: add()?.list })
+                    [name]="
+                      line.stepperName ??
+                      ('amount.inList'
+                        | rokuT: { name: line.name, list: add()?.list })
                     "
+                    [step]="line.step ?? null"
+                    [unit]="line.unit ?? 'UNIT'"
                     [value]="line.quantity"
+                    variant="row"
                   />
                 </li>
               }
@@ -599,6 +725,9 @@ export class ProductRow {
 
   /** The plus, or null for a card that offers none. See {@link ProductRowAdd}. */
   readonly add = input<ProductRowAdd | null>(null);
+
+  /** The id of the sentence a switched off plus is described by. */
+  protected readonly onListId = `product-row-on-list-${++onListCount}`;
 
   /**
    * A radio or a tick in the control slot, for the catalog opened to choose
@@ -668,11 +797,11 @@ export class ProductRow {
   /** The plus was pressed: add one of this product. */
   readonly added = output<ProductRowAdded>();
 
-  /** A press on the stepper of one line that holds the product. */
+  /** A step of the stepper of one line that holds the product. */
   readonly lineStepped = output<ProductRowLineStep>();
 
-  /** A press on the stepper in the control slot. */
-  readonly stepped = output<1 | -1>();
+  /** A step of the stepper in the control slot, as the stepper drew it. */
+  readonly stepped = output<QuantityStep>();
 
   /** The chain line or a group's reveal was pressed: open or close that part. */
   readonly expandToggled = output<ProductRowExpanded>();
@@ -713,7 +842,17 @@ export class ProductRow {
     }
   }
 
-  protected pressAdd(event: Event): void {
+  /** Whether the plus is switched off: on the list, above zero or at zero. */
+  protected switchedOff(adding: ProductRowAdd): boolean {
+    return adding.onList !== undefined || adding.atZero === true;
+  }
+
+  protected pressAdd(event: Event, adding: ProductRowAdd): void {
+    // Switched off by `aria-disabled`, so a click, Enter or Space still reaches
+    // here and does nothing (velista `0185`, decision G).
+    if (this.switchedOff(adding)) {
+      return;
+    }
     this.added.emit({
       id: this.row().id,
       anchor: event.currentTarget as HTMLElement,

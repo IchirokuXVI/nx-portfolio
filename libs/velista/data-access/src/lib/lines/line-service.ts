@@ -2,12 +2,14 @@ import { inject } from '@angular/core';
 import { serviceToken } from '@portfolio/shared/data-access';
 import type {
   AddLineOptions,
+  AddOutcome,
   AlsoOnVm,
   ItemLists,
   Line,
   LineApprovalStatus,
   LineOrder,
   LineSettlement,
+  LineUnit,
   Page,
   SettleLineOptions,
   SettlementOutcome,
@@ -28,11 +30,19 @@ export interface LineUpdateResult {
 
 /**
  * What an add answers (backend plan 0091): the line, and whether it is a line the
- * list already held, raised, rather than a new one.
+ * list already held rather than a new one.
+ *
+ * Since backend `0260` an add that meets a line the list already asks for changes
+ * nothing: `outcome` is `alreadyOnList`, `line` is the first line it met, and
+ * `alreadyOnList` names every one of them, unchanged and at their own versions. A
+ * line kept at zero is `raised`, and nothing met is `created`.
  */
 export interface LineAddResult {
   readonly line: Line;
   readonly merged: boolean;
+  readonly outcome: AddOutcome;
+  /** Empty unless {@link outcome} is `alreadyOnList`. In list position order. */
+  readonly alreadyOnList: readonly Line[];
 }
 
 /**
@@ -41,8 +51,8 @@ export interface LineAddResult {
  * Split from `ListServiceI` on the same line that separates memberships from zones:
  * that interface is operations on **a list**, this is operations on **a line**. The
  * split is not cosmetic here, because the routes are on two different controllers and
- * two different permission rules: reading and reordering are addressed through the
- * list, while editing, ticking, deciding and deleting are addressed by line id alone.
+ * two different permission rules: reading is addressed through the list, while
+ * editing, ticking, deciding and deleting are addressed by line id alone.
  *
  * Every method returns a promise. The live half arrives through `REALTIME_CLIENT`, and
  * `LineStore` is the only thing that joins the two (plan 0012, section 5.2).
@@ -53,10 +63,6 @@ export interface LineServiceI {
    *
    * Defaults to `position` order, which is the only order any screen asks for: a
    * shopping list has a manual order because that is the order of the aisles.
-   *
-   * The **cursor matters beyond pagination**. Rule L4 turns dragging on only once
-   * `nextCursor` is null, because `line.reorder` renumbers exactly the lines it names
-   * and leaves the rest on positions that deletes have already made non contiguous.
    */
   listLines(
     listId: string,
@@ -81,6 +87,11 @@ export interface LineServiceI {
    * `options` is what a free text add says about a name the list already holds
    * (backend `0228`): that the caller can ask, or which answer the person gave. It is
    * ignored on an add that carries products, and is not sent there.
+   *
+   * `unit` is what `quantity` counts (velista `0182`): the unit of the product
+   * added, `lineUnitOf(soldAsOf(offer, product))`. Absent is `UNIT`. A typed name
+   * sends neither (velista `0185`): the server then makes a line of one piece, or
+   * meets the line of that name in whatever unit it counts.
    */
   addLine(
     listId: string,
@@ -88,7 +99,8 @@ export interface LineServiceI {
     quantity?: number,
     itemIds?: readonly string[],
     named?: false,
-    options?: AddLineOptions
+    options?: AddLineOptions,
+    unit?: LineUnit
   ): Promise<Line>;
 
   /**
@@ -110,7 +122,8 @@ export interface LineServiceI {
     quantity?: number,
     itemIds?: readonly string[],
     named?: false,
-    options?: AddLineOptions
+    options?: AddLineOptions,
+    unit?: LineUnit
   ): Promise<LineAddResult>;
 
   /**
@@ -118,8 +131,9 @@ export interface LineServiceI {
    * Version bumped.
    *
    * `itemIds` replaces the **whole** set, and an empty array clears it back to
-   * free text. A whole set rather than an add or a remove, for the reason reorder
-   * takes the whole order.
+   * free text. A whole set rather than an add or a remove, because two people
+   * editing a line's products would otherwise each send a delta against a set
+   * neither of them still has.
    *
    * `adoptItemIds` moves products from the catalog's side of the line to the
    * person's and changes the set not at all (backend plan 0070, section 9). It is
@@ -128,13 +142,16 @@ export interface LineServiceI {
    * it, and reading adoption out of one would adopt the whole line every time
    * somebody removed a product.
    *
-   * Not the reel's path, deliberately. This is an absolute write, which is a last
+   * Not the stepper's path, deliberately. This is an absolute write, which is a last
    * writer wins race over a value somebody deliberately chose; a moving control
    * writes {@link addQuantity} instead.
    *
    * A rename onto a name another line of the list holds is refused with
    * `line_merge_required` unless `confirmMerge` is true, and then the two lines merge
    * into the earlier one (backend plan 0112).
+   *
+   * `unit` is sent with `quantity` and never alone (velista `0182`): every
+   * absolute write states what its number counts.
    */
   updateLine(
     lineId: string,
@@ -142,6 +159,7 @@ export interface LineServiceI {
       content?: string;
       named?: false;
       quantity?: number;
+      unit?: LineUnit;
       itemIds?: readonly string[];
       adoptItemIds?: readonly string[];
       favoriteItemId?: string | null;
@@ -153,15 +171,18 @@ export interface LineServiceI {
   /**
    * Move a line's quantity by a signed delta (`POST /v1/lines/:id/quantity`).
    *
-   * **The reel's write, and the reason the reel is correct** (velista plan 0043,
-   * section 4.1). Applied atomically under the row's lock, so two people adjusting
-   * the same line both land where two absolute writes would have silently lost
-   * one. Built by backend plan 0040 for the assistant and never called by anything
-   * else until now.
+   * **The stepper's write, and the reason the stepper is correct** (velista plan
+   * 0043, section 4.1, which built it for the reel). Applied atomically under the
+   * row's lock, so two people adjusting the same line both land where two absolute
+   * writes would have silently lost one. Built by backend plan 0040 for the
+   * assistant and never called by anything else until now.
    *
    * `DECIDE`, like settling, because both say what the household now has.
+   *
+   * `unit` is the line's (velista `0182`), required: a delta in another unit is
+   * refused with `line_unit_mismatch` and changes nothing.
    */
-  addQuantity(lineId: string, delta: number): Promise<Line>;
+  addQuantity(lineId: string, delta: number, unit: LineUnit): Promise<Line>;
 
   /**
    * Say what happened to a line on a trip (`POST /v1/lines/:id/settle`).
@@ -180,7 +201,7 @@ export interface LineServiceI {
   settle(
     lineId: string,
     outcome: SettlementOutcome,
-    options?: SettleLineOptions
+    options: SettleLineOptions & { readonly unit: LineUnit }
   ): Promise<{ line: Line; settlement: LineSettlement }>;
 
   /**
@@ -261,16 +282,6 @@ export interface LineServiceI {
    * turned down line back is a third outcome and not the negation of a second.
    */
   setApproval(lineId: string, status: LineApprovalStatus): Promise<Line>;
-
-  /**
-   * Rewrite the whole order (`POST /v1/lists/:id/lines/reorder`).
-   *
-   * Answers the list id and nothing else, so the caller either trusts its own optimistic
-   * order or rereads. `validation_failed` here means the order named a line the server
-   * no longer has, which is somebody deleting one mid drag: the list rereads and says
-   * nothing, per section 5.7.
-   */
-  reorder(listId: string, orderedLineIds: readonly string[]): Promise<void>;
 
   /** Take it off the list, for everybody (`DELETE /v1/lines/:id`). */
   deleteLine(lineId: string): Promise<string>;

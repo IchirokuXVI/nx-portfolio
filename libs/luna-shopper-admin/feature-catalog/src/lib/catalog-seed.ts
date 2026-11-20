@@ -268,7 +268,7 @@ export const ITEM_LINKED_IMAGE_SEED: Readonly<
     },
     {
       sourceEntryId: 'entry-bound-milk-deza',
-      supermarketId: '33333333-3333-4333-8333-333333333333',
+      supermarketId: 'sm_deza',
       url: 'https://www.deza.example/images/leche-entera-1l.jpg',
       firstLinkedAt: '2026-08-28T07:00:00.000Z',
       lastSeenAt: '2026-08-28T07:00:00.000Z',
@@ -314,6 +314,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     ean: '8480000123459',
     eans: ['8480000123459'],
     unitSize: 1,
+    quantityStep: null,
     packCount: null,
     categories: categoriesOf('milk'),
     defaultUnit: 'LITER',
@@ -328,6 +329,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     ean: '8480000123466',
     eans: ['8480000123466'],
     unitSize: 6,
+    quantityStep: null,
     packCount: 6,
     categories: categoriesOf('milk'),
     defaultUnit: 'LITER',
@@ -348,6 +350,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     ean: '8480000220011',
     eans: ['8480000220011'],
     unitSize: 1,
+    quantityStep: null,
     packCount: null,
     categories: categoriesOf('oils'),
     defaultUnit: 'LITER',
@@ -362,10 +365,31 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     ean: '8480000310071',
     eans: ['8480000310071'],
     unitSize: 750,
+    quantityStep: null,
     packCount: null,
     categories: categoriesOf('dishwasher'),
     defaultUnit: 'MILLILITER',
     // Curation has not reached it. Nothing is wrong with this row.
+    productGroupId: null,
+  },
+  {
+    // Loose, sold by the kilo with no size and no weight, and a curator gave
+    // it a step of 100 g (backend plan 0261, admin plan 0070). No other
+    // seeded product is sold that way, so the record shows a set step here.
+    id: 'it_tomato_loose',
+    name: { en: 'Pear tomatoes, loose', es: 'Tomate pera a granel' },
+    brand: null,
+    ...itemPhotos(null, []),
+    sku: null,
+    ean: null,
+    eans: [],
+    unitSize: null,
+    approxWeight: null,
+    approxWeightSetBy: null,
+    quantityStep: 100,
+    packCount: null,
+    categories: categoriesOf('uncategorised'),
+    defaultUnit: 'KILOGRAM',
     productGroupId: null,
   },
 ];
@@ -681,3 +705,129 @@ export const LOCATION_ITEM_SEED: readonly Wire.CatalogSupermarketLocationItemVie
       itemBrand: 'Hacendado',
     },
   ];
+
+/**
+ * Two pieces with no size and a weight (backend plan 0244, admin plan 0068),
+ * apart from the tables above so the lists and counts of every other screen
+ * stay as they are. A spec that needs them adds them to the memory tables.
+ *
+ * The cheese is a piece sold by the kilo: 13.42 a kilo, and the server's
+ * price of one piece of 1560 g beside it on its offer. The back office prints
+ * that one and works out none. The melon is a piece priced as one: its price
+ * is the piece's, and it has no piece price.
+ */
+export const PIECE_SEED: {
+  readonly items: readonly Wire.CatalogItemView[];
+  readonly prices: readonly Wire.CatalogAdminSupermarketItemView[];
+  readonly itemPrices: readonly Wire.CatalogItemPriceView[];
+  readonly scopes: readonly ItemScopePrices[];
+} = (() => {
+  const piece = (
+    id: string,
+    name: { en: string; es: string },
+    defaultUnit: Wire.CatalogItemView['defaultUnit'],
+    approxWeight: number
+  ): Wire.CatalogItemView => ({
+    id,
+    name,
+    brand: 'Hacendado',
+    ...itemPhotos(null, []),
+    sku: null,
+    ean: null,
+    eans: [],
+    unitSize: null,
+    approxWeight,
+    approxWeightSetBy: 'SOURCE',
+    quantityStep: null,
+    packCount: null,
+    categories: categoriesOf('uncategorised'),
+    defaultUnit,
+    productGroupId: null,
+  });
+  const cheese = { en: 'Cured cheese piece', es: 'Queso curado pieza' };
+  const melon = { en: 'Piel de sapo melon', es: 'Melón piel de sapo' };
+  const seen = '2026-09-03T06:12:00.000Z';
+
+  const offer = (
+    itemId: string,
+    itemName: { en: string; es: string },
+    price: number,
+    label: string,
+    piecePrice: number | null
+  ): Wire.CatalogAdminSupermarketItemView => ({
+    id: `si_${itemId}`,
+    itemId,
+    itemName,
+    priceScopeId: 'ps_mercadona_4661',
+    price,
+    currency: 'EUR',
+    unitPrice: price,
+    unitPriceLabel: label,
+    observedAt: seen,
+    sourceKind: 'OFFICIAL_API',
+    stale: false,
+    validUntil: null,
+    itemPriceId: `ip_${itemId}`,
+    available: true,
+    piecePrice,
+  });
+
+  const row = (
+    itemId: string,
+    price: number,
+    label: string,
+    unitBasis: Wire.CatalogItemPriceView['unitBasis'] = null
+  ): Wire.CatalogItemPriceView => ({
+    id: `ip_${itemId}`,
+    itemId,
+    priceScopeId: 'ps_mercadona_4661',
+    sourceKind: 'OFFICIAL_API',
+    price,
+    currency: 'EUR',
+    unitPrice: price,
+    unitPriceLabel: label,
+    unitBasis,
+    observedAt: seen,
+    lastObservedAt: seen,
+    validFrom: null,
+    validUntil: null,
+    sourceRunId: null,
+    lastObservedRunId: null,
+    overrides: null,
+    protectedUntil: null,
+    details: null,
+  });
+
+  const itemPrices = [
+    row('it_cheese_piece', 13.42, '1 kg'),
+    // A piece priced as one: the run writes its price per unit beside it.
+    row('it_melon_piece', 6.5, '1 ud', 'UNIT'),
+  ];
+
+  return {
+    items: [
+      piece('it_cheese_piece', cheese, 'KILOGRAM', 1560),
+      piece('it_melon_piece', melon, 'UNIT', 580),
+    ],
+    prices: [
+      offer('it_cheese_piece', cheese, 13.42, '1 kg', 20.94),
+      offer('it_melon_piece', melon, 6.5, '1 ud', null),
+    ],
+    itemPrices,
+    scopes: itemPrices.map((priced) => ({
+      itemId: priced.itemId,
+      priceScopeId: 'ps_mercadona_4661',
+      supermarketId: MERCADONA,
+      scopeKind: 'REGION',
+      scopeExternalKey: '4661',
+      scopeLabel: { en: 'Córdoba warehouse', es: 'Almacén de Córdoba' },
+      scopePriority: 300,
+      rows: [priced],
+      shownItemPriceId: priced.id,
+      shownBecause: 'ONLY_ROW',
+      stale: false,
+      protectedUntil: null,
+      overrides: null,
+    })),
+  };
+})();

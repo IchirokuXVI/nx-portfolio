@@ -112,6 +112,24 @@ export const ERROR_CODES = [
    */
   'stale_quantity',
   /**
+   * A delta, a settle or a demand named another unit than the line's (backend
+   * `0246`, section 3.2), as a 409. Nothing was written. The app recovers it as
+   * it does {@link stale_quantity}, by reading the line again, and shows no
+   * error (velista `0182`).
+   */
+  'line_unit_mismatch',
+  /**
+   * A rename would merge two lines that count in different units (backend `0246`,
+   * section 3.3), as a 409. The two lines stay as they are.
+   */
+  'line_unit_differs',
+  /**
+   * The unit named is not one the line's products can serve (backend `0246`,
+   * section 4.2), as a 422. `details.offered` lists the units it allows; velista
+   * `0183` draws the choice.
+   */
+  'line_unit_not_offered',
+  /**
    * A contribution was set below what this basket has already bought against it
    * (backend plan 0057, section 5.2), as a 409.
    *

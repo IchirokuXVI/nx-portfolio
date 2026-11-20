@@ -5,6 +5,10 @@ import type {
   LineSettlement,
   ProductOffer,
 } from '@portfolio/velista/models';
+import {
+  selectLinePage,
+  type LinePageInput,
+} from '../line-page/select-line-page';
 import { selectLineDetail, type LineDetailInput } from './select-line-detail';
 
 /**
@@ -76,6 +80,7 @@ function item(
 ): CatalogItem {
   return {
     id,
+    quantityStep: null,
     name: { es: en, en },
     brand,
     size: 1,
@@ -87,6 +92,7 @@ function item(
     imageUrl: null,
     packCount: null,
     unitBasis: null,
+    approxWeight: null,
   };
 }
 
@@ -96,10 +102,13 @@ function offer(price: number, priceScopeId: string): ProductOffer {
     currency: 'EUR',
     unitPrice: price,
     unitPriceLabel: null,
+    comparablePrice: null,
+    comparableBasis: null,
     observedAt: null,
     sourceKind: 'OFFICIAL_WEB',
     stale: false,
     priceScopeId,
+    piecePrice: null,
   };
 }
 
@@ -114,10 +123,15 @@ const CATALOG: readonly CatalogItem[] = [
 ];
 
 function select(overrides: Partial<LineDetailInput> = {}): LineDetailVm | null {
+  const itemNameOf =
+    overrides.itemNameOf ??
+    ((itemId: string) => CATALOG.find((row) => row.id === itemId) ?? null);
   return selectLineDetail({
     line: line(),
     settlements: [],
-    itemNameOf: (itemId) => CATALOG.find((row) => row.id === itemId) ?? null,
+    itemNameOf,
+    // Every record of these fixtures is settled: a product it cannot name is gone.
+    productOf: itemNameOf,
     namesUnavailable: false,
     nameOf: () => null,
     claimedBy: null,
@@ -134,6 +148,27 @@ function select(overrides: Partial<LineDetailInput> = {}): LineDetailVm | null {
 describe('selectLineDetail', () => {
   it('is null for a line the store does not hold', () => {
     expect(select({ line: undefined })).toBeNull();
+  });
+
+  it("gives both steppers the product's step (velista 0186)", () => {
+    const saffron: CatalogItem = {
+      ...item('item-saffron', 'Saffron'),
+      size: null,
+      unit: 'KILOGRAM',
+      quantityStep: 5,
+    };
+    const detail = select({
+      line: {
+        ...line(),
+        unit: 'GRAM',
+        quantity: 20,
+        itemIds: ['item-saffron'],
+      },
+      itemNameOf: (itemId) => (itemId === 'item-saffron' ? saffron : null),
+    });
+
+    expect(detail?.step).toBe(5);
+    expect(select()?.step).toBeNull();
   });
 
   describe('the estimate', () => {
@@ -392,7 +427,7 @@ describe('selectLineDetail', () => {
 
       expect(detail?.choices[0]).toMatchObject({
         imageUrl: 'https://img.test/milk.png',
-        price: '€0.92',
+        price: { amount: '€0.92', per: null },
         chain: 'Mercadona',
       });
     });
@@ -416,7 +451,7 @@ describe('selectLineDetail', () => {
       });
 
       expect(detail?.choices[1]).toMatchObject({
-        price: '€1.15',
+        price: { amount: '€1.15', per: null },
         chain: 'Lidl',
       });
       expect(detail?.choices[0]).toMatchObject({ price: null, chain: null });
@@ -456,7 +491,35 @@ describe('selectLineDetail', () => {
       });
 
       expect(detail?.choices[0]).toMatchObject({
-        price: '€0.92',
+        price: { amount: '€0.92', per: null },
+        chain: 'Mercadona',
+      });
+    });
+
+    it('draw the piece price of a kilo piece the catalog has not named yet (velista 0179)', () => {
+      const detail = select({
+        line: line({ itemIds: ['item-milk-a', 'item-unknown'] }),
+        pricesOf: (itemId) =>
+          itemId === 'item-unknown'
+            ? [
+                {
+                  supermarketId: 'chain-mercadona',
+                  chain: { en: 'Mercadona', es: 'Mercadona' },
+                  logoUrl: null,
+                  kind: 'priced',
+                  offer: {
+                    ...offer(13.42, 'scope-mercadona'),
+                    piecePrice: 20.94,
+                  },
+                  cheapest: true,
+                },
+              ]
+            : [],
+      });
+
+      expect(detail?.choices[1]).toMatchObject({
+        name: null,
+        price: { amount: '€20.94', per: null },
         chain: 'Mercadona',
       });
     });
@@ -483,7 +546,10 @@ describe('selectLineDetail', () => {
             : (CATALOG.find((row) => row.id === itemId) ?? null),
       });
 
-      expect(detail?.choices[0]).toMatchObject({ price: '€0.92', chain: null });
+      expect(detail?.choices[0]).toMatchObject({
+        price: { amount: '€0.92', per: null },
+        chain: null,
+      });
     });
 
     it('keep an unnamed product unnamed, with no detail', () => {
@@ -596,6 +662,72 @@ describe('selectLineDetail', () => {
       });
 
       expect(detail?.lastPurchase).toBeNull();
+    });
+  });
+
+  describe('a record the catalog no longer has (velista 0183)', () => {
+    // Loose bananas, a kilo piece, and a third product whose record is gone.
+    const LOOSE: CatalogItem = {
+      ...item('item-loose', 'Loose bananas'),
+      size: null,
+      unit: 'KILOGRAM',
+    };
+    const PIECE: CatalogItem = {
+      ...item('item-piece', 'Banana bunch'),
+      size: null,
+      unit: 'KILOGRAM',
+      approxWeight: 700,
+    };
+    const held = (itemId: string) =>
+      [LOOSE, PIECE].find((row) => row.id === itemId) ?? null;
+    const bananas = line({
+      content: '',
+      named: false,
+      unit: 'UNIT',
+      itemIds: ['item-gone', LOOSE.id, PIECE.id],
+    });
+
+    it('still draws the chip, as the line page does', () => {
+      const detail = select({
+        line: bananas,
+        itemNameOf: held,
+        // Settled: the lookup answered nothing for the gone record.
+        productOf: held,
+      });
+
+      expect(detail?.units).toEqual(['UNIT', 'GRAM']);
+    });
+
+    it('names the product the line page names', () => {
+      const pricesOf = () => [];
+      const detail = select({
+        line: bananas,
+        itemNameOf: held,
+        productOf: held,
+        pricesOf,
+      });
+      const page = selectLinePage({
+        line: bananas,
+        list: undefined,
+        zoneName: null,
+        itemNameOf: held,
+        namesUnavailable: false,
+        nameOf: () => null,
+        callerUserId: ME,
+        locale: 'en',
+        priceOf: pricesOf,
+        productOf: held,
+        supermarketNameOf: () => null,
+        alsoOn: null,
+        commentCount: null,
+        canEdit: true,
+        canStep: true,
+        canRename: true,
+        translate: (key) => key,
+      } satisfies LinePageInput);
+
+      expect(detail?.content).toBe(page?.content);
+      expect(detail?.units).toEqual(page?.units);
     });
   });
 });

@@ -6,9 +6,11 @@ import {
   LINE_ITEM_SET_MAX,
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
+  LINE_UNITS,
   LineApprovalStatus,
   ListPermission,
   SettlementOutcome,
+  type LineUnit,
 } from '@portfolio/luna-shopper/contracts';
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
 import { Transform, Type } from 'class-transformer';
@@ -35,6 +37,42 @@ import {
   ValidateNested,
   type ValidationArguments,
 } from 'class-validator';
+
+/**
+ * What a line's `quantity` counts (plan 0246). One description for every DTO
+ * that names it, so the routes cannot say different things about one field.
+ */
+export const LINE_UNIT_DOCS = {
+  optional:
+    'What `quantity` counts: UNIT for pieces or packs, GRAM for a weight in grams, MILLILITER for a volume in millilitres (plan 0246). Base units only, so 750 g is 750 and 1.5 l is 1500. Absent is UNIT. A unit none of the line’s products can be counted in answers 422 `line_unit_not_offered`, with the units it does offer in `details.offered`. A line with one product counts in that product’s unit. A free text line, with no product, counts in whichever of the three it is given and is never refused for its unit.',
+  update:
+    'Change what `quantity` counts (plan 0246). It must come with `quantity`, the amount the line starts from in the new unit, or the edit answers 400. Absent leaves the unit alone. A unit none of the line’s products can be counted in answers 422 `line_unit_not_offered`, and so does an edit of the products that leaves the line with products that do not offer its unit: name the new unit and quantity in the same request. A free text line, with no product, takes any of the three.',
+  required:
+    'The unit the number was made in, which must be the line’s (plan 0246). Required: a unit that is not the line’s answers 409 `line_unit_mismatch` and changes nothing, and the client reads the line again.',
+} as const;
+
+/** An optional line unit, as the add and the update take it. */
+function OptionalLineUnit(description: string): PropertyDecorator {
+  return (target, key) => {
+    ApiPropertyOptional({
+      enum: LINE_UNITS,
+      description,
+    })(target, key);
+    IsOptional()(target, key);
+    IsIn([...LINE_UNITS])(target, key);
+  };
+}
+
+/** A required line unit, as a delta, a settle and a demand take it (M8). */
+export function RequiredLineUnit(): PropertyDecorator {
+  return (target, key) => {
+    ApiProperty({
+      enum: LINE_UNITS,
+      description: LINE_UNIT_DOCS.required,
+    })(target, key);
+    IsIn([...LINE_UNITS])(target, key);
+  };
+}
 
 export class CreateListDto {
   @ApiProperty({ maxLength: 120 })
@@ -148,12 +186,17 @@ export class AddLinesItemDto {
   @ApiPropertyOptional({
     minimum: LINE_QUANTITY_MIN,
     maximum: LINE_QUANTITY_MAX,
+    description:
+      'The amount of a line the add creates, or of the raise of a line at 0 (plan 0260). Never added to a wanted line: an add that meets one writes nothing and answers outcome ALREADY_ON_LIST. Absent is one step of the unit: 1 piece, 25 g or 25 ml.',
   })
   @IsOptional()
   @IsInt()
   @Min(LINE_QUANTITY_MIN)
   @Max(LINE_QUANTITY_MAX)
   quantity?: number;
+
+  @OptionalLineUnit(LINE_UNIT_DOCS.optional)
+  unit?: LineUnit;
 
   @ApiPropertyOptional({
     type: [String],
@@ -187,11 +230,11 @@ export class AddLinesItemDto {
  * the basket's add, which take them alike because both are `LineService.add`.
  */
 export const ADD_CHOICE_DOCS = {
-  askIfAmbiguous: `The client can ask which line a typed name means (plan 0228). A free text add whose name is the name of one line that holds a product raises that line in any case. With two or more such lines, true refuses the add with 409 line_add_needs_choice and the lines in details.lines, at most ${LINE_ADD_CHOICE_MAX} of them, in list position order; absent or false creates a line, as before. Ignored on an add that carries itemIds or a productGroupId.`,
+  askIfAmbiguous: `The client can ask which line an add means (plan 0228). An add that meets one line above 0 writes nothing and answers 201 with outcome ALREADY_ON_LIST and that line in alreadyOnList; one line at 0 is raised and answers RAISED (plan 0260). An add that meets two or more lines, above 0 or at 0, a product add included: true refuses it with 409 line_add_needs_choice and every one of them in details.lines, at most ${LINE_ADD_CHOICE_MAX}, in list position order, each with its own unit, its quantity, the outcome choosing it answers (ALREADY_ON_LIST for a line above 0, which nothing changes; RAISED for a line at 0) and the resultingQuantity; absent or false writes nothing and answers 201 ALREADY_ON_LIST with every one of them in alreadyOnList, lines at 0 included (the owner, 2026-11-16). Never asked about a unit.`,
   intoLineId:
-    'The line the person chose, which a free text add raises (plan 0228). A line of the same list that is not REJECTED; any other id answers 404 not_found, and the add never falls back to a new line. The line need not carry the typed name. Refused beside newLine true. Ignored on an add that carries itemIds or a productGroupId.',
+    'The line the person chose, the answer to line_add_needs_choice (plan 0228), on a free text add or a product add. It must be one of the lines the add meets; any other id, a line of another list and a REJECTED line answer 404 not_found, and the add never falls back to a new line. Above 0, the add writes nothing and answers ALREADY_ON_LIST; at 0, it is raised by the add amount, or by one step of its own unit when that is not the unit of the add, and answers RAISED (plan 0260). Refused beside newLine true.',
   newLine:
-    'The person chose a new line over the lines that hold a product under this name (plan 0228). A free text line of the same name still takes the add, because a list holds one free text line per name. Ignored on an add that carries itemIds or a productGroupId.',
+    'The person chose a new line over the lines that hold a product under this typed name (plan 0228). A free text line of the same name still meets the add, because a list holds one free text line per name. A free text add only: true beside itemIds or a productGroupId answers 400 under newLine, because a second line of one product in one unit is what plan 0260 prevents (the owner, 2026-11-16).',
 } as const;
 
 /**
@@ -213,6 +256,40 @@ export function NotBesideNewLine(): PropertyDecorator {
         },
         defaultMessage(args: ValidationArguments): string {
           return `${args.property} cannot be sent beside newLine true`;
+        },
+      },
+    });
+  };
+}
+
+/**
+ * `newLine: true` answers the question of a typed name alone (the owner,
+ * 2026-11-16), so a body that sends it beside products or a group is refused
+ * under `newLine`. Core refuses it too, for a caller that is not this route.
+ */
+export function OnTypedNameOnly(): PropertyDecorator {
+  return (target, propertyName) => {
+    registerDecorator({
+      name: 'onTypedNameOnly',
+      target: target.constructor,
+      propertyName: propertyName as string,
+      validator: {
+        validate(value: unknown, args: ValidationArguments): boolean {
+          const body = args.object as {
+            itemIds?: unknown;
+            productGroupId?: unknown;
+          };
+          // An explicit null group is no group, as core reads it: that add
+          // is free text, so newLine true answers it.
+          return (
+            value !== true ||
+            ((!Array.isArray(body.itemIds) || body.itemIds.length === 0) &&
+              (body.productGroupId === undefined ||
+                body.productGroupId === null))
+          );
+        },
+        defaultMessage(args: ValidationArguments): string {
+          return `${args.property} true is an answer for a typed name alone`;
         },
       },
     });
@@ -261,6 +338,7 @@ export class AddLineDto extends AddLinesItemDto {
   @Transform(({ obj }: { obj: Record<string, unknown> }) => obj?.['newLine'])
   @IsOptional()
   @IsBoolean()
+  @OnTypedNameOnly()
   newLine?: boolean;
 }
 
@@ -308,6 +386,9 @@ export class AddLineQuantityDto {
   @Min(-LINE_QUANTITY_MAX)
   @Max(LINE_QUANTITY_MAX)
   delta!: number;
+
+  @RequiredLineUnit()
+  unit!: LineUnit;
 }
 
 export class UpdateLineDto {
@@ -328,16 +409,17 @@ export class UpdateLineDto {
   @Max(LINE_QUANTITY_MAX)
   quantity?: number;
 
+  @OptionalLineUnit(LINE_UNIT_DOCS.update)
+  unit?: LineUnit;
+
   @ApiPropertyOptional({
     minimum: LINE_QUANTITY_MIN,
-    maximum: LINE_QUANTITY_MAX,
     description:
-      'The quantity of the line as the client drew it (plan 0209). When present, the line must still hold it when the edit is written, or the edit answers 409 stale_quantity and writes nothing, as a stale from on the demand of a basket row does: somebody bought from the line in between. Absent, the edit writes what it was given.',
+      'The quantity of the line as the client drew it (plan 0209). When present, the line must still hold it when the edit is written, or the edit answers 409 stale_quantity and writes nothing, as a stale from on the demand of a basket row does: somebody bought from the line in between. Absent, the edit writes what it was given. It has no ceiling, because it is what the line holds and not what the edit writes: a line stored above the ceiling is edited down with its own amount here (plan 0262).',
   })
   @IsOptional()
   @IsInt()
   @Min(LINE_QUANTITY_MIN)
-  @Max(LINE_QUANTITY_MAX)
   from?: number;
 
   @ApiPropertyOptional({
@@ -446,6 +528,9 @@ export class SettleLineDto {
   @Min(1)
   @Max(LINE_QUANTITY_MAX)
   quantity?: number;
+
+  @RequiredLineUnit()
+  unit!: LineUnit;
 
   @ApiPropertyOptional({
     format: 'uuid',

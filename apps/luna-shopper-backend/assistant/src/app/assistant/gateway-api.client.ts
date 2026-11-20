@@ -4,6 +4,7 @@ import type {
   AddLineResult,
   LinePage,
   LineSettlementResult,
+  LineUnit,
   LineView,
   ListPage,
   ListView,
@@ -63,7 +64,12 @@ export class GatewayApiError extends Error {
     readonly status: number,
     /** The problem body's `message`, when the response carried one. */
     readonly apiMessage: string | undefined,
-    readonly code: string | undefined
+    readonly code: string | undefined,
+    /**
+     * The problem body's `details`, unread: a reader that needs it maps it
+     * from `unknown` itself (plan 0260, `line_unit_differs` on an add).
+     */
+    readonly details?: unknown
   ) {
     super(`gateway answered ${status}`);
     this.name = 'GatewayApiError';
@@ -176,7 +182,7 @@ export class GatewayApiClient {
   addLines(
     caller: ApiCaller,
     listId: string,
-    items: { content: string; quantity?: number }[]
+    items: { content: string; quantity?: number; unit?: LineUnit }[]
   ): Promise<AddLineResult[]> {
     return this.request<AddLineResult[]>(
       caller,
@@ -189,7 +195,7 @@ export class GatewayApiClient {
   updateLine(
     caller: ApiCaller,
     lineId: string,
-    body: { content?: string; quantity?: number }
+    body: { content?: string; quantity?: number; unit?: LineUnit }
   ): Promise<LineView> {
     return this.request<LineView>(
       caller,
@@ -211,13 +217,15 @@ export class GatewayApiClient {
   addLineQuantity(
     caller: ApiCaller,
     lineId: string,
-    delta: number
+    delta: number,
+    /** The unit the delta was made in, required by the route (plan 0246 M8). */
+    unit: LineUnit
   ): Promise<LineView> {
     return this.request<LineView>(
       caller,
       'POST',
       `/v1/lines/${encodeURIComponent(lineId)}/quantity`,
-      { delta }
+      { delta, unit }
     );
   }
 
@@ -237,13 +245,15 @@ export class GatewayApiClient {
     caller: ApiCaller,
     lineId: string,
     outcome: SettlementOutcome,
+    /** The unit `quantity` is in, required by the route (plan 0246). */
+    unit: LineUnit,
     quantity?: number
   ): Promise<LineSettlementResult> {
     return this.request<LineSettlementResult>(
       caller,
       'POST',
       `/v1/lines/${encodeURIComponent(lineId)}/settle`,
-      { outcome, ...(quantity === undefined ? {} : { quantity }) }
+      { outcome, unit, ...(quantity === undefined ? {} : { quantity }) }
     );
   }
 
@@ -314,16 +324,19 @@ export class GatewayApiClient {
 async function readProblem(response: Response): Promise<GatewayApiError> {
   let message: string | undefined;
   let code: string | undefined;
+  let details: unknown;
   try {
     const problem = (await response.json()) as {
       message?: unknown;
       code?: unknown;
+      details?: unknown;
     };
     message = typeof problem.message === 'string' ? problem.message : undefined;
     code = typeof problem.code === 'string' ? problem.code : undefined;
+    details = problem.details;
   } catch {
     // A non JSON body from something in front of the gateway. The status is
     // still the answer, and it is enough for the bot to say what happened.
   }
-  return new GatewayApiError(response.status, message, code);
+  return new GatewayApiError(response.status, message, code, details);
 }

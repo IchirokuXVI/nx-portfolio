@@ -2,11 +2,12 @@ import {
   cheapestOf,
   type BasketRulePrice,
 } from '@portfolio/luna-shopper/basket-rules';
-import type {
-  BasketLinePick,
-  BasketPriceChoice,
-  ItemOfferView,
-  ItemView,
+import {
+  productKindOf,
+  type BasketLinePick,
+  type BasketPriceChoice,
+  type ItemOfferView,
+  type ItemView,
 } from '@portfolio/luna-shopper/contracts';
 
 /**
@@ -32,6 +33,11 @@ import type {
  * answered them. The cheapest offer of the list is the cheapest offer of its
  * product, so no price is compared here. A tie keeps the product that the line
  * holds first.
+ *
+ * Since plan 0246 each offer goes with how its product is sold and its size,
+ * and the line goes with its unit and its amount: the cheapest is the cost of
+ * that amount with each product (owner, W3), and a product that cannot serve
+ * the unit is not a candidate.
  *
  * ## A product in stock first (plan 0220, section 15.5)
  *
@@ -62,12 +68,20 @@ export function picksOf(
         // A product catalog no longer names is not a candidate.
         continue;
       }
+      const sizing = {
+        defaultUnit: item.defaultUnit,
+        unitSize: item.unitSize ?? null,
+        approxWeight: item.approxWeight ?? null,
+      };
+      const kind = productKindOf(sizing);
       for (const offer of offersOf(item)) {
         if (counted.has(offer.priceScopeId)) {
-          const price = {
+          const price: BasketRulePrice = {
             itemId,
+            kind,
+            ...sizing,
             price: offer.price,
-            unitPrice: offer.unitPrice,
+            piecePrice: offer.piecePrice ?? null,
           };
           prices.push(price);
           // Absent is a catalog from before the field, which said nothing.
@@ -77,7 +91,9 @@ export function picksOf(
         }
       }
     }
-    const itemId = cheapestOf(inStock) ?? cheapestOf(prices);
+    // A core older than plan 0246 sends no unit, and its lines count pieces.
+    const amount = { unit: line.unit ?? 'UNIT', quantity: line.quantity ?? 1 };
+    const itemId = cheapestOf(inStock, amount) ?? cheapestOf(prices, amount);
     if (itemId !== null) {
       picks.push({ lineId: line.lineId, itemId });
     }

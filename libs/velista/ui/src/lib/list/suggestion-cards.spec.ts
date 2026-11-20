@@ -38,10 +38,13 @@ function offer(price: number | null): ProductOffer {
     currency: 'EUR',
     unitPrice: null,
     unitPriceLabel: null,
+    comparablePrice: null,
+    comparableBasis: null,
     observedAt: null,
     sourceKind: 'OFFICIAL_WEB',
     stale: false,
     priceScopeId: 'scope',
+    piecePrice: null,
   };
 }
 
@@ -663,7 +666,9 @@ describe('SuggestionList, the cards', () => {
 
       await press(fixture, steps?.[1] ?? null);
 
-      expect(changed).toEqual([{ holding: holdings[0], from: 2, to: 3 }]);
+      expect(changed).toEqual([
+        { holding: holdings[0], from: 2, to: 3, repeat: false },
+      ]);
       expect(chose).toEqual([]);
     });
 
@@ -675,7 +680,49 @@ describe('SuggestionList, the cards', () => {
 
       await press(fixture, steps?.[0] ?? null);
 
-      expect(changed).toEqual([{ holding: holdings[0], from: 2, to: 1 }]);
+      expect(changed).toEqual([
+        { holding: holdings[0], from: 2, to: 1, repeat: false },
+      ]);
+    });
+
+    it("steps a weight line by the product's step the holding carries (velista 0186)", async () => {
+      const stepped = [
+        { ...holdings[0], quantity: 1000, unit: 'GRAM' as const, step: 100 },
+      ];
+      const { fixture, changed } = await render([item('held')], {
+        holdings: stepped,
+      });
+      const steps = root(fixture)
+        .querySelectorAll('.held-line')[0]
+        ?.querySelectorAll('.step');
+
+      await press(fixture, steps?.[0] ?? null);
+
+      expect(changed).toEqual([
+        { holding: stepped[0], from: 1000, to: 900, repeat: false },
+      ]);
+    });
+
+    it('steps and draws a weight line by its unit: 1 kg up to 1,025 kg, down to 975 g (velista 0188)', async () => {
+      const weighed = [
+        { ...holdings[0], quantity: 1000, unit: 'GRAM' as const },
+      ];
+      const { fixture, changed } = await render([item('held')], {
+        holdings: weighed,
+      });
+      const line = root(fixture).querySelectorAll('.held-line')[0];
+      const steps = line?.querySelectorAll('.step');
+
+      expect(line?.querySelector('.number')?.textContent?.trim()).toBe('1');
+      expect(line?.querySelector('.symbol')?.textContent?.trim()).toBe('kg');
+
+      await press(fixture, steps?.[1] ?? null);
+      await press(fixture, steps?.[0] ?? null);
+
+      expect(changed).toEqual([
+        { holding: weighed[0], from: 1000, to: 1025, repeat: false },
+        { holding: weighed[0], from: 1000, to: 975, repeat: false },
+      ]);
     });
 
     it('disables the stepper on a line the reader may not change', async () => {
@@ -684,7 +731,11 @@ describe('SuggestionList, the cards', () => {
         .querySelectorAll('.held-line')[1]
         ?.querySelectorAll<HTMLButtonElement>('.step');
 
-      expect([...(steps ?? [])].every((step) => step.disabled)).toBe(true);
+      expect(
+        [...(steps ?? [])].every(
+          (step) => step.getAttribute('aria-disabled') === 'true'
+        )
+      ).toBe(true);
     });
 
     it('disables a line’s stepper while a write to its row is in flight, and sends nothing', async () => {
@@ -697,7 +748,11 @@ describe('SuggestionList, the cards', () => {
         .querySelectorAll('.held-line')[0]
         ?.querySelectorAll<HTMLButtonElement>('.step');
 
-      expect([...(steps ?? [])].every((step) => step.disabled)).toBe(true);
+      expect(
+        [...(steps ?? [])].every(
+          (step) => step.getAttribute('aria-disabled') === 'true'
+        )
+      ).toBe(true);
       await press(fixture, steps?.[1] ?? null);
       expect(changed).toEqual([]);
     });

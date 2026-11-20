@@ -52,7 +52,7 @@ describe('AppUpdates', () => {
 
   /** Lets every pending `then`/`finally` in the check chain run. */
   const flushMicrotasks = async () => {
-    for (let i = 0; i < 5; i++) await Promise.resolve();
+    for (let i = 0; i < 20; i++) await Promise.resolve();
   };
 
   function configure(isEnabled: boolean, runtime: AppRuntime = 'web') {
@@ -81,6 +81,9 @@ describe('AppUpdates', () => {
           provide: BrowserFacade,
           useValue: {
             document: doc,
+            // `AppResumed` reads these inside the native shell (velista `0180`).
+            window: null,
+            visible: signal(true),
             reload,
             // `BackendReadiness` reads this through `ConnectionState`, and it holds
             // the timer off with `isBrowser`, which a bare fake leaves undefined.
@@ -599,7 +602,8 @@ describe('AppUpdates', () => {
     });
 
     it('goes straight to the dead end on a refusal, with no reload', async () => {
-      // The same bundle would come back and be refused again (D3).
+      // The same bundle would come back and be refused again (D3). With no updater
+      // and no Play bound, the native order of velista `0180` D9 ends here too.
       const updates = TestBed.inject(AppUpdates);
 
       refuse();

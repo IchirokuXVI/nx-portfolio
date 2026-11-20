@@ -421,7 +421,7 @@ describe('BasketApi, the writes on a row', () => {
     expect((await done).entries[0].content).toBe('Batteries');
   });
 
-  it('sends what a typed add says about a name the list holds, and never with products (backend 0228)', async () => {
+  it('sends what an add says about the lines the list holds, with products too, and never newLine beside products (the ruling of 2026-11-16)', async () => {
     const asked = api.addLine(BASKET, {
       targetListId: 'list-weekly',
       content: 'Milk',
@@ -467,9 +467,30 @@ describe('BasketApi, the writes on a row', () => {
       content: 'Milk',
       quantity: 1,
       itemIds: ['item-a'],
+      askIfAmbiguous: true,
     });
     product.flush(ANSWER);
     await card;
+
+    const fresh = api.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 1,
+      itemIds: ['item-a'],
+      newLine: true,
+    });
+    const refusedNew = httpMock.expectOne(
+      `${GATEWAY}/v1/baskets/${BASKET}/lines`
+    );
+    // The gateway answers 400 to newLine beside products (backend 0260, rule 7).
+    expect(refusedNew.request.body).toEqual({
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 1,
+      itemIds: ['item-a'],
+    });
+    refusedNew.flush(ANSWER);
+    await fresh;
   });
 
   it('sends a suggestion\u2019s product set as itemIds', async () => {
@@ -531,6 +552,73 @@ describe('BasketApi, the writes on a row', () => {
     });
     revert.flush(ANSWER);
     await reverted;
+  });
+
+  describe('every write states its unit (velista 0182, criterion 7)', () => {
+    it('sends the row’s unit on a settle', async () => {
+      const settled = api.settle(BASKET, TARGET, {
+        outcome: 'BOUGHT',
+        quantity: 250,
+        from: 750,
+        unit: 'GRAM',
+      });
+      const settle = httpMock.expectOne(`${rowUrl}/settle`);
+      expect(settle.request.body).toMatchObject({
+        quantity: 250,
+        from: 750,
+        unit: 'GRAM',
+      });
+      settle.flush(ANSWER);
+      await settled;
+    });
+
+    it('sends the line’s unit on a demand', async () => {
+      const done = api.setDemand(BASKET, {
+        lineId: 'zl-8',
+        quantity: 1000,
+        from: 750,
+        unit: 'GRAM',
+      });
+      const req = httpMock.expectOne(
+        `${GATEWAY}/v1/baskets/${BASKET}/rows/zl-8/demand`
+      );
+      expect(req.request.body).toEqual({
+        lineId: 'zl-8',
+        quantity: 1000,
+        from: 750,
+        unit: 'GRAM',
+      });
+      req.flush({ entries: [] });
+      await done;
+    });
+
+    it('sends a weight on an add, and no unit for a count', async () => {
+      const weighed = api.addLine(BASKET, {
+        targetListId: 'list-weekly',
+        content: 'Plátanos',
+        quantity: 1000,
+        unit: 'GRAM',
+        itemIds: ['item-bananas'],
+        named: false,
+      });
+      const req = httpMock.expectOne(`${GATEWAY}/v1/baskets/${BASKET}/lines`);
+      expect(req.request.body).toMatchObject({ quantity: 1000, unit: 'GRAM' });
+      req.flush(ANSWER);
+      await weighed;
+
+      const counted = api.addLine(BASKET, {
+        targetListId: 'list-weekly',
+        content: 'Milk',
+        quantity: 2,
+        unit: 'UNIT',
+      });
+      const second = httpMock.expectOne(
+        `${GATEWAY}/v1/baskets/${BASKET}/lines`
+      );
+      expect('unit' in second.request.body).toBe(false);
+      second.flush(ANSWER);
+      await counted;
+    });
   });
 
   describe('a settle names a scope and never money (velista 0095, test 9)', () => {

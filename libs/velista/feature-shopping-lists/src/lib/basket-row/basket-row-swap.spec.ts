@@ -10,6 +10,7 @@ import { BasketRow as BasketRowComponent } from './basket-row';
 
 const MILK: BasketProduct = {
   id: 'item-milk',
+  quantityStep: null,
   name: { en: 'Whole milk', es: 'Leche entera' },
   brand: 'Hacendado',
   imageUrl: null,
@@ -27,6 +28,7 @@ const MILK: BasketProduct = {
       name: { en: 'Milk', es: 'Leche' },
     },
   ],
+  approxWeight: null,
 };
 
 function row(): BasketRow {

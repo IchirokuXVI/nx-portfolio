@@ -30,6 +30,7 @@ import {
   hasDetailScreen,
   idOf,
   isEditable,
+  isEmptyValue,
   nounKeyOf,
   recordLayout,
   toInput,
@@ -38,6 +39,7 @@ import {
   type ErrorLinkTarget,
   type FieldDescriptor,
   type FieldMessage,
+  type FieldNote,
   type RecordValue,
   type ResourceRow,
   type ScopeMarkView,
@@ -183,6 +185,9 @@ const NO_MARKS: Readonly<Record<string, ScopeMarkView>> = {};
             @for (field of section.fields; track field.name) {
               @if (loading) {
                 <lib-field-row [label]="field.label | rokuT" [loading]="true" />
+              } @else if (!isShown(field)) {
+                <!-- Not offered for this row: a product sold by the kilo has
+                     no size. A field with a refusal under it is drawn. -->
               } @else if (isControl(field)) {
                 @let said = saidOf(field);
                 <lib-field-row
@@ -198,12 +203,35 @@ const NO_MARKS: Readonly<Record<string, ScopeMarkView>> = {};
                     [context]="context()"
                     [controlId]="controlId(field)"
                     [describedBy]="describedBy(field, said.length)"
-                    [disabled]="record.busy()"
+                    [disabled]="record.busy() || isExcluded(field)"
                     [field]="field"
                     [invalid]="said.length > 0"
                     [lookup]="references"
                     [value]="record.draft()[field.name] ?? ''"
                   />
+                  @if (noteOf(field); as note) {
+                    <p
+                      [attr.id]="noteId(field)"
+                      class="note"
+                      fieldRowAfter
+                      data-note
+                    >
+                      {{ noteText(note) }}
+                      @if (note.action; as action) {
+                        @if (!isExcluded(field)) {
+                          <button
+                            (click)="pressNote(field, action.value)"
+                            [disabled]="record.busy()"
+                            class="link"
+                            type="button"
+                            data-note-action
+                          >
+                            {{ action.label | rokuT }}
+                          </button>
+                        }
+                      }
+                    </p>
+                  }
                 </lib-field-row>
               } @else {
                 <lib-field-row
@@ -229,6 +257,13 @@ const NO_MARKS: Readonly<Record<string, ScopeMarkView>> = {};
                       [names]="namesOf(field)"
                       [value]="valueOf(field)"
                     />
+                  }
+                  @if (!form) {
+                    @if (noteOf(field); as note) {
+                      <p class="note" fieldRowAfter data-note>
+                        {{ noteText(note) }}
+                      </p>
+                    }
                   }
                 </lib-field-row>
               }
@@ -390,6 +425,24 @@ const NO_MARKS: Readonly<Record<string, ScopeMarkView>> = {};
     .link:focus-visible {
       outline: 2px solid currentcolor;
       outline-offset: 2px;
+    }
+
+    /* A line under a field, in the style of its help, with one press after
+       the words. */
+    .note {
+      margin-block-start: var(--admin-space-1);
+      font-size: 0.8125rem;
+      color: var(--admin-ink-muted);
+    }
+
+    .note .link {
+      margin-inline-start: var(--admin-space-1);
+      color: var(--admin-ink);
+    }
+
+    .note .link:disabled {
+      cursor: default;
+      opacity: 0.6;
     }
 
     .body {
@@ -964,6 +1017,83 @@ export class RecordView {
     return 'record.locked.system';
   }
 
+  /**
+   * The row `shown` and `note` of a field read: the row as the form holds
+   * it while the page is a form, and the row while it reads.
+   */
+  private readonly _held = computed<ResourceRow>(() =>
+    this.store().mode() === 'read' ? this._shown() : this.context()
+  );
+
+  /**
+   * Whether a field is drawn. A field with something said under it is drawn
+   * whatever its `shown` answers, so a refusal is never hidden.
+   */
+  isShown(field: FieldDescriptor): boolean {
+    return (
+      field.shown === undefined ||
+      field.shown(this._held()) ||
+      this.saidOf(field).length > 0
+    );
+  }
+
+  /**
+   * Whether another field shuts this one out right now: one that names it in
+   * `excludes` and holds a value in the draft.
+   */
+  isExcluded(field: FieldDescriptor): boolean {
+    const draft = this.store().draft();
+    return this.descriptor().fields.some(
+      (other) =>
+        other.excludes === field.name &&
+        other.name in draft &&
+        !isEmptyValue(draft[other.name])
+    );
+  }
+
+  /**
+   * The row as it was read, which `note` reads beside the row as the form
+   * holds it, or `null` for a record that does not exist yet.
+   */
+  private readonly _asRead = computed<ResourceRow | null>(() => {
+    const store = this.store();
+    return store.mode() === 'create' ? null : (store.row() ?? null);
+  });
+
+  /** The line under a field, or `null`. */
+  noteOf(field: FieldDescriptor): FieldNote | null {
+    return field.note?.(this._held(), this._asRead()) ?? null;
+  }
+
+  /**
+   * The press of a note: its value goes into the field as typing would, and
+   * the focus goes to the field's control. The press may take the note, and
+   * the button with it, off the page, and the focus would fall to the
+   * document.
+   */
+  pressNote(field: FieldDescriptor, value: string | null): void {
+    this.store().set(field.name, value);
+    afterNextRender(
+      () =>
+        this._host.nativeElement
+          .querySelector<HTMLElement>(`[id="${this.labelledId(field)}"]`)
+          ?.focus(),
+      { injector: this._injector }
+    );
+  }
+
+  /** The words of a note, translated. */
+  noteText(note: FieldNote): string {
+    return note.text.kind === 'text'
+      ? note.text.text
+      : this._t(note.text.key, note.text.args);
+  }
+
+  /** The id of the line under a field, which its control names. */
+  noteId(field: FieldDescriptor): string {
+    return `${this.labelledId(field)}-note`;
+  }
+
   /** What is said under one field. */
   saidOf(field: FieldDescriptor): readonly FieldMessage[] {
     return this.messages()[field.name] ?? NO_MESSAGES;
@@ -1009,11 +1139,15 @@ export class RecordView {
 
   /** The lines under a control that describe it: its refusals and its help. */
   describedBy(field: FieldDescriptor, messages: number): string | null {
-    return describedByOf(
+    const ids = describedByOf(
       this.labelledId(field),
       messages,
       field.help !== undefined
     );
+    if (this.noteOf(field) === null) {
+      return ids;
+    }
+    return ids === null ? this.noteId(field) : `${ids} ${this.noteId(field)}`;
   }
 
   /**

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import {
   LineApprovalStatus,
   LineChangeKind,
+  type LineUnit,
   type LineWriteVia,
 } from '@portfolio/luna-shopper/contracts';
 import type { EntityManager } from 'typeorm';
@@ -42,13 +43,15 @@ export class LineChangeRecorder {
   async added(
     manager: EntityManager,
     list: ListRef,
-    line: Pick<ListLine, 'id' | 'content' | 'quantity' | 'approvalStatus'>,
+    line: Pick<ListLine, 'id' | 'content' | 'quantity' | 'approvalStatus'> &
+      UnitOf,
     actor: LineChangeActor
   ): Promise<void> {
     await this.write(manager, list, line.id, actor, {
       kind: LineChangeKind.ADDED,
       contentAfter: line.content,
       quantityAfter: line.quantity,
+      unitAfter: unitOf(line),
       approvalAfter: line.approvalStatus,
     });
   }
@@ -87,7 +90,8 @@ export class LineChangeRecorder {
     manager: EntityManager,
     list: ListRef,
     absorbed: LineSnapshot & { id: string },
-    survivor: Pick<ListLine, 'id' | 'content' | 'quantity' | 'approvalStatus'>,
+    survivor: Pick<ListLine, 'id' | 'content' | 'quantity' | 'approvalStatus'> &
+      UnitOf,
     actor: LineChangeActor
   ): Promise<void> {
     await this.write(manager, list, absorbed.id, actor, {
@@ -96,6 +100,8 @@ export class LineChangeRecorder {
       contentAfter: survivor.content,
       quantityBefore: absorbed.quantity,
       quantityAfter: survivor.quantity,
+      unitBefore: unitOf(absorbed),
+      unitAfter: unitOf(survivor),
       approvalBefore: absorbed.approvalStatus,
       approvalAfter: survivor.approvalStatus,
       mergedIntoLineId: survivor.id,
@@ -112,13 +118,15 @@ export class LineChangeRecorder {
   async deleted(
     manager: EntityManager,
     list: ListRef,
-    line: Pick<ListLine, 'id' | 'content' | 'quantity' | 'approvalStatus'>,
+    line: Pick<ListLine, 'id' | 'content' | 'quantity' | 'approvalStatus'> &
+      UnitOf,
     actor: LineChangeActor
   ): Promise<void> {
     await this.write(manager, list, line.id, actor, {
       kind: LineChangeKind.DELETED,
       contentBefore: line.content,
       quantityBefore: line.quantity,
+      unitBefore: unitOf(line),
       approvalBefore: line.approvalStatus,
     });
   }
@@ -140,7 +148,8 @@ export class LineChangeRecorder {
     lineId: string,
     quantityBefore: number,
     quantityAfter: number,
-    actor: LineChangeActor
+    actor: LineChangeActor,
+    unit?: LineUnit
   ): Promise<boolean> {
     return this.quantityMoved(
       manager,
@@ -149,7 +158,8 @@ export class LineChangeRecorder {
       LineChangeKind.BOUGHT,
       quantityBefore,
       quantityAfter,
-      actor
+      actor,
+      unit
     );
   }
 
@@ -163,7 +173,8 @@ export class LineChangeRecorder {
     lineId: string,
     quantityBefore: number,
     quantityAfter: number,
-    actor: LineChangeActor
+    actor: LineChangeActor,
+    unit?: LineUnit
   ): Promise<boolean> {
     return this.quantityMoved(
       manager,
@@ -172,11 +183,16 @@ export class LineChangeRecorder {
       LineChangeKind.BUY_REVERTED,
       quantityBefore,
       quantityAfter,
-      actor
+      actor,
+      unit
     );
   }
 
-  /** The row of a buy or of a taken back buy, unless nothing moved. */
+  /**
+   * The row of a buy or of a taken back buy, unless nothing moved. A buy does
+   * not change the unit, so both halves of the unit pair are the line's (plan
+   * 0246, section 3.4).
+   */
   private async quantityMoved(
     manager: EntityManager,
     list: ListRef,
@@ -184,7 +200,8 @@ export class LineChangeRecorder {
     kind: LineChangeKind,
     quantityBefore: number,
     quantityAfter: number,
-    actor: LineChangeActor
+    actor: LineChangeActor,
+    unit?: LineUnit
   ): Promise<boolean> {
     if (quantityBefore === quantityAfter) {
       return false;
@@ -193,6 +210,8 @@ export class LineChangeRecorder {
       kind,
       quantityBefore,
       quantityAfter,
+      unitBefore: unit ?? null,
+      unitAfter: unit ?? null,
     });
     return true;
   }
@@ -214,6 +233,8 @@ export class LineChangeRecorder {
       contentAfter: moved.contentAfter ?? null,
       quantityBefore: moved.quantityBefore ?? null,
       quantityAfter: moved.quantityAfter ?? null,
+      unitBefore: moved.unitBefore ?? null,
+      unitAfter: moved.unitAfter ?? null,
       approvalBefore: moved.approvalBefore ?? null,
       approvalAfter: moved.approvalAfter ?? null,
       mergedIntoLineId: moved.mergedIntoLineId ?? null,
@@ -243,11 +264,22 @@ export interface LineChangeActor {
   basketId: string | null;
 }
 
-/** The three things about a line a change is ever about. */
+/**
+ * The things about a line a change is ever about. The unit since plan 0246,
+ * optional so that a snapshot built by hand reads as `UNIT`.
+ */
 export interface LineSnapshot {
   content: string;
   quantity: number;
+  unit?: LineUnit;
   approvalStatus: LineApprovalStatus;
+}
+
+/** A line's unit, as a line written before plan 0246 may lack it. */
+type UnitOf = { unit?: LineUnit | null };
+
+function unitOf(line: UnitOf): LineUnit {
+  return line.unit ?? 'UNIT';
 }
 
 /**
@@ -257,11 +289,12 @@ export interface LineSnapshot {
  * already makes with `const before = { ...line }` for the audit trail.
  */
 export function snapshotOf(
-  line: Pick<ListLine, 'content' | 'quantity' | 'approvalStatus'>
+  line: Pick<ListLine, 'content' | 'quantity' | 'approvalStatus'> & UnitOf
 ): LineSnapshot {
   return {
     content: line.content,
     quantity: line.quantity,
+    unit: unitOf(line),
     approvalStatus: line.approvalStatus,
   };
 }
@@ -273,6 +306,9 @@ interface MovedColumns {
   contentAfter?: string | null;
   quantityBefore?: number | null;
   quantityAfter?: number | null;
+  /** What the quantity pair counts, written beside it (plan 0246). */
+  unitBefore?: LineUnit | null;
+  unitAfter?: LineUnit | null;
   approvalBefore?: LineApprovalStatus | null;
   approvalAfter?: LineApprovalStatus | null;
   mergedIntoLineId?: string | null;
@@ -298,7 +334,10 @@ export function movedBetween(
   after: LineSnapshot
 ): MovedColumns | null {
   const content = before.content !== after.content;
-  const quantity = before.quantity !== after.quantity;
+  // A unit change is an edit of the amount (plan 0246, section 3.4): both
+  // pairs are filled, and the unit pair differs.
+  const quantity =
+    before.quantity !== after.quantity || unitOf(before) !== unitOf(after);
   const approval = before.approvalStatus !== after.approvalStatus;
   if (!content && !quantity && !approval) {
     return null;
@@ -313,7 +352,12 @@ export function movedBetween(
       ? { contentBefore: before.content, contentAfter: after.content }
       : {}),
     ...(quantity
-      ? { quantityBefore: before.quantity, quantityAfter: after.quantity }
+      ? {
+          quantityBefore: before.quantity,
+          quantityAfter: after.quantity,
+          unitBefore: unitOf(before),
+          unitAfter: unitOf(after),
+        }
       : {}),
     ...(approval
       ? {

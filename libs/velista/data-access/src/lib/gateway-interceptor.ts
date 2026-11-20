@@ -2,6 +2,7 @@ import {
   HttpErrorResponse,
   type HttpEvent,
   type HttpHandlerFn,
+  type HttpHeaders,
   type HttpInterceptorFn,
   type HttpRequest,
   HttpResponse,
@@ -150,7 +151,7 @@ export const gatewayInterceptor: HttpInterceptorFn = (req, next) => {
         // Google sends both, and a retry would post the same refused token again,
         // whose second refusal would sign the guest out and lose their groups.
         const refused = toGatewayError(
-          error.error,
+          errorBody(error),
           error.status,
           correlationId
         );
@@ -182,7 +183,7 @@ export const gatewayInterceptor: HttpInterceptorFn = (req, next) => {
       }
 
       return throwError(() =>
-        toGatewayError(error.error, error.status, correlationId)
+        toGatewayError(errorBody(error), error.status, correlationId)
       );
     }),
     // **After** the `catchError`, so both the first attempt and the refreshed retry
@@ -321,12 +322,44 @@ function retryAfterRefresh(
             }
 
             return throwError(() =>
-              toGatewayError(error.error, error.status, correlationId)
+              toGatewayError(errorBody(error), error.status, correlationId)
             );
           })
         );
     })
   );
+}
+
+/**
+ * The error body in the form `toGatewayError` reads, a record when it was JSON.
+ *
+ * A request sent with `responseType: 'text'` receives its error body as text too, so
+ * the gateway's problem document reaches here as a string. `StartupProbe` asks for
+ * text, and the one refusal it exists to notice, `client_too_old` from
+ * `MinClientVersionGuard` on `/health/ready`, then mapped to the fallback code of a
+ * 426 and never reached `noticeRefusal`: the device drew "cannot reach the server"
+ * instead of pulling the bundle or the dead end face (plan 0180, row 12 of section 5).
+ *
+ * Parsed only when the response says it is JSON, so a proxy's text or HTML page stays
+ * the string it was and maps by its status as before.
+ */
+function errorBody(error: HttpErrorResponse): unknown {
+  const body: unknown = error.error;
+  if (typeof body !== 'string' || !isJsonMediaType(error.headers)) {
+    return body;
+  }
+
+  try {
+    return JSON.parse(body) as unknown;
+  } catch {
+    return body;
+  }
+}
+
+/** `application/json` or `application/problem+json`, with any parameters. */
+function isJsonMediaType(headers: HttpHeaders): boolean {
+  const type = headers.get('content-type')?.split(';')[0].trim().toLowerCase();
+  return type === 'application/json' || type === 'application/problem+json';
 }
 
 function decorate(

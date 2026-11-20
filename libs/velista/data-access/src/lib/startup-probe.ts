@@ -58,7 +58,9 @@ export const STARTUP_PROBE_INTERVAL_MS = 10_000;
  * health routes too. One probe therefore comes back carrying the advertised floor, and
  * comes back **refused** with `client_too_old` when this build is below it. The
  * refusal is noticed by `gatewayInterceptor`, which reports it to `BackendReadiness`
- * for us: this class never has to read a status code to find out.
+ * for us: this class never has to read a status code to find out. The probe asks for
+ * text, so the refusal's problem document arrives as a string, and the interceptor
+ * parses it because the response says it is JSON (plan 0180, row 12 of section 5).
  *
  * ## What it does not do
  *

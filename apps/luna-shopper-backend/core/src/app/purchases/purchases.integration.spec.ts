@@ -8,6 +8,7 @@ import {
   TripKind,
   ZoneRole,
   ZoneStatus,
+  type LineUnit,
   type PurchaseEntryView,
 } from '@portfolio/luna-shopper/contracts';
 import { NotFoundException } from '@portfolio/luna-shopper/platform';
@@ -17,17 +18,17 @@ import {
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
+import { SHARED_BASKETS_SQL } from '../baskets/basket-members.sql';
 import {
-  CORE_ENTITIES,
   Basket,
   BasketParticipant,
+  CORE_ENTITIES,
   LineSettlement,
   ListLine,
   ShoppingList,
   Zone,
   ZoneMembership,
 } from '../entities';
-import { SHARED_BASKETS_SQL } from '../baskets/basket-members.sql';
 import { PurchasesService } from './purchases.service';
 import { purchaseEntriesSql, type PurchaseEntryRow } from './purchases.sql';
 
@@ -191,6 +192,10 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
        */
       pricePaidCurrency?: string;
       reverted?: boolean;
+      /** What `quantity` counts (plan 0246). `UNIT` when absent. */
+      unit?: LineUnit;
+      /** Whether the price makes the cost an estimate (plan 0246 M7). */
+      estimated?: boolean;
     } = {}
   ): Promise<string> {
     const repo = dataSource.getRepository(LineSettlement);
@@ -204,6 +209,8 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
         outcome,
         quantity:
           outcome === SettlementOutcome.BOUGHT ? (options.quantity ?? 1) : 0,
+        unit: options.unit ?? 'UNIT',
+        estimated: options.estimated ?? false,
         settledByUserId: byParticipant ? null : (options.userId ?? reader),
         settledByParticipantId: byParticipant
           ? (options.participantId as string)
@@ -626,6 +633,75 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
         spent: { cents: 2 * 120 + 250, currency: 'EUR' },
         unpricedCount: 1,
       });
+    });
+
+    it('spends a weighed purchase at the price of a kilo times the amount, rounded once (plan 0246 M7)', async () => {
+      // 750 g of cheese at 9,95 the kilo is 746,25 cents, and two pieces of
+      // bread at 1,20: 986 together, and what was bought said per unit.
+      const flat = await list(zones.flat, 'Flat');
+      const cheese = await line(flat, 'Cheese');
+      const bread = await line(flat, 'Bread');
+      await settled(flat, cheese, '2026-04-03T10:00:00Z', {
+        quantity: 750,
+        unit: 'GRAM',
+        estimated: true,
+        pricePaidCents: 995,
+      });
+      await settled(flat, bread, '2026-04-03T10:05:00Z', {
+        quantity: 2,
+        pricePaidCents: 120,
+      });
+
+      const mine = await entries();
+
+      expect(mine[0]).toMatchObject({
+        spent: { cents: 746 + 240, currency: 'EUR' },
+        bought: { UNIT: 2, GRAM: 750 },
+        estimated: true,
+      });
+      const rows = await rowsOf(mine[0]);
+      expect(
+        rows.map((row) => [row.content, row.quantity, row.unit, row.estimated])
+      ).toEqual([
+        ['Cheese', 750, 'GRAM', true],
+        ['Bread', 2, 'UNIT', false],
+      ]);
+    });
+
+    it('reads 746 for the one weighed purchase alone', async () => {
+      const flat = await list(zones.flat, 'Flat');
+      const cheese = await line(flat, 'Cheese');
+      await settled(flat, cheese, '2026-04-04T10:00:00Z', {
+        quantity: 750,
+        unit: 'GRAM',
+        estimated: true,
+        pricePaidCents: 995,
+      });
+
+      const mine = await entries();
+
+      expect(mine[0].spent).toEqual({ cents: 746, currency: 'EUR' });
+      expect(mine[0].bought).toEqual({ GRAM: 750 });
+    });
+
+    it('keeps two units of one line apart in the rows and the totals', async () => {
+      // A line that changed its unit between two buys.
+      const flat = await list(zones.flat, 'Flat');
+      const apples = await line(flat, 'Apples');
+      await settled(flat, apples, '2026-04-05T10:00:00Z', { quantity: 3 });
+      await settled(flat, apples, '2026-04-05T10:05:00Z', {
+        quantity: 500,
+        unit: 'GRAM',
+      });
+
+      const mine = await entries();
+
+      expect(mine[0].bought).toEqual({ UNIT: 3, GRAM: 500 });
+      const rows = await rowsOf(mine[0]);
+      expect(rows.map((row) => [row.quantity, row.unit])).toEqual([
+        [3, 'UNIT'],
+        [500, 'GRAM'],
+      ]);
     });
 
     // A settle whose client showed no price records none, so an entry of them

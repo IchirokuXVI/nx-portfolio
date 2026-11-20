@@ -1,0 +1,123 @@
+{
+  "id": "60226",
+  "ean": "8480000602268",
+  "slug": "ensaladilla-rusa-mediana-listo-comer-bandeja",
+  "brand": "Listo para Comer",
+  "limit": 999,
+  "badges": {
+    "is_water": false,
+    "requires_age_check": false
+  },
+  "origin": null,
+  "photos": [
+    {
+      "zoom": "https://prod-mercadona.imgix.net/images/0d70a92075e9653e8719d81545beeca5.jpg?fit=crop&h=3600&w=3600",
+      "regular": "https://prod-mercadona.imgix.net/images/0d70a92075e9653e8719d81545beeca5.jpg?fit=crop&h=600&w=600",
+      "thumbnail": "https://prod-mercadona.imgix.net/images/0d70a92075e9653e8719d81545beeca5.jpg?fit=crop&h=300&w=300",
+      "perspective": 1
+    },
+    {
+      "zoom": "https://prod-mercadona.imgix.net/images/cfd91384df81717e2ec6e8b5a0fb359c.jpg?fit=crop&h=3600&w=3600",
+      "regular": "https://prod-mercadona.imgix.net/images/cfd91384df81717e2ec6e8b5a0fb359c.jpg?fit=crop&h=600&w=600",
+      "thumbnail": "https://prod-mercadona.imgix.net/images/cfd91384df81717e2ec6e8b5a0fb359c.jpg?fit=crop&h=300&w=300",
+      "perspective": 9
+    }
+  ],
+  "status": null,
+  "details": {
+    "brand": "Listo para Comer",
+    "origin": null,
+    "suppliers": [],
+    "legal_name": null,
+    "description": "Ensaladilla rusa mediana Listo para Comer",
+    "counter_info": "Ingredientes: Patata 45%, mayonesa 20% (aceite refinado de girasol, agua, yema de huevo pasteurizada, azúcar, vinagre de vino blanco, estabilizante: E1422; sal, zumo de limón concentrado, colorantes: E160A (i), E160C), atún (pescado) 15% (atún (pescado), aceite refinado de girasol, sal), zanahoria 10%, huevo cocido 6%, guisantes 3%, sal, conservadores: E202, E211; antioxidante: E385.\n\nAlérgenos: huevo, atún, pescado.\n\nPuede contener trazas de: Altramuces, Soja, Leche y sus derivados (incluida lactosa), Mostaza, Frutos de cáscara y derivados, Moluscos, Sésamo, Crustáceos, Gluten, Apio, Cacahuetes, Sulfitos.\n\nProducto preparado por Mercadona, S.A. (C/ Alfonso Roig Alfonso, s/n. Albalat dels Sorells 46135, Valencia).",
+    "danger_mentions": null,
+    "alcohol_by_volume": null,
+    "mandatory_mentions": null,
+    "production_variant": null,
+    "usage_instructions": null,
+    "storage_instructions": null,
+    "is_prepared_by_mercadona": true
+  },
+  "is_bulk": false,
+  "packaging": "Bandeja",
+  "published": true,
+  "share_url": "https://tienda.mercadona.es/product/60226/ensaladilla-rusa-mediana-listo-comer-bandeja",
+  "thumbnail": "https://prod-mercadona.imgix.net/images/0d70a92075e9653e8719d81545beeca5.jpg?fit=crop&h=300&w=300",
+  "categories": [
+    {
+      "id": 16,
+      "name": "Pizzas y platos preparados",
+      "level": 0,
+      "order": 597,
+      "categories": [
+        {
+          "id": 897,
+          "name": "Listo para Comer",
+          "level": 1,
+          "order": 597,
+          "categories": [
+            {
+              "id": 898,
+              "name": "Platos fríos",
+              "level": 2,
+              "order": 597
+            }
+          ]
+        },
+        {
+          "id": 142,
+          "name": "Platos preparados fríos",
+          "level": 1,
+          "order": 597,
+          "categories": [
+            {
+              "id": 499,
+              "name": "Ensaladilla",
+              "level": 2,
+              "order": 597
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "extra_info": [
+    null
+  ],
+  "display_name": "Ensaladilla rusa mediana Listo para Comer",
+  "main_feature": null,
+  "unavailable_from": null,
+  "is_variable_weight": false,
+  "price_instructions": {
+    "iva": null,
+    "is_new": false,
+    "is_pack": false,
+    "pack_size": null,
+    "unit_name": null,
+    "unit_size": 0.58,
+    "bulk_price": "6.50",
+    "unit_price": "6.50",
+    "approx_size": true,
+    "size_format": "kg",
+    "total_units": null,
+    "unit_selector": true,
+    "bunch_selector": false,
+    "drained_weight": null,
+    "selling_method": 0,
+    "tax_percentage": "10.000",
+    "price_decreased": false,
+    "reference_price": "6.500",
+    "min_bunch_amount": 1,
+    "reference_format": "ud",
+    "previous_unit_price": null,
+    "increment_bunch_amount": 1
+  },
+  "unavailable_weekdays": [],
+  "nutrition_information": {
+    "allergens": null,
+    "ingredients": null
+  },
+  "is_new_arrival": false,
+  "color_variants": null
+}

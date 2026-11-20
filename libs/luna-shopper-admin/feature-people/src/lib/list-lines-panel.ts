@@ -21,6 +21,7 @@ import {
   type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
 import { RecordSection } from '@portfolio/luna-shopper-admin/ui';
+import { lineAmountText } from './line-amount-text';
 import { instant } from './people-format';
 import type { ListLineRow, ListRow } from './people-seed';
 import { PEOPLE_STYLES } from './people-styles';
@@ -99,7 +100,10 @@ export interface LineRow {
                 <span class="row-line">
                   {{
                     'people.lists.quantity'
-                      | rokuT: { count: entry.line.quantity }
+                      | rokuT
+                        : {
+                            count: amount(entry.line.quantity, entry.line.unit),
+                          }
                   }}
                   ·
                   {{
@@ -267,6 +271,14 @@ export class ListLinesPanel {
 
   when(value: string): string {
     return instant(value, this._translator.locale());
+  }
+
+  /**
+   * A line's quantity in its unit (backend plan 0246, section 6): the number
+   * for pieces, "750 g" for a weight.
+   */
+  amount(quantity: number, unit: unknown): string {
+    return lineAmountText(quantity, unit, this._translator.locale());
   }
 
   /** Whether the button of an action is red, as its confirmation is. */

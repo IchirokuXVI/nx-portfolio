@@ -31,6 +31,7 @@ import {
   POSTAL_CODE_DISCOVERY_SEED,
   SOURCE_ENTRY_SEED,
   SOURCE_LOCATION_SEED,
+  SOURCE_PROBE_SEED,
   SUPERMARKET_SOURCE_SEED,
   type StoredSchedule,
 } from './harvest-seed';
@@ -108,6 +109,8 @@ export class HarvestMemory implements HarvestServiceI {
   );
   private readonly _shops: Wire.HarvestSourceLocationView[] =
     clone(SOURCE_LOCATION_SEED);
+  private readonly _probes: Wire.HarvestSourceProbeView[] =
+    clone(SOURCE_PROBE_SEED);
   private readonly _postalCodes: Wire.HarvestPostalCodeDiscoveryRequestView[] =
     clone(POSTAL_CODE_DISCOVERY_SEED);
   private readonly _presets: StoredPreset[] = HARVEST_RUN_PRESET_SEED.map(
@@ -123,11 +126,21 @@ export class HarvestMemory implements HarvestServiceI {
   async spawnRun(
     input: Wire.SpawnHarvestRunDto
   ): Promise<Wire.HarvestHarvestRunView> {
-    // The real service answers 409 carrying the active run's id, because one
-    // harvester runs one thing at a time. Refusing here too keeps the screen's
-    // conflict branch reachable with no backend.
+    // The real service answers 409 carrying the active run's id. Its database
+    // holds two rules, and this mirrors both. `uq_harvest_run_active`: a run of
+    // a chain is refused while that chain has a PENDING or RUNNING run of any
+    // mode. `uq_harvest_run_active_store_discovery`: a store discovery is
+    // refused while any store discovery is PENDING or RUNNING, of any chain or
+    // of none. A run with no chain is held by the second rule only, so one that
+    // is not a store discovery is never refused. The seed can thus hold a
+    // Mercadona walk and a DEZA walk at once. Refusing here too keeps the
+    // screen's conflict branch reachable with no backend.
+    const chain = input.supermarketId ?? null;
     const active = this._runs.find(
-      (run) => run.status === 'PENDING' || run.status === 'RUNNING'
+      (run) =>
+        (run.status === 'PENDING' || run.status === 'RUNNING') &&
+        ((chain !== null && run.supermarketId === chain) ||
+          (input.mode === 'STORE_DISCOVERY' && run.mode === 'STORE_DISCOVERY'))
     );
     if (active !== undefined) {
       throw new GatewayError({
@@ -138,8 +151,12 @@ export class HarvestMemory implements HarvestServiceI {
     }
 
     const now = new Date().toISOString();
+    // The run keeps its own request, as the harvester stores it: the spawn's
+    // fields without the chain, which the run carries as `supermarketId`.
+    const { supermarketId: _chain, ...request } = copyInput(input);
     const run: Wire.HarvestHarvestRunView = {
       id: mintRunId(this._nextId++),
+      input: request,
       supermarketId: input.supermarketId ?? null,
       sourceId: null,
       mode: input.mode,
@@ -627,18 +644,25 @@ export class HarvestMemory implements HarvestServiceI {
    * No status asked for means the queue: `CANDIDATE` and `UNRESOLVED` together,
    * which is what is waiting for a person. That default is the route's, not the
    * screen's, so it lives here rather than in the page.
+   *
+   * An `entryId` answers that one row, and with no status asked for it drops
+   * the default, as the route does (admin plan 0073).
    */
   async listEntries(
     query: EntryQuery
   ): Promise<Wire.HarvestQueuedSourceEntryPage> {
     const term = (query.query ?? '').trim().toLowerCase();
     const chain = query.supermarketId ?? '';
+    const entryId = query.entryId ?? '';
     const matching = this._entries.filter(
       (entry) =>
         // Absent lists every chain's rows, as the route does.
         (chain === '' || entry.supermarketId === chain) &&
+        (entryId === '' || entry.id === entryId) &&
         (query.status === undefined
-          ? entry.status === 'CANDIDATE' || entry.status === 'UNRESOLVED'
+          ? entryId !== '' ||
+            entry.status === 'CANDIDATE' ||
+            entry.status === 'UNRESOLVED'
           : entry.status === query.status) &&
         (query.sourceKind === undefined ||
           entry.sourceKind === query.sourceKind) &&
@@ -647,6 +671,11 @@ export class HarvestMemory implements HarvestServiceI {
         // the route does with it: `brandKey` never answers punctuation.
         (query.brandKey === undefined ||
           brandKey(entry.brand ?? '') === query.brandKey) &&
+        // Admin plan 0072, as the route reads it: true is the doubted rows,
+        // false the others, and absent both.
+        (query.sizeDoubt === undefined ||
+          (entry.sizeDoubt !== null && entry.sizeDoubt !== undefined) ===
+            query.sizeDoubt) &&
         (term === '' ||
           entry.name.toLowerCase().includes(term) ||
           (entry.brand ?? '').toLowerCase().includes(term) ||
@@ -1291,6 +1320,25 @@ export class HarvestMemory implements HarvestServiceI {
     return { ...source };
   }
 
+  /**
+   * The seeded probes of a chain, newest first, as the route orders them. A
+   * chain with no source row is a 404, as the route answers it.
+   */
+  async listProbes(
+    supermarketId: string,
+    query: PageQuery
+  ): Promise<Wire.HarvestSourceProbePage> {
+    if (
+      !this._sources.some((source) => source.supermarketId === supermarketId)
+    ) {
+      throw notFound();
+    }
+    const rows = this._probes
+      .filter((probe) => probe.supermarketId === supermarketId)
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+    return page(rows, query);
+  }
+
   async upsertSource(
     supermarketId: string,
     input: Wire.UpsertSupermarketSourceDto
@@ -1477,9 +1525,14 @@ export class HarvestMemory implements HarvestServiceI {
       return;
     }
 
+    // A run that does not know its total (a DEZA walk) still counts up; it
+    // used to be pinned at zero against a total of nothing.
     const total = run.totalPlanned ?? 0;
     run.heartbeatAt = new Date().toISOString();
-    run.processed = Math.min(total, run.processed + 137);
+    run.processed =
+      run.totalPlanned === null
+        ? run.processed + 137
+        : Math.min(total, run.processed + 137);
     run.created += 61;
     run.unchanged += 76;
 

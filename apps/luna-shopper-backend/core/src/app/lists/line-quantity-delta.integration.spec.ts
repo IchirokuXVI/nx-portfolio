@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
 import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
+import { fakeLineClaims } from '../baskets/line-claims.fake';
 import {
   CORE_ENTITIES,
   LineSettlement,
@@ -23,7 +24,6 @@ import {
   Zone,
   ZoneMembership,
 } from '../entities';
-import { fakeLineClaims } from '../baskets/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { LineChangeRecorder } from './changes/line-change.recorder';
 import { LineMergeService } from './line-merge.service';
@@ -216,6 +216,9 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
     return running;
   }
 
+  // Changed on purpose by plan 0260 (A1): the second add meets the line the
+  // first created and adds nothing, where it raised it before. What the lock
+  // protects is unchanged: two concurrent adds of one name make one line.
   it('makes one line out of two concurrent adds of one name', async () => {
     const results = await whileTheListIsHeld(() =>
       Promise.all([
@@ -234,20 +237,30 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
       ])
     );
 
-    // One row at three, whichever of the two got there first. Without the lock
-    // both read a list holding no milk and both create, and the household ends
-    // up with two Milks for one thing they buy.
+    // One row, at the amount of whichever of the two got there first. Without
+    // the lock both read a list holding no milk and both create, and the
+    // household ends up with two Milks for one thing they buy.
     const stored = await dataSource
       .getRepository(ListLine)
       .find({ where: { listId: ids.list } });
     expect(stored).toHaveLength(1);
-    expect(stored[0].quantity).toBe(3);
-    // One of them created and the other raised, and the answer says which.
-    expect(results.filter((result) => result.merged)).toHaveLength(1);
+    // One of them created and the other met it, and the answer says which.
+    const created = results.filter((result) => result.outcome === 'CREATED');
+    const met = results.filter(
+      (result) => result.outcome === 'ALREADY_ON_LIST'
+    );
+    expect(created).toHaveLength(1);
+    expect(met).toHaveLength(1);
+    expect(met[0].merged).toBe(true);
+    expect(stored[0].quantity).toBe(created[0].line.quantity);
+    expect(stored[0].version).toBe(created[0].line.version);
     expect(results[0].line.id).toBe(results[1].line.id);
   });
 
-  it('raises the line an earlier batch created rather than adding beside it', async () => {
+  // Changed on purpose by plan 0260 (A1): the add meets the line an earlier
+  // batch created and adds nothing, where it raised it before. It still never
+  // adds a second line beside it.
+  it('meets the line an earlier batch created rather than adding beside it', async () => {
     await lines.addMany({
       userId: ids.owner,
       listId: ids.list,
@@ -262,7 +275,8 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
     });
 
     expect(result.merged).toBe(true);
-    expect(result.line.quantity).toBe(3);
+    expect(result.outcome).toBe('ALREADY_ON_LIST');
+    expect(result.line.quantity).toBe(1);
     expect(
       await dataSource
         .getRepository(ListLine)
@@ -275,8 +289,18 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
 
     await whileTheRowIsHeld(line.id, () =>
       Promise.all([
-        lines.addQuantity({ userId: ids.owner, lineId: line.id, delta: 1 }),
-        lines.addQuantity({ userId: ids.owner, lineId: line.id, delta: 1 }),
+        lines.addQuantity({
+          userId: ids.owner,
+          lineId: line.id,
+          delta: 1,
+          unit: 'UNIT',
+        }),
+        lines.addQuantity({
+          userId: ids.owner,
+          lineId: line.id,
+          delta: 1,
+          unit: 'UNIT',
+        }),
       ])
     );
 
@@ -298,7 +322,12 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
     await whileTheRowIsHeld(line.id, () =>
       Promise.all(
         Array.from({ length: 10 }, () =>
-          lines.addQuantity({ userId: ids.owner, lineId: line.id, delta: 2 })
+          lines.addQuantity({
+            userId: ids.owner,
+            lineId: line.id,
+            delta: 2,
+            unit: 'UNIT',
+          })
         )
       )
     );

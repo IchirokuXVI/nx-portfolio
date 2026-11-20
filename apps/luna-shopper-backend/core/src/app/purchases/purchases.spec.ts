@@ -65,7 +65,24 @@ describe('one history entry (section 3)', () => {
       boughtLineCount: 3,
       spent: { cents: 1240, currency: 'EUR' },
       unpricedCount: 1,
+      // Nothing per unit on a row from before plan 0246's columns.
+      bought: {},
+      estimated: false,
     });
+  });
+
+  it('reports what was bought per unit, with a unit that bought nothing left out (plan 0246)', () => {
+    const view = toPurchaseEntryView(
+      row({
+        boughtUnit: '3',
+        boughtGram: '750',
+        boughtMilliliter: '0',
+        estimated: true,
+      })
+    );
+
+    expect(view.bought).toEqual({ UNIT: 3, GRAM: 750 });
+    expect(view.estimated).toBe(true);
   });
 
   // The sum arrives as a `bigint`, which the driver hands back as a string so
@@ -133,6 +150,9 @@ describe('one row of an entry (section 4)', () => {
       itemSnapshot: null,
       outcome: SettlementOutcome.BOUGHT,
       quantity: 3,
+      // A row read before plan 0246 counts pieces and is exact.
+      unit: 'UNIT',
+      estimated: false,
       pricePaid: { cents: 120, currency: 'EUR' },
       priceScopeId: 'scope-1',
       supermarketLocationId: 'shop-1',
@@ -143,6 +163,27 @@ describe('one row of an entry (section 4)', () => {
       zoneId: 'zone-1',
       content: 'Milk',
     });
+  });
+
+  it('serves the unit of the row and whether its cost is an estimate (plan 0246)', () => {
+    expect(
+      toPurchaseRowView(
+        row({
+          quantity: 750,
+          unit: 'GRAM',
+          estimated: true,
+          pricePaidCents: 995,
+        })
+      )
+    ).toMatchObject({
+      quantity: 750,
+      unit: 'GRAM',
+      estimated: true,
+      // The price of one kilo, as M7 records it.
+      pricePaid: { cents: 995, currency: 'EUR' },
+    });
+    // A unit this build does not know reads as pieces rather than as a lie.
+    expect(toPurchaseRowView(row({ unit: 'KILOGRAM' })).unit).toBe('UNIT');
   });
 
   // Plan 0202, section 4: what the product was called when it was bought.

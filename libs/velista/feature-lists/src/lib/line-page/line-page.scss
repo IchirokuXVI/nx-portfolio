@@ -39,6 +39,22 @@
   min-inline-size: 0;
 }
 
+// The unit above the number (velista 0183), both held to the end of the row.
+.amount {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--app-space-3);
+}
+
+// A refused unit change, under the row it was made in.
+.unit-error {
+  margin: var(--app-space-3) 0 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-status-danger-fg);
+}
+
 .where {
   margin: 0;
   font-size: var(--app-text-sm);

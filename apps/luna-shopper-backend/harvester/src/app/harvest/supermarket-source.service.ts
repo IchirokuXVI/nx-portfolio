@@ -26,6 +26,8 @@ import { SupermarketSource } from '../entities';
 import { HarvestRunStore } from './harvest-run.store';
 import { toSupermarketSourceView } from './harvest.mappers';
 import { PlatformAdminService } from './platform-admin.service';
+import { toSourceProbeSummary } from './probes/source-probe.mappers';
+import { SourceProbeStore } from './probes/source-probe.store';
 
 interface SourceCursor {
   value: string;
@@ -47,7 +49,10 @@ export class SupermarketSourceService {
     private readonly sources: Repository<SupermarketSource>,
     private readonly admin: PlatformAdminService,
     private readonly config: ConfigService,
-    private readonly runs: HarvestRunStore
+    private readonly runs: HarvestRunStore,
+    // Plan 0219: the newest probe of each row, for its view. Optional, so a
+    // spec that builds this service without probes still can.
+    private readonly probes?: SourceProbeStore
   ) {}
 
   private defaults(): HarvesterConfig {
@@ -104,12 +109,12 @@ export class SupermarketSourceService {
       row.maxRequestsPerSecond = req.maxRequestsPerSecond;
     }
 
-    return toSupermarketSourceView(await this.sources.save(row));
+    return this.withLastProbe(await this.sources.save(row));
   }
 
   async get(req: SupermarketSourceIdRequest): Promise<SupermarketSourceView> {
     await this.admin.requireAdmin(req);
-    return toSupermarketSourceView(await this.load(req.supermarketId));
+    return this.withLastProbe(await this.load(req.supermarketId));
   }
 
   async setEnabled(
@@ -118,7 +123,7 @@ export class SupermarketSourceService {
     await this.admin.requireAdmin(req);
     const row = await this.load(req.supermarketId);
     row.enabled = req.enabled;
-    return toSupermarketSourceView(await this.sources.save(row));
+    return this.withLastProbe(await this.sources.save(row));
   }
 
   /**
@@ -176,12 +181,37 @@ export class SupermarketSourceService {
     const page = rows.slice(0, limit);
     const last = page[page.length - 1];
     return {
-      items: page.map(toSupermarketSourceView),
+      items: await this.withLastProbes(page),
       nextCursor:
         hasMore && last
           ? encodeCursor({ value: last.createdAt.toISOString(), id: last.id })
           : null,
     };
+  }
+
+  /** One row's view with its newest probe that is not ABORTED (plan 0219). */
+  private async withLastProbe(
+    row: SupermarketSource
+  ): Promise<SupermarketSourceView> {
+    const [view] = await this.withLastProbes([row]);
+    return view;
+  }
+
+  /** Every row's newest probe in one query, never one query per row. */
+  private async withLastProbes(
+    rows: SupermarketSource[]
+  ): Promise<SupermarketSourceView[]> {
+    if (!this.probes) {
+      return rows.map((row) => toSupermarketSourceView(row));
+    }
+    const latest = await this.probes.latestBySources(rows.map((row) => row.id));
+    return rows.map((row) => {
+      const probe = latest.get(row.id);
+      return toSupermarketSourceView(
+        row,
+        probe ? toSourceProbeSummary(probe) : null
+      );
+    });
   }
 
   /** The row a run reads its knobs from. Used by the runners, not the surface. */
@@ -216,27 +246,53 @@ export class SupermarketSourceService {
     });
   }
 
+  /**
+   * A run started on this chain. Writes `lastRunAt` and nothing else.
+   *
+   * **Never `save` the object a run holds.** The run read it when it started,
+   * and the owner may switch the chain off or change its rate, workers or
+   * config from the back office while the run works. A whole row save then
+   * puts the old values back, and a chain switched off during a run comes back
+   * on. Both run writes thus name their own columns only.
+   */
   async recordRunStarted(source: SupermarketSource): Promise<void> {
-    source.lastRunAt = new Date();
-    await this.sources.save(source);
+    const at = new Date();
+    await this.sources.update({ id: source.id }, { lastRunAt: at });
+    source.lastRunAt = at;
   }
 
   /**
-   * A finished run's verdict. `consecutiveFailures` is what a future scheduler
-   * would back off on; nothing reads it yet, and it is one column rather than the
-   * schedule block section 4.1 refuses to add before anything needs it.
+   * A finished run's verdict: `lastSuccessAt` and `consecutiveFailures`, and
+   * no other column (see {@link recordRunStarted}). A failure is counted in
+   * the database, so a count the object read at the start of the run is never
+   * written back. The object takes the stored count, for a caller that reads
+   * it afterwards.
    */
   async recordRunFinished(
     source: SupermarketSource,
     succeeded: boolean
   ): Promise<void> {
     if (succeeded) {
-      source.lastSuccessAt = new Date();
+      const at = new Date();
+      await this.sources.update(
+        { id: source.id },
+        { lastSuccessAt: at, consecutiveFailures: 0 }
+      );
+      source.lastSuccessAt = at;
       source.consecutiveFailures = 0;
-    } else {
-      source.consecutiveFailures += 1;
+      return;
     }
-    await this.sources.save(source);
+    const result = await this.sources
+      .createQueryBuilder()
+      .update(SupermarketSource)
+      .set({ consecutiveFailures: () => '"consecutiveFailures" + 1' })
+      .where('id = :id', { id: source.id })
+      .returning(['consecutiveFailures'])
+      .execute();
+    const counted = (result.raw as { consecutiveFailures?: unknown }[])[0]
+      ?.consecutiveFailures;
+    source.consecutiveFailures =
+      counted === undefined ? source.consecutiveFailures + 1 : Number(counted);
   }
 }
 

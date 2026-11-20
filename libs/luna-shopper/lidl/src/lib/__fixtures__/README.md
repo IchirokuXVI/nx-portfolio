@@ -9,14 +9,15 @@ For the index and the store service that is the JSON body. For a product page it
 is the flat array inside the page's `__NUXT_DATA__` tag. The page has no JSON
 endpoint behind it, and that tag is the whole input.
 
-| File                             | The case it pins                                                                                       |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `search-page.json`               | one page of the in-store index, holding grocery rows beside bazar rows, so section 5's filter has both  |
-| `product-single-price.json`      | an EAN-13, one priced region group, and a second group the chain publishes no price for                |
-| `product-two-region-prices.json` | two region groups at two different prices: 51 regions at one, 8 at the other                            |
-| `product-unpriced.json`          | in the window with no current price in any region at all, which 21 of the week's products look like     |
-| `product-short-code.json`        | an eight digit code in `eans`, which is LIDL's own weight item number and is never written as an EAN    |
-| `store-page.json`                | five shops, each naming its price region, with two of them sharing one                                 |
+| File                              | The case it pins                                                                                                                                                                                                                                                                                     |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search-page.json`                | one page of the in-store index, holding grocery rows beside bazar rows, so section 5's filter has both                                                                                                                                                                                               |
+| `product-single-price.json`       | an EAN-13, one priced region group, and a second group the chain publishes no price for                                                                                                                                                                                                              |
+| `product-two-region-prices.json`  | two region groups at two different prices: 51 regions at one, 8 at the other                                                                                                                                                                                                                         |
+| `product-unpriced.json`           | in the window with no current price in any region at all, which 21 of the week's products look like                                                                                                                                                                                                  |
+| `product-short-code.json`         | an eight digit code in `eans`, which is LIDL's own weight item number and is never written as an EAN                                                                                                                                                                                                 |
+| `product-approximate-weight.json` | a chorizo tray printed `Aprox.450 g` with one price and no price per kilo (plan 0244): a piece priced as one, with a weight of 450 g and no size. Captured on 2026-11-05 by `--only=product-approximate-weight`, which finds the first grocery row of the week that prints one number after `Aprox.` |
+| `store-page.json`                 | five shops, each naming its price region, with two of them sharing one                                                                                                                                                                                                                               |
 
 ## Two of these are not grocery, on purpose
 
@@ -36,3 +37,10 @@ The assortment is a rolling window. Every product named here leaves in a week or
 two, and the capture then fails by name. **Pick a new product for that case
 rather than dropping the case.** The shapes outlive any week's assortment. The
 products do not. The addresses are in `tools/capture-fixtures.ts`.
+
+`--only=<name>[,<name>]` (file names without `.json`) captures the named
+fixtures and leaves every other file as it is:
+`npx nx run luna-shopper/lidl:capture-fixtures --only=product-approximate-weight`.
+That case names no address. The tool walks the week's index and takes the first
+grocery row that prints one approximate weight, because such a row is rare and
+leaves the window every week.

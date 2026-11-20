@@ -1,21 +1,26 @@
-import { PLATFORM_ID } from '@angular/core';
+import { ApplicationRef, PLATFORM_ID } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import {
   APP_RUNTIME,
+  APP_STORE_UPDATES,
   APP_STORE_URL,
   BrowserFacade,
   BrowserGeolocationReader,
   GEOLOCATION_READER,
   GOOGLE_CREDENTIAL,
+  LIVE_UPDATES,
   SHARE_TARGET,
   SYSTEM_BARS,
+  UNAVAILABLE_LIVE_UPDATES,
   WebShareTarget,
   WebSystemBars,
 } from '@portfolio/velista/platform';
+import { NativeAppStoreUpdates } from './native-app-store-updates';
 import { NativeBrowserFacade } from './native-browser-facade';
 import { NativeGeolocationReader } from './native-geolocation-reader';
 import { NativeGoogleCredential } from './native-google-credential';
+import { NativeLiveUpdates } from './native-live-updates';
 import { NATIVE_PLUGINS } from './native-plugins';
 import { NativeShareTarget } from './native-share-target';
 import { NativeSystemBars } from './native-system-bars';
@@ -64,6 +69,9 @@ describe('provideNativeShell', () => {
     expect(TestBed.inject(APP_STORE_URL)).toBeNull();
     // No picker on the web, so `GoogleSignIn` keeps the redirect flow (velista 0177).
     expect(TestBed.inject(GOOGLE_CREDENTIAL)).toBeNull();
+    // No updater and no Play on the web (velista 0180).
+    expect(TestBed.inject(LIVE_UPDATES)).toBe(UNAVAILABLE_LIVE_UPDATES);
+    expect(TestBed.inject(APP_STORE_UPDATES).available()).toBe(false);
   }
 
   describe('on the web', () => {
@@ -73,6 +81,17 @@ describe('provideNativeShell', () => {
       expectWebDefaults();
       await Promise.resolve();
       expect(doubles.loads).toBe(0);
+    });
+
+    it('confirms no boot on the web', async () => {
+      setUp();
+      TestBed.inject(APP_RUNTIME);
+      TestBed.inject(ApplicationRef).tick();
+      for (let i = 0; i < 5; i++) {
+        await Promise.resolve();
+      }
+
+      expect(doubles.readyNotices).toBe(0);
     });
 
     it('stays the web app where Capacitor defines its global but is not native', async () => {
@@ -111,6 +130,28 @@ describe('provideNativeShell', () => {
       expect(TestBed.inject(GOOGLE_CREDENTIAL)).toBeInstanceOf(
         NativeGoogleCredential
       );
+      expect(TestBed.inject(LIVE_UPDATES)).toBeInstanceOf(NativeLiveUpdates);
+      expect(TestBed.inject(APP_STORE_UPDATES)).toBeInstanceOf(
+        NativeAppStoreUpdates
+      );
+    });
+
+    it('confirms the boot at the first render, once per document', async () => {
+      TestBed.inject(APP_RUNTIME);
+      for (let i = 0; i < 5; i++) {
+        await Promise.resolve();
+      }
+      // Nothing rendered yet, so nothing confirmed (velista 0180, D7).
+      expect(doubles.readyNotices).toBe(0);
+
+      const appRef = TestBed.inject(ApplicationRef);
+      appRef.tick();
+      appRef.tick();
+      for (let i = 0; i < 5; i++) {
+        await Promise.resolve();
+      }
+
+      expect(doubles.readyNotices).toBe(1);
     });
 
     it('registers the back and link listeners at startup', async () => {

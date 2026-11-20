@@ -62,4 +62,66 @@ describe('ReloadBlocker', () => {
 
     expect(reload).not.toHaveBeenCalled();
   });
+
+  describe('whenIdle', () => {
+    it('runs the action now when nothing is held, and never reloads', () => {
+      const action = jest.fn();
+
+      blocker.whenIdle(action);
+
+      expect(action).toHaveBeenCalledTimes(1);
+      expect(reload).not.toHaveBeenCalled();
+    });
+
+    it('holds the action until the last blocker is released', () => {
+      // The native apply of plan 0180 D6 replaces the document as a reload does.
+      const action = jest.fn();
+      const release = blocker.block();
+
+      blocker.whenIdle(action);
+      expect(action).not.toHaveBeenCalled();
+
+      release();
+      expect(action).toHaveBeenCalledTimes(1);
+    });
+
+    it('runs only the latest request once released', () => {
+      const first = jest.fn();
+      const second = jest.fn();
+      const release = blocker.block();
+
+      blocker.whenIdle(first);
+      blocker.whenIdle(second);
+      release();
+
+      expect(first).not.toHaveBeenCalled();
+      expect(second).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps a waiting action over a later plain reload', () => {
+      // Velista `0180` D6: inside the native shell a reload loads the running bundle
+      // again, so it must not replace the apply of a new one.
+      const apply = jest.fn();
+      const release = blocker.block();
+
+      blocker.whenIdle(apply);
+      blocker.reloadWhenIdle();
+      release();
+
+      expect(apply).toHaveBeenCalledTimes(1);
+      expect(reload).not.toHaveBeenCalled();
+    });
+
+    it('lets an action replace a reload that is still waiting', () => {
+      const apply = jest.fn();
+      const release = blocker.block();
+
+      blocker.reloadWhenIdle();
+      blocker.whenIdle(apply);
+      release();
+
+      expect(apply).toHaveBeenCalledTimes(1);
+      expect(reload).not.toHaveBeenCalled();
+    });
+  });
 });

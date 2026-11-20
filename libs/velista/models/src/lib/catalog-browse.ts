@@ -60,7 +60,9 @@ export function catalogOrdersFor(query: string): readonly CatalogOrder[] {
  * come last. A list where no row has a price draws none either: the line separates
  * two parts, and one part needs no separator.
  *
- * `unitPrice` reads the price per kilo or litre, since that is what placed the row.
+ * `unitPrice` reads the comparable figure (backend `0245`), since that is what
+ * placed the row. The chain's own `unitPrice` is not it: a chain that prints none
+ * still has a figure the catalog derived.
  */
 export function unpricedStart(
   order: CatalogOrder,
@@ -73,7 +75,7 @@ export function unpricedStart(
     const offer = product.offer;
     return (
       offer !== null &&
-      (order === 'price' ? offer.price : offer.unitPrice) !== null
+      (order === 'price' ? offer.price : offer.comparablePrice) !== null
     );
   };
 
@@ -89,16 +91,30 @@ export function unpricedStart(
  * What a price per kilo or litre is counted in, as the source published it.
  *
  * Read off the wire so the row can say "/ L" without parsing `unitPriceLabel`,
- * which is text for a human and not a unit.
+ * which is text for a human and not a unit. No value names a wash (backend
+ * `0264`): a wash is no basis, and a value this build does not know maps to no
+ * basis, so a row draws no unit price line for it.
  */
-export type PriceUnitBasis = 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH';
+export type PriceUnitBasis = 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN';
 
 export const PRICE_UNIT_BASES: readonly PriceUnitBasis[] = [
   'KILOGRAM',
   'LITER',
   'UNIT',
   'DOZEN',
-  'WASH',
+];
+
+/**
+ * What `comparablePrice` is a price per, as the catalog derived it (backend
+ * `0245`). Three values and never `DOZEN`: that describes the chain's own
+ * figure, and a dozen is twelve units.
+ */
+export type ComparableBasis = 'KILOGRAM' | 'LITER' | 'UNIT';
+
+export const COMPARABLE_BASES: readonly ComparableBasis[] = [
+  'KILOGRAM',
+  'LITER',
+  'UNIT',
 ];
 
 /**
@@ -116,6 +132,18 @@ export interface CatalogProduct {
   readonly imageUrl: string | null;
   readonly size: number | null;
   readonly unit: UnitOfMeasure;
+  /**
+   * The approximate weight of one piece in grams, when the chain says it varies
+   * (backend 0244). Null for a product with a size, and for a product sold by
+   * the kilo with no stated weight.
+   */
+  readonly approxWeight: number | null;
+  /**
+   * The step a curator set, in base units (backend `0261`), or null for the
+   * default. Required, so a conversion to another product shape cannot drop it
+   * unseen.
+   */
+  readonly quantityStep: number | null;
   /** The aisles the catalog files it under, in its order. Empty when none was readable. */
   readonly categories: readonly ProductCategory[];
   /** The cheapest price at the scopes the read was given, or null. */

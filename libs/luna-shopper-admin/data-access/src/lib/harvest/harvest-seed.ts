@@ -17,10 +17,18 @@ import type { LinkableChain, LinkableShop } from './place-linking';
  * gone beside one that was never resolved.
  */
 
-/** Fixed, so that a spec asserting on a row can name it. */
-const MERCADONA = '11111111-1111-4111-8111-111111111111';
-const CARREFOUR = '22222222-2222-4222-8222-222222222222';
-const DEZA = '33333333-3333-4333-8333-333333333333';
+/**
+ * The chains, by the ids of `SUPERMARKET_SEED` in `feature-catalog`, so the
+ * name lookup finds each one with nothing listening and a harvest screen draws
+ * the chain's name where a gateway would.
+ */
+const MERCADONA = 'sm_mercadona';
+const CARREFOUR = 'sm_carrefour';
+const DEZA = 'sm_deza';
+/** A chain with no source row here, for its walk on the run screen alone. */
+const ELJAMON = 'sm_eljamon';
+/** A chain with no source row here, for its walk on the run screen alone. */
+const DIA = 'sm_dia';
 
 /**
  * The scopes a price belongs to, fixed so a spec can name one.
@@ -49,7 +57,35 @@ export const MERCADONA_WEEKDAYS_SCHEDULE =
 export const MERCADONA_SUNDAY_SCHEDULE = '77777777-7777-4777-8777-777777777772';
 export const DEZA_NIGHTLY_SCHEDULE = '77777777-7777-4777-8777-777777777773';
 
+/**
+ * The two Carrefour rows a size example of the reverted walk names, fixed so a
+ * spec can name them. A uuid, as the gateway reads one, because the products
+ * queue asks for nothing with an id of another shape (admin plan 0073).
+ */
+export const CARREFOUR_YOGUR_ENTRY = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01';
+export const CARREFOUR_ACEITE_ENTRY = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee02';
+
 const NOW = '2026-09-03T10:00:00.000Z';
+
+/**
+ * A DEZA walk of the whole chain, as the harvester states a run's request
+ * with its defaults resolved (backend `run-input.ts`). Whole, so a run of it is
+ * a fair reference for another whole walk of the chain (owner decision 112b).
+ */
+const DEZA_WHOLE_WALK: Wire.HarvestHarvestRunPresetInput = {
+  mode: 'CATALOG_DISCOVERY',
+  writes: 'PRICES_AND_AVAILABILITY',
+  details: 'ALL',
+};
+
+/** A Carrefour store discovery of every shop the chain lists. */
+const CARREFOUR_EVERY_SHOP: Wire.HarvestHarvestRunPresetInput = {
+  mode: 'STORE_DISCOVERY',
+  postalCode: '',
+  postalCodes: [],
+  country: 'es',
+  radiusMetres: 3000,
+};
 
 export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
   {
@@ -149,15 +185,62 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     failed: 0,
     stage: 'fetch-products',
     stageLabel: 'Fetching products',
-    warnings: [],
+    warnings: [
+      {
+        code: 'LISTING_UNREAD',
+        offerId: null,
+        page: null,
+        name: null,
+        message:
+          'Category cat21449123 Congelados was refused twice and was not read.',
+      },
+    ],
     documentSha256: null,
     abortRequestedAt: null,
     error: null,
-    report: {},
+    // What the walk did not read and the sizes it doubted (admin plan 0071;
+    // backend plans 0249 and 0251), so the run screen draws the Carrefour
+    // part of its report with nothing listening.
+    report: {
+      unreadableCategories: ['/supermercado/congelados/cat21449123/c'],
+      askedAgain: [
+        { id: 'cat20002', name: 'Lácteos', read: true },
+        { id: 'cat21449123', name: 'Congelados', read: false },
+      ],
+      blockedAfter: null,
+      sizesDisproved: 2,
+      probablePackCounts: 1,
+      sizesDisprovedExamples: [
+        {
+          entryId: CARREFOUR_YOGUR_ENTRY,
+          externalId: '521006',
+          name: 'Yogur natural Carrefour 125 g',
+          stated: 125,
+          implied: 500,
+          unit: 'GRAM',
+          ratio: 4,
+          label: '2,36 €/kg',
+          probablePackCount: 4,
+        },
+        {
+          entryId: CARREFOUR_ACEITE_ENTRY,
+          externalId: '600214',
+          name: 'Aceite de oliva virgen extra 1 l',
+          stated: 1000,
+          implied: 750,
+          unit: 'MILLILITER',
+          ratio: 0.75,
+          label: '9,99 €/l',
+          probablePackCount: null,
+        },
+      ],
+    },
     correlationId: 'seed-correlation-4',
     requestedByUserId: null,
     revertedAt: '2026-09-01T11:20:00.000Z',
-    revertedByUserId: '44444444-4444-4444-8444-444444444444',
+    // An admin of the seed, so the run screen names who reverted it (admin
+    // plan 0074, section 2).
+    revertedByUserId: 'admin-ichiroku',
     revertedPriceCount: 214,
   },
   {
@@ -257,6 +340,364 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     revertedPriceCount: null,
   },
   {
+    // A DEZA walk somebody stopped (decision 86 of the harvester round). DEZA
+    // reports products section by section and never knows its total while it
+    // runs (backend plan 0267), so `totalPlanned` is null. The completed DEZA
+    // walk below is the earlier run its screen takes an approximate total
+    // from: "824 of about 2,361". After the first five, so the dashboard's
+    // recent runs stay as they were.
+    id: 'run-deza-aborted',
+    input: { ...DEZA_WHOLE_WALK },
+    supermarketId: DEZA,
+    sourceId: 'source-deza',
+    mode: 'CATALOG_DISCOVERY',
+    trigger: 'MANUAL',
+    status: 'ABORTED',
+    requestedAt: '2026-09-01T21:00:00.000Z',
+    startedAt: '2026-09-01T21:00:03.000Z',
+    finishedAt: '2026-09-01T21:14:40.000Z',
+    heartbeatAt: '2026-09-01T21:14:40.000Z',
+    totalPlanned: null,
+    processed: 824,
+    created: 0,
+    updated: 0,
+    unchanged: 824,
+    notFound: 0,
+    skipped: 0,
+    failed: 0,
+    stage: 'fetch-sections',
+    stageLabel: 'Reading section 02 Alimentación',
+    warnings: [],
+    documentSha256: null,
+    abortRequestedAt: '2026-09-01T21:14:31.000Z',
+    error: null,
+    report: {},
+    correlationId: 'seed-correlation-deza-aborted',
+    requestedByUserId: null,
+    revertedAt: null,
+    revertedByUserId: null,
+    revertedPriceCount: null,
+  },
+  {
+    // A DEZA walk still going, beside the Mercadona one: the harvester holds
+    // one active run per chain, not one in all (`uq_harvest_run_active`). It
+    // does not know its total, so its page reads "1,200 of about 2,361" with
+    // a bar, from the completed DEZA walk below (decision 86 of the harvester
+    // round). Started from the DEZA preset, which has no completed run of its
+    // own, so the estimate falls back to the chain and mode (owner decision
+    // 98b). After the first five, and after the Mercadona run, so the
+    // dashboard's running and recent runs stay as they were.
+    id: 'run-deza-running',
+    input: { ...DEZA_WHOLE_WALK },
+    supermarketId: DEZA,
+    sourceId: 'source-deza',
+    presetId: DEZA_CATALOG_PRESET,
+    mode: 'CATALOG_DISCOVERY',
+    trigger: 'MANUAL',
+    status: 'RUNNING',
+    requestedAt: '2026-09-03T09:40:00.000Z',
+    startedAt: '2026-09-03T09:40:02.000Z',
+    finishedAt: null,
+    heartbeatAt: '2026-09-03T09:59:50.000Z',
+    totalPlanned: null,
+    processed: 1200,
+    created: 0,
+    updated: 0,
+    unchanged: 1200,
+    notFound: 0,
+    skipped: 0,
+    failed: 0,
+    stage: 'fetch-sections',
+    stageLabel: 'Reading section 05 Droguería',
+    warnings: [],
+    documentSha256: null,
+    abortRequestedAt: null,
+    error: null,
+    report: {},
+    correlationId: 'seed-correlation-deza-running',
+    requestedByUserId: null,
+    revertedAt: null,
+    revertedByUserId: null,
+    revertedPriceCount: null,
+  },
+  {
+    // A DEZA walk (admin plan 0071; backend plans 0257 and 0258): one section
+    // out of queries, one that stopped growing with queries still at the
+    // ceiling, one read whole. DEZA prints no price, so it created none.
+    id: 'run-deza-completed',
+    input: { ...DEZA_WHOLE_WALK },
+    supermarketId: DEZA,
+    sourceId: 'source-deza',
+    mode: 'CATALOG_DISCOVERY',
+    trigger: 'MANUAL',
+    status: 'COMPLETED',
+    requestedAt: '2026-08-30T21:00:00.000Z',
+    startedAt: '2026-08-30T21:00:03.000Z',
+    finishedAt: '2026-08-30T21:41:20.000Z',
+    heartbeatAt: '2026-08-30T21:41:20.000Z',
+    totalPlanned: 2361,
+    processed: 2361,
+    created: 0,
+    updated: 0,
+    unchanged: 2361,
+    notFound: 0,
+    skipped: 0,
+    failed: 1,
+    stage: null,
+    stageLabel: null,
+    warnings: [
+      {
+        code: 'LISTING_SHORT',
+        offerId: null,
+        page: null,
+        name: null,
+        message:
+          'Section 04 Bebidas spent its 25 queries with a term still left.',
+      },
+      {
+        code: 'LISTING_UNREAD',
+        offerId: null,
+        page: null,
+        name: 'Mascotas',
+        message: 'Section 07 Mascotas failed: Error: socket hang up',
+      },
+    ],
+    documentSha256: null,
+    abortRequestedAt: null,
+    error: null,
+    report: {
+      products: 2361,
+      incompleteSections: [
+        {
+          code: '04',
+          name: 'Bebidas',
+          queries: 25,
+          stoppedBy: 'BUDGET',
+          openQueries: ['agua', 'refresco'],
+          narrowing: 'zumo',
+          termsTried: 9,
+        },
+        // A section that threw, as the runner records one: no queries, no
+        // stop word, and the error where the open queries would be.
+        {
+          code: '07',
+          name: 'Mascotas',
+          queries: null,
+          stoppedBy: null,
+          openQueries: ['Error: socket hang up'],
+          narrowing: null,
+          termsTried: null,
+        },
+      ],
+      sections: [
+        {
+          code: '01',
+          name: 'Droguería',
+          products: 812,
+          firstSeen: 801,
+          queries: 14,
+          stoppedBy: 'GROWTH',
+          coverageOnce: 63,
+          growthAtStop: 4,
+          openQueries: ['champú', 'gel de baño'],
+        },
+        {
+          code: '04',
+          name: 'Bebidas',
+          products: 1320,
+          firstSeen: 1301,
+          queries: 25,
+          stoppedBy: 'BUDGET',
+          coverageOnce: 118,
+          growthAtStop: 37,
+          openQueries: [],
+        },
+        {
+          code: '07',
+          name: 'Mascotas',
+          products: 259,
+          firstSeen: 259,
+          queries: null,
+          stoppedBy: null,
+          coverageOnce: null,
+          growthAtStop: null,
+          openQueries: [],
+        },
+      ],
+    },
+    correlationId: 'seed-correlation-6',
+    requestedByUserId: null,
+    revertedAt: null,
+    revertedByUserId: null,
+    revertedPriceCount: null,
+  },
+  {
+    // An older DEZA walk that completed without knowing its total, as every
+    // DEZA walk does since backend plan 0267. Its page reads "2100 processed"
+    // and no estimate, because a completed run did the whole walk (owner
+    // decision 111c of the harvester round). Requested before the walk above,
+    // so that one stays the reference the other DEZA runs read.
+    id: 'run-deza-completed-unsized',
+    input: { ...DEZA_WHOLE_WALK },
+    supermarketId: DEZA,
+    sourceId: 'source-deza',
+    mode: 'CATALOG_DISCOVERY',
+    trigger: 'MANUAL',
+    status: 'COMPLETED',
+    requestedAt: '2026-08-27T21:00:00.000Z',
+    startedAt: '2026-08-27T21:00:03.000Z',
+    finishedAt: '2026-08-27T21:38:10.000Z',
+    heartbeatAt: '2026-08-27T21:38:10.000Z',
+    totalPlanned: null,
+    processed: 2100,
+    created: 0,
+    updated: 0,
+    unchanged: 2100,
+    notFound: 0,
+    skipped: 0,
+    failed: 0,
+    stage: null,
+    stageLabel: null,
+    warnings: [],
+    documentSha256: null,
+    abortRequestedAt: null,
+    error: null,
+    report: {},
+    correlationId: 'seed-correlation-deza-completed-unsized',
+    requestedByUserId: null,
+    revertedAt: null,
+    revertedByUserId: null,
+    revertedPriceCount: null,
+  },
+  {
+    // An El Jamón walk (admin plan 0071; backend plan 0253): one category
+    // read short against the count it printed, and the detail stage's counts.
+    id: 'run-eljamon-completed',
+    supermarketId: ELJAMON,
+    sourceId: null,
+    mode: 'CATALOG_DISCOVERY',
+    trigger: 'MANUAL',
+    status: 'COMPLETED',
+    requestedAt: '2026-08-29T20:00:00.000Z',
+    startedAt: '2026-08-29T20:00:02.000Z',
+    finishedAt: '2026-08-29T20:52:47.000Z',
+    heartbeatAt: '2026-08-29T20:52:47.000Z',
+    totalPlanned: 3402,
+    processed: 3402,
+    created: 3310,
+    updated: 0,
+    unchanged: 0,
+    notFound: 0,
+    skipped: 0,
+    failed: 92,
+    stage: null,
+    stageLabel: null,
+    warnings: [
+      {
+        code: 'DETAIL_UNREAD',
+        offerId: null,
+        page: null,
+        name: null,
+        message: '92 product pages did not answer after two tries.',
+      },
+    ],
+    documentSha256: null,
+    abortRequestedAt: null,
+    error: null,
+    report: {
+      postalCode: '41001',
+      categories: [
+        {
+          code: '01',
+          name: 'DESPENSA',
+          printedCount: 1214,
+          rowsRead: 1188,
+          rowsRepeated: 0,
+        },
+        {
+          code: '02',
+          name: 'BEBIDAS',
+          printedCount: 412,
+          rowsRead: 412,
+          rowsRepeated: 3,
+        },
+      ],
+      detail: { pages: 3402, failed: 92, timeouts: 17, silentAttempts: 4 },
+    },
+    correlationId: 'seed-correlation-7',
+    requestedByUserId: null,
+    revertedAt: null,
+    revertedByUserId: null,
+    revertedPriceCount: null,
+  },
+  {
+    // A DIA walk (backend plan 0268, section 5): the products whose every leaf
+    // has no category of ours, by leaf, the first five of each as examples.
+    id: 'run-dia-completed',
+    supermarketId: DIA,
+    sourceId: null,
+    mode: 'CATALOG_DISCOVERY',
+    trigger: 'MANUAL',
+    status: 'COMPLETED',
+    requestedAt: '2026-08-28T20:00:00.000Z',
+    startedAt: '2026-08-28T20:00:02.000Z',
+    finishedAt: '2026-08-28T20:31:10.000Z',
+    heartbeatAt: '2026-08-28T20:31:10.000Z',
+    totalPlanned: 5738,
+    processed: 5738,
+    created: 5702,
+    updated: 0,
+    unchanged: 0,
+    notFound: 0,
+    skipped: 0,
+    failed: 0,
+    stage: null,
+    stageLabel: null,
+    warnings: [],
+    documentSha256: null,
+    abortRequestedAt: null,
+    error: null,
+    report: {
+      listed: 5738,
+      unslottedOnly: {
+        products: 9,
+        leaves: [
+          {
+            id: 'L2222',
+            rootName: 'Especial Navidad',
+            name: 'Ibéricos y quesos',
+            products: 7,
+            examples: [
+              {
+                externalId: '279931',
+                name: 'Paleta de cebo ibérica loncheada',
+              },
+              { externalId: '280112', name: 'Queso curado de oveja cuña' },
+              { externalId: '280455', name: 'Lomo ibérico de bellota' },
+              { externalId: '281030', name: 'Tabla de quesos variados' },
+              { externalId: '281207', name: 'Chorizo ibérico cular' },
+            ],
+          },
+          {
+            id: 'L2255',
+            rootName: 'Especial Navidad',
+            name: 'Platos especiales',
+            products: 2,
+            examples: [
+              { externalId: '282840', name: 'Cordero asado al horno' },
+              { externalId: '282901', name: 'Canelones de carne' },
+            ],
+          },
+        ],
+      },
+    },
+    correlationId: 'seed-correlation-dia',
+    requestedByUserId: null,
+    revertedAt: null,
+    revertedByUserId: null,
+    revertedPriceCount: null,
+  },
+  {
     /**
      * A file import that finished (backend plan 0086, section 6; admin plan
      * 0010, section 5).
@@ -330,6 +771,85 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     // index ignores a reverted run, so a reverted seed run would let the same
     // document be imported again and the upload screen's 409 would be
     // unreachable with nothing listening.
+    revertedAt: null,
+    revertedByUserId: null,
+    revertedPriceCount: null,
+  },
+  {
+    // A Carrefour store discovery of two postal codes, still going (owner
+    // decision 112b). It does not know its total and has no preset, and the
+    // chain's whole discovery below found 1,180 shops. That count says nothing
+    // about two postal codes, so its page reads "14 processed" and no
+    // estimate. The one store discovery the harvester lets run at a time
+    // (`uq_harvest_run_active_store_discovery`), and the one active run of
+    // Carrefour. Last, so the dashboard's running and recent runs stay as
+    // they were.
+    id: 'run-store-postal-running',
+    input: {
+      ...CARREFOUR_EVERY_SHOP,
+      postalCodes: ['15001', '15002'],
+    },
+    supermarketId: CARREFOUR,
+    sourceId: 'source-carrefour',
+    mode: 'STORE_DISCOVERY',
+    trigger: 'MANUAL',
+    status: 'RUNNING',
+    requestedAt: '2026-09-03T09:55:00.000Z',
+    startedAt: '2026-09-03T09:55:02.000Z',
+    finishedAt: null,
+    heartbeatAt: NOW,
+    totalPlanned: null,
+    processed: 14,
+    created: 3,
+    updated: 0,
+    unchanged: 11,
+    notFound: 0,
+    skipped: 0,
+    failed: 0,
+    stage: 'list-shops',
+    stageLabel: 'Reading the shop list',
+    warnings: [],
+    documentSha256: null,
+    abortRequestedAt: null,
+    error: null,
+    report: {},
+    correlationId: 'seed-correlation-store-postal',
+    requestedByUserId: null,
+    revertedAt: null,
+    revertedByUserId: null,
+    revertedPriceCount: null,
+  },
+  {
+    // The whole Carrefour store discovery the narrowed one above must not be
+    // measured against (owner decision 112b).
+    id: 'run-store-carrefour-completed',
+    input: { ...CARREFOUR_EVERY_SHOP },
+    supermarketId: CARREFOUR,
+    sourceId: 'source-carrefour',
+    mode: 'STORE_DISCOVERY',
+    trigger: 'MANUAL',
+    status: 'COMPLETED',
+    requestedAt: '2026-08-20T08:00:00.000Z',
+    startedAt: '2026-08-20T08:00:02.000Z',
+    finishedAt: '2026-08-20T08:06:40.000Z',
+    heartbeatAt: '2026-08-20T08:06:40.000Z',
+    totalPlanned: 1180,
+    processed: 1180,
+    created: 1180,
+    updated: 0,
+    unchanged: 0,
+    notFound: 0,
+    skipped: 0,
+    failed: 0,
+    stage: null,
+    stageLabel: null,
+    warnings: [],
+    documentSha256: null,
+    abortRequestedAt: null,
+    error: null,
+    report: {},
+    correlationId: 'seed-correlation-store-carrefour',
+    requestedByUserId: null,
     revertedAt: null,
     revertedByUserId: null,
     revertedPriceCount: null,
@@ -552,7 +1072,10 @@ export const DISCOVERED_PLACE_SEED: readonly Wire.HarvestDiscoveredPlaceView[] =
       provider: 'osm',
       externalRef: 'node/7654321',
       brandKey: 'Q925132',
-      brandName: 'Dia',
+      // The printed brand is the `brand` tag, as the OpenStreetMap adapter
+      // reads it. It names no chain of the catalog, so only the key resolves
+      // this place to Dia.
+      brandName: 'Maxi Dia',
       name: 'Maxi Dia',
       latitude: 40.4169,
       longitude: -3.7039,
@@ -686,16 +1209,73 @@ export const DISCOVERED_PLACE_SEED: readonly Wire.HarvestDiscoveredPlaceView[] =
       candidates: [],
     },
     {
-      // An OpenStreetMap place with no brand key, whose chain the catalog does
-      // not hold (backend plan 0153). OpenStreetMap prints no language, so an
-      // import names the chain with `newChain` or is refused.
+      // A place that names ALDI by its Wikidata key, a chain the catalog does
+      // not hold. Neither the key nor the printed name resolves a chain, so a
+      // link names its shop and an import names the chain. The key is the one
+      // the recorded Overpass fixture of `osm-places` carries for ALDI.
+      id: 'place-aldi-1',
+      runId: 'run-store-aborted',
+      provider: 'osm',
+      externalRef: 'node/5550101',
+      brandKey: 'Q41171373',
+      brandName: 'ALDI',
+      name: 'ALDI',
+      latitude: 40.4152,
+      longitude: -3.7074,
+      street: 'Calle de Toledo 40',
+      city: 'Madrid',
+      postalCode: '28005',
+      postalCodeSource: 'SOURCE',
+      country: 'ES',
+      website: 'https://www.aldi.es',
+      openingHours: 'Mo-Sa 09:00-21:30',
+      tags: { shop: 'supermarket', brand: 'ALDI' },
+      scopeKey: null,
+      status: 'NEW',
+      supermarketLocationId: null,
+      firstSeenAt: '2026-09-01T08:02:30.000Z',
+      lastSeenAt: '2026-09-01T08:02:30.000Z',
+      candidates: [],
+    },
+    {
+      // An OpenStreetMap place with no brand key, whose printed name the catalog
+      // resolves: the catalog row of DEZA is named `Deza` (backend plan 0153).
+      id: 'place-osm-deza',
+      runId: 'run-store-aborted',
+      provider: 'osm',
+      externalRef: 'node/5550002',
+      brandKey: null,
+      brandName: 'Deza',
+      name: 'Supermercado Deza',
+      latitude: 37.8812,
+      longitude: -4.7701,
+      street: 'Avenida de Libia 31',
+      city: 'Córdoba',
+      postalCode: '14007',
+      postalCodeSource: 'DERIVED',
+      country: 'ES',
+      website: null,
+      openingHours: null,
+      tags: { shop: 'supermarket', brand: 'Deza' },
+      scopeKey: null,
+      status: 'NEW',
+      supermarketLocationId: null,
+      firstSeenAt: '2026-09-01T08:04:50.000Z',
+      lastSeenAt: '2026-09-01T08:04:50.000Z',
+      candidates: [],
+    },
+    {
+      // An OpenStreetMap place with no brand key, whose printed name matches no
+      // chain of the catalog (backend plan 0153): the catalog holds no Aldi.
+      // OpenStreetMap prints no language, so an import names the chain with
+      // `newChain` or is refused.
       id: 'place-osm-unbranded',
       runId: 'run-store-aborted',
       provider: 'osm',
       externalRef: 'node/5550001',
       brandKey: null,
-      brandName: 'Deza',
-      name: 'Supermercado Deza',
+      brandName: 'Aldi',
+      name: 'Supermercado Aldi',
       latitude: 37.8791,
       longitude: -4.7646,
       street: 'Calle Isla de Fuerteventura 48',
@@ -705,7 +1285,7 @@ export const DISCOVERED_PLACE_SEED: readonly Wire.HarvestDiscoveredPlaceView[] =
       country: 'ES',
       website: null,
       openingHours: null,
-      tags: { shop: 'supermarket', brand: 'Deza' },
+      tags: { shop: 'supermarket', brand: 'Aldi' },
       scopeKey: null,
       status: 'NEW',
       supermarketLocationId: null,
@@ -836,6 +1416,21 @@ export const PLACE_CHAIN_SEED: readonly LinkableChain[] = [
     name: { en: 'Consum', es: 'Consum' },
     brandKey: 'Q8350308',
   },
+  {
+    id: 'sm_deza',
+    name: { en: 'Deza', es: 'Deza' },
+    brandKey: null,
+  },
+  {
+    id: 'sm_dia',
+    name: { en: 'Dia', es: 'Dia' },
+    brandKey: 'Q925132',
+  },
+  {
+    id: 'sm_eljamon',
+    name: { en: 'El Jamón', es: 'El Jamón' },
+    brandKey: 'Q6135982',
+  },
 ];
 
 /**
@@ -874,6 +1469,11 @@ export const SOURCE_ENTRY_SEED: readonly Wire.HarvestSourceCatalogEntryView[] =
       sizeFormat: '1 L',
       packCount: null,
       categoryPath: ['Lacteos', 'Leche'],
+      // Every shelf the chain files it under (backend plan 0268).
+      categoryPaths: [
+        ['Lacteos', 'Leche'],
+        ['Desayuno', 'Leche y bebidas vegetales'],
+      ],
       url: 'https://tienda.mercadona.es/product/12345',
       imageUrl: null,
       extra: { packaging: 'brik', published: true },
@@ -922,6 +1522,7 @@ export const SOURCE_ENTRY_SEED: readonly Wire.HarvestSourceCatalogEntryView[] =
       sizeFormat: '460 g',
       packCount: null,
       categoryPath: ['Panaderia'],
+      categoryPaths: [['Panaderia'], ['Desayuno', 'Pan de molde y tostadas']],
       url: null,
       imageUrl: null,
       extra: null,
@@ -1037,6 +1638,11 @@ export const SOURCE_ENTRY_SEED: readonly Wire.HarvestSourceCatalogEntryView[] =
       sizeFormat: 'Paquete 800 g',
       packCount: null,
       categoryPath: ['Dulces', 'Galletas'],
+      // DEZA saw it in two sections.
+      categoryPaths: [
+        ['Dulces', 'Galletas'],
+        ['Desayuno', 'Galletas y bollería'],
+      ],
       url: 'https://www.deza.es/producto/galletas-maria-cuetara',
       imageUrl: null,
       extra: { shops: ['T1', 'T4', 'C2'] },
@@ -1165,6 +1771,136 @@ export const SOURCE_ENTRY_SEED: readonly Wire.HarvestSourceCatalogEntryView[] =
       confidence: 1,
       decidedAt: '2026-08-20T09:00:00.000Z',
       prices: [],
+    },
+    {
+      // The two rows the size examples of `run-catalog-reverted` name (admin
+      // plan 0073), so each link of its report lands on a row with nothing
+      // listening. This one still waits for a person.
+      id: CARREFOUR_YOGUR_ENTRY,
+      supermarketId: CARREFOUR,
+      externalId: '521006',
+      sourceKind: 'OFFICIAL_WEB',
+      name: 'Yogur natural Carrefour 125 g',
+      brand: 'Carrefour',
+      ean: null,
+      unitSize: 125,
+      sizeUnit: 'GRAM',
+      soldByWeight: false,
+      sizeFormat: '125 g',
+      packCount: null,
+      categoryPath: ['Lácteos', 'Yogures'],
+      url: null,
+      imageUrl: null,
+      extra: null,
+      timesSeen: 1,
+      firstSeenAt: '2026-08-31T07:10:00.000Z',
+      lastSeenAt: '2026-08-31T07:10:00.000Z',
+      firstRunId: 'run-catalog-reverted',
+      lastRunId: 'run-catalog-reverted',
+      itemId: null,
+      candidateEntryId: null,
+      status: 'UNRESOLVED',
+      matchedBy: null,
+      confidence: 0,
+      decidedAt: null,
+      prices: [],
+      // Its price and its price per kilo imply four times the size it states,
+      // the example the run's report names (backend plan 0249). The ratio is
+      // a whole number and the row states no pack, so the queue draws the pack
+      // guess (admin plan 0072).
+      sizeDoubt: {
+        implied: 500,
+        unit: 'GRAM',
+        ratio: 4,
+        label: 'kg',
+        runId: 'run-catalog-reverted',
+      },
+    },
+    {
+      // A walk doubts the size of a decided row too (backend plan 0249), so a
+      // size example can name an `ACTIVE` row, which the default queue does not
+      // list. The address reaches it all the same (admin plan 0073).
+      id: CARREFOUR_ACEITE_ENTRY,
+      supermarketId: CARREFOUR,
+      externalId: '600214',
+      sourceKind: 'OFFICIAL_WEB',
+      name: 'Aceite de oliva virgen extra 1 l',
+      brand: 'Carrefour',
+      ean: null,
+      unitSize: 1000,
+      sizeUnit: 'MILLILITER',
+      soldByWeight: false,
+      sizeFormat: '1 l',
+      packCount: null,
+      categoryPath: ['Despensa', 'Aceites'],
+      url: null,
+      imageUrl: null,
+      extra: null,
+      timesSeen: 5,
+      firstSeenAt: '2026-07-20T07:00:00.000Z',
+      lastSeenAt: '2026-08-31T07:12:00.000Z',
+      firstRunId: 'run-catalog-reverted',
+      lastRunId: 'run-catalog-reverted',
+      // The catalog seed's own olive oil, so the panel beside the row draws
+      // the product it is bound to.
+      itemId: 'it_olive_oil_1l',
+      candidateEntryId: null,
+      status: 'ACTIVE',
+      matchedBy: 'MANUAL',
+      confidence: 1,
+      decidedAt: '2026-08-01T09:00:00.000Z',
+      prices: [],
+      // Bound and still doubted, as the run's report names it: the product's
+      // panel of source rows draws the chip on it (admin plan 0072). Three
+      // quarters is no whole number, so no pack is guessed.
+      sizeDoubt: {
+        implied: 750,
+        unit: 'MILLILITER',
+        ratio: 0.75,
+        label: 'l',
+        runId: 'run-catalog-reverted',
+      },
+    },
+    {
+      // A row sized in units whose price per unit equals its price, so the
+      // tray of thirty reads as one egg. Its label is printed in capitals with
+      // a stop, as chains print them, which the sentence writes as the
+      // harvester keys it (admin plan 0072).
+      id: 'entry-huevos',
+      supermarketId: MERCADONA,
+      externalId: '31074',
+      sourceKind: 'OFFICIAL_API',
+      name: 'Huevos frescos camperos L',
+      brand: 'Hacendado',
+      ean: null,
+      unitSize: 30,
+      sizeUnit: 'UNIT',
+      soldByWeight: false,
+      sizeFormat: 'Bandeja 30 ud.',
+      packCount: null,
+      categoryPath: ['Huevos, leche y mantequilla', 'Huevos'],
+      url: null,
+      imageUrl: null,
+      extra: null,
+      timesSeen: 1,
+      firstSeenAt: '2026-09-02T07:00:00.000Z',
+      lastSeenAt: '2026-09-02T07:00:00.000Z',
+      firstRunId: 'run-catalog-completed',
+      lastRunId: 'run-catalog-completed',
+      itemId: null,
+      candidateEntryId: null,
+      status: 'UNRESOLVED',
+      matchedBy: null,
+      confidence: 0,
+      decidedAt: null,
+      prices: [],
+      sizeDoubt: {
+        implied: 1,
+        unit: 'UNIT',
+        ratio: 1 / 30,
+        label: 'UD.',
+        runId: 'run-catalog-completed',
+      },
     },
   ];
 
@@ -1346,6 +2082,88 @@ export const SUPERMARKET_SOURCE_SEED: readonly Wire.HarvestSupermarketSourceView
       consecutiveFailures: 0,
     },
   ];
+
+/** One seeded probe, with the fields every row shares filled in. */
+function probe(
+  fields: Pick<
+    Wire.HarvestSourceProbeView,
+    | 'id'
+    | 'sourceId'
+    | 'supermarketId'
+    | 'adapterKey'
+    | 'status'
+    | 'startedAt'
+    | 'error'
+  > &
+    Partial<Wire.HarvestSourceProbeView>
+): Wire.HarvestSourceProbeView {
+  return {
+    trigger: 'SCHEDULED',
+    previousStatus: null,
+    changed: false,
+    attempt: 1,
+    finishedAt: fields.startedAt,
+    durationMs: 1800,
+    requests: 3,
+    steps: [],
+    requestedByUserId: null,
+    scheduleId: null,
+    ...fields,
+  };
+}
+
+/**
+ * The probes of each storefront (backend plan 0219), in no order: the route
+ * answers them newest first and the memory sorts them the same way.
+ *
+ * DEZA's newest finished probe is red, behind nothing, so a start of a DEZA
+ * walk draws the notice of admin plan 0069 with no backend. Mercadona's newest
+ * is green over an older red one, which is the case the notice must stay away
+ * from. The Carrefour row is a manual source and has none.
+ */
+export const SOURCE_PROBE_SEED: readonly Wire.HarvestSourceProbeView[] = [
+  probe({
+    id: '88888888-8888-4888-8888-888888888881',
+    sourceId: 'source-deza',
+    supermarketId: DEZA,
+    adapterKey: 'deza-web',
+    status: 'UNREACHABLE',
+    previousStatus: 'PASSED',
+    changed: true,
+    startedAt: '2026-09-02T06:00:00.000Z',
+    requests: 1,
+    error: 'home: the storefront did not answer within 20 seconds',
+  }),
+  probe({
+    id: '88888888-8888-4888-8888-888888888882',
+    sourceId: 'source-deza',
+    supermarketId: DEZA,
+    adapterKey: 'deza-web',
+    status: 'PASSED',
+    startedAt: '2026-09-01T06:00:00.000Z',
+    error: null,
+  }),
+  probe({
+    id: '88888888-8888-4888-8888-888888888883',
+    sourceId: 'source-mercadona',
+    supermarketId: MERCADONA,
+    adapterKey: 'mercadona-api',
+    status: 'PASSED',
+    previousStatus: 'SHAPE_CHANGED',
+    changed: true,
+    startedAt: '2026-09-02T06:10:00.000Z',
+    error: null,
+  }),
+  probe({
+    id: '88888888-8888-4888-8888-888888888884',
+    sourceId: 'source-mercadona',
+    supermarketId: MERCADONA,
+    adapterKey: 'mercadona-api',
+    status: 'SHAPE_CHANGED',
+    startedAt: '2026-09-01T06:10:00.000Z',
+    error: 'categories: 0 of 26 sections carried a product',
+  }),
+];
 
 /**
  * How many places a code has to show for itself, in one line.

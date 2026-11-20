@@ -3,6 +3,7 @@ import {
   CARREFOUR_REFUSAL_POLICY,
   CarrefourClient,
 } from '@portfolio/luna-shopper/carrefour';
+import { HarvestWarningCode } from '@portfolio/luna-shopper/contracts';
 import {
   SourceBlockedError,
   SourceGuard,
@@ -10,9 +11,11 @@ import {
 import type { HarvestRun, SupermarketSource } from '../entities';
 import { TokenBucket } from '../runner/token-bucket';
 import { CarrefourCatalogRunner } from './carrefour-catalog.runner';
+import { FailingRunReport } from './failing-run-report.fake';
 import type { HarvestRunStore } from './harvest-run.store';
 import { RunContext } from './run-context';
 import { RecordingRunReport } from './run-report';
+import { ReportWriteFailedError } from './run-report.sink';
 
 /**
  * The crawl, end to end, over a fake page loader and no browser (plan 0090,
@@ -148,6 +151,43 @@ class BlockingRunner extends TestRunner {
   }
 }
 
+/**
+ * The same runner, over a session that refuses a path as many times as a test
+ * says and answers it after that. An isolated refusal, as the storefront gave
+ * seven of on 2026-11-06 (plan 0251).
+ */
+class RefusingRunner extends TestRunner {
+  constructor(
+    states: Record<string, Record<string, unknown>>,
+    private readonly refusals: Record<string, number>
+  ) {
+    super(states);
+  }
+
+  protected override createClient(context: RunContext): CarrefourClient {
+    return new CarrefourClient({
+      userAgent: 'LunaShopperBot/1.0',
+      sleepImpl: async () => undefined,
+      acquire: context.acquire,
+      guard: context.guard,
+      signal: context.signal,
+      openSession: async () => ({
+        goto: async (url: string) => {
+          const path = url.replace('https://www.carrefour.es', '');
+          this.asked.push(path);
+          if ((this.refusals[path] ?? 0) > 0) {
+            this.refusals[path] -= 1;
+            return { status: 403, state: null };
+          }
+          const state = this.states[path];
+          return state ? { status: 200, state } : { status: 404, state: null };
+        },
+        close: async () => undefined,
+      }),
+    });
+  }
+}
+
 function context(signal = new AbortController().signal): RunContext {
   return {
     runId: RUN,
@@ -200,8 +240,7 @@ function countingContext() {
  * A context with the run's refusal guard, wired the way `RunExecutor` wires
  * it: its stop aborts the run with the stop as the reason (plan 0215).
  */
-function guardedContext(): RunContext {
-  const controller = new AbortController();
+function guardedContext(controller = new AbortController()): RunContext {
   const ctx = context(controller.signal);
   const guard = new SourceGuard(CARREFOUR_REFUSAL_POLICY, {
     onStop: (stop) => controller.abort(new SourceBlockedError(stop)),
@@ -214,6 +253,14 @@ function guardedContext(): RunContext {
 
 const source = (config: Record<string, unknown> = {}): SupermarketSource =>
   ({ adapterKey: 'carrefour-web', config, workers: 1 }) as SupermarketSource;
+
+/** `failed` as the run row would hold it: the sum of every report. */
+const failedOf = (runContext: RunContext): number =>
+  (runContext.report as jest.Mock).mock.calls.reduce(
+    (sum: number, [counters]: [{ failed?: number }]) =>
+      sum + (counters.failed ?? 0),
+    0
+  );
 
 describe('CarrefourCatalogRunner', () => {
   // A recording report and nothing else: the runner fetches and reports, so
@@ -624,6 +671,353 @@ describe('CarrefourCatalogRunner', () => {
     expect(
       runner.asked.filter((path) => path.includes('?offset=0'))
     ).toHaveLength(4);
+    // The block skips the end pass, so the two refused before it are counted
+    // as unread beside the one that blocked: each once.
+    expect(failedOf(runContext)).toBe(3);
+  });
+
+  describe('a category refused once (plan 0251)', () => {
+    const good = link('cat1', 'Bebidas');
+    const pastas = link('cat2', 'Pastas');
+    const between = link('cat4', 'Lácteos');
+    const caldos = link('cat3', 'Caldos');
+    const last = link('cat5', 'Aceites');
+    const states = (): Record<string, Record<string, unknown>> => ({
+      '/seed': page({ firstLevel: [good, pastas, between, caldos, last] }),
+      [good.url]: page({ totalResults: 1 }),
+      [pastas.url]: page({ totalResults: 30 }),
+      [between.url]: page({ totalResults: 1 }),
+      [caldos.url]: page({ totalResults: 1 }),
+      [last.url]: page({ totalResults: 1 }),
+      '/supermercado/x/cat1/c?offset=0': page({
+        totalResults: 1,
+        cards: [card('p1', 'Agua CARREFOUR 1,5 l.', '0,39 €')],
+      }),
+      // Two pages: the first answers, the second is refused.
+      '/supermercado/x/cat2/c?offset=0': page({
+        totalResults: 30,
+        cards: [card('p2', 'Macarrones CARREFOUR 500 g', '0,79 €')],
+      }),
+      '/supermercado/x/cat2/c?offset=24': page({
+        totalResults: 30,
+        cards: [card('p3', 'Espaguetis CARREFOUR 500 g', '0,79 €')],
+      }),
+      '/supermercado/x/cat4/c?offset=0': page({
+        totalResults: 1,
+        cards: [card('p4', 'Leche CARREFOUR 1 l.', '0,89 €')],
+      }),
+      '/supermercado/x/cat3/c?offset=0': page({
+        totalResults: 1,
+        cards: [card('p5', 'Caldo CARREFOUR 1 l.', '1,09 €')],
+      }),
+      '/supermercado/x/cat5/c?offset=0': page({
+        totalResults: 1,
+        cards: [card('p6', 'Aceite CARREFOUR 1 l.', '4,99 €')],
+      }),
+    });
+
+    /** The paged reads a crawl asked for, in order, without the tree walk. */
+    const offsets = (runner: TestRunner): string[] =>
+      runner.asked.filter((path) => path.includes('?offset='));
+
+    const pastasWarning = (again: boolean) => ({
+      code: HarvestWarningCode.LISTING_UNREAD,
+      name: 'Pastas',
+      offerId: null,
+      page: null,
+      message:
+        `Category cat2 Pastas: Carrefour answered 403 at offset 24` +
+        `${again ? ', once more at the end of the run' : ''}. The listings ` +
+        `from there on, of 30, were not read.`,
+    });
+
+    const caldosWarning = (again: boolean) => ({
+      code: HarvestWarningCode.LISTING_UNREAD,
+      name: 'Caldos',
+      offerId: null,
+      page: null,
+      message:
+        `Category cat3 Caldos: Carrefour answered 403 at offset 0` +
+        `${again ? ', once more at the end of the run' : ''}. The listings ` +
+        `from there on, of 1, were not read.`,
+    });
+
+    async function crawl(
+      refusals: Record<string, number>,
+      options: {
+        seed?: Array<ReturnType<typeof link>>;
+        abortAfter?: string;
+      } = {}
+    ) {
+      const pages = states();
+      if (options.seed) {
+        pages['/seed'] = page({ firstLevel: options.seed });
+      }
+      const runner = new RefusingRunner(pages, refusals);
+      const controller = new AbortController();
+      const runContext = guardedContext(controller);
+      if (options.abortAfter) {
+        const after = options.abortAfter;
+        (runContext.report as jest.Mock).mockImplementation(async () => {
+          if (runner.asked.includes(after)) {
+            controller.abort();
+          }
+        });
+      }
+      await runner.run(
+        runContext,
+        report,
+        { supermarketId: CHAIN, priceScopeId: SCOPE },
+        source({ seedPath: '/seed' })
+      );
+      return { runner, runContext };
+    }
+
+    it('asks once more at the end, from the page that failed, and keeps what it reads', async () => {
+      // Pastas is refused once on its second page, Caldos on both asks. A
+      // good page answers after each, so the walk ends on no refusal.
+      const { runner, runContext } = await crawl({
+        '/supermercado/x/cat2/c?offset=24': 1,
+        '/supermercado/x/cat3/c?offset=0': 2,
+      });
+
+      expect(runContext.signal.aborted).toBe(false);
+      expect(
+        report.products.map((product) => product.externalId).sort()
+      ).toEqual(['p1', 'p2', 'p3', 'p4', 'p6']);
+      // After every other category, in the order they failed, and never
+      // inside the paging loop: each refused page is asked exactly twice,
+      // the second time after the last category's first ask.
+      expect(offsets(runner)).toEqual([
+        '/supermercado/x/cat1/c?offset=0',
+        '/supermercado/x/cat2/c?offset=0',
+        '/supermercado/x/cat2/c?offset=24',
+        '/supermercado/x/cat4/c?offset=0',
+        '/supermercado/x/cat3/c?offset=0',
+        '/supermercado/x/cat5/c?offset=0',
+        '/supermercado/x/cat2/c?offset=24',
+        '/supermercado/x/cat3/c?offset=0',
+      ]);
+      expect(runContext.setReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          unreadableCategories: [caldos.url],
+          askedAgain: [
+            { id: 'cat2', name: 'Pastas', read: true },
+            { id: 'cat3', name: 'Caldos', read: false },
+          ],
+        })
+      );
+    });
+
+    it('leaves one LISTING_UNREAD for the category refused twice, and none for the one read', async () => {
+      const { runContext } = await crawl({
+        '/supermercado/x/cat2/c?offset=24': 1,
+        '/supermercado/x/cat3/c?offset=0': 2,
+      });
+
+      expect(runContext.warn).toHaveBeenCalledTimes(1);
+      expect(runContext.warn).toHaveBeenCalledWith(caldosWarning(true));
+      // Before the last flush, which is what writes it onto the row.
+      expect(
+        (runContext.warn as jest.Mock).mock.invocationCallOrder[0]
+      ).toBeLessThan(
+        Math.max(...(runContext.flush as jest.Mock).mock.invocationCallOrder)
+      );
+      // The run is not stopped, so it ends COMPLETED with the warning.
+      expect(runContext.guard?.stop).toBeNull();
+    });
+
+    it('stops the pass at its first refusal, and every category keeps its warning and the run COMPLETED', async () => {
+      // Pastas is refused on both asks. Caldos would answer the second time,
+      // and is never asked: the pass ends at the refusal before it.
+      const { runner, runContext } = await crawl({
+        '/supermercado/x/cat2/c?offset=24': 2,
+        '/supermercado/x/cat3/c?offset=0': 1,
+      });
+
+      expect(offsets(runner).slice(-2)).toEqual([
+        '/supermercado/x/cat5/c?offset=0',
+        '/supermercado/x/cat2/c?offset=24',
+      ]);
+      expect(runContext.warn).toHaveBeenCalledTimes(2);
+      expect(runContext.warn).toHaveBeenCalledWith(pastasWarning(true));
+      expect(runContext.warn).toHaveBeenCalledWith(caldosWarning(false));
+      expect(runContext.setReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          unreadableCategories: [pastas.url, caldos.url],
+          askedAgain: [{ id: 'cat2', name: 'Pastas', read: false }],
+          blockedAfter: null,
+        })
+      );
+      // Not stopped and not aborted: the executor ends it COMPLETED.
+      expect(runContext.guard?.stop).toBeNull();
+      expect(runContext.signal.aborted).toBe(false);
+    });
+
+    it('skips the pass when the walk ended on a refusal', async () => {
+      // Caldos is the last category, so the walk hands the pass a guard that
+      // counts one refusal in a row.
+      const { runner, runContext } = await crawl(
+        {
+          '/supermercado/x/cat2/c?offset=24': 1,
+          '/supermercado/x/cat3/c?offset=0': 1,
+        },
+        { seed: [good, pastas, between, caldos] }
+      );
+
+      expect(offsets(runner)).toEqual([
+        '/supermercado/x/cat1/c?offset=0',
+        '/supermercado/x/cat2/c?offset=0',
+        '/supermercado/x/cat2/c?offset=24',
+        '/supermercado/x/cat4/c?offset=0',
+        '/supermercado/x/cat3/c?offset=0',
+      ]);
+      expect(runContext.warn).toHaveBeenCalledTimes(2);
+      expect(runContext.warn).toHaveBeenCalledWith(pastasWarning(false));
+      expect(runContext.warn).toHaveBeenCalledWith(caldosWarning(false));
+      expect(runContext.setReport).toHaveBeenCalledWith(
+        expect.objectContaining({ askedAgain: [] })
+      );
+      expect(runContext.guard?.stop).toBeNull();
+    });
+
+    it('skips the pass after an abort', async () => {
+      const { runner, runContext } = await crawl(
+        { '/supermercado/x/cat2/c?offset=24': 1 },
+        { abortAfter: '/supermercado/x/cat4/c?offset=0' }
+      );
+
+      expect(offsets(runner)).toEqual([
+        '/supermercado/x/cat1/c?offset=0',
+        '/supermercado/x/cat2/c?offset=0',
+        '/supermercado/x/cat2/c?offset=24',
+        '/supermercado/x/cat4/c?offset=0',
+      ]);
+      // The refused category stays unread and is counted once, as before.
+      expect(failedOf(runContext)).toBe(1);
+    });
+
+    describe('failed counts the categories left unread', () => {
+      it('counts nothing for a category refused on the walk and read by the end pass', async () => {
+        const { runContext } = await crawl({
+          '/supermercado/x/cat2/c?offset=24': 1,
+        });
+
+        expect(runContext.setReport).toHaveBeenCalledWith(
+          expect.objectContaining({
+            unreadableCategories: [],
+            askedAgain: [{ id: 'cat2', name: 'Pastas', read: true }],
+          })
+        );
+        expect(failedOf(runContext)).toBe(0);
+      });
+
+      it('counts one when the pass reads one category and not the other', async () => {
+        const { runContext } = await crawl({
+          '/supermercado/x/cat2/c?offset=24': 1,
+          '/supermercado/x/cat3/c?offset=0': 2,
+        });
+
+        expect(failedOf(runContext)).toBe(1);
+      });
+
+      it('counts once a category the pass did not ask because it stopped at a refusal', async () => {
+        // Pastas is refused again and ends the pass. Caldos is never asked.
+        const { runContext } = await crawl({
+          '/supermercado/x/cat2/c?offset=24': 2,
+          '/supermercado/x/cat3/c?offset=0': 1,
+        });
+
+        expect(failedOf(runContext)).toBe(2);
+      });
+
+      it('counts each once when the pass cannot start after a refusal in a row', async () => {
+        const { runContext } = await crawl(
+          {
+            '/supermercado/x/cat2/c?offset=24': 1,
+            '/supermercado/x/cat3/c?offset=0': 1,
+          },
+          { seed: [good, pastas, between, caldos] }
+        );
+
+        expect(failedOf(runContext)).toBe(2);
+      });
+
+      it('leaves processed and products as they were', async () => {
+        const { runContext } = await crawl({
+          '/supermercado/x/cat2/c?offset=24': 1,
+          '/supermercado/x/cat3/c?offset=0': 2,
+        });
+
+        const processed = (runContext.report as jest.Mock).mock.calls.reduce(
+          (sum: number, [counters]: [{ processed?: number }]) =>
+            sum + (counters.processed ?? 0),
+          0
+        );
+        // p1, p2, p4, p6 on the walk, p3 in the end pass; Caldos read none.
+        expect(processed).toBe(5);
+        expect(report.products).toHaveLength(5);
+      });
+    });
+  });
+
+  it('writes no listing warning when the walk is aborted', async () => {
+    const one = link('cat1', 'Bebidas');
+    const two = link('cat2', 'Lácteos');
+    const controller = new AbortController();
+    // A node the tree walk cannot open, and a category the abort leaves
+    // unread: either would warn on a run that was not aborted.
+    const runner = new TestRunner({
+      '/seed': page({ firstLevel: [one, link('cat3', 'Gone'), two] }),
+      [one.url]: page({ totalResults: 1 }),
+      [two.url]: page({ totalResults: 1 }),
+      '/supermercado/x/cat1/c?offset=0': page({
+        totalResults: 1,
+        cards: [card('p1', 'Agua CARREFOUR 1,5 l.', '0,39 €')],
+      }),
+      '/supermercado/x/cat2/c?offset=0': page({
+        totalResults: 1,
+        cards: [card('p2', 'Leche CARREFOUR 1 l.', '0,89 €')],
+      }),
+    });
+    const runContext = context(controller.signal);
+    (runContext.report as jest.Mock).mockImplementation(async () => {
+      if (runner.asked.includes('/supermercado/x/cat1/c?offset=0')) {
+        controller.abort();
+      }
+    });
+
+    await runner.run(
+      runContext,
+      report,
+      { supermarketId: CHAIN, priceScopeId: SCOPE },
+      source({ seedPath: '/seed' })
+    );
+
+    expect(runContext.signal.aborted).toBe(true);
+    expect(runContext.warn).not.toHaveBeenCalled();
+  });
+
+  it('names a node the tree walk could not open with LISTING_UNREAD', async () => {
+    const runContext = context();
+    await new TestRunner({
+      '/seed': page({
+        firstLevel: [link('cat1', 'Bebidas'), link('cat3', 'Gone')],
+      }),
+      [link('cat1', 'Bebidas').url]: page({ totalResults: 0 }),
+    }).run(
+      runContext,
+      report,
+      { supermarketId: CHAIN, priceScopeId: SCOPE },
+      source({ seedPath: '/seed' })
+    );
+
+    expect(runContext.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: HarvestWarningCode.LISTING_UNREAD,
+        name: link('cat3', 'Gone').url,
+      })
+    );
   });
 
   it('keeps what it read when a person aborts the crawl', async () => {
@@ -702,5 +1096,1423 @@ describe('CarrefourCatalogRunner', () => {
     // sighting is the one kept, category path and all.
     expect(report.products).toHaveLength(1);
     expect(report.products[0].categoryPath).toEqual(['Bebidas']);
+  });
+
+  describe('a walk reports what it has read as it goes (plan 0267)', () => {
+    const one = link('cat1', 'Bebidas');
+    const two = link('cat2', 'Ofertas');
+    const shared = card('p1', 'Agua CARREFOUR 1,5 l.', '0,39 €');
+    /** Two frontier categories under the default seed, sharing one product. */
+    const states = () => ({
+      '/supermercado/la-despensa/cat20001/c': page({ firstLevel: [one, two] }),
+      [one.url]: page({ totalResults: 2 }),
+      [two.url]: page({ totalResults: 2 }),
+      '/supermercado/x/cat1/c?offset=0': page({
+        totalResults: 2,
+        cards: [shared, card('p2', 'Cola CARREFOUR 33 cl.', '0,35 €')],
+      }),
+      '/supermercado/x/cat2/c?offset=0': page({
+        totalResults: 2,
+        cards: [shared, card('p3', 'Leche CARREFOUR 1 l.', '0,89 €')],
+      }),
+    });
+
+    /**
+     * A recording report that notes, for each product, how many pages the
+     * walk had asked for and which stages it had set when the product came.
+     */
+    function watchedReport(runner: TestRunner, runContext: RunContext) {
+      const at: Record<string, { asked: number; stages: string[] }> = {};
+      const product = report.product.bind(report);
+      report.product = (observation) => {
+        at[observation.externalId] = {
+          asked: runner.asked.length,
+          stages: (runContext.setStage as jest.Mock).mock.calls.map(
+            ([stage]) => stage as string
+          ),
+        };
+        product(observation);
+      };
+      return at;
+    }
+
+    it('reports each product once, at its first sighting, before the end of the walk', async () => {
+      const runner = new TestRunner(states());
+      const runContext = context();
+      const at = watchedReport(runner, runContext);
+
+      await runner.run(
+        runContext,
+        report,
+        { supermarketId: CHAIN, priceScopeId: SCOPE },
+        source({ delistCountsCrawl: true })
+      );
+
+      expect(report.products.map((product) => product.externalId)).toEqual([
+        'p1',
+        'p2',
+        'p3',
+      ]);
+      // The first sighting keeps its category path, as it did at the end.
+      expect(report.products[0].categoryPath).toEqual(['Bebidas']);
+      const secondPage = runner.asked.indexOf(
+        '/supermercado/x/cat2/c?offset=0'
+      );
+      // p1 and p2 came while the first category was paged, before the second
+      // category's page was asked for.
+      expect(at['p1'].asked).toBeLessThanOrEqual(secondPage);
+      expect(at['p2'].asked).toBeLessThanOrEqual(secondPage);
+      // None of them waited for the end of the walk.
+      for (const id of ['p1', 'p2', 'p3']) {
+        expect(at[id].stages).toEqual(['FRONTIER', 'ENUMERATE']);
+      }
+      // The whole listing is still decided at the end, from every id read.
+      expect(report.wholeListings).toEqual([
+        { scopeKey: null, listed: ['p1', 'p2', 'p3'] },
+      ]);
+    });
+
+    it('has reported what it read while the walk is still going, and has declared no listing', async () => {
+      let reached!: () => void;
+      const stalled = new Promise<void>((resolve) => (reached = resolve));
+      let release!: () => void;
+      const released = new Promise<void>((resolve) => (release = resolve));
+      /** A walk that stops answering on the second category, as a dying pod. */
+      class StallingRunner extends TestRunner {
+        protected override createClient(): CarrefourClient {
+          return new CarrefourClient({
+            userAgent: 'LunaShopperBot/1.0',
+            sleepImpl: async () => undefined,
+            openSession: async () => ({
+              goto: async (url: string) => {
+                const path = url.replace('https://www.carrefour.es', '');
+                this.asked.push(path);
+                if (path === '/supermercado/x/cat2/c?offset=0') {
+                  reached();
+                  await released;
+                  throw new Error('The browser stopped answering.');
+                }
+                const state = this.states[path];
+                return state
+                  ? { status: 200, state }
+                  : { status: 404, state: null };
+              },
+              close: async () => undefined,
+            }),
+          });
+        }
+      }
+      const runner = new StallingRunner(states());
+      const runContext = context();
+
+      const run = runner.run(
+        runContext,
+        report,
+        { supermarketId: CHAIN, priceScopeId: SCOPE },
+        source({ delistCountsCrawl: true })
+      );
+      await stalled;
+
+      // Half way: the first category's products are with the sink, and
+      // nothing whole was declared, so a walk that dies here states no
+      // negative and keeps every row it had reported.
+      expect(report.products.map((product) => product.externalId)).toEqual([
+        'p1',
+        'p2',
+      ]);
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole).toEqual([]);
+      expect(runContext.setReport).not.toHaveBeenCalled();
+
+      release();
+      await run;
+      // The category that did not answer makes the crawl not whole, and the
+      // products are not reported a second time at the end.
+      expect(report.products).toHaveLength(2);
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole).toEqual([
+        expect.objectContaining({ scopeKey: null, reason: 'unreadable' }),
+      ]);
+    });
+
+    it('reports what the end pass reads as it reads it, and nothing twice', async () => {
+      const runner = new RefusingRunner(states(), {
+        '/supermercado/x/cat2/c?offset=0': 1,
+      });
+      const runContext = context();
+      const at = watchedReport(runner, runContext);
+
+      await runner.run(
+        runContext,
+        report,
+        { supermarketId: CHAIN, priceScopeId: SCOPE },
+        source({ delistCountsCrawl: true })
+      );
+
+      expect(report.products.map((product) => product.externalId)).toEqual([
+        'p1',
+        'p2',
+        'p3',
+      ]);
+      // p3 came from the end pass, which runs under ENUMERATE too.
+      expect(at['p3'].stages).toEqual(['FRONTIER', 'ENUMERATE', 'ENUMERATE']);
+    });
+
+    it('stops before the next page when its first chunk fails to write (plan 0269)', async () => {
+      // Two pages in the first category and one in the second, so a walk that
+      // missed the stop would ask for two more pages.
+      const pages = {
+        ...states(),
+        [one.url]: page({ totalResults: 30 }),
+        '/supermercado/x/cat1/c?offset=0': page({
+          totalResults: 30,
+          cards: [shared, card('p2', 'Cola CARREFOUR 33 cl.', '0,35 €')],
+        }),
+        '/supermercado/x/cat1/c?offset=24': page({
+          totalResults: 30,
+          cards: [card('p4', 'Zumo CARREFOUR 1 l.', '0,99 €')],
+        }),
+      };
+      /** The runtime's wiring: the client reads the run's signal. */
+      class SignalledRunner extends TestRunner {
+        protected override createClient(ctx: RunContext): CarrefourClient {
+          return new CarrefourClient({
+            userAgent: 'LunaShopperBot/1.0',
+            sleepImpl: async () => undefined,
+            signal: ctx.signal,
+            openSession: async () => ({
+              goto: async (url: string) => {
+                const path = url.replace('https://www.carrefour.es', '');
+                this.asked.push(path);
+                const state = this.states[path];
+                return state
+                  ? { status: 200, state }
+                  : { status: 404, state: null };
+              },
+              close: async () => undefined,
+            }),
+          });
+        }
+      }
+      const controller = new AbortController();
+      const failing = new FailingRunReport(controller);
+      const runner = new SignalledRunner(pages);
+      const runContext = context(controller.signal);
+
+      await runner.run(
+        runContext,
+        failing,
+        { supermarketId: CHAIN, priceScopeId: SCOPE },
+        source({ delistCountsCrawl: true })
+      );
+
+      // The executor's abort reached the walk through the signal it reads.
+      expect(controller.signal.reason).toBeInstanceOf(ReportWriteFailedError);
+      // No page was asked after the one whose product failed to write.
+      expect(runner.asked).toContain('/supermercado/x/cat1/c?offset=0');
+      expect(runner.asked).not.toContain('/supermercado/x/cat1/c?offset=24');
+      expect(runner.asked).not.toContain('/supermercado/x/cat2/c?offset=0');
+      // Nothing that needs the whole walk is stated for a stopped one.
+      expect(failing.wholeListings).toEqual([]);
+      expect(failing.notWhole).toEqual([]);
+      expect(runContext.warn).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('every path a product is filed under (plan 0268)', () => {
+    const one = link('cat1', 'Bebidas');
+    const two = link('cat2', 'Ofertas');
+    const shared = card('p1', 'Agua CARREFOUR 1,5 l.', '0,39 €');
+    /** Two frontier categories under the default seed, sharing one product. */
+    const states = () => ({
+      '/supermercado/la-despensa/cat20001/c': page({ firstLevel: [one, two] }),
+      [one.url]: page({ totalResults: 2 }),
+      [two.url]: page({ totalResults: 2 }),
+      '/supermercado/x/cat1/c?offset=0': page({
+        totalResults: 2,
+        cards: [shared, card('p2', 'Cola CARREFOUR 33 cl.', '0,35 €')],
+      }),
+      // p1 twice on one page: one category is one path.
+      '/supermercado/x/cat2/c?offset=0': page({
+        totalResults: 3,
+        cards: [shared, shared, card('p3', 'Leche CARREFOUR 1 l.', '0,89 €')],
+      }),
+    });
+    const crawl = (
+      runner: TestRunner,
+      runContext: RunContext,
+      config: Record<string, unknown>
+    ) =>
+      runner.run(
+        runContext,
+        report,
+        { supermarketId: CHAIN, priceScopeId: SCOPE },
+        source(config)
+      );
+    const callOf = (externalId: string) =>
+      report.categoryPathCalls.find((call) => call.externalId === externalId);
+
+    it('gives a product met in two categories both, in walk order, and replaces on a whole crawl', async () => {
+      await crawl(new TestRunner(states()), context(), {
+        delistCountsCrawl: true,
+      });
+
+      expect(report.wholeListings).toHaveLength(1);
+      expect(callOf('p1')).toEqual({
+        externalId: 'p1',
+        paths: [['Bebidas'], ['Ofertas']],
+        mode: 'REPLACE',
+      });
+      // The first path is the one `categoryPath` holds, which is unchanged.
+      expect(report.products[0].categoryPath).toEqual(['Bebidas']);
+      expect(callOf('p1')?.paths[0]).toEqual(report.products[0].categoryPath);
+      // A product of one category gets that one path.
+      expect(callOf('p3')).toEqual({
+        externalId: 'p3',
+        paths: [['Ofertas']],
+        mode: 'REPLACE',
+      });
+      // One call a product, in the order the walk first met them.
+      expect(report.categoryPathCalls.map((call) => call.externalId)).toEqual([
+        'p1',
+        'p2',
+        'p3',
+      ]);
+    });
+
+    it('adds when the crawl is not declared whole', async () => {
+      // The switch is off, so the crawl declares nothing and proves no path
+      // gone.
+      await crawl(new TestRunner(states()), context(), {});
+
+      expect(report.notWhole[0].reason).toBe('switch-off');
+      expect(callOf('p1')).toEqual({
+        externalId: 'p1',
+        paths: [['Bebidas'], ['Ofertas']],
+        mode: 'ADD',
+      });
+      expect(
+        report.categoryPathCalls.every((call) => call.mode === 'ADD')
+      ).toBe(true);
+    });
+
+    it('keeps the path the end pass reads, and replaces once that pass read the refused category', async () => {
+      // Ofertas is refused once and read whole by the end pass, so every
+      // frontier category was paged after all and the crawl is whole.
+      const runner = new RefusingRunner(states(), {
+        '/supermercado/x/cat2/c?offset=0': 1,
+      });
+      await crawl(runner, context(), { delistCountsCrawl: true });
+
+      expect(report.wholeListings).toHaveLength(1);
+      expect(callOf('p1')).toEqual({
+        externalId: 'p1',
+        paths: [['Bebidas'], ['Ofertas']],
+        mode: 'REPLACE',
+      });
+      expect(callOf('p3')?.paths).toEqual([['Ofertas']]);
+    });
+
+    it('adds when a category stays unread', async () => {
+      // Ofertas is refused on both asks, so a category the crawl did not read
+      // may list p1 and p2 too.
+      const runner = new RefusingRunner(states(), {
+        '/supermercado/x/cat2/c?offset=0': 2,
+      });
+      await crawl(runner, context(), { delistCountsCrawl: true });
+
+      expect(report.notWhole[0].reason).toBe('unreadable');
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: 'p1', paths: [['Bebidas']], mode: 'ADD' },
+        { externalId: 'p2', paths: [['Bebidas']], mode: 'ADD' },
+      ]);
+    });
+
+    it('adds for every product of an aborted crawl, and never replaces', async () => {
+      const runner = new TestRunner(states());
+      const controller = new AbortController();
+      const runContext = context(controller.signal);
+      (runContext.report as jest.Mock).mockImplementation(async () => {
+        if (runner.asked.includes('/supermercado/x/cat1/c?offset=0')) {
+          controller.abort();
+        }
+      });
+
+      await crawl(runner, runContext, { delistCountsCrawl: true });
+
+      expect(runContext.signal.aborted).toBe(true);
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: 'p1', paths: [['Bebidas']], mode: 'ADD' },
+        { externalId: 'p2', paths: [['Bebidas']], mode: 'ADD' },
+      ]);
+    });
+
+    it('puts the paths on no observation, and makes every call after the last product and before the run flushes', async () => {
+      const events: string[] = [];
+      const runContext = context();
+      (runContext.flush as jest.Mock).mockImplementation(async () => {
+        events.push('flush');
+      });
+      const product = report.product.bind(report);
+      report.product = (observation) => {
+        events.push('product');
+        product(observation);
+      };
+      const paths = report.categoryPaths.bind(report);
+      report.categoryPaths = (externalId, list, mode) => {
+        events.push('paths');
+        paths(externalId, list, mode);
+      };
+
+      await crawl(new TestRunner(states()), runContext, {
+        delistCountsCrawl: true,
+      });
+
+      for (const observed of report.products) {
+        expect(observed).not.toHaveProperty('categoryPaths');
+      }
+      expect(events.lastIndexOf('product')).toBeLessThan(
+        events.indexOf('paths')
+      );
+      expect(events.filter((event) => event === 'paths')).toHaveLength(3);
+      // The run's own flush comes after every path call, so the paths are
+      // with the sink before the run hands it over.
+      expect(events.filter((event) => event === 'flush')).toHaveLength(1);
+      expect(events.lastIndexOf('paths')).toBeLessThan(events.indexOf('flush'));
+    });
+
+    it('makes no call when the walk dies before its end', async () => {
+      // The run row stops taking writes once the categories are paged, so the
+      // run throws before the end of its walk, as a dying pod would.
+      const runContext = context();
+      (runContext.setStage as jest.Mock).mockImplementation(
+        async (stage: string) => {
+          if (stage === 'INGEST') {
+            throw new Error('The run row did not answer.');
+          }
+        }
+      );
+
+      await expect(
+        crawl(new TestRunner(states()), runContext, { delistCountsCrawl: true })
+      ).rejects.toThrow('The run row did not answer.');
+
+      // Every product was reported at its first sighting, and no path.
+      expect(report.products).toHaveLength(3);
+      expect(report.categoryPathCalls).toEqual([]);
+    });
+  });
+
+  describe('a category cut short is not read (owner decision 90b)', () => {
+    const bebidas = link('cat1', 'Bebidas');
+    const ofertas = link('cat2', 'Ofertas');
+    const shared = card('p1', 'Agua CARREFOUR 1,5 l.', '0,39 €');
+    /**
+     * Bebidas holds two pages and Ofertas one. p1 sits in both, and p2 sits
+     * on the second page of Bebidas only.
+     */
+    const states = (): Record<string, Record<string, unknown>> => ({
+      '/supermercado/la-despensa/cat20001/c': page({
+        firstLevel: [bebidas, ofertas],
+      }),
+      [bebidas.url]: page({ totalResults: 30 }),
+      [ofertas.url]: page({ totalResults: 1 }),
+      '/supermercado/x/cat1/c?offset=0': page({
+        totalResults: 30,
+        cards: [card('p3', 'Cola CARREFOUR 33 cl.', '0,35 €')],
+      }),
+      '/supermercado/x/cat1/c?offset=24': page({
+        totalResults: 30,
+        cards: [shared, card('p2', 'Leche CARREFOUR 1 l.', '0,89 €')],
+      }),
+      '/supermercado/x/cat2/c?offset=0': page({
+        totalResults: 1,
+        cards: [shared],
+      }),
+    });
+
+    /**
+     * The same runner, over a session that answers the statuses a test names
+     * for a path, one an ask, and the page's state once they run out.
+     */
+    class StatusRunner extends TestRunner {
+      constructor(
+        states: Record<string, Record<string, unknown>>,
+        private readonly statuses: Record<string, number[]>
+      ) {
+        super(states);
+      }
+
+      protected override createClient(context: RunContext): CarrefourClient {
+        return new CarrefourClient({
+          userAgent: 'LunaShopperBot/1.0',
+          sleepImpl: async () => undefined,
+          acquire: context.acquire,
+          guard: context.guard,
+          signal: context.signal,
+          openSession: async () => ({
+            goto: async (url: string) => {
+              const path = url.replace('https://www.carrefour.es', '');
+              this.asked.push(path);
+              const status = this.statuses[path]?.shift();
+              if (status !== undefined) {
+                return { status, state: null };
+              }
+              const state = this.states[path];
+              return state
+                ? { status: 200, state }
+                : { status: 404, state: null };
+            },
+            close: async () => undefined,
+          }),
+        });
+      }
+    }
+
+    async function crawl(
+      runner: TestRunner,
+      options: { guarded?: boolean } = {}
+    ) {
+      const runContext = options.guarded ? guardedContext() : context();
+      await runner.run(
+        runContext,
+        report,
+        { supermarketId: CHAIN, priceScopeId: SCOPE },
+        source({ delistCountsCrawl: true })
+      );
+      return runContext;
+    }
+
+    const callOf = (externalId: string) =>
+      report.categoryPathCalls.find((call) => call.externalId === externalId);
+
+    const asksOf = (runner: TestRunner, path: string) =>
+      runner.asked.filter((asked) => asked === path).length;
+
+    it('declares a crawl whole once the end pass reads the page a 503 cut, and replaces (owner decision 103b)', async () => {
+      const runner = new StatusRunner(states(), {
+        '/supermercado/x/cat1/c?offset=24': [503],
+      });
+      const runContext = await crawl(runner);
+
+      // Asked on the walk and once more after Ofertas, and never a third time.
+      expect(asksOf(runner, '/supermercado/x/cat1/c?offset=24')).toBe(2);
+      expect(
+        runner.asked.indexOf('/supermercado/x/cat2/c?offset=0')
+      ).toBeLessThan(
+        runner.asked.lastIndexOf('/supermercado/x/cat1/c?offset=24')
+      );
+      expect(
+        report.products.map((product) => product.externalId).sort()
+      ).toEqual(['p1', 'p2', 'p3']);
+      expect(report.wholeListings).toEqual([
+        { scopeKey: null, listed: ['p3', 'p1', 'p2'] },
+      ]);
+      expect(report.notWhole).toEqual([]);
+      expect(callOf('p1')).toEqual({
+        externalId: 'p1',
+        paths: [['Ofertas'], ['Bebidas']],
+        mode: 'REPLACE',
+      });
+      expect(runContext.warn).not.toHaveBeenCalled();
+      expect(runContext.setReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          unreadableCategories: [],
+          askedAgain: [{ id: 'cat1', name: 'Bebidas', read: true }],
+        })
+      );
+      // The 503 told the guard of no refusal.
+      expect(runContext.guard?.consecutiveRefusals ?? 0).toBe(0);
+    });
+
+    it('does not declare a crawl whole when the page a 503 cut answers 503 again, and adds', async () => {
+      const runner = new StatusRunner(states(), {
+        '/supermercado/x/cat1/c?offset=24': [503, 503],
+      });
+      const runContext = await crawl(runner);
+
+      expect(asksOf(runner, '/supermercado/x/cat1/c?offset=24')).toBe(2);
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole[0].reason).toBe('unreadable');
+      expect(
+        report.categoryPathCalls.every((call) => call.mode === 'ADD')
+      ).toBe(true);
+      expect(runContext.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Bebidas',
+          message:
+            'Category cat1 Bebidas: Carrefour answered 503 at offset 24, ' +
+            'once more at the end of the run. The listings from there on, ' +
+            'of 30, were not read.',
+        })
+      );
+      expect(runContext.setReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          unreadableCategories: [bebidas.url],
+          askedAgain: [{ id: 'cat1', name: 'Bebidas', read: false }],
+        })
+      );
+    });
+
+    it('does not declare a crawl whole when the pass cannot start after a 503, and adds', async () => {
+      // Ofertas is refused last, so the walk hands the pass a guard counting
+      // one refusal in a row, the pass does not start, and the 503 that cut
+      // Bebidas stands.
+      const runner = new StatusRunner(states(), {
+        '/supermercado/x/cat1/c?offset=24': [503],
+        '/supermercado/x/cat2/c?offset=0': [403],
+      });
+      const runContext = await crawl(runner, { guarded: true });
+
+      expect(asksOf(runner, '/supermercado/x/cat1/c?offset=24')).toBe(1);
+      // What the first page held is kept.
+      expect(report.products.map((product) => product.externalId)).toEqual([
+        'p3',
+      ]);
+      // Not whole, so nothing is delisted and no path is replaced.
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole).toEqual([
+        { scopeKey: null, reason: 'unreadable', detail: [], listed: null },
+      ]);
+      expect(
+        report.categoryPathCalls.every((call) => call.mode === 'ADD')
+      ).toBe(true);
+      expect(runContext.guard?.stop).toBeNull();
+      // Named the way an unreadable category is, with no second ask.
+      expect(runContext.warn).toHaveBeenCalledWith({
+        code: HarvestWarningCode.LISTING_UNREAD,
+        name: 'Bebidas',
+        offerId: null,
+        page: null,
+        message:
+          'Category cat1 Bebidas: Carrefour answered 503 at offset 24. The ' +
+          'listings from there on, of 30, were not read.',
+      });
+      expect(runContext.setReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          unreadableCategories: [bebidas.url, ofertas.url],
+          askedAgain: [],
+        })
+      );
+      // Bebidas and Ofertas, each once, though the pass asked neither.
+      expect(failedOf(runContext)).toBe(2);
+    });
+
+    it('does not declare a crawl whole when a page answered 404 part way, and does not ask it again', async () => {
+      const runner = new StatusRunner(states(), {
+        '/supermercado/x/cat1/c?offset=24': [404],
+      });
+      const runContext = await crawl(runner);
+
+      // A 404 is an answer about the page and not a passing failure, so the
+      // end pass leaves it (owner decision 103b).
+      expect(asksOf(runner, '/supermercado/x/cat1/c?offset=24')).toBe(1);
+      expect(runContext.setReport).toHaveBeenCalledWith(
+        expect.objectContaining({ askedAgain: [] })
+      );
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole[0].reason).toBe('unreadable');
+      expect(callOf('p1')?.mode).toBe('ADD');
+      expect(runContext.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Bebidas',
+          message: expect.stringContaining(
+            'Carrefour answered 404 at offset 24'
+          ),
+        })
+      );
+      // Never asked again, so counted once and at once: before Ofertas, the
+      // next category, reports its progress.
+      expect(failedOf(runContext)).toBe(1);
+      const calls = (runContext.report as jest.Mock).mock.calls.map(
+        ([counters]) => counters
+      );
+      expect(calls).toEqual([
+        { processed: 1 },
+        { failed: 1 },
+        { processed: 1 },
+      ]);
+    });
+
+    it('counts nothing for a page a 503 cut that the end pass reads', async () => {
+      const runner = new StatusRunner(states(), {
+        '/supermercado/x/cat1/c?offset=24': [503],
+      });
+      const runContext = await crawl(runner);
+
+      expect(failedOf(runContext)).toBe(0);
+    });
+
+    it('does not declare a crawl whole when an empty page still states rows', async () => {
+      const pages = states();
+      pages['/supermercado/x/cat1/c?offset=24'] = page({ totalResults: 30 });
+      const runner = new TestRunner(pages);
+      const runContext = await crawl(runner);
+
+      // Not asked again either: the storefront chose to serve it empty.
+      expect(asksOf(runner, '/supermercado/x/cat1/c?offset=24')).toBe(1);
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole[0].reason).toBe('unreadable');
+      expect(runContext.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Bebidas',
+          message: expect.stringContaining(
+            'Carrefour answered an empty page that states 30 results at offset 24'
+          ),
+        })
+      );
+    });
+
+    it('declares a crawl whole when an empty page states the set ended before it', async () => {
+      // The category shrank to 24 between the tree walk and the paging, and
+      // the page says so: that is the end, not a gap.
+      const pages = states();
+      pages['/supermercado/x/cat1/c?offset=24'] = page({ totalResults: 24 });
+      const runContext = await crawl(new TestRunner(pages));
+
+      expect(report.wholeListings).toEqual([
+        { scopeKey: null, listed: ['p3', 'p1'] },
+      ]);
+      expect(callOf('p1')).toEqual({
+        externalId: 'p1',
+        paths: [['Ofertas']],
+        mode: 'REPLACE',
+      });
+      expect(runContext.warn).not.toHaveBeenCalled();
+    });
+
+    it('declares a crawl whole that paged every category to its last page', async () => {
+      await crawl(new TestRunner(states()));
+
+      expect(report.wholeListings).toHaveLength(1);
+      expect(callOf('p1')).toEqual({
+        externalId: 'p1',
+        paths: [['Bebidas'], ['Ofertas']],
+        mode: 'REPLACE',
+      });
+    });
+
+    it('keeps a refused category unread when the end pass meets a 503 in it', async () => {
+      // The second page is refused on the walk, and the end pass asks it once
+      // more and meets a page after it that answers 503. Bebidas now has
+      // three pages so the pass has a page after the refused one to fail on.
+      const pages = states();
+      pages[bebidas.url] = page({ totalResults: 60 });
+      const runner = new StatusRunner(pages, {
+        '/supermercado/x/cat1/c?offset=24': [403],
+        '/supermercado/x/cat1/c?offset=48': [503],
+      });
+      const runContext = await crawl(runner);
+
+      // The end pass read the refused page this time.
+      expect(
+        runner.asked.filter(
+          (path) => path === '/supermercado/x/cat1/c?offset=24'
+        )
+      ).toHaveLength(2);
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole[0].reason).toBe('unreadable');
+      expect(runContext.setReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          unreadableCategories: [bebidas.url],
+          askedAgain: [{ id: 'cat1', name: 'Bebidas', read: false }],
+        })
+      );
+      expect(runContext.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining(
+            'Carrefour answered 503 at offset 48, once more at the end of the run'
+          ),
+        })
+      );
+    });
+
+    it('names the second offset when the end pass is cut by a 5xx at a later page', async () => {
+      // A 503 cuts Bebidas at offset 24. The end pass reads that page and
+      // meets a second 503 at offset 48.
+      const pages = states();
+      pages[bebidas.url] = page({ totalResults: 60 });
+      const runner = new StatusRunner(pages, {
+        '/supermercado/x/cat1/c?offset=24': [503],
+        '/supermercado/x/cat1/c?offset=48': [503],
+      });
+      const runContext = await crawl(runner);
+
+      expect(asksOf(runner, '/supermercado/x/cat1/c?offset=24')).toBe(2);
+      expect(asksOf(runner, '/supermercado/x/cat1/c?offset=48')).toBe(1);
+      expect(runContext.warn).toHaveBeenCalledTimes(1);
+      expect(runContext.warn).toHaveBeenCalledWith({
+        code: HarvestWarningCode.LISTING_UNREAD,
+        name: 'Bebidas',
+        offerId: null,
+        page: null,
+        message:
+          'Category cat1 Bebidas: Carrefour answered 503 at offset 48, ' +
+          'once more at the end of the run. The listings from there on, ' +
+          'of 60, were not read.',
+      });
+      expect(runContext.setReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          unreadableCategories: [bebidas.url],
+          askedAgain: [{ id: 'cat1', name: 'Bebidas', read: false }],
+        })
+      );
+    });
+
+    it('goes on to the next entry after a 5xx cuts one again', async () => {
+      const runner = new StatusRunner(states(), {
+        '/supermercado/x/cat1/c?offset=24': [503, 503],
+        '/supermercado/x/cat2/c?offset=0': [503],
+      });
+      const runContext = await crawl(runner);
+
+      // The pass asked Bebidas, was cut again, and still asked Ofertas.
+      expect(
+        runner.asked.filter((path) => path.includes('?offset=')).slice(-2)
+      ).toEqual([
+        '/supermercado/x/cat1/c?offset=24',
+        '/supermercado/x/cat2/c?offset=0',
+      ]);
+      expect(runContext.setReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          unreadableCategories: [bebidas.url],
+          askedAgain: [
+            { id: 'cat1', name: 'Bebidas', read: false },
+            { id: 'cat2', name: 'Ofertas', read: true },
+          ],
+        })
+      );
+      expect(runContext.warn).toHaveBeenCalledTimes(1);
+      expect(runContext.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Bebidas',
+          message: expect.stringContaining(
+            'Carrefour answered 503 at offset 24, once more at the end of the run'
+          ),
+        })
+      );
+    });
+
+    it('ends the pass at a refusal before a waiting 5xx entry, which keeps its first warning', async () => {
+      // Bebidas is refused on the walk and again in the pass. Ofertas was cut
+      // by a 503 after it and is never asked again. Caldos answers last, so
+      // the walk ends on no refusal in a row and the pass starts.
+      const caldos = link('cat3', 'Caldos');
+      const pages = states();
+      pages['/supermercado/la-despensa/cat20001/c'] = page({
+        firstLevel: [bebidas, ofertas, caldos],
+      });
+      pages[caldos.url] = page({ totalResults: 1 });
+      pages['/supermercado/x/cat3/c?offset=0'] = page({
+        totalResults: 1,
+        cards: [card('p5', 'Caldo CARREFOUR 1 l.', '1,09 €')],
+      });
+      const runner = new StatusRunner(pages, {
+        '/supermercado/x/cat1/c?offset=24': [403, 403],
+        '/supermercado/x/cat2/c?offset=0': [503],
+      });
+      const runContext = await crawl(runner, { guarded: true });
+
+      expect(asksOf(runner, '/supermercado/x/cat1/c?offset=24')).toBe(2);
+      expect(asksOf(runner, '/supermercado/x/cat2/c?offset=0')).toBe(1);
+      expect(runContext.guard?.stop).toBeNull();
+      expect(runContext.warn).toHaveBeenCalledTimes(2);
+      expect(runContext.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Bebidas',
+          message: expect.stringContaining(
+            'Carrefour answered 403 at offset 24, once more at the end of the run'
+          ),
+        })
+      );
+      expect(runContext.warn).toHaveBeenCalledWith({
+        code: HarvestWarningCode.LISTING_UNREAD,
+        name: 'Ofertas',
+        offerId: null,
+        page: null,
+        message:
+          'Category cat2 Ofertas: Carrefour answered 503 at offset 0. The ' +
+          'listings from there on, of 1, were not read.',
+      });
+      expect(runContext.setReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          unreadableCategories: [bebidas.url, ofertas.url],
+          askedAgain: [{ id: 'cat1', name: 'Bebidas', read: false }],
+        })
+      );
+    });
+
+    describe('a category that grew since the frontier (owner decision 104b)', () => {
+      const at = (offset: number) => `/supermercado/x/cat1/c?offset=${offset}`;
+
+      /**
+       * Bebidas alone, 48 at the frontier. Its pages state `stated` results
+       * and serve `served` pages of 24, one distinct card each.
+       */
+      const grown = (stated: number, served: number) => {
+        const pages: Record<string, Record<string, unknown>> = {
+          '/supermercado/la-despensa/cat20001/c': page({
+            firstLevel: [bebidas],
+          }),
+          [bebidas.url]: page({ totalResults: 48 }),
+        };
+        for (let offset = 0; offset < served * 24; offset += 24) {
+          pages[at(offset)] = {
+            ...page({
+              totalResults: stated,
+              cards: [card(`p${offset}`, `Agua ${offset} 1,5 l.`, '0,39 €')],
+            }),
+            pagination: { page_size: 24, total_pages: served },
+          };
+        }
+        return pages;
+      };
+
+      const run = (runner: TestRunner, runContext: RunContext) =>
+        runner.run(
+          runContext,
+          report,
+          { supermarketId: CHAIN, priceScopeId: SCOPE },
+          source({ delistCountsCrawl: true })
+        );
+
+      it('cuts a category whose third page is empty while it still states 49, and the crawl is not whole', async () => {
+        // The stated 49 grows the walk to a third page. It answers empty and
+        // still states 49. The paging figure is never read, so that is a cut
+        // and not an end: a false cut is the safe error, a false whole is not.
+        const pages = grown(49, 2);
+        pages[at(48)] = {
+          ...page({ totalResults: 49 }),
+          pagination: { page_size: 24, total_pages: 2 },
+        };
+        const runner = new TestRunner(pages);
+        const runContext = context();
+        await run(runner, runContext);
+
+        // An empty page cut is not asked again in the end pass.
+        expect(
+          runner.asked.filter((path) => path.includes('?offset='))
+        ).toEqual([at(0), at(24), at(48)]);
+        expect(report.wholeListings).toEqual([]);
+        expect(report.notWhole[0].reason).toBe('unreadable');
+        expect(runContext.warn).toHaveBeenCalledWith(
+          expect.objectContaining({
+            code: HarvestWarningCode.LISTING_UNREAD,
+            name: 'Bebidas',
+            message: expect.stringContaining(
+              'Carrefour answered an empty page that states 49 results at offset 48'
+            ),
+          })
+        );
+        expect(runContext.setReport).toHaveBeenCalledWith(
+          expect.objectContaining({ unreadableCategories: [bebidas.url] })
+        );
+        // The bound grew from 48 to 49, so the plan rose by one.
+        expect(runContext.setTotalPlanned).toHaveBeenLastCalledWith(49);
+      });
+
+      it('pages the end pass to the total the first walk learned, when the pages it reads state none', async () => {
+        // Frontier 48. The first walk read two pages stating 96 and met a 503
+        // at the third. The pages from there on serve cards and state no
+        // total, so only the total the first walk learned asks the fourth.
+        const pages = grown(96, 2);
+        for (const offset of [48, 72]) {
+          const unstated = page({
+            cards: [card(`p${offset}`, `Agua ${offset} 1,5 l.`, '0,39 €')],
+          });
+          delete (
+            (unstated['productCardList'] as Record<string, unknown>)[
+              'results'
+            ] as Record<string, unknown>
+          )['total_results'];
+          pages[at(offset)] = unstated;
+        }
+        const runner = new StatusRunner(pages, { [at(48)]: [503] });
+        const runContext = context();
+        await run(runner, runContext);
+
+        expect(asksOf(runner, at(48))).toBe(2);
+        expect(asksOf(runner, at(72))).toBe(1);
+        expect(runContext.warn).not.toHaveBeenCalled();
+        expect(report.wholeListings).toHaveLength(1);
+        expect(runContext.setReport).toHaveBeenCalledWith(
+          expect.objectContaining({
+            unreadableCategories: [],
+            askedAgain: [{ id: 'cat1', name: 'Bebidas', read: true }],
+          })
+        );
+      });
+
+      it('raises the planned total to the grown one, so progress never passes it', async () => {
+        // Full pages: 24 distinct cards on each of four pages, where the
+        // frontier saw 48 and the pages state 96. Without the raise the run
+        // would report 96 processed against a plan of 48.
+        const pages = grown(96, 4);
+        for (let offset = 0; offset < 96; offset += 24) {
+          const cards = Array.from({ length: 24 }, (_, i) =>
+            card(`p${offset + i}`, `Agua ${offset + i} 1,5 l.`, '0,39 €')
+          );
+          pages[at(offset)] = {
+            ...page({ totalResults: 96, cards }),
+            pagination: { page_size: 24, total_pages: 4 },
+          };
+        }
+        const counting = countingContext();
+        const reported: Array<{ processed: number; planned: number | null }> =
+          [];
+        let processed = 0;
+        const original = counting.context.report.bind(counting.context);
+        counting.context.report = async (counters) => {
+          processed += counters.processed ?? 0;
+          reported.push({ processed, planned: counting.planned() });
+          await original(counters);
+        };
+        await run(new TestRunner(pages), counting.context);
+        await counting.context.flush();
+
+        expect(reported.length).toBeGreaterThan(0);
+        for (const { processed: done, planned } of reported) {
+          expect(planned).not.toBeNull();
+          expect(done).toBeLessThanOrEqual(planned as number);
+        }
+        expect(counting.processed()).toBe(96);
+        expect(counting.planned()).toBe(96);
+      });
+
+      it('names the grown total in the warning of a category it could not finish', async () => {
+        // Frontier 48, pages state 96: a 503 at the fourth page, twice.
+        const runner = new StatusRunner(grown(96, 4), { [at(72)]: [503, 503] });
+        const runContext = context();
+        await run(runner, runContext);
+
+        expect(runContext.warn).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: 'Bebidas',
+            message:
+              'Category cat1 Bebidas: Carrefour answered 503 at offset 72, ' +
+              'once more at the end of the run. The listings from there on, ' +
+              'of 96, were not read.',
+          })
+        );
+        expect(runContext.setTotalPlanned).toHaveBeenLastCalledWith(96);
+      });
+
+      it('keeps the walk’s own error and its progress when the plan write fails', async () => {
+        // Frontier 48, pages state 96, and a 503 at the third page, twice.
+        // Restating the plan fails after the frontier's write. The 503 is
+        // still what cost the category, so the end pass asks it once more,
+        // and the two listings the walk did page are still reported.
+        const runner = new StatusRunner(grown(96, 4), { [at(48)]: [503, 503] });
+        const runContext = context();
+        (runContext.setTotalPlanned as jest.Mock)
+          .mockResolvedValueOnce(undefined)
+          .mockRejectedValue(new Error('the database is down'));
+        await run(runner, runContext);
+
+        expect(runContext.report).toHaveBeenCalledWith({ processed: 2 });
+        expect(asksOf(runner, at(48))).toBe(2);
+        expect(runContext.warn).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: 'Bebidas',
+            message:
+              'Category cat1 Bebidas: Carrefour answered 503 at offset 48, ' +
+              'once more at the end of the run. The listings from there on, ' +
+              'of 96, were not read.',
+          })
+        );
+      });
+
+      it('keeps the walk’s SourceBlockedError when the plan write and the progress report both fail', async () => {
+        // A walk that grew the category to 96 and then met the block. Both
+        // writes after it fail; the caller must still see the block, or the
+        // run would go on crawling a source that is blocking it.
+        const blockedError = new SourceBlockedError({
+          at: 0,
+          cause: 'trip',
+          trip: {
+            at: 0,
+            rule: 'consecutive',
+            refusals: 3,
+            of: null,
+            status: 403,
+            url: at(24),
+            pauseMs: null,
+          },
+          probesRefused: 0,
+          pausedMs: null,
+          status: 403,
+          url: at(24),
+        });
+        const client = {
+          async *walkCategory(
+            _category: unknown,
+            onPage?: (listing: unknown, page: number, total: number) => void
+          ) {
+            onPage?.({}, 0, 96);
+            yield* [];
+            throw blockedError;
+          },
+        } as unknown as CarrefourClient;
+        const runContext = context();
+        (runContext.setTotalPlanned as jest.Mock).mockRejectedValue(
+          new Error('the database is down')
+        );
+        (runContext.report as jest.Mock).mockRejectedValue(
+          new Error('the database is still down')
+        );
+        const runner = new TestRunner({});
+
+        await expect(
+          runner['pageCategory'](
+            runContext,
+            client,
+            report,
+            {
+              id: 'cat1',
+              name: 'Bebidas',
+              url: bebidas.url,
+              path: ['Bebidas'],
+              totalResults: 48,
+            },
+            new Map(),
+            { page: 0, total: 48, stated: null },
+            { total: 48 }
+          )
+        ).rejects.toBe(blockedError);
+        expect(runContext.setTotalPlanned).toHaveBeenCalledWith(96);
+        expect(runContext.report).toHaveBeenCalledWith({ processed: 0 });
+      });
+
+      it('keeps a category read whole, and the crawl whole, when the plan write fails after it (owner decision 122a)', async () => {
+        // Frontier 48, four pages stating 96, every page read. Restating the
+        // plan fails after the frontier's write. That concerns a progress
+        // figure only, so the category stays read and the crawl whole.
+        const runner = new TestRunner(grown(96, 4));
+        const warn = jest.spyOn(runner['logger'], 'warn');
+        const runContext = context();
+        (runContext.setTotalPlanned as jest.Mock)
+          .mockResolvedValueOnce(undefined)
+          .mockRejectedValue(new Error('the database is down'));
+        await run(runner, runContext);
+
+        expect(runContext.setTotalPlanned).toHaveBeenLastCalledWith(96);
+        expect(runContext.report).toHaveBeenCalledWith({ processed: 4 });
+        expect(runContext.report).not.toHaveBeenCalledWith({ failed: 1 });
+        expect(report.products).toHaveLength(4);
+        expect(report.wholeListings).toHaveLength(1);
+        expect(report.notWhole).toEqual([]);
+        expect(runContext.warn).not.toHaveBeenCalled();
+        expect(runContext.setReport).toHaveBeenCalledWith(
+          expect.objectContaining({ unreadableCategories: [], askedAgain: [] })
+        );
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining(
+            'the planned total was not restated: Error: the database is down'
+          )
+        );
+      });
+
+      it('logs the failed plan write and surfaces the failed progress report when both fail after a whole read', async () => {
+        const reportError = new Error('the database is still down');
+        const client = {
+          async *walkCategory(
+            _category: unknown,
+            onPage?: (
+              listing: unknown,
+              page: number,
+              total: number,
+              stated: number | null
+            ) => void
+          ) {
+            onPage?.({}, 0, 96, 96);
+            yield* [];
+          },
+        } as unknown as CarrefourClient;
+        const runContext = context();
+        (runContext.setTotalPlanned as jest.Mock).mockRejectedValue(
+          new Error('the database is down')
+        );
+        (runContext.report as jest.Mock).mockRejectedValue(reportError);
+        const runner = new TestRunner({});
+        const warn = jest.spyOn(runner['logger'], 'warn');
+
+        await expect(
+          runner['pageCategory'](
+            runContext,
+            client,
+            report,
+            {
+              id: 'cat1',
+              name: 'Bebidas',
+              url: bebidas.url,
+              path: ['Bebidas'],
+              totalResults: 48,
+            },
+            new Map(),
+            { page: 0, total: 48, stated: null },
+            { total: 48 }
+          )
+        ).rejects.toBe(reportError);
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining(
+            'the planned total was not restated: Error: the database is down'
+          )
+        );
+      });
+    });
+
+    describe('a total past the ceiling while paged (owner decision 116b)', () => {
+      const at = (offset: number) => `/supermercado/x/cat1/c?offset=${offset}`;
+
+      /**
+       * Bebidas at `frontier` when the tree was walked, then Ofertas. Every
+       * page of Bebidas holds one distinct card and states `stated` results.
+       */
+      const pastCeiling = (frontier: number, stated: number) => {
+        const pages = states();
+        pages[bebidas.url] = page({ totalResults: frontier });
+        for (let offset = 0; offset < 1008; offset += 24) {
+          pages[at(offset)] = page({
+            totalResults: stated,
+            cards: [card(`b${offset}`, `Agua ${offset} 1,5 l.`, '0,39 €')],
+          });
+        }
+        return pages;
+      };
+
+      it('names a category at 900 whose pages state 1,100 as truncated, keeps what it read, and the crawl is not whole', async () => {
+        const runner = new TestRunner(pastCeiling(900, 1100));
+        const warn = jest.spyOn(runner['logger'], 'warn');
+        const runContext = await crawl(runner);
+
+        // Paged to the ceiling and no further.
+        expect(
+          runner.asked.filter((path) =>
+            path.startsWith('/supermercado/x/cat1/c?offset=')
+          )
+        ).toHaveLength(42);
+        expect(runner.asked).not.toContain(at(1008));
+        // Every product it read is reported, and Ofertas' too.
+        expect(report.products).toHaveLength(43);
+        expect(report.wholeListings).toEqual([]);
+        expect(report.notWhole).toEqual([
+          { scopeKey: null, reason: 'truncated', detail: [], listed: null },
+        ]);
+        expect(report.categoryPathCalls.length).toBeGreaterThan(0);
+        expect(
+          report.categoryPathCalls.every((call) => call.mode === 'ADD')
+        ).toBe(true);
+        expect(runContext.setReport).toHaveBeenCalledWith(
+          expect.objectContaining({
+            truncatedCategories: [
+              {
+                id: 'cat1',
+                name: 'Bebidas',
+                totalResults: 1100,
+                path: ['Bebidas'],
+              },
+            ],
+            unreadableCategories: [],
+          })
+        );
+        // Not unread, so no LISTING_UNREAD: the same as a capped node.
+        expect(runContext.warn).not.toHaveBeenCalled();
+        expect(runContext.report).not.toHaveBeenCalledWith({ failed: 1 });
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining(
+            'category cat1 (Bebidas) states 1100 results, past the paging ceiling of 1008'
+          )
+        );
+      });
+
+      it('keeps a category whose pages state exactly the ceiling read whole', async () => {
+        await crawl(new TestRunner(pastCeiling(900, 1008)));
+
+        expect(report.wholeListings).toHaveLength(1);
+        expect(report.notWhole).toEqual([]);
+      });
+
+      it('names a frontier capped node and a category truncated while paged in the one record', async () => {
+        const capped = link('cat9', 'Limpieza');
+        const pages = pastCeiling(900, 1100);
+        pages['/supermercado/la-despensa/cat20001/c'] = page({
+          firstLevel: [capped, bebidas, ofertas],
+        });
+        pages[capped.url] = page({ totalResults: 2000 });
+        const runContext = await crawl(new TestRunner(pages));
+
+        expect(report.notWhole[0].reason).toBe('truncated');
+        expect(runContext.setReport).toHaveBeenCalledWith(
+          expect.objectContaining({
+            truncatedCategories: [
+              expect.objectContaining({ id: 'cat9', totalResults: 2000 }),
+              expect.objectContaining({ id: 'cat1', totalResults: 1100 }),
+            ],
+          })
+        );
+      });
+
+      it('names a category truncated while the end pass pages it', async () => {
+        // A 503 cuts Bebidas at offset 24 on the walk. The end pass reads it
+        // from there, and its pages from then on state 1,100.
+        const pages = pastCeiling(900, 900);
+        for (let offset = 24; offset < 1008; offset += 24) {
+          pages[at(offset)] = page({
+            totalResults: 1100,
+            cards: [card(`b${offset}`, `Agua ${offset} 1,5 l.`, '0,39 €')],
+          });
+        }
+        const runner = new StatusRunner(pages, { [at(24)]: [503] });
+        const runContext = await crawl(runner);
+
+        expect(report.notWhole[0].reason).toBe('truncated');
+        expect(runContext.setReport).toHaveBeenCalledWith(
+          expect.objectContaining({
+            truncatedCategories: [
+              expect.objectContaining({ id: 'cat1', totalResults: 1100 }),
+            ],
+            unreadableCategories: [],
+            askedAgain: [{ id: 'cat1', name: 'Bebidas', read: true }],
+          })
+        );
+      });
+    });
+
+    describe('the end pass stops after failures in a row (owner decision 118b)', () => {
+      const lostOf = (n: number) =>
+        Array.from({ length: n }, (_, i) =>
+          link(`cat${i + 1}`, `Cat ${i + 1}`)
+        );
+
+      /** Every category one page of one card. */
+      const pagesOf = (categories: Array<ReturnType<typeof link>>) => {
+        const pages: Record<string, Record<string, unknown>> = {
+          '/supermercado/la-despensa/cat20001/c': page({
+            firstLevel: categories,
+          }),
+        };
+        for (const category of categories) {
+          pages[category.url] = page({ totalResults: 1 });
+          pages[`/supermercado/x/${category.id}/c?offset=0`] = page({
+            totalResults: 1,
+            cards: [card(`p-${category.id}`, `${category.id} 1 l.`, '1,00 €')],
+          });
+        }
+        return pages;
+      };
+
+      const first = (id: string) => `/supermercado/x/${id}/c?offset=0`;
+
+      const unreadWarning = (id: string, again: boolean) => ({
+        code: HarvestWarningCode.LISTING_UNREAD,
+        name: `Cat ${id.slice(3)}`,
+        offerId: null,
+        page: null,
+        message:
+          `Category ${id} Cat ${id.slice(3)}: Carrefour answered 503 at ` +
+          `offset 0${again ? ', once more at the end of the run' : ''}. The ` +
+          `listings from there on, of 1, were not read.`,
+      });
+
+      it('stops after three failures in a row, and the fourth keeps its first warning', async () => {
+        const categories = lostOf(4);
+        const runner = new StatusRunner(pagesOf(categories), {
+          [first('cat1')]: [503, 503],
+          [first('cat2')]: [503, 503],
+          [first('cat3')]: [503, 503],
+          // It would answer the second time, and is never asked.
+          [first('cat4')]: [503],
+        });
+        const runContext = await crawl(runner);
+
+        expect(asksOf(runner, first('cat3'))).toBe(2);
+        expect(asksOf(runner, first('cat4'))).toBe(1);
+        expect(runContext.warn).toHaveBeenCalledTimes(4);
+        for (const id of ['cat1', 'cat2', 'cat3']) {
+          expect(runContext.warn).toHaveBeenCalledWith(unreadWarning(id, true));
+        }
+        expect(runContext.warn).toHaveBeenCalledWith(
+          unreadWarning('cat4', false)
+        );
+        expect(runContext.setReport).toHaveBeenCalledWith(
+          expect.objectContaining({
+            askedAgain: [
+              { id: 'cat1', name: 'Cat 1', read: false },
+              { id: 'cat2', name: 'Cat 2', read: false },
+              { id: 'cat3', name: 'Cat 3', read: false },
+            ],
+          })
+        );
+        expect(report.notWhole[0].reason).toBe('unreadable');
+        // The three asked and the one the stop left, each once.
+        expect(failedOf(runContext)).toBe(4);
+      });
+
+      it('counts once a category the stop left unasked, and not one the pass read before it', async () => {
+        // The pass reads cat1, fails cat2 to cat4 and stops before cat5.
+        const categories = lostOf(5);
+        const runner = new StatusRunner(pagesOf(categories), {
+          [first('cat1')]: [503],
+          [first('cat2')]: [503, 503],
+          [first('cat3')]: [503, 503],
+          [first('cat4')]: [503, 503],
+          [first('cat5')]: [503],
+        });
+        const runContext = await crawl(runner);
+
+        expect(asksOf(runner, first('cat1'))).toBe(2);
+        expect(asksOf(runner, first('cat5'))).toBe(1);
+        expect(failedOf(runContext)).toBe(4);
+      });
+
+      it('counts again from nothing after a category the pass reads', async () => {
+        // Two failures, a read, then two failures: never three in a row, so
+        // every entry is asked.
+        const categories = lostOf(5);
+        const runner = new StatusRunner(pagesOf(categories), {
+          [first('cat1')]: [503, 503],
+          [first('cat2')]: [503, 503],
+          [first('cat3')]: [503],
+          [first('cat4')]: [503, 503],
+          [first('cat5')]: [503, 503],
+        });
+        const runContext = await crawl(runner);
+
+        for (const category of categories) {
+          expect(asksOf(runner, first(category.id))).toBe(2);
+        }
+        expect(runContext.setReport).toHaveBeenCalledWith(
+          expect.objectContaining({
+            askedAgain: [
+              { id: 'cat1', name: 'Cat 1', read: false },
+              { id: 'cat2', name: 'Cat 2', read: false },
+              { id: 'cat3', name: 'Cat 3', read: true },
+              { id: 'cat4', name: 'Cat 4', read: false },
+              { id: 'cat5', name: 'Cat 5', read: false },
+            ],
+          })
+        );
+      });
+
+      it('still ends the pass at its first refusal', async () => {
+        // The fourth category is read on the walk, so the walk ends on no
+        // refusal in a row and the pass starts.
+        const runner = new StatusRunner(pagesOf(lostOf(4)), {
+          [first('cat1')]: [503, 403],
+          [first('cat2')]: [503],
+          [first('cat3')]: [503],
+        });
+        const runContext = await crawl(runner, { guarded: true });
+
+        expect(asksOf(runner, first('cat1'))).toBe(2);
+        expect(asksOf(runner, first('cat2'))).toBe(1);
+        expect(asksOf(runner, first('cat3'))).toBe(1);
+        expect(runContext.setReport).toHaveBeenCalledWith(
+          expect.objectContaining({
+            askedAgain: [{ id: 'cat1', name: 'Cat 1', read: false }],
+          })
+        );
+      });
+    });
   });
 });

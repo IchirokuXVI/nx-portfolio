@@ -1,5 +1,8 @@
 import { registerAs } from '@nestjs/config';
-import { telemetryValidationSchema } from '@portfolio/luna-shopper/platform';
+import {
+  redisValidationSchema,
+  telemetryValidationSchema,
+} from '@portfolio/luna-shopper/platform';
 import {
   DEFAULT_POSTAL_CODE_DERIVE_MAX_METRES,
   POSTAL_CODE_DERIVE_MAX_METRES_VAR,
@@ -71,6 +74,22 @@ export const harvesterValidationSchema = Joi.object({
    * fetch one chain on one timer.
    */
   HARVEST_SCHEDULER_ENABLED: Joi.boolean().default(false),
+  /**
+   * Whether a shopper can make this pod fetch the price of one product (plan
+   * 0216, section 9). A fourth switch because it is a fourth decision: who can
+   * make this cluster contact a chain. A refresh needs it, `HARVEST_ENABLED`
+   * and the chain's own row. Off by default.
+   */
+  HARVEST_REFRESH_ENABLED: Joi.boolean().default(false),
+  /** One refresh fetch per chain in this many seconds, across every shopper. */
+  HARVEST_REFRESH_CHAIN_SECONDS: Joi.number().integer().min(1).default(30),
+  /**
+   * A price read less than this many minutes ago is `FRESH`, and one product
+   * at one fetch scope is fetched at most once in this window.
+   */
+  HARVEST_REFRESH_PRODUCT_MINUTES: Joi.number().integer().min(1).default(30),
+  /** How long a 403 to a refresh holds every refresh of that chain off. */
+  HARVEST_REFRESH_BLOCKED_MINUTES: Joi.number().integer().min(1).default(30),
   HARVEST_USER_AGENT: Joi.string().default(
     'LunaShopper/0.1 (+https://velista.app; personal price comparison; contact@velista.app)'
   ),
@@ -137,6 +156,32 @@ export const harvesterValidationSchema = Joi.object({
   OVERPASS_URL: Joi.string().allow('').default(''),
   NOMINATIM_URL: Joi.string().allow('').default(''),
 
+  /**
+   * Who hears when a run fails (plan 0218, section 8). One setting for the
+   * whole deployment and never one per chain: a comma separated list of
+   * addresses, from the app Secret, empty by default. With it empty every
+   * alert ends `SUPPRESSED` and no mail is sent, which is how staging and
+   * every luna slot run.
+   */
+  HARVEST_ALERT_EMAIL: Joi.string().allow('').default(''),
+  /**
+   * The SMTP relay auth already uses, from the same ConfigMap keys and the
+   * same Secret key. With no host the alerts end `SUPPRESSED` too.
+   */
+  SMTP_HOST: Joi.string().allow('').default(''),
+  SMTP_PORT: Joi.number().port().default(587),
+  SMTP_USER: Joi.string().allow('').default(''),
+  SMTP_PASS: Joi.string().allow('').default(''),
+  MAIL_FROM: Joi.string().allow('').default(''),
+  /** What the subject of an alert names the deployment by. */
+  ENVIRONMENT_NAME: Joi.string().default('development'),
+  /** The back office origin a mail links a run to. Empty names the run id only. */
+  ADMIN_APP_BASE_URL: Joi.string().allow('').default(''),
+
+  // Required since plan 0216: the refresh cooldowns live in Redis. Nothing
+  // else here uses it, and readiness does not probe it, so an outage refuses
+  // refreshes and nothing else.
+  ...redisValidationSchema,
   ...telemetryValidationSchema,
 })
   .or('AUTH_JWT_PUBLIC_KEY', 'AUTH_JWT_PUBLIC_KEY_FILE')
@@ -154,6 +199,11 @@ export interface HarvesterConfig {
   harvestEnabled: boolean;
   /** Whether due schedules start runs here (plan 0206). */
   schedulerEnabled: boolean;
+  /** Whether a shopper can start a refresh here (plan 0216). */
+  refreshEnabled: boolean;
+  refreshChainSeconds: number;
+  refreshProductMinutes: number;
+  refreshBlockedMinutes: number;
   userAgent: string;
   batchSize: number;
   defaultWorkers: number;
@@ -171,6 +221,31 @@ export interface HarvesterConfig {
   lidlStoresApiKey: string | undefined;
   overpassUrl: string | undefined;
   nominatimUrl: string | undefined;
+  /** The alerts to the owner (plan 0218). */
+  alerts: HarvestAlertConfig;
+}
+
+/** Where an alert goes, and how (plan 0218, section 8). */
+export interface HarvestAlertConfig {
+  /** `HARVEST_ALERT_EMAIL`, split on commas. Empty sends nothing. */
+  recipients: string[];
+  smtp: {
+    host: string;
+    port: number;
+    user: string;
+    pass: string;
+    from: string;
+  };
+  environmentName: string;
+  adminAppBaseUrl: string;
+}
+
+/** A comma separated list of addresses, with the blanks left out. */
+export function parseRecipients(raw: string | undefined): string[] {
+  return (raw ?? '')
+    .split(',')
+    .map((address) => address.trim())
+    .filter((address) => address.length > 0);
 }
 
 /** Joi coerces to a real boolean, but process.env is read directly here too. */
@@ -206,6 +281,16 @@ export const harvesterConfiguration = registerAs(
       process.env.HARVEST_SCHEDULER_ENABLED,
       false
     ),
+    refreshEnabled: parseBoolean(process.env.HARVEST_REFRESH_ENABLED, false),
+    refreshChainSeconds: Number(
+      process.env.HARVEST_REFRESH_CHAIN_SECONDS ?? 30
+    ),
+    refreshProductMinutes: Number(
+      process.env.HARVEST_REFRESH_PRODUCT_MINUTES ?? 30
+    ),
+    refreshBlockedMinutes: Number(
+      process.env.HARVEST_REFRESH_BLOCKED_MINUTES ?? 30
+    ),
     userAgent: process.env.HARVEST_USER_AGENT as string,
     batchSize: Number(process.env.HARVEST_BATCH_SIZE ?? 200),
     defaultWorkers: Number(process.env.HARVEST_DEFAULT_WORKERS ?? 4),
@@ -231,5 +316,17 @@ export const harvesterConfiguration = registerAs(
     lidlStoresApiKey: optional(process.env.LIDL_STORES_API_KEY),
     overpassUrl: optional(process.env.OVERPASS_URL),
     nominatimUrl: optional(process.env.NOMINATIM_URL),
+    alerts: {
+      recipients: parseRecipients(process.env.HARVEST_ALERT_EMAIL),
+      smtp: {
+        host: (process.env.SMTP_HOST ?? '').trim(),
+        port: Number(process.env.SMTP_PORT ?? 587),
+        user: process.env.SMTP_USER ?? '',
+        pass: process.env.SMTP_PASS ?? '',
+        from: (process.env.MAIL_FROM ?? '').trim(),
+      },
+      environmentName: process.env.ENVIRONMENT_NAME || 'development',
+      adminAppBaseUrl: (process.env.ADMIN_APP_BASE_URL ?? '').trim(),
+    },
   })
 );

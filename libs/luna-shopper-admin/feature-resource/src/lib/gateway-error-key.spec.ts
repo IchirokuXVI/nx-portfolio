@@ -81,6 +81,25 @@ describe('gatewayErrorKey', () => {
     ]);
   });
 
+  /** A size or a weight, never both (backend plan 0244, admin plan 0068). */
+  it('names each refusal about the size of a product apart', () => {
+    expect(
+      ['item_kilogram_has_size', 'item_approx_weight_beside_size'].map((code) =>
+        gatewayErrorKey(failure({ code }))
+      )
+    ).toEqual([
+      'resource.error.itemKilogramHasSize',
+      'resource.error.itemApproxWeightBesideSize',
+    ]);
+  });
+
+  /** A step on a product not sold by weight or volume (backend plan 0261, admin plan 0070). */
+  it('names the refusal of a step apart', () => {
+    expect(
+      gatewayErrorKey(failure({ code: 'item_quantity_step_not_allowed' }))
+    ).toBe('resource.error.itemQuantityStepNotAllowed');
+  });
+
   /** The shop section refusals (backend plan 0200, admin plan 0063). */
   it('names each shop section refusal apart', () => {
     expect(

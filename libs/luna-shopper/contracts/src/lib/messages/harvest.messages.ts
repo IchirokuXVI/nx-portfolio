@@ -38,6 +38,7 @@ import type {
   OfferKeptReason,
   UnitBasis,
 } from './catalog.messages';
+import type { SourceProbeSummary } from './source-probe.messages';
 
 /**
  * Harvester message contracts (plan 0038). The gateway calls these on the
@@ -414,6 +415,30 @@ export interface AdapterCapabilities {
    * change this table.
    */
   provesDelisting: boolean;
+  /**
+   * The source can fetch the price of one product alone, in one plain request
+   * with no session, so a shopper can refresh it (harvester plan 0216, section
+   * 6). True for `mercadona-api` (one JSON request by product and warehouse)
+   * and `lidl-api` (one page by path, the page a walk reads too). False for
+   * `eljamon-web`, whose page price can differ from the listing price a walk
+   * writes, so a refresh and the next walk would overwrite each other; for
+   * `carrefour-web`, whose product page parser reads no price; for `dia-api`,
+   * whose client has no product read; and for every source that writes no
+   * price.
+   */
+  refreshesOneProduct: boolean;
+  /**
+   * The count of one finished walk of this source says about how big the next
+   * walk of it is (owner decision 127b), so the back office may draw "about M"
+   * beside a run in flight from an earlier run's total.
+   *
+   * False for `deza-web` alone. Its walk is capped queries split by search term
+   * until a pass adds nothing new or a budget ends (plan 0085), so two walks of
+   * one assortment can count different totals, and an earlier total is not a
+   * fair estimate. True for every other adapter. An adapter this build does
+   * not know answers false, which draws no estimate.
+   */
+  comparableWalkTotal: boolean;
 }
 
 /**
@@ -461,13 +486,19 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     // listing of a warehouse is whole (plan 0220, section 2.1).
     stockIndicator: 'per-scope',
     provesDelisting: true,
+    // One JSON request by product id and warehouse, no session (plan 0216).
+    refreshesOneProduct: true,
+    comparableWalkTotal: true,
   },
   // The site prints no price at all, so a scope would be a required field that
   // does nothing (plan 0085).
   'deza-web': {
     writesPrices: false,
     scopesItsOwn: false,
-    listsItsOwnStores: false,
+    // `/centros/` names every shop of the chain with its code, and each shop
+    // page states the postal code (plan 0222). Away from Córdoba a run of the
+    // postal code queue costs one request.
+    listsItsOwnStores: true,
     hasProductPages: false,
     skipsKnownDetails: false,
     printedLocale: 'es',
@@ -477,11 +508,16 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     // at most 300 rows, so no listing is whole (plan 0085).
     stockIndicator: 'per-shop',
     provesDelisting: false,
+    refreshesOneProduct: false,
+    // Capped queries split by search term (plan 0085): two walks of one
+    // assortment can count different totals (owner decision 127b).
+    comparableWalkTotal: false,
   },
   'carrefour-web': {
     writesPrices: true,
     scopesItsOwn: false,
-    listsItsOwnStores: false,
+    // The store finder's document names every point of sale (plan 0223).
+    listsItsOwnStores: true,
     hasProductPages: true,
     skipsKnownDetails: false,
     printedLocale: 'es',
@@ -493,6 +529,8 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     // `config.delistCountsCrawl` says otherwise (plan 0220, section 15.4).
     stockIndicator: null,
     provesDelisting: false,
+    refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
   // The one source that states the region of every price it publishes and names
   // its own 730 shops (plan 0089).
@@ -510,6 +548,9 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     // `validUntil` (plan 0089).
     stockIndicator: null,
     provesDelisting: false,
+    // One page request by path, no session: the page a walk reads (plan 0216).
+    refreshesOneProduct: true,
+    comparableWalkTotal: true,
   },
   'eljamon-web': {
     writesPrices: true,
@@ -528,6 +569,8 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     // section 2.3).
     stockIndicator: null,
     provesDelisting: true,
+    refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
   'dia-api': {
     writesPrices: true,
@@ -553,6 +596,8 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     // (plan 0220, section 2.2).
     stockIndicator: 'per-scope',
     provesDelisting: true,
+    refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
   // OpenStreetMap carries a place's name and never a language for it, and a
   // shop name is a proper noun in any case, so there is nothing to claim here.
@@ -566,6 +611,8 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     walkablePriorities: null,
     stockIndicator: null,
     provesDelisting: false,
+    refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
   // Nothing is printed: whatever a manual row holds, an operator typed, and the
   // operator says which language they typed it in.
@@ -579,6 +626,8 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     walkablePriorities: null,
     stockIndicator: null,
     provesDelisting: false,
+    refreshesOneProduct: false,
+    comparableWalkTotal: true,
   },
 };
 
@@ -610,6 +659,8 @@ export function adapterCapabilities(
       walkablePriorities: null,
       stockIndicator: null,
       provesDelisting: false,
+      refreshesOneProduct: false,
+      comparableWalkTotal: false,
     }
   );
 }
@@ -648,6 +699,11 @@ export interface SupermarketSourceView {
   lastRunAt: string | null;
   lastSuccessAt: string | null;
   consecutiveFailures: number;
+  /**
+   * The newest probe of the source that is not `ABORTED`, or null when none
+   * (plan 0219, section 8). Optional, as `presetId` is on a run.
+   */
+  lastProbe?: SourceProbeSummary | null;
 }
 
 /**
@@ -769,6 +825,61 @@ export interface HarvestRunView {
    * preset.
    */
   presetId: string | null;
+  /**
+   * The run's own request, as it was started (owner decision 114a): what
+   * `harvest_runs.input` stored, in the shape of a preset's input. **Never the
+   * preset's current input.** A preset can be edited after its runs, and this
+   * field is how a run still says what it read.
+   *
+   * **A record of what ran, not a request.** It has the type of a preset's
+   * input only for its shape. The values are the resolved ones the spawn
+   * stored, so a default is stated (`writes`, `details`, `radiusMetres`,
+   * `country`). A run stored before `writes` or `details` existed states the
+   * value its runner read in their place: both writes, every detail. The spawn
+   * refuses some of those stated values for some chains, so never send this
+   * back as a run request and never save it as a preset. A file import states
+   * its source kind and its window too (owner decision 129b), which is why the
+   * type is {@link HarvestRunInputRecord} and not a preset's input. Two things
+   * the run stored are left out. A file import's document is the run's
+   * `documentSha256` here, and the chain is the run's own `supermarketId`.
+   *
+   * **Null when the stored input cannot be read**: not an object, a mode this
+   * build does not know, or a field of the wrong type. Null says the request is
+   * unknown, never that it was empty, and an unknown request counts as
+   * narrowed. {@link isNarrowedRun} reads this field, null included, and
+   * {@link isNarrowedRunRequest} holds that rule.
+   */
+  input: HarvestRunInputRecord | null;
+  /**
+   * What shaped the walk outside its request, as a digest (owner decision
+   * 130b): sha256, hex, over a canonical JSON of the source row's `adapterKey`
+   * and its whole `config`, taken when the run was spawned. A Carrefour seed
+   * path is the example: it lives in `config`, it can shrink a walk, and the
+   * request does not state it.
+   *
+   * **A digest and never the configuration**, because `config` holds base URLs
+   * and other values that stay in the harvester. Two runs whose digests are
+   * equal walked under the same configuration. The rate (`workers`,
+   * `maxRequestsPerSecond`) and `enabled` are not in it: they change how fast a
+   * walk goes, not what it walks.
+   *
+   * Null for a run that used no source row (a file import, an OpenStreetMap
+   * store discovery) and for every run stored before the column existed.
+   * {@link walkedUnderSameConfig} is the one rule that compares two of them,
+   * and a null on either side answers no.
+   */
+  configFingerprint: string | null;
+  /**
+   * The adapter of the source row the run used, as it was when the run was
+   * spawned (owner decision 127b), so a reader can ask
+   * {@link adapterCapabilities} about the run without the sources list.
+   *
+   * Null for a run that used no source row and for every run stored before
+   * the column existed. **A reader must treat a null, absent or unknown key as
+   * an adapter whose walk total is not comparable**: `adapterCapabilities`
+   * answers `comparableWalkTotal: false` for it, so no estimate is drawn.
+   */
+  adapterKey: AdapterKey | null;
   /**
    * The schedule that started this run (plan 0206, section 9), null for a run
    * a person or the postal code queue started. A deleted schedule leaves it.
@@ -966,8 +1077,27 @@ export interface SourceCatalogEntryView {
    * whose payload has no field that says it.
    */
   soldByWeight: boolean;
+  /**
+   * The approximate weight of one piece, in grams, as the last run that saw
+   * the row read it (plan 0244, section 5.5). The source's, so every run
+   * rewrites it. Null whenever `unitSize` is set, and for a row whose source
+   * states no weight.
+   *
+   * Independent of {@link soldByWeight}: a piece priced as one has a weight
+   * and is not sold by weight. Optional until the harvester fills it on every
+   * view it builds.
+   */
+  approxWeight?: number | null;
   /** The source's own size text, and half of the key for a source with no id. */
   sizeFormat: string | null;
+  /**
+   * The container the chain prints (`Brik`, `Botella`, `Pack-4`), verbatim, as
+   * the last full read stated it (plan 0248). Null for a row whose source
+   * prints none, which is every chain but Mercadona, and for a Mercadona row no
+   * run has read whole since that plan. It tells two containers of one product
+   * apart, and they are never proposed as each other.
+   */
+  packaging: string | null;
   /**
    * How many units the pack holds, as the last run that saw the row read it
    * (plan 0162). Null when the source stated no count. It is the source's, so
@@ -975,6 +1105,16 @@ export interface SourceCatalogEntryView {
    */
   packCount: number | null;
   categoryPath: string[];
+  /**
+   * Every category path the chain files the product under, each root first,
+   * in walk order, in the chain's own words (plan 0268). Context for the
+   * curator and the queue, never a category of ours. After a run that
+   * replaced the list, the first path is the one `categoryPath` holds. A run
+   * that added to it keeps the stored paths in their order and appends, so
+   * the first path can then differ from `categoryPath`. Empty for a row no
+   * walk of its chain has stated paths for since that plan.
+   */
+  categoryPaths: string[][];
   url: string | null;
   /**
    * The address of the photo the chain prints for the product, verbatim, or
@@ -1031,6 +1171,35 @@ export interface SourceCatalogEntryView {
    * is waiting on. An accept writes every one of these that is still valid.
    */
   prices: SourceEntryPriceView[];
+  /**
+   * The size the row's own price and comparison price imply, when it
+   * disagrees with the stated one beyond about 15% (plan 0249), and null
+   * otherwise. Written by the ingest alone, from what it read.
+   *
+   * **Evidence, never a correction.** `unitSize` stays what the source sent,
+   * because the chain prints wrong comparison prices too. While it is set, a
+   * product is created from the row only with a `unitSize` the request
+   * names, and rung 4 neither proposes from the row nor proposes it. An
+   * accept onto an existing product is untouched.
+   */
+  sizeDoubt: SourceEntrySizeDoubtView | null;
+}
+
+/** A size its own unit price disproves (plan 0249, section 3). */
+export interface SourceEntrySizeDoubtView {
+  /** The implied size, in {@link unit}. */
+  implied: number;
+  /** The base unit both sizes are compared in: grams, millilitres or units. */
+  unit: UnitOfMeasure;
+  /** `implied / stated`, with the stated size in the same unit. */
+  ratio: number;
+  /**
+   * The comparison price's label the check read, as the chain printed it, or
+   * null when the row's prices were not loaded with it.
+   */
+  label: string | null;
+  /** The run whose observation recorded the doubt. */
+  runId: string;
 }
 
 /**
@@ -1142,6 +1311,11 @@ export interface SourceLocationCandidate {
   postalCode: string | null;
   score: number;
   strong: boolean;
+  /**
+   * The chain's own shop list names a shop with this row's code, and that shop
+   * is linked to this location (plan 0222). A proposal, never a mapping.
+   */
+  sameCode?: boolean;
 }
 
 // --- Run requests ----------------------------------------------------------
@@ -1365,6 +1539,41 @@ export type HarvestRunPresetInput = Omit<
   | 'validFrom'
   | 'validUntil'
 >;
+
+/**
+ * A run's own request as the run view states it (owner decision 129b): a
+ * preset's input, and for a `FILE_IMPORT` the source kind and the window the
+ * spawn stored beside it.
+ *
+ * **A type of its own so a preset still cannot carry them.** A preset is
+ * {@link HarvestRunPresetInput}, which leaves the file import fields out, and
+ * this type is only ever read off a run.
+ *
+ * Every field it adds is absent on a run of another mode, and on a file import
+ * stored before the run view read them, never null.
+ */
+export interface HarvestRunInputRecord extends HarvestRunPresetInput {
+  /**
+   * What the prices of a `FILE_IMPORT` are stamped with: what observed them,
+   * not what uploaded them. One of the three official kinds.
+   */
+  sourceKind?: PriceSourceKind;
+  /**
+   * The window of a `FILE_IMPORT`'s prices as the spawn resolved it: ISO 8601
+   * instants, **not** the local days a spawn request takes. Both or neither:
+   * absent when the document stated no window and none was given, which is
+   * what a walk's export is.
+   */
+  validFrom?: string;
+  validUntil?: string;
+}
+
+export {
+  isNarrowedRun,
+  isNarrowedRunRequest,
+  walkedUnderSameConfig,
+} from './run-narrowing';
+export type { NarrowableRunRequest } from './run-narrowing';
 
 /** The latest run started from a preset, for the presets list. */
 export interface HarvestRunPresetLastRun {
@@ -1719,6 +1928,19 @@ export interface ListSourceEntriesRequest extends PageQuery, AdminCredential {
    * false leaves them out, and absent lists both (plan 0220, section 12).
    */
   delisted?: boolean;
+  /**
+   * True lists only the rows whose size their own price and comparison price
+   * disprove (`sizeDoubtImplied` set, plan 0249), false leaves them out, and
+   * absent lists both (admin plan 0072).
+   */
+  sizeDoubt?: boolean;
+  /**
+   * The one row with this id, whatever its status (admin plan 0073). Every
+   * other filter given still applies, and with no `status` the default
+   * `CANDIDATE` and `UNRESOLVED` clause is not added, because the row a link
+   * names can be decided already.
+   */
+  entryId?: string;
 }
 
 export interface SourceEntryIdRequest extends AdminCredential {

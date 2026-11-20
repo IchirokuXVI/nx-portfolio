@@ -504,6 +504,7 @@ describe('a member holding {READ, WRITE} (acceptance 3)', () => {
         userId: USER_ID,
         lineId: 'li1',
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
       })
     ).resolves.toBeDefined();
   });
@@ -514,6 +515,7 @@ describe('a member holding {READ, WRITE} (acceptance 3)', () => {
       userId: USER_ID,
       lineId: 'li1',
       outcome: SettlementOutcome.NOT_AVAILABLE,
+      unit: 'UNIT',
     });
     expect(settlement.outcome).toBe(SettlementOutcome.NOT_AVAILABLE);
     // Nothing was bought, so nothing came off what the household still wants
@@ -641,6 +643,7 @@ describe('a member holding {READ, DECIDE} (acceptance 4)', () => {
         userId: USER_ID,
         lineId: 'li1',
         outcome: SettlementOutcome.NOT_AVAILABLE,
+        unit: 'UNIT',
       })
     ).rejects.toThrow(/write access to this list/);
   });
@@ -983,6 +986,7 @@ describe('the whole call site table (plan 0036, section 4)', () => {
           userId: USER_ID,
           lineId: 'li1',
           outcome: SettlementOutcome.BOUGHT,
+          unit: 'UNIT',
         }),
     },
     {

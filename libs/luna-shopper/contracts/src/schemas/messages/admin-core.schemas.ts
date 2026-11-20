@@ -220,6 +220,8 @@ const listLineView = object(
     listName: nonEmptyString(),
     content: string(),
     quantity: integer(),
+    // What `quantity` counts (plan 0246, section 6).
+    unit: ref(ENUM_IDS.lineUnit),
     approvalStatus: ref(ENUM_IDS.lineApprovalStatus),
     createdByUserId: nonEmptyString(),
     ...timestamps,
@@ -230,6 +232,7 @@ const listLineView = object(
     'listName',
     'content',
     'quantity',
+    'unit',
     'approvalStatus',
     'createdByUserId',
     ...timestampKeys,
@@ -281,13 +284,15 @@ const basketRowView = object(
   {
     rowKey: nonEmptyString(),
     content: string(),
+    // What the three numbers count: a row is one unit (plan 0246 M6).
+    unit: ref(ENUM_IDS.lineUnit),
     left: integer({ minimum: 0 }),
     bought: integer({ minimum: 0 }),
     asked: integer({ minimum: 0 }),
     // Plan 0160: what the row was bought for, reverted ones included.
     settlements: array(ref(ADMIN_CORE_SCHEMA_IDS.basketSettlementView)),
   },
-  ['rowKey', 'content', 'left', 'bought', 'asked', 'settlements']
+  ['rowKey', 'content', 'unit', 'left', 'bought', 'asked', 'settlements']
 );
 
 const basketSettlementView = object(
@@ -298,6 +303,9 @@ const basketSettlementView = object(
     itemId: nullableString(),
     outcome: ref(ENUM_IDS.settlementOutcome),
     quantity: integer({ minimum: 0 }),
+    // What `quantity` counts, and so what `pricePaidCents` is one of (plan
+    // 0246 M7).
+    unit: ref(ENUM_IDS.lineUnit),
     pricePaidCents: { type: ['integer', 'null'], minimum: 0 },
     pricePaidCurrency: nullableString(),
     priceScopeId: nullableString(),
@@ -313,6 +321,7 @@ const basketSettlementView = object(
     'itemId',
     'outcome',
     'quantity',
+    'unit',
     'pricePaidCents',
     'pricePaidCurrency',
     'priceScopeId',
@@ -526,6 +535,9 @@ const updateLineRequest = object(
     lineId: nonEmptyString(),
     content: nonEmptyString(),
     quantity: integer({ minimum: 0 }),
+    // What the quantity counts (plan 0246, section 6). Core refuses it
+    // without a quantity beside it, as on a member's edit.
+    unit: ref(ENUM_IDS.lineUnit),
     itemIds: array(nonEmptyString()),
   },
   ['userId', 'listId', 'lineId']

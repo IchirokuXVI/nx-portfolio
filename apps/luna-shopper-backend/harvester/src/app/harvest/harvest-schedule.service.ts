@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   HarvestRunMode,
   HarvestScheduleBlock,
+  SourceProbeStatus,
   type CreateHarvestScheduleRequest,
   type HarvestScheduleIdRequest,
   type HarvestScheduleLastRun,
@@ -27,6 +28,12 @@ import { HarvestRunStore, type SourceRef } from './harvest-run.store';
 import { HarvestScheduleStore } from './harvest-schedule.store';
 import { toHarvestScheduleView } from './harvest.mappers';
 import { PlatformAdminService } from './platform-admin.service';
+import { isProbedAdapterKey } from './probes/source-probe.runner';
+import {
+  SourceProbeStore,
+  type LatestProbe,
+} from './probes/source-probe.store';
+import { runFetchesChain } from './schedule-probe-gate';
 import {
   HARVEST_CLOCK,
   isKnownTimezone,
@@ -75,7 +82,8 @@ export class HarvestScheduleService {
     private readonly runs: HarvestRunService,
     private readonly admin: PlatformAdminService,
     private readonly config: ConfigService,
-    @Inject(HARVEST_CLOCK) private readonly clock: HarvestClock
+    @Inject(HARVEST_CLOCK) private readonly clock: HarvestClock,
+    private readonly probes: SourceProbeStore
   ) {}
 
   private settings(): HarvesterConfig {
@@ -257,6 +265,13 @@ export class HarvestScheduleService {
     const sourceByChain = new Map(
       sources.map((source) => [source.supermarketId, source])
     );
+    // The `lastProbe` read of the source list (plan 0219, section 8), for
+    // the forecast of plan 0247, section 3, with a `RUNNING` probe read past:
+    // the forecast is the newest finished probe that is not `ABORTED`.
+    const probeBySource = await this.probes.latestBySources(
+      sources.map((source) => source.id),
+      { finishedOnly: true }
+    );
 
     const estimates = await this.runs.estimates(
       rows.map((row) => ({
@@ -270,14 +285,19 @@ export class HarvestScheduleService {
       }))
     );
 
-    return rows.map((row, index) =>
-      toHarvestScheduleView(row, {
+    return rows.map((row, index) => {
+      const source = sourceByChain.get(row.supermarketId) ?? null;
+      return toHarvestScheduleView(row, {
         presetName: presetById.get(row.presetId)?.name ?? row.presetId,
         lastRun: row.lastRunId ? (runById.get(row.lastRunId) ?? null) : null,
-        blockedBy: this.blockedBy(sourceByChain.get(row.supermarketId) ?? null),
+        blockedBy: this.blockedBy(
+          source,
+          presetById.get(row.presetId)?.input.mode ?? null,
+          source ? (probeBySource.get(source.id) ?? null) : null
+        ),
         estimate: estimates[index],
-      })
-    );
+      });
+    });
   }
 
   /**
@@ -287,8 +307,18 @@ export class HarvestScheduleService {
    *
    * The order is the worker's: the source row before its failures, so a row
    * that is off and failing says it is off, which is the first thing to fix.
+   *
+   * `PROBE_NOT_PASSED` comes last (plan 0247, section 3): the newest probe of
+   * the chain that is not `ABORTED` is finished and not `PASSED`, and the
+   * preset reads the chain, so the gate applies to it. It is a forecast, not a
+   * verdict: the slot runs a fresh probe and may pass. A probe that is running
+   * forecasts nothing.
    */
-  private blockedBy(source: SourceRef | null): HarvestScheduleBlock | null {
+  private blockedBy(
+    source: SourceRef | null,
+    mode: HarvestRunMode | null,
+    probe: LatestProbe | null
+  ): HarvestScheduleBlock | null {
     const settings = this.settings();
     if (!settings.harvestEnabled) {
       return HarvestScheduleBlock.HARVEST_DISABLED;
@@ -301,6 +331,16 @@ export class HarvestScheduleService {
     }
     if (source.consecutiveFailures >= SOURCE_FAILING_AFTER) {
       return HarvestScheduleBlock.SOURCE_FAILING;
+    }
+    if (
+      probe &&
+      mode &&
+      isProbedAdapterKey(source.adapterKey) &&
+      runFetchesChain(mode, source.adapterKey) &&
+      probe.status !== SourceProbeStatus.PASSED &&
+      probe.status !== SourceProbeStatus.RUNNING
+    ) {
+      return HarvestScheduleBlock.PROBE_NOT_PASSED;
     }
     return null;
   }

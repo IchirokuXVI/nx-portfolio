@@ -5,7 +5,67 @@ import type {
   ProductShopPrice,
   ShoppingListSummary,
 } from '@portfolio/velista/models';
-import { selectLinePage, type LinePageInput } from './select-line-page';
+import {
+  offeredUnits,
+  selectLinePage,
+  type LinePageInput,
+} from './select-line-page';
+
+describe('offeredUnits (velista 0183; backend 0246 W1 and W2)', () => {
+  const LOOSE = { unit: 'KILOGRAM', size: null, approxWeight: null };
+  const PIECE = { unit: 'KILOGRAM', size: null, approxWeight: 700 };
+
+  it('offers pieces and weight on a line of a loose product and a kilo piece', () => {
+    expect(
+      offeredUnits({ itemIds: ['loose', 'piece'], unit: 'UNIT' }, (itemId) =>
+        itemId === 'loose' ? LOOSE : PIECE
+      )
+    ).toEqual(['UNIT', 'GRAM']);
+  });
+
+  it('offers no choice on a line of one product, even a kilo piece', () => {
+    expect(
+      offeredUnits({ itemIds: ['piece'], unit: 'UNIT' }, () => PIECE)
+    ).toEqual(['UNIT']);
+  });
+
+  it('keeps a free text line in its own unit, grams or millilitres too (the owner, 2026-11-17)', () => {
+    expect(offeredUnits({ itemIds: [], unit: 'GRAM' }, () => null)).toEqual([
+      'GRAM',
+    ]);
+    expect(
+      offeredUnits({ itemIds: [], unit: 'MILLILITER' }, () => null)
+    ).toEqual(['MILLILITER']);
+  });
+
+  it('keeps the stored unit on offer when no product serves it, so the chip has a way out', () => {
+    // A legacy line stored in pieces whose readable products are all loose.
+    expect(
+      offeredUnits(
+        { itemIds: ['loose-a', 'loose-b'], unit: 'UNIT' },
+        () => LOOSE
+      )
+    ).toEqual(['UNIT', 'GRAM']);
+  });
+
+  it('reads a gone record as answered, not as still loading', () => {
+    expect(
+      offeredUnits(
+        { itemIds: ['gone', 'loose', 'piece'], unit: 'UNIT' },
+        (itemId) =>
+          itemId === 'gone' ? null : itemId === 'loose' ? LOOSE : PIECE
+      )
+    ).toEqual(['UNIT', 'GRAM']);
+  });
+
+  it('offers the line unit alone while a record is still being read', () => {
+    expect(
+      offeredUnits({ itemIds: ['loose', 'piece'], unit: 'UNIT' }, (itemId) =>
+        itemId === 'loose' ? LOOSE : undefined
+      )
+    ).toEqual(['UNIT']);
+  });
+});
 
 /**
  * What the line page says, asserted against the function that decides it
@@ -23,6 +83,7 @@ function line(overrides: Partial<Line> = {}): Line {
     listId: LIST_ID,
     content: 'Shampoo',
     quantity: 3,
+    unit: 'UNIT',
     itemIds: ['normal', 'classic'],
     productGroupId: null,
     groupItemIds: [],
@@ -83,12 +144,17 @@ function price(
 ): ProductShopPrice {
   return {
     supermarketId,
-    chain: { en: supermarketId === MERCADONA ? 'Mercadona' : 'Carrefour', es: '' },
+    chain: {
+      en: supermarketId === MERCADONA ? 'Mercadona' : 'Carrefour',
+      es: '',
+    },
     logoUrl: null,
     kind: 'priced',
     offer: {
       price: amount,
       unitPrice: unit,
+      comparablePrice: unit,
+      comparableBasis: 'LITER',
       currency: 'EUR',
       priceScopeId: 'scope',
     } as ProductShopPrice['offer'],
@@ -102,11 +168,15 @@ const PRICES: Record<string, LineProductPriceRead> = {
 };
 
 function input(overrides: Partial<LinePageInput> = {}): LinePageInput {
+  const itemNameOf =
+    overrides.itemNameOf ?? ((itemId: string) => CATALOG[itemId] ?? null);
   return {
     line: line(),
     list: list(),
     zoneName: 'Home',
-    itemNameOf: (itemId) => CATALOG[itemId] ?? null,
+    itemNameOf,
+    // The size fields come with the record, as `ItemNames.sizingOf` answers.
+    productOf: (itemId) => itemNameOf(itemId),
     namesUnavailable: false,
     nameOf: (userId) => (userId === 'user-marta' ? 'Marta' : null),
     callerUserId: ME,
@@ -142,6 +212,22 @@ describe('selectLinePage', () => {
     });
   });
 
+  it("gives the stepper the product's step, and none for a count (velista 0186)", () => {
+    const chicken = {
+      ...item('chicken', 'Whole chicken', null),
+      size: null,
+      unit: 'KILOGRAM',
+      quantityStep: 250,
+    } as CatalogItem;
+    const weighed = input({
+      line: { ...line(), unit: 'GRAM', quantity: 1000, itemIds: ['chicken'] },
+      itemNameOf: (itemId) => (itemId === 'chicken' ? chicken : null),
+    });
+
+    expect(selectLinePage(weighed)?.step).toBe(250);
+    expect(selectLinePage(input())?.step).toBeNull();
+  });
+
   describe('who added it', () => {
     it('uses the word for the reader', () => {
       expect(selectLinePage(input())?.addedBy).toBe('list.page.you');
@@ -173,17 +259,111 @@ describe('selectLinePage', () => {
         cheapest: true,
         favorite: false,
       });
-      expect(cards[0].price).toContain('2.15');
-      expect(cards[0].caption).toContain('Mercadona');
-      expect(cards[0].caption).toContain('catalog.unit.LITER');
+      expect(cards[0].price?.amount).toContain('2.15');
+      expect(cards[0].chain).toBe('Mercadona');
+      expect(cards[0].unit?.amount).toContain('5.38');
+      expect(cards[0].unit?.per).toBe('catalog.per.LITER');
       expect(cards[1].cheapest).toBe(false);
+    });
+
+    describe('a kilo piece (velista 0179)', () => {
+      const CHEESE = {
+        ...item('cheese', 'Cured cheese', null),
+        size: null,
+        unit: 'KILOGRAM',
+        approxWeight: 1560,
+        unitBasis: 'KILOGRAM',
+      } as CatalogItem;
+
+      function cheeseCard(
+        piecePrice: number | null,
+        known: CatalogItem | null = CHEESE
+      ) {
+        const offer = {
+          price: 13.42,
+          unitPrice: 13.42,
+          piecePrice,
+          currency: 'EUR',
+          priceScopeId: 'scope',
+        } as ProductShopPrice['offer'];
+        return selectLinePage(
+          input({
+            line: line({ itemIds: ['cheese'] }),
+            itemNameOf: (itemId) => (itemId === 'cheese' ? known : null),
+            priceOf: () => [{ ...price(MERCADONA, 13.42, 13.42), offer }],
+          })
+        )?.cards[0];
+      }
+
+      it('draws the piece price, and the price per kilo in the caption', () => {
+        const card = cheeseCard(20.94);
+        expect(card?.price).toEqual({ amount: '€20.94', per: null });
+        expect(card?.chain).toBe('Mercadona');
+        expect(card?.unit).toEqual({
+          amount: '€13.42',
+          per: 'catalog.per.KILOGRAM',
+        });
+      });
+
+      it('draws no price for a kilo piece with a price and no piece price', () => {
+        const card = cheeseCard(null);
+        expect(card?.priceKind).toBe('noPrice');
+        expect(card?.price).toBeNull();
+      });
+
+      it('never calls a kilo piece with no piece price the cheapest', () => {
+        // A kilo of the cheese costs less than a litre of the shampoo, so the
+        // comparison picks it; with no piece price it is drawn unpriced.
+        const cheapestOf = (piecePrice: number | null) =>
+          selectLinePage(
+            input({
+              line: line({ itemIds: ['cheese', 'normal'] }),
+              itemNameOf: (itemId) =>
+                itemId === 'cheese' ? CHEESE : (CATALOG[itemId] ?? null),
+              priceOf: (itemId) =>
+                itemId === 'cheese'
+                  ? [
+                      {
+                        ...price(MERCADONA, 1, 1),
+                        offer: {
+                          price: 1,
+                          unitPrice: 1,
+                          piecePrice,
+                          currency: 'EUR',
+                          priceScopeId: 'scope',
+                        } as ProductShopPrice['offer'],
+                      },
+                    ]
+                  : PRICES[itemId],
+            })
+          )?.cards.find((card) => card.itemId === 'cheese');
+
+        expect(cheapestOf(1.56)).toMatchObject({
+          priceKind: 'priced',
+          cheapest: true,
+        });
+        expect(cheapestOf(null)).toMatchObject({
+          priceKind: 'noPrice',
+          cheapest: false,
+        });
+      });
+
+      it('draws the piece price while the catalog has not named the product', () => {
+        const card = cheeseCard(20.94, null);
+        expect(card?.price).toEqual({ amount: '€20.94', per: null });
+        expect(card?.unit).toEqual({
+          amount: '€13.42',
+          per: 'catalog.per.KILOGRAM',
+        });
+      });
     });
 
     it('puts the cheapest first on a line with no favourite', () => {
       // The line holds the dearer product first.
       const cards =
-        selectLinePage(input({ line: line({ itemIds: ['classic', 'normal'] }) }))
-          ?.cards ?? [];
+        selectLinePage(
+          input({ line: line({ itemIds: ['classic', 'normal'] }) })
+        )?.cards ?? [];
 
       expect(cards.map((card) => card.itemId)).toEqual(['normal', 'classic']);
       expect(cards.map((card) => card.cheapest)).toEqual([true, false]);
@@ -205,9 +385,9 @@ describe('selectLinePage', () => {
           input({ line: line({ preferredSupermarketId: CARREFOUR }) })
         )?.cards ?? [];
 
-      expect(cards[0].price).toContain('2.60');
-      expect(cards[0].caption).not.toContain('Carrefour');
-      expect(cards[0].caption).toContain('catalog.unit.LITER');
+      expect(cards[0].price?.amount).toContain('2.60');
+      expect(cards[0].chain).toBeNull();
+      expect(cards[0].unit?.per).toBe('catalog.per.LITER');
     });
 
     it('says a product is not sold at the supermarket of the line', () => {
@@ -220,7 +400,8 @@ describe('selectLinePage', () => {
         itemId: 'classic',
         priceKind: 'notSold',
         price: null,
-        caption: null,
+        chain: null,
+        unit: null,
       });
     });
 

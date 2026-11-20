@@ -146,14 +146,38 @@ export class SourceCatalogEntry extends BaseEntity {
   @Column({ type: 'boolean', default: false })
   soldByWeight!: boolean;
 
+  /**
+   * The approximate weight of one piece in grams, as the source printed it
+   * (plan 0244, section 5.5). The source's, like `soldByWeight`: every run
+   * that states it rewrites it.
+   *
+   * Independent of {@link soldByWeight}: a cheese sold by the kilo has one,
+   * and so does a tray priced as one piece. Null whenever {@link unitSize} is
+   * set, which `chk_source_catalog_entries_approx_weight` holds.
+   */
+  @Column({ type: 'numeric', precision: 12, scale: 4, nullable: true })
+  approxWeight!: number | null;
+
   /** The source's own token (`kg`, `l`, `ud`, `m`), not a `UnitOfMeasure`. */
   @Column({ type: 'varchar', nullable: true })
   sizeFormat!: string | null;
 
   /**
+   * The container the chain prints (`Brik`, `Botella`, `Pack-4`), verbatim,
+   * or null (plan 0248, section 2). Only Mercadona states one. The source's,
+   * like `sizeFormat`: every full read that states it rewrites it. It joins
+   * rung 4's sibling key, so a brik never proposes a bottle (D2), and never
+   * the row identity.
+   */
+  @Column({ type: 'text', nullable: true })
+  packaging!: string | null;
+
+  /**
    * How many units the pack holds, as the last run that saw the row read it
    * (plan 0162), or null. The source's, like `sizeFormat`: every run rewrites
-   * it, and it is never part of a matching key.
+   * it. It joins rung 4's sibling key (plan 0248, D3), so a pack of four never
+   * proposes the single bottle of the same total size, and never the row
+   * identity.
    */
   @Column({ type: 'smallint', nullable: true })
   packCount!: number | null;
@@ -161,6 +185,24 @@ export class SourceCatalogEntry extends BaseEntity {
   /** The path the walk took, root first. Deepest node drives the category map. */
   @Column({ type: 'jsonb', default: () => `'[]'::jsonb` })
   categoryPath!: string[];
+
+  /**
+   * Every path the chain files the product under, each root first, in walk
+   * order, distinct, in the chain's own words (plan 0268). Context for the
+   * curator and the back office: no rule reads it, and nothing maps it to a
+   * category of ours. After a `REPLACE` write the first path is the one
+   * `categoryPath` holds. An `ADD` write keeps the stored paths as they are
+   * and in their order, except that an element that is not a path (not a non
+   * empty list of strings) is removed, and appends the new ones, so its first
+   * path can differ from `categoryPath` (owner decisions 75a and 78a).
+   *
+   * **Written only at the end of a run**, by the drain, and never by a chunk:
+   * a run that dies before its drain leaves the stored list as it was. A row
+   * a run created holds `[]` until then, and a row no walk of its chain has
+   * read since the plan holds `[]` too (D3, no backfill).
+   */
+  @Column({ type: 'jsonb', default: () => `'[]'::jsonb` })
+  categoryPaths!: string[][];
 
   @Column({ type: 'varchar', nullable: true })
   url!: string | null;
@@ -288,4 +330,32 @@ export class SourceCatalogEntry extends BaseEntity {
    */
   @OneToMany(() => SourceEntryPrice, (price) => price.entry)
   prices!: SourceEntryPrice[];
+
+  /**
+   * The size the row's own price and comparison price imply, in the base unit
+   * of {@link unitSize} (grams, millilitres or units), when the two disagree
+   * beyond the tolerance of plan 0249, section 2. Null when the last check
+   * agreed, or none could be made.
+   *
+   * **In neither group above.** The ingest writes the three doubt columns
+   * from what it read, and nothing else writes them. The stated size stays
+   * what the source sent: a doubt is evidence for a person, never a
+   * correction, because the chain prints wrong comparison prices too. While
+   * it is set, a product is created from the row only with a size the person
+   * names (`createdSize`), and rung 4 neither proposes from the row nor
+   * proposes it.
+   */
+  @Column({ type: 'numeric', precision: 14, scale: 4, nullable: true })
+  sizeDoubtImplied!: number | null;
+
+  /**
+   * `sizeDoubtImplied / stated` (plan 0249). Unscaled, so a ratio of a
+   * millionth, a box stated a thousand times too heavy, is kept.
+   */
+  @Column({ type: 'numeric', nullable: true })
+  sizeDoubtRatio!: number | null;
+
+  /** The run whose observation recorded the doubt (plan 0249). */
+  @Column({ type: 'uuid', nullable: true })
+  sizeDoubtRunId!: string | null;
 }

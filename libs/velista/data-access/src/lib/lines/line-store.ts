@@ -7,20 +7,29 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
+  addAmount,
   addMayMeetLine,
+  addMayMeetProduct,
+  defaultQuantity,
+  legacyLineUnit,
   LINE_QUANTITY_MIN,
+  LINE_UNIT_FALLBACK,
   LINES_PAGE_SIZE,
   SETTLEMENTS_PAGE_SIZE,
+  shownLineUnit,
   type AddLineOptions,
+  type AddOutcome,
   type Comment,
   type Line,
   type LineApprovalStatus,
   type LineSettlement,
+  type LineUnit,
   type Page,
   type SettleLineOptions,
   type SettlementOutcome,
 } from '@portfolio/velista/models';
 import { onEdge } from '@portfolio/velista/platform';
+import { ItemNames } from '../catalog/item-names';
 import { GatewayError } from '../errors';
 import {
   listWritesPage,
@@ -36,9 +45,22 @@ import {
 import type { RealtimeEvent } from '../realtime/realtime-events';
 import {
   LINE_SERVICE,
+  type LineAddResult,
   type LineServiceI,
   type LineUpdateResult,
 } from './line-service';
+
+/** An add's answer, as {@link LineStore.addLine} hands it on. */
+function added(answer: LineAddResult): LineAddOutcome {
+  return {
+    state: 'added',
+    line: answer.line,
+    // From the outcome, so the pages that read `merged` agree with it.
+    merged: answer.outcome !== 'created',
+    outcome: answer.outcome,
+    alreadyOnList: answer.alreadyOnList,
+  };
+}
 
 /**
  * What {@link LineStore.updateLine} answers.
@@ -71,7 +93,17 @@ export type LineLoadState = 'idle' | 'loading' | 'loaded' | 'failed';
  * refusal that asks which line carries.
  */
 export type LineAddOutcome =
-  | { readonly state: 'added'; readonly line: Line; readonly merged: boolean }
+  | {
+      readonly state: 'added';
+      readonly line: Line;
+      readonly merged: boolean;
+      /**
+       * What the add did (backend `0260`). With `alreadyOnList` nothing changed:
+       * {@link alreadyOnList} names every line the add met, and the page shows them.
+       */
+      readonly outcome: AddOutcome;
+      readonly alreadyOnList: readonly Line[];
+    }
   | { readonly state: 'failed'; readonly error: unknown };
 
 /** How a pending write on one line is going. Mirrors `LineWriteState` in `models`. */
@@ -137,6 +169,21 @@ export class LineStore {
   private readonly _lines = inject<LineServiceI>(LINE_SERVICE);
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
   private readonly _mutations = inject(Mutations);
+  /**
+   * The products' records, to draw a line the migration left in `UNIT` in its
+   * product's unit (backend `0246` M2). Optional, so a store with no catalog
+   * draws every line in its stored unit.
+   */
+  private readonly _items = inject(ItemNames, { optional: true });
+
+  /**
+   * The corrections of legacy lines still on their way, by line id, each
+   * answering how it went. A step on such a line waits for it.
+   */
+  private readonly _corrections = new Map<
+    string,
+    Promise<'succeeded' | 'failed' | 'overwritten'>
+  >();
 
   /** Lines known to be gone, and how this client learned it. */
   private readonly _deletions = signal<ReadonlyMap<string, LineDeletion>>(
@@ -332,7 +379,7 @@ export class LineStore {
 
   /** One list's lines, in `position` order with rejected ones last. */
   linesIn(listId: string): readonly Line[] {
-    return this._byList().get(listId) ?? [];
+    return this._shownLines(this._byList().get(listId) ?? []);
   }
 
   /**
@@ -372,10 +419,8 @@ export class LineStore {
   /**
    * Whether every page has arrived.
    *
-   * Rule L4 turns dragging on from exactly this: `line.reorder` renumbers only the
-   * lines it names, so reordering a list the client has not finished reading leaves
-   * two lines on the same position and the order becomes whatever the id tie break
-   * says (section 4.5).
+   * The list order is the server's `position`, read page by page, so a list the client
+   * has not finished reading may still be missing lines at its end (section 4.5).
    */
   isComplete(listId: string): boolean {
     return (this._cursor().get(listId) ?? null) === null;
@@ -429,7 +474,7 @@ export class LineStore {
   /** A signal view of one list, for a container that reads it in a computed. */
   forList(listId: string) {
     return computed(() => ({
-      lines: this._byList().get(listId) ?? [],
+      lines: this._shownLines(this._byList().get(listId) ?? []),
       state: this._state().get(listId) ?? ('idle' as LineLoadState),
       error: this._error().get(listId) ?? null,
       complete: (this._cursor().get(listId) ?? null) === null,
@@ -446,8 +491,8 @@ export class LineStore {
    * the list** (rule L2). They are two independent calls, and making the lines wait on
    * a title means somebody in an aisle waits for a name before they see what to buy.
    *
-   * Every page is asked for, up to the gateway's maximum, because that is what makes
-   * reordering available on the first frame for every list this product is for.
+   * Every page is asked for, up to the gateway's maximum, so the first frame holds every
+   * line of every list this product is for.
    */
   async load(listId: string): Promise<void> {
     // A stale list is read like any other; the read is what clears the mark.
@@ -485,10 +530,7 @@ export class LineStore {
   /**
    * Reread without dropping the page back to a skeleton.
    *
-   * `ListStore.refresh`'s reason exactly, and this screen has one more: a
-   * `validation_failed` on a reorder means somebody deleted a line mid drag, and the
-   * answer to that is a silent reread rather than a message about somebody else's
-   * perfectly ordinary action (section 5.7).
+   * `ListStore.refresh`'s reason exactly.
    */
   async refresh(listId: string): Promise<void> {
     this._unstale(listId);
@@ -550,13 +592,23 @@ export class LineStore {
    * that appears and then vanishes is worse than a row that appears a beat late, and
    * the answer is quick.
    *
+   * ## An add that meets a line already asked for adds nothing (velista `0185`)
+   *
+   * The server answers `alreadyOnList` with every line it met, unchanged (backend
+   * `0260`, A1). The placeholder goes, if one was drawn, and each met line is
+   * reconciled where it stands, which changes nothing at the same version.
+   *
+   * `quantity` and `unit` are left out for a typed name, so the server decides both:
+   * a line it makes then counts one piece (U1), and that is what the placeholder
+   * draws.
+   *
    * `options` goes to the server as it is (backend `0228`). A refusal asking which
    * line is an ordinary failure here, whose error the page reads.
    */
   async addLine(
     listId: string,
     content: string,
-    quantity: number,
+    quantity: number | undefined,
     createdByUserId: string,
     approval: {
       readonly canDecide: boolean;
@@ -564,7 +616,8 @@ export class LineStore {
     },
     itemIds?: readonly string[],
     named?: false,
-    options?: AddLineOptions
+    options?: AddLineOptions,
+    unit?: LineUnit
   ): Promise<LineAddOutcome> {
     if (!this.drawsBeforeAnswer(listId, content, itemIds, options)) {
       return this._addOnAnswer(
@@ -573,7 +626,8 @@ export class LineStore {
         quantity,
         itemIds,
         named,
-        options
+        options,
+        unit
       );
     }
 
@@ -584,7 +638,8 @@ export class LineStore {
       content,
       // As the server will answer it (backend `0207`, section 1.2).
       named: named !== false || (itemIds ?? []).length === 0,
-      quantity,
+      quantity: quantity ?? addAmount(unit ?? LINE_UNIT_FALLBACK),
+      unit: unit ?? LINE_UNIT_FALLBACK,
       itemIds: [...(itemIds ?? [])],
       // Following no group until the server says otherwise. An optimistic row that
       // claimed a binding would draw provenance headings for the beat before the
@@ -623,7 +678,8 @@ export class LineStore {
         quantity,
         itemIds,
         named,
-        options
+        options,
+        unit
       )
     );
 
@@ -637,30 +693,35 @@ export class LineStore {
       return { state: 'failed', error: outcome.error };
     }
 
-    const { line, merged } = outcome.value;
-    if (merged) {
+    const answer = outcome.value;
+    // By the outcome, not `merged`: an answer that met a line and said otherwise
+    // would settle as a made line and draw a second row with that line's id.
+    if (answer.outcome !== 'created') {
       // A line the list already held. The placeholder goes, and the line is raised
-      // where it stands (velista `0170`, target 2).
+      // where it stands (velista `0170`, target 2), or, met at an amount, kept as
+      // it is (velista `0185`).
       this._removeLine(clientKey);
-      this._settleRaise(listId, line);
-      return { state: 'added', line, merged };
+      this._settleMet(listId, answer);
+      return added(answer);
     }
 
     // The server's row replaces the local one in place, keeping its position in the
     // rendered order, so nothing jumps at the moment the response lands.
-    this._mine.add(line.id);
-    this._settleAdd(listId, clientKey, line);
-    return { state: 'added', line, merged };
+    this._mine.add(answer.line.id);
+    this._settleAdd(listId, clientKey, answer.line);
+    return added(answer);
   }
 
   /**
    * Whether an add draws its row before the server answers (velista `0170`, target 3).
    *
-   * Yes for a product add and for a typed name no loaded line carries. No for a typed
-   * name a loaded line already carries, since the answer is then likely a raise or a
-   * question and a drawn row would vanish, and no for a line the person chose, which
-   * is a raise by definition. The page reads it too, to know whether the list follows
-   * a new row to its end or waits for the answer to say where the units went.
+   * Yes for a product add no loaded line asks for, and for a typed name no loaded
+   * line carries. No for a typed name a loaded line already carries, since the answer
+   * is then likely that line or a question and a drawn row would vanish; no for a
+   * product a loaded line already holds at any amount, met above zero or raised from
+   * a kept zero, hidden or not (velista `0185`, decision I; velista `0192`); and
+   * no for a line the person chose. The page reads it too, to know whether the list
+   * follows a new row to its end or waits for the answer to say where the add went.
    */
   drawsBeforeAnswer(
     listId: string,
@@ -668,11 +729,13 @@ export class LineStore {
     itemIds?: readonly string[],
     options?: AddLineOptions
   ): boolean {
-    if ((itemIds ?? []).length > 0) {
-      return true;
-    }
+    // First: an add that names its line, a product's as much as a typed name's,
+    // lands on that line or nowhere, and never draws a new row.
     if (options?.intoLineId !== undefined) {
       return false;
+    }
+    if (itemIds !== undefined && itemIds.length > 0) {
+      return !addMayMeetProduct(this._byList().get(listId) ?? [], itemIds);
     }
     return !addMayMeetLine(this._byList().get(listId) ?? [], content);
   }
@@ -681,10 +744,11 @@ export class LineStore {
   private async _addOnAnswer(
     listId: string,
     content: string,
-    quantity: number,
+    quantity: number | undefined,
     itemIds: readonly string[] | undefined,
     named: false | undefined,
-    options: AddLineOptions | undefined
+    options: AddLineOptions | undefined,
+    unit: LineUnit | undefined
   ): Promise<LineAddOutcome> {
     const outcome = await this._mutations.run(null, () =>
       this._lines.addLineResult(
@@ -693,7 +757,8 @@ export class LineStore {
         quantity,
         itemIds,
         named,
-        options
+        options,
+        unit
       )
     );
 
@@ -701,14 +766,27 @@ export class LineStore {
       return { state: 'failed', error: outcome.error };
     }
 
-    const { line, merged } = outcome.value;
-    if (merged) {
-      this._settleRaise(listId, line);
+    const answer = outcome.value;
+    if (answer.outcome !== 'created') {
+      this._settleMet(listId, answer);
     } else {
-      this._mine.add(line.id);
-      this._settleNew(listId, line);
+      this._mine.add(answer.line.id);
+      this._settleNew(listId, answer.line);
     }
-    return { state: 'added', line, merged };
+    return added(answer);
+  }
+
+  /**
+   * The line or lines an add met, each settled where it stands: the one it raised,
+   * or every one it found already asked for (velista `0185`), which at the same
+   * version changes nothing.
+   */
+  private _settleMet(listId: string, answer: LineAddResult): void {
+    const met =
+      answer.outcome === 'alreadyOnList' ? answer.alreadyOnList : [answer.line];
+    for (const line of met) {
+      this._settleRaise(listId, line);
+    }
   }
 
   /**
@@ -732,6 +810,7 @@ export class LineStore {
       content?: string;
       named?: false;
       quantity?: number;
+      unit?: LineUnit;
       itemIds?: readonly string[];
       adoptItemIds?: readonly string[];
       favoriteItemId?: string | null;
@@ -743,10 +822,33 @@ export class LineStore {
     if (before === null) {
       return { state: 'failed', error: null };
     }
+    // Every absolute write states what its number counts (velista `0182`): the
+    // line's own unit, unless the caller names another. A line the migration left
+    // in `UNIT` is corrected to its product's unit by this write (backend `0246`
+    // section 3.2). At nothing it is drawn in that unit, so the number typed is
+    // in it; above nothing it was drawn in pieces, and the write names the
+    // default amount instead of reading pieces as grams. Zero is zero in both.
+    const legacy =
+      changes.quantity !== undefined && changes.unit === undefined
+        ? this._legacyUnit(before)
+        : null;
+    const sent =
+      changes.quantity === undefined || changes.unit !== undefined
+        ? changes
+        : legacy === null
+          ? { ...changes, unit: before.unit }
+          : {
+              ...changes,
+              unit: legacy,
+              quantity:
+                before.quantity === 0 || changes.quantity === 0
+                  ? changes.quantity
+                  : defaultQuantity(legacy),
+            };
 
     const listId = before.listId;
-    const fields = claimedBy(changes);
-    const apply = (line: Line) => applyLineChanges(line, changes);
+    const fields = claimedBy(sent);
+    const apply = (line: Line) => applyLineChanges(line, sent);
     const overlay: Overlay<unknown> = {
       key: overlayKey(lineId, fields.join('+')),
       apply: (current) => apply(current as Line) as unknown,
@@ -758,7 +860,7 @@ export class LineStore {
 
     const outcome = await this._mutations.run(
       overlay,
-      () => this._lines.updateLine(lineId, changes),
+      () => this._lines.updateLine(lineId, sent),
       // A survivor that is another line has its own version history, and comparing
       // it with this line's would read every merge as an overwrite.
       (result) =>
@@ -833,9 +935,26 @@ export class LineStore {
     delta: number,
     options: { readonly reportDropped?: boolean } = {}
   ): Promise<'succeeded' | 'failed' | 'overwritten'> {
+    // A step during the correction of the line waits for its answer: the row is
+    // patched to the new unit already, and a delta in it could reach core before
+    // the correction and be refused (backend `0246` section 3.2). A step after a
+    // failed correction is dropped, since the line is back in the old unit.
+    const correcting = this._corrections.get(lineId);
+    if (correcting !== undefined) {
+      if ((await correcting) === 'failed') {
+        return 'failed';
+      }
+      return this.addQuantity(lineId, delta, options);
+    }
+
     const before = this._lineById(lineId);
     if (before === null || delta === 0) {
       return 'failed';
+    }
+
+    const legacy = this._legacyUnit(before);
+    if (legacy !== null) {
+      return this._correctUnit(before, legacy, delta);
     }
 
     return this._write(
@@ -846,7 +965,7 @@ export class LineStore {
         ...line,
         quantity: Math.max(LINE_QUANTITY_MIN, line.quantity + delta),
       }),
-      () => this._lines.addQuantity(lineId, delta),
+      () => this._lines.addQuantity(lineId, delta, before.unit),
       // Velista `0159`: the reconnect reloads the page and this row's note goes with
       // it, so a delta the network dropped is written down for the next document.
       // The name is the line's own text, which the page swaps for the name it draws.
@@ -856,11 +975,16 @@ export class LineStore {
             subject: overlayKey(lineId, 'quantity'),
             lineId,
             key: 'list.dropped.quantity',
+            // The unit rides along so the page says "+250 g" in the reader's
+            // language (velista `0182`). `delta` stays the bare signed number.
             args: {
               name: before.content,
               delta: delta > 0 ? `+${delta}` : `${delta}`,
+              unit: before.unit,
             },
-            replay: { kind: 'line-quantity', lineId, delta },
+            // The unit too, so a resend is offered only while the line still
+            // counts in it: 250 g sent again as 250 pieces would be a new order.
+            replay: { kind: 'line-quantity', lineId, delta, unit: before.unit },
           }
         : undefined
     );
@@ -871,7 +995,7 @@ export class LineStore {
    *
    * **Not optimistic, and that is the one deliberate difference from every other
    * write on this screen.** Everything else here is a gesture whose result the person
-   * already knows: they dragged a number, so the number moves. This one is two taps
+   * already knows: they stepped a number, so the number moves. This one is two taps
    * behind a deliberate open and its result is a *derivation* the server performs,
    * over history the client does not hold: how far the quantity falls depends on what
    * was outstanding, and whether the bought indicator appears depends on a count only
@@ -897,8 +1021,9 @@ export class LineStore {
 
     this._note(lineId, { outcome: 'pending', byUserId: null });
 
+    // In the line's unit, always (velista `0182`): the server requires it.
     const result = await this._mutations.run(null, () =>
-      this._lines.settle(lineId, outcome, options)
+      this._lines.settle(lineId, outcome, { ...options, unit: before.unit })
     );
 
     if (result.state === 'failed') {
@@ -1210,47 +1335,6 @@ export class LineStore {
   }
 
   /**
-   * Rewrite the whole order.
-   *
-   * The caller is responsible for having checked {@link isComplete} first: this method
-   * sends what it is given, and rule L4 is a rule about when the control is offered
-   * rather than a check buried here where a reader of the page cannot see it.
-   *
-   * A `validation_failed` is **silent** and rereads. It means the order named a line
-   * the server no longer has, which is somebody deleting one mid drag, and the person
-   * who dragged has done nothing wrong (section 5.7).
-   */
-  async reorder(
-    listId: string,
-    orderedLineIds: readonly string[]
-  ): Promise<'succeeded' | 'failed'> {
-    const before = this._byList().get(listId) ?? [];
-    const byId = new Map(before.map((line) => [line.id, line]));
-
-    this._setLines(
-      listId,
-      orderedLineIds
-        .map((id, index) => {
-          const line = byId.get(id);
-          return line === undefined ? null : { ...line, position: index + 1 };
-        })
-        .filter((line): line is Line => line !== null)
-    );
-
-    const outcome = await this._mutations.run(null, () =>
-      this._lines.reorder(listId, orderedLineIds)
-    );
-
-    if (outcome.state === 'failed') {
-      this._setLines(listId, before);
-      void this.refresh(listId);
-      return 'failed';
-    }
-
-    return 'succeeded';
-  }
-
-  /**
    * Record how many comments a line has, from a source that knows.
    *
    * The lines read counts them (backend `0214`), and so does a comment page the
@@ -1385,6 +1469,15 @@ export class LineStore {
 
     if (outcome.state === 'failed') {
       this._patch(listId, lineId, () => before);
+      if (isUnitMismatch(outcome.error)) {
+        // The line counts in another unit now (velista `0182`), which the event
+        // that changed it is already bringing. Recovered as `stale_quantity` is:
+        // the list is read again, the server's line replaces the preview, and no
+        // error is shown, because nothing the person did was wrong.
+        this._clearNote(lineId);
+        await this.refresh(listId);
+        return 'overwritten';
+      }
       this._note(lineId, { outcome: 'failed', byUserId: null });
       return 'failed';
     }
@@ -1726,6 +1819,78 @@ export class LineStore {
     );
   }
 
+  /** {@link shownLineUnit} of a stored line, over the products this session read. */
+  private _unitShown(line: Line): LineUnit {
+    const items = this._items;
+    return items === null
+      ? line.unit
+      : shownLineUnit(line, (itemId) => items.nameOf(itemId));
+  }
+
+  /** {@link legacyLineUnit} of a stored line, over the products this session read. */
+  private _legacyUnit(line: Line): LineUnit | null {
+    const items = this._items;
+    return items === null
+      ? null
+      : legacyLineUnit(line, (itemId) => items.nameOf(itemId));
+  }
+
+  /**
+   * The lines as a screen draws them: a line the migration left in `UNIT` at
+   * nothing carries its product's unit (backend `0246` M2). The same array when
+   * no line differs.
+   */
+  private _shownLines(lines: readonly Line[]): readonly Line[] {
+    if (this._items === null) {
+      return lines;
+    }
+    let changed = false;
+    const shown = lines.map((line) => {
+      const unit = this._unitShown(line);
+      if (unit === line.unit) {
+        return line;
+      }
+      changed = true;
+      return { ...line, unit };
+    });
+    return changed ? shown : lines;
+  }
+
+  /**
+   * A step on a legacy line (backend `0246` section 3.2). A delta in the
+   * product's unit would be refused with `line_unit_mismatch` against the stored
+   * one, so the step is an absolute update that states the unit, which corrects
+   * the row; the next step is a delta again.
+   *
+   * It never reads the old number in the new unit: three pieces are not three
+   * grams. Whatever the step asked for, the update names
+   * the unit's default amount, one kilo or one litre, as an add does. A minus at
+   * nothing sends nothing.
+   *
+   * Steps on the line wait for it ({@link _corrections}).
+   */
+  private async _correctUnit(
+    before: Line,
+    unit: LineUnit,
+    delta: number
+  ): Promise<'succeeded' | 'failed' | 'overwritten'> {
+    if (delta < 0 && before.quantity === 0) {
+      return 'succeeded';
+    }
+    const writing = this.updateLine(before.id, {
+      quantity: defaultQuantity(unit),
+      unit,
+    }).then((outcome) => outcome.state);
+    this._corrections.set(before.id, writing);
+    try {
+      return await writing;
+    } finally {
+      if (this._corrections.get(before.id) === writing) {
+        this._corrections.delete(before.id);
+      }
+    }
+  }
+
   private _lineById(lineId: string): Line | null {
     for (const lines of this._byList().values()) {
       const found = lines.find((line) => line.id === lineId);
@@ -1936,6 +2101,7 @@ interface LineChanges {
   readonly content?: string;
   readonly named?: false;
   readonly quantity?: number;
+  readonly unit?: LineUnit;
   readonly itemIds?: readonly string[];
   readonly adoptItemIds?: readonly string[];
   readonly favoriteItemId?: string | null;
@@ -1961,7 +2127,8 @@ function claimedBy(changes: LineChanges): readonly string[] {
     fields.push('content');
   }
   if (changes.quantity !== undefined) {
-    fields.push('quantity');
+    // The unit travels with the number it counts, so one claim holds both.
+    fields.push('quantity', 'unit');
   }
   if (changes.itemIds !== undefined) {
     // Removing a product takes it off the catalog's side as well, so a write that
@@ -2001,6 +2168,9 @@ function applyLineChanges(line: Line, changes: LineChanges): Line {
     ...(changes.content === undefined ? {} : { content: changes.content }),
     named: namedAfter(line, changes),
     ...(changes.quantity === undefined ? {} : { quantity: changes.quantity }),
+    ...(changes.quantity === undefined || changes.unit === undefined
+      ? {}
+      : { unit: changes.unit }),
     ...(changes.itemIds === undefined ? {} : { itemIds: changes.itemIds }),
     favoriteItemId: favoriteAfter(line, changes),
     ...(changes.preferredSupermarketId === undefined
@@ -2050,6 +2220,14 @@ function namedAfter(line: Line, changes: LineChanges): boolean {
 /** Whether a failure is the gateway refusing a write for lack of access. */
 export function isForbidden(error: unknown): boolean {
   return error instanceof GatewayError && error.code === 'forbidden';
+}
+
+/**
+ * A delta, a settle or a demand named another unit than the line's (velista
+ * `0182`, backend `0246` section 3.2).
+ */
+function isUnitMismatch(error: unknown): boolean {
+  return error instanceof GatewayError && error.code === 'line_unit_mismatch';
 }
 
 /**

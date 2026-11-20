@@ -3,6 +3,7 @@ import {
   changedFields,
   draftFor,
   orderedFieldNames,
+  settleDraft,
   toInput,
   validateDraft,
   type ResourceDraft,
@@ -642,5 +643,117 @@ describe('isEditable', () => {
       [true, false],
       [false, true],
     ]);
+  });
+});
+
+/**
+ * A size or a weight, never both, and no size on a piece sold by the kilo
+ * (admin plan 0068): what one change rules out.
+ */
+describe('settleDraft', () => {
+  interface Piece {
+    id: string;
+    unit: string;
+    size: number | null;
+    weight: number | null;
+    flagged: boolean;
+  }
+
+  const pieces: ResourceDescriptor<Piece> = {
+    name: 'pieces',
+    segment: 'pieces',
+    labels: { one: 'pieces.one', many: 'pieces.many' },
+    title: (row) => row.id,
+    fields: [
+      { kind: 'text', name: 'id', label: 'pieces.id', editable: false },
+      {
+        kind: 'enum',
+        name: 'unit',
+        label: 'pieces.unit',
+        options: [
+          { value: 'GRAM', label: 'pieces.gram' },
+          { value: 'KILO', label: 'pieces.kilo' },
+        ],
+      },
+      {
+        kind: 'number',
+        name: 'size',
+        label: 'pieces.size',
+        nullable: true,
+        shown: (row) => row.unit !== 'KILO',
+        excludes: 'weight',
+      },
+      {
+        kind: 'number',
+        name: 'weight',
+        label: 'pieces.weight',
+        nullable: true,
+        excludes: 'size',
+      },
+      { kind: 'boolean', name: 'flagged', label: 'pieces.flagged' },
+    ],
+    list: { columns: ['id'], compact: ['id'] },
+    gateway: () => {
+      throw new Error('not used');
+    },
+  };
+
+  const piece: Piece = {
+    id: 'p1',
+    unit: 'GRAM',
+    size: null,
+    weight: null,
+    flagged: false,
+  };
+
+  it('empties the field a field with a value excludes', () => {
+    const draft = { unit: 'GRAM', size: '250', weight: '500', flagged: false };
+
+    expect(settleDraft(pieces, draft, piece, 'size')).toEqual({
+      ...draft,
+      weight: '',
+    });
+    expect(settleDraft(pieces, draft, piece, 'weight')).toEqual({
+      ...draft,
+      size: '',
+    });
+  });
+
+  it('empties nothing for a field that was emptied', () => {
+    const draft = { unit: 'GRAM', size: '', weight: '500', flagged: false };
+
+    expect(settleDraft(pieces, draft, piece, 'size')).toBe(draft);
+  });
+
+  it('empties a field the row with the draft over it does not show', () => {
+    const draft = { unit: 'KILO', size: '250', weight: '', flagged: false };
+
+    expect(settleDraft(pieces, draft, piece, 'unit')).toEqual({
+      ...draft,
+      size: '',
+    });
+  });
+
+  it('reads the row under a draft that does not hold the field shown reads', () => {
+    const draft = { size: '250' };
+
+    expect(
+      settleDraft(pieces, draft, { ...piece, unit: 'KILO' }, 'flagged')
+    ).toEqual({
+      size: '',
+    });
+  });
+
+  it('answers the same draft when nothing is ruled out', () => {
+    const draft = { unit: 'GRAM', size: '250', weight: '', flagged: true };
+
+    expect(settleDraft(pieces, draft, piece, 'size')).toBe(draft);
+    expect(settleDraft(pieces, draft, piece, 'flagged')).toBe(draft);
+  });
+
+  it('touches only the fields the draft holds', () => {
+    const draft = { unit: 'KILO' };
+
+    expect(settleDraft(pieces, draft, piece, 'unit')).toBe(draft);
   });
 });

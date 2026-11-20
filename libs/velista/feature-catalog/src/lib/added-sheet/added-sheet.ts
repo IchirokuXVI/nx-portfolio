@@ -13,11 +13,7 @@ import {
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import { CatalogAddStore } from '@portfolio/velista/data-access';
-import {
-  APP_BASE_PATH,
-  visitFloor,
-  visitSections,
-} from '@portfolio/velista/models';
+import { APP_BASE_PATH, visitSections } from '@portfolio/velista/models';
 import { appPath, SheetNavigation } from '@portfolio/velista/platform';
 import {
   SheetShell,
@@ -86,6 +82,14 @@ export class AddedSheet {
   /** The record, one section for each list, the chosen list first. */
   protected readonly sections = computed<readonly VisitAddedSection[]>(() => {
     const lists = this._adds.lists();
+    // What each line counts, off the store's held lines (velista `0182`).
+    const units = new Map(
+      this._adds.held().map((line) => [line.lineId, line.unit])
+    );
+    // And the step its product says (velista `0186`), off the same lines.
+    const steps = new Map(
+      this._adds.held().map((line) => [line.lineId, line.step ?? null])
+    );
     return visitSections(
       this._adds.visit(),
       this._adds.target()?.listId ?? null
@@ -99,7 +103,11 @@ export class AddedSheet {
         detail: entry.detail,
         imageUrl: entry.imageUrl,
         quantity: entry.quantity,
-        floor: visitFloor(entry),
+        unit: units.get(entry.lineId) ?? 'UNIT',
+        step: steps.get(entry.lineId) ?? null,
+        // A line the visit made goes to 0 and is taken back there, a weight as a
+        // count (velista 0188 S14); one that was there before stops at what it held.
+        min: entry.created ? 0 : entry.before,
         pending: entry.pending,
       })),
     }));
@@ -119,7 +127,7 @@ export class AddedSheet {
   }
 
   protected step(step: VisitAddedStep): void {
-    void this._adds.step(
+    this._adds.step(
       {
         listId: step.listId,
         itemId: step.itemId,
@@ -127,7 +135,7 @@ export class AddedSheet {
         imageUrl: step.imageUrl,
       },
       step.lineId,
-      step.by
+      step.step
     );
   }
 

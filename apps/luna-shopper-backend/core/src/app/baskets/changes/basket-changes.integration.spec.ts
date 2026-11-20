@@ -1,4 +1,3 @@
-import { LineChangeRecorder } from '../../lists/changes/line-change.recorder';
 import {
   BASKET_CHANGE_LIMITS,
   BasketKind,
@@ -21,16 +20,17 @@ import {
 import { randomUUID } from 'node:crypto';
 import { DataSource, IsNull } from 'typeorm';
 import {
-  BasketSource,
-  CORE_ENTITIES,
   Basket,
   BasketParticipant,
+  BasketSource,
+  CORE_ENTITIES,
   ListLine,
   ListLineChange,
   ShoppingList,
   Zone,
   ZoneMembership,
 } from '../../entities';
+import { LineChangeRecorder } from '../../lists/changes/line-change.recorder';
 import { ListLineChangeSweepService } from '../../lists/changes/list-line-change-sweep.service';
 import { fakeBasketAnnouncer } from '../basket-announcer.fake';
 import { CHANGE_MARK_WINDOW_MS, fakeCoreConfig } from '../basket-config.fake';
@@ -111,11 +111,7 @@ describeIntegration(
           dataSource
             .getRepository(BasketParticipant)
             .findOne({ where: { id: participantId } }),
-        listParticipants: async ({
-          basketId,
-        }: {
-          basketId: string;
-        }) => ({
+        listParticipants: async ({ basketId }: { basketId: string }) => ({
           participants: (
             await dataSource
               .getRepository(BasketParticipant)
@@ -696,6 +692,7 @@ describeIntegration(
           rowKey: bought.id,
           lineIds: [bought.id],
           outcome: SettlementOutcome.BOUGHT,
+          unit: 'UNIT',
           quantity: 2,
           from: 2,
         });
@@ -735,6 +732,7 @@ describeIntegration(
           rowKey: olives.id,
           lineIds: [olives.id],
           outcome: SettlementOutcome.BOUGHT,
+          unit: 'UNIT',
           quantity: 1,
           from: 2,
         });
@@ -951,6 +949,7 @@ describeIntegration(
           rowKey: milk.id,
           lineIds: [milk.id],
           outcome: SettlementOutcome.BOUGHT,
+          unit: 'UNIT',
           quantity: 1,
           from: 2,
         });
@@ -1002,6 +1001,7 @@ describeIntegration(
           rowKey: milk.id,
           lineIds: [milk.id],
           outcome: SettlementOutcome.NOT_AVAILABLE,
+          unit: 'UNIT',
           from: 2,
         });
         await revertService.revert({

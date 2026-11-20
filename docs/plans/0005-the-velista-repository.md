@@ -159,7 +159,7 @@ later), and the Compose path itself (k8s `0020`, which travels as files).
 - No history rewrite of `nx-portfolio`. No force push anywhere. `main` of `nx-portfolio`
   stays off limits as `CLAUDE.md` says.
 - The import is one commit of the paths of section 1.1, copied at their source locations
-  from one commit of `nx-portfolio`. Every later edit (the folds and renames of D3 to D7,
+  from one commit of `nx-portfolio`. Every later edit (the folds and renames of D3 to D6,
   the pruning, the root configs, the docs) is its own commit or pull request in the new
   repository, so that `git diff --no-index` of the import against its source shows nothing.
 - Generated files stay generated: the OpenAPI document and the admin wire types are
@@ -226,7 +226,7 @@ Every entry is copied from `nx-portfolio` at the import commit. Names after docs
 | `.github/actions/*` | same | |
 | `renovate.json`, `migrations.json`, `skills-lock.json`, `.agents` | same | |
 | `nx.json`, `tsconfig.base.json`, `jest.config.ts`, `jest.preset.js`, `eslint.config.mjs`, `playwright.reporters.ts`, `.prettierrc`, `.prettierignore`, `.editorconfig`, `.gitattributes`, `.gitignore`, `.dockerignore`, `.env.development`, `.env.production`, `types/` | same | pruned (1.3) |
-| `.claude/settings.json`, `.claude/skills/*` | same | the Angular skill renamed (D7) |
+| `.claude/settings.json`, `.claude/skills/*` | same | |
 | `CLAUDE.md`, `CONTRIBUTING.md`, `README.md`, `docs/` | same | rewritten (1.5) |
 | `package.json`, `package-lock.json` | same | pruned (1.3) |
 
@@ -378,7 +378,7 @@ One pull request into `dev` of `nx-portfolio`, merged only at step 4 of section 
 - `tools/deploy/units.mjs`: nothing to change in code; `check` stops finding
   `deploy:velista` tags once the projects are gone. Its tests keep their fixtures.
 - `tsconfig.base.json`, `package.json`, `nx.json`, `CLAUDE.md`, `.claude/skills`: the
-  velista parts go. The Angular skill keeps its name in `nx-portfolio`.
+  velista parts go.
 - `libs/shared` stays whole, except `shared/model-engines` (its only consumers left).
 
 ### 3.2 The `/velista` mount
@@ -405,8 +405,7 @@ that decision, and the two must agree:
 ### 3.3 Memory and skills
 
 The assistant's memory files under the owner's profile describe paths of `nx-portfolio`.
-After the move the guiding agent writes the update (docs `0006` phase 5). The skill
-`nx-portfolio-angular-developer` stays in `nx-portfolio`.
+After the move the guiding agent writes the update (docs `0006` phase 5).
 
 ## 4. The first deploy changes no running object
 
@@ -510,14 +509,10 @@ short, and no velista production change is planned inside it.
 - **D6. `tools/docker` is copied and its package renamed `@velista/docker`**, with every
   `executor` reference in `project.json` files updated. Keeping `@portfolio/docker` would
   leave the one `@portfolio` name in the new repository.
-- **D7. The skill `nx-portfolio-angular-developer` is copied as `velista-angular-developer`**,
-  with the module federation and remote sections removed and its reference implementations
-  moved from `damoclesSword` and `landingV2` to `velista-client`. Dropping it would lose the
-  RokuTranslator, zoneless and spec conventions that the client follows.
-- **D8. The plans are copied with their PR links as they are.** Each link keeps pointing at
+- **D7. The plans are copied with their PR links as they are.** Each link keeps pointing at
   `IchirokuXVI/nx-portfolio`, which stays readable. New plans continue each directory's
   numbering (backend `0244` and so on, after the series).
-- **D9. `PEER_NAMESPACES`** when the `/velista` mount survives (section 3.2), rather than a
+- **D8. `PEER_NAMESPACES`** when the `/velista` mount survives (section 3.2), rather than a
   stub `unit.env` of the other unit, which `units.mjs` and `github-environments.sh` would
   treat as a unit of the repository.
 

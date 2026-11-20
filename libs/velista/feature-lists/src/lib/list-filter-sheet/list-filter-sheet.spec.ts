@@ -35,6 +35,7 @@ function line(id: string, itemIds: string[]): Line {
 function product(id: string, slug: string): CatalogItem {
   return {
     id,
+    quantityStep: null,
     name: { es: id, en: id },
     brand: null,
     size: null,
@@ -46,6 +47,7 @@ function product(id: string, slug: string): CatalogItem {
     chainPrices: [],
     imageUrl: null,
     packCount: null,
+    approxWeight: null,
   };
 }
 

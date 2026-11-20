@@ -89,6 +89,19 @@ const entryView = object(
       deprecated: true,
       description: 'The same value as `anyBoughtLineCount`. Read that.',
     }),
+    // What was bought, per unit, with a unit that bought nothing left out
+    // (plan 0246, section 3.5). A sum across units would add grams to pieces.
+    bought: {
+      type: 'object',
+      properties: {
+        UNIT: integer({ minimum: 1 }),
+        GRAM: integer({ minimum: 1 }),
+        MILLILITER: integer({ minimum: 1 }),
+      },
+      additionalProperties: false,
+    },
+    // Whether any priced purchase of the entry is an estimate (plan 0246 M7).
+    estimated: boolean(),
     // Null, never zero, when nothing in the entry carries a price, and null
     // again when its priced rows carry two currencies (plan 0143, section 7).
     spent: nullableMoney(),
@@ -105,6 +118,8 @@ const entryView = object(
     'anyBoughtLineCount',
     'lineCount',
     'boughtLineCount',
+    'bought',
+    'estimated',
     'spent',
     'unpricedCount',
   ]
@@ -130,6 +145,10 @@ const rowView = object(
     },
     outcome: ref(ENUM_IDS.settlementOutcome),
     quantity: integer({ minimum: 0 }),
+    // What `quantity` counts and whether the cost is an estimate (plan 0246,
+    // section 3.5). `pricePaid` is the price of one of `unit` (M7).
+    unit: ref(ENUM_IDS.lineUnit),
+    estimated: boolean(),
     pricePaid: nullableMoney(),
     // The one read that serves a shop: the reader is the person the purchase is
     // about (plan 0143, section 6).
@@ -148,6 +167,8 @@ const rowView = object(
     'itemSnapshot',
     'outcome',
     'quantity',
+    'unit',
+    'estimated',
     'pricePaid',
     'priceScopeId',
     'supermarketLocationId',

@@ -1,4 +1,5 @@
 import { inject, Injectable, signal } from '@angular/core';
+import { LINE_UNITS, type LineUnit } from '@portfolio/velista/models';
 import { BrowserFacade, StorageKeys } from '@portfolio/velista/platform';
 import { TimeoutError } from 'rxjs';
 import { NetworkError } from './errors';
@@ -46,6 +47,27 @@ export interface DroppedWriteReplay {
   readonly kind: 'line-quantity';
   readonly lineId: string;
   readonly delta: number;
+  /**
+   * What the delta counts (velista `0182`). Absent on an entry written before it,
+   * which counted pieces.
+   */
+  readonly unit?: LineUnit;
+}
+
+/**
+ * The replay of a dropped write while the line still counts in the unit it was
+ * written in, or null when it no longer does or there is none. A minus 250 g sent
+ * again after the line moved to pieces would take 250 pieces off, so no resend is
+ * offered then.
+ */
+export function replayInUnit(
+  replay: DroppedWriteReplay | null,
+  unit: LineUnit | undefined
+): DroppedWriteReplay | null {
+  if (replay === null || unit === undefined) {
+    return replay;
+  }
+  return (replay.unit ?? 'UNIT') === unit ? replay : null;
 }
 
 /**
@@ -183,7 +205,9 @@ function isReplay(value: unknown): value is DroppedWriteReplay {
     typeof replay['lineId'] === 'string' &&
     typeof delta === 'number' &&
     Number.isInteger(delta) &&
-    delta !== 0
+    delta !== 0 &&
+    (replay['unit'] === undefined ||
+      LINE_UNITS.includes(replay['unit'] as LineUnit))
   );
 }
 

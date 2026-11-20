@@ -13,6 +13,8 @@ import {
 import {
   ADMIN_POSTAL_CODE_PATTERNS,
   ADMIN_PRICE_ITEM_IDS_MAX,
+  APPROX_WEIGHT_FILL_MAX,
+  APPROX_WEIGHT_SET_BY,
   BRAND_BATCH_MAX,
   BRAND_LABEL_MAX_LENGTH,
   BRAND_MATCHES_MAX_KEYS,
@@ -48,6 +50,8 @@ import {
   UNIT_BASES,
   WITHDRAW_MAX_SCOPES,
 } from '../../lib/messages/catalog.messages';
+import { COMPARABLE_BASES } from '../../lib/units/comparable-price';
+import { QUANTITY_STEPS } from '../../lib/units/quantity-step';
 // The one bound a suggestion's product set has to respect, taken from the line it
 // will become rather than restated here, so the two cannot drift apart.
 import { LINE_ITEM_SET_MAX } from '../../lib/messages/list.messages';
@@ -187,6 +191,12 @@ export const CATALOG_SCHEMA_IDS = {
   getItemsRequest: schemaId('msg/item.getMany/request'),
   getItemsResult: schemaId('msg/item.getMany/response'),
   searchItemsRequest: schemaId('msg/item.search/request'),
+  findItemCreatedFromEntryRequest: schemaId(
+    'msg/item.findCreatedFromEntry/request'
+  ),
+  findItemCreatedFromEntryResult: schemaId(
+    'msg/item.findCreatedFromEntry/response'
+  ),
   findItemByEanRequest: schemaId('msg/item.findByEan/request'),
   findItemByEanResult: schemaId('catalog/FindItemByEanResult'),
   findItemsByEansRequest: schemaId('msg/item.findByEans/request'),
@@ -200,6 +210,10 @@ export const CATALOG_SCHEMA_IDS = {
   packCountFill: schemaId('catalog/PackCountFill'),
   fillPackCountsRequest: schemaId('msg/item.fillPackCounts/request'),
   fillPackCountsResult: schemaId('msg/item.fillPackCounts/response'),
+  // Plan 0244: the harvester writes the weights a run read.
+  approxWeightFill: schemaId('catalog/ApproxWeightFill'),
+  setApproxWeightsRequest: schemaId('msg/item.setApproxWeights/request'),
+  setApproxWeightsResult: schemaId('msg/item.setApproxWeights/response'),
   // Plan 0100: the two bulk replays, and the error shape they share.
   bulkOperationErrorCode: schemaId('enums/BulkOperationErrorCode'),
   bulkOperationError: schemaId('catalog/BulkOperationError'),
@@ -379,11 +393,25 @@ export const CATALOG_SCHEMA_IDS = {
 
 const numberOrNull = (): JsonSchema => ({ type: ['number', 'null'] });
 const integerOrNull = (): JsonSchema => ({ type: ['integer', 'null'] });
+/**
+ * A step a product is served with (plan 0261, S2): one of the ten, or null.
+ * Only the view states the list. A request states an integer, so a step off
+ * the list reaches catalog and is refused there with
+ * `item_quantity_step_not_allowed`, the floor for a caller on the bus.
+ */
+const quantityStepOrNull = (): JsonSchema => ({
+  anyOf: [{ type: 'integer', enum: [...QUANTITY_STEPS] }, { type: 'null' }],
+});
 /** A pack count (plan 0162): a whole number in the bounds, or null. */
 const packCountOrNull = (): JsonSchema => ({
   type: ['integer', 'null'],
   minimum: PACK_COUNT_MIN,
   maximum: PACK_COUNT_MAX,
+});
+/** Who wrote a product's approximate weight (plan 0244, section 3.1). */
+const approxWeightSetBy = (): JsonSchema => ({
+  type: 'string',
+  enum: [...APPROX_WEIGHT_SET_BY],
 });
 /** A kind, or null for a materialized row no price row stands behind (plan 0080). */
 const nullableSourceKind = (): JsonSchema => ({
@@ -393,6 +421,10 @@ const nullableSourceKind = (): JsonSchema => ({
 // required, and a reader built before it keeps validating what it holds.
 const nullableUnitBasis = (): JsonSchema => ({
   anyOf: [{ type: 'string', enum: [...UNIT_BASES] }, { type: 'null' }],
+});
+// Plan 0245: what a derived `comparablePrice` is a price per.
+const nullableComparableBasis = (): JsonSchema => ({
+  anyOf: [{ type: 'string', enum: [...COMPARABLE_BASES] }, { type: 'null' }],
 });
 const nullableLocalized = (): JsonSchema => ({
   anyOf: [ref(CATALOG_SCHEMA_IDS.localizedText), { type: 'null' }],
@@ -539,6 +571,10 @@ const itemOfferView = object(
     unitPrice: numberOrNull(),
     unitPriceLabel: nullableString(),
     unitBasis: nullableUnitBasis(),
+    // Plan 0245: the catalog's own comparison figure and its basis. Stated
+    // but not required, so a reader built before it keeps validating.
+    comparablePrice: numberOrNull(),
+    comparableBasis: nullableComparableBasis(),
     observedAt: nullableString(),
     sourceKind: nullableSourceKind(),
     // Plan 0118. Stated but not required, so a reader built before it keeps
@@ -547,6 +583,9 @@ const itemOfferView = object(
     stale: boolean(),
     // Plan 0220, section 15.2. Stated but not required, for the same reason.
     outOfStockAt: nullableString(),
+    // Plan 0244, section 3.3: what one kilo piece costs, derived on read.
+    // Stated but not required, for the same reason.
+    piecePrice: numberOrNull(),
   },
   [
     'itemId',
@@ -699,6 +738,14 @@ export const itemViewProperties: Record<string, JsonSchema> = {
   // Plan 0185: every barcode of the product, `ean` first. Empty for none.
   eans: array(nonEmptyString()),
   unitSize: numberOrNull(),
+  // Plan 0244: the weight of one piece in grams, never beside a size. Stated
+  // but not required, so a reader built before it keeps validating.
+  approxWeight: numberOrNull(),
+  // Who wrote the weight, for the back office. Not required either.
+  approxWeightSetBy: { anyOf: [approxWeightSetBy(), { type: 'null' }] },
+  // Plan 0261: the step of a product sold by the kilo. Stated
+  // but not required, so a reader built before it keeps validating.
+  quantityStep: quantityStepOrNull(),
   packCount: packCountOrNull(),
   // Plan 0166: position order and never empty, so a reader always has a first.
   categories: {
@@ -771,6 +818,8 @@ const itemSnapshot = object(
     unitSize: itemViewProperties.unitSize,
     packCount: itemViewProperties.packCount,
     defaultUnit: itemViewProperties.defaultUnit,
+    // Plan 0244, section 4. Not required: a buy before that plan has none.
+    approxWeight: itemViewProperties.approxWeight,
   },
   ['name', 'brand', 'unitSize', 'packCount', 'defaultUnit']
 );
@@ -842,6 +891,10 @@ const supermarketItemProperties = () => ({
   unitPrice: numberOrNull(),
   unitPriceLabel: nullableString(),
   unitBasis: nullableUnitBasis(),
+  // Plan 0245: the catalog's own comparison figure and its basis. Stated
+  // but not required, so a reader built before it keeps validating.
+  comparablePrice: numberOrNull(),
+  comparableBasis: nullableComparableBasis(),
   observedAt: nullableString(),
   sourceKind: nullableSourceKind(),
   // Plan 0118. Stated but not required, so a reader built before it keeps
@@ -855,6 +908,9 @@ const supermarketItemProperties = () => ({
   // built before it keeps validating what it holds.
   delistedAt: nullableString(),
   outOfStockAt: nullableString(),
+  // Plan 0244, section 3.3: what one kilo piece costs, derived on read.
+  // Stated but not required, for the same reason.
+  piecePrice: numberOrNull(),
 });
 const SUPERMARKET_ITEM_REQUIRED = [
   'id',
@@ -1486,6 +1542,17 @@ const createItemRequest = withRule(
       sku: nullableString(),
       ean: nullableString(),
       unitSize: numberOrNull(),
+      // Plan 0244. Catalog refuses a weight beside a size, or at zero or
+      // below, with `item_approx_weight_beside_size`, so no bound here.
+      approxWeight: numberOrNull(),
+      approxWeightSetBy: approxWeightSetBy(),
+      // Plan 0261. Catalog refuses a step off the list, or on a product not
+      // sold by the kilo, with `item_quantity_step_not_allowed`. No product
+      // by the litre carries one: a liquid is stored in millilitres with a
+      // size, a pack (the owner's ruling of 2026-11-17).
+      quantityStep: integerOrNull(),
+      // Plan 0244, section 7.4: recorded in the audit row only.
+      createdFromEntry: nonEmptyString(),
       packCount: packCountOrNull(),
       // One of the two (plan 0237, section 3.4), which catalog checks.
       categoryIds: categoryIds(),
@@ -1508,6 +1575,12 @@ const updateItemFields = {
   sku: nullableString(),
   ean: nullableString(),
   unitSize: numberOrNull(),
+  // Plan 0244. Bounds are catalog's, as on a create. ADMIN unless a service
+  // states SOURCE, which catalog checks against the caller.
+  approxWeight: numberOrNull(),
+  approxWeightSetBy: approxWeightSetBy(),
+  // Plan 0261, bounded by catalog as on a create.
+  quantityStep: integerOrNull(),
   packCount: packCountOrNull(),
   // Replaces the whole set. Never empty, because a product always has one.
   categoryIds: categoryIds(),
@@ -1528,6 +1601,8 @@ const itemExpectation = object(
     name: ref(CATALOG_SCHEMA_IDS.localizedText),
     brand: nullableString(),
     unitSize: numberOrNull(),
+    approxWeight: numberOrNull(),
+    quantityStep: integerOrNull(),
     defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
     packCount: { type: ['integer', 'null'] },
     categorySlugs: array(
@@ -1803,6 +1878,12 @@ const createItemInput = withRule(
       sku: nullableString(),
       ean: nullableString(),
       unitSize: numberOrNull(),
+      // Plan 0244. Catalog refuses a weight beside a size, or at zero or
+      // below, with `item_approx_weight_beside_size`, so no bound here.
+      approxWeight: numberOrNull(),
+      approxWeightSetBy: approxWeightSetBy(),
+      quantityStep: integerOrNull(),
+      createdFromEntry: nonEmptyString(),
       packCount: packCountOrNull(),
       categoryIds: categoryIds(),
       categorySlugs: categorySlugs(),
@@ -1906,6 +1987,20 @@ const applyGroupAssignmentsResult = object(
   ['applied', 'error', 'results', 'createdGroups']
 );
 
+const findItemCreatedFromEntryRequest = object(
+  CATALOG_SCHEMA_IDS.findItemCreatedFromEntryRequest,
+  { ...adminCredentialProperties, createdFromEntry: nonEmptyString() },
+  ['userId', 'createdFromEntry']
+);
+const findItemCreatedFromEntryResult = object(
+  CATALOG_SCHEMA_IDS.findItemCreatedFromEntryResult,
+  {
+    item: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.itemView), { type: 'null' }],
+    },
+  },
+  ['item']
+);
 const findItemByEanRequest = object(
   CATALOG_SCHEMA_IDS.findItemByEanRequest,
   { userId: nonEmptyString(), ean: nonEmptyString() },
@@ -2004,6 +2099,37 @@ const fillPackCountsResult = object(
   CATALOG_SCHEMA_IDS.fillPackCountsResult,
   { written: integer({ minimum: 0 }) },
   ['written']
+);
+/** One product and the weight a run read for it (plan 0244, section 3.4). */
+const approxWeightFill = object(
+  CATALOG_SCHEMA_IDS.approxWeightFill,
+  {
+    itemId: nonEmptyString(),
+    approxWeight: { type: 'number', exclusiveMinimum: 0 },
+  },
+  ['itemId', 'approxWeight']
+);
+const setApproxWeightsRequest = object(
+  CATALOG_SCHEMA_IDS.setApproxWeightsRequest,
+  {
+    ...adminCredentialProperties,
+    entries: {
+      ...array(ref(CATALOG_SCHEMA_IDS.approxWeightFill)),
+      maxItems: APPROX_WEIGHT_FILL_MAX,
+    },
+  },
+  ['userId', 'entries']
+);
+const setApproxWeightsResult = object(
+  CATALOG_SCHEMA_IDS.setApproxWeightsResult,
+  {
+    written: integer({ minimum: 0 }),
+    skippedHasSize: integer({ minimum: 0 }),
+    skippedSetByAdmin: integer({ minimum: 0 }),
+    // Plan 0261, S6: a product a person gave a step.
+    skippedHasStep: integer({ minimum: 0 }),
+  },
+  ['written', 'skippedHasSize', 'skippedSetByAdmin', 'skippedHasStep']
 );
 const itemIdRequest = object(
   CATALOG_SCHEMA_IDS.itemIdRequest,
@@ -3603,6 +3729,8 @@ export const catalogSchemas: JsonSchema[] = [
   updateProductGroupRequest,
   productGroupIdRequest,
   listProductGroupsRequest,
+  findItemCreatedFromEntryRequest,
+  findItemCreatedFromEntryResult,
   findItemByEanRequest,
   findItemByEanResult,
   findItemsByEansRequest,
@@ -3615,6 +3743,9 @@ export const catalogSchemas: JsonSchema[] = [
   packCountFill,
   fillPackCountsRequest,
   fillPackCountsResult,
+  approxWeightFill,
+  setApproxWeightsRequest,
+  setApproxWeightsResult,
   itemPriceOverride,
   itemPriceOverrides,
   itemPriceDetails,
@@ -3794,6 +3925,10 @@ export const catalogMessageContracts: Record<
     request: CATALOG_SCHEMA_IDS.itemPriceHistoryRequest,
     response: CATALOG_SCHEMA_IDS.itemPriceHistoryView,
   },
+  [ITEM_PATTERNS.findCreatedFromEntry]: {
+    request: CATALOG_SCHEMA_IDS.findItemCreatedFromEntryRequest,
+    response: CATALOG_SCHEMA_IDS.findItemCreatedFromEntryResult,
+  },
   [ITEM_PATTERNS.findByEan]: {
     request: CATALOG_SCHEMA_IDS.findItemByEanRequest,
     response: CATALOG_SCHEMA_IDS.findItemByEanResult,
@@ -3825,6 +3960,10 @@ export const catalogMessageContracts: Record<
   [ITEM_PATTERNS.fillPackCounts]: {
     request: CATALOG_SCHEMA_IDS.fillPackCountsRequest,
     response: CATALOG_SCHEMA_IDS.fillPackCountsResult,
+  },
+  [ITEM_PATTERNS.setApproxWeights]: {
+    request: CATALOG_SCHEMA_IDS.setApproxWeightsRequest,
+    response: CATALOG_SCHEMA_IDS.setApproxWeightsResult,
   },
   [CATEGORY_PATTERNS.tree]: {
     request: CATALOG_SCHEMA_IDS.categoryTreeRequest,

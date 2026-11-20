@@ -41,6 +41,7 @@ export * from './lib/versioning/versioning';
 export * from './lib/auth/admin-token';
 
 // Validation
+export * from './lib/validation/query-flag';
 export * from './lib/validation/username';
 export * from './lib/validation/uuid';
 export * from './lib/validation/validation-pipe';

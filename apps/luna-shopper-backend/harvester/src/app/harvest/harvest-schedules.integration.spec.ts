@@ -4,6 +4,7 @@ import {
   HarvestRunStatus,
   HarvestRunTrigger,
   HarvestScheduleOutcome,
+  SourceProbeStatus,
 } from '@portfolio/luna-shopper/contracts';
 import {
   describeIntegration,
@@ -15,15 +16,19 @@ import {
   HarvestRun,
   HarvestRunPreset,
   HarvestSchedule,
+  SourceCatalogEntry,
   type SupermarketSource,
 } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
+import { DezaKeyGuard } from './deza-key-guard';
 import { HarvestRunPresetStore } from './harvest-run-preset.store';
 import { HarvestRunService } from './harvest-run.service';
 import { HarvestRunStore } from './harvest-run.store';
 import { HarvestScheduleStore } from './harvest-schedule.store';
 import { HarvestScheduleWorker } from './harvest-schedule.worker';
 import type { PlatformAdminService } from './platform-admin.service';
+import type { SourceProbeService } from './probes/source-probe.service';
+import type { SourceProbeStore } from './probes/source-probe.store';
 import type { RunExecutor } from './run-executor.service';
 import type { SourceEntryService } from './source-entry.service';
 import type { SupermarketSourceService } from './supermarket-source.service';
@@ -105,12 +110,33 @@ describeIntegration('harvest schedules (real Postgres)', () => {
       { listAllPriceScopes: async () => [] } as unknown as CatalogClient,
       { requireAdmin: async () => ADMIN } as unknown as PlatformAdminService,
       config,
-      presets
+      presets,
+      new DezaKeyGuard(dataSource.getRepository(SourceCatalogEntry))
     );
     const store = new HarvestScheduleStore(
       dataSource.getRepository(HarvestSchedule)
     );
-    const worker = new HarvestScheduleWorker(store, runs, config, () => NOW);
+    // Every chain of this spec has a probe that passed a minute ago, so the
+    // gate of plan 0247 lets each start through. The gate itself is
+    // `schedule-probe-gate.integration.spec.ts`.
+    const passing = {
+      gateProbes: async () => [
+        {
+          id: 'probe-passed',
+          status: SourceProbeStatus.PASSED,
+          startedAt: new Date(NOW.getTime() - 60_000),
+          error: null,
+        },
+      ],
+    } as unknown as SourceProbeStore;
+    const worker = new HarvestScheduleWorker(
+      store,
+      runs,
+      config,
+      () => NOW,
+      {} as SourceProbeService,
+      passing
+    );
     return { dataSource, store, worker, presets };
   }
 

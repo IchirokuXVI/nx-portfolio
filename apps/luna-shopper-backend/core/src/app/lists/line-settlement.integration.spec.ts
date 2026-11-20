@@ -1,4 +1,3 @@
-import { LineChangeRecorder } from './changes/line-change.recorder';
 import {
   ListPermission,
   MembershipStatus,
@@ -13,6 +12,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
+import { fakeLineClaims } from '../baskets/line-claims.fake';
 import {
   CORE_ENTITIES,
   LineSettlement,
@@ -22,8 +22,8 @@ import {
   Zone,
   ZoneMembership,
 } from '../entities';
-import { fakeLineClaims } from '../baskets/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
+import { LineChangeRecorder } from './changes/line-change.recorder';
 import { ListAccessService } from './list-access.service';
 import { SettlementService } from './settlement.service';
 
@@ -470,12 +470,14 @@ describeIntegration('the settlement history (real Postgres)', () => {
           userId: ids.shopper,
           lineId: line.id,
           outcome: SettlementOutcome.BOUGHT,
+          unit: 'UNIT',
           quantity: 1,
         }),
         settlements.settle({
           userId: ids.shopper,
           lineId: line.id,
           outcome: SettlementOutcome.BOUGHT,
+          unit: 'UNIT',
           quantity: 1,
         }),
       ]);

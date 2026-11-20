@@ -56,3 +56,6 @@ export type {
   ElJamonStore,
   ElJamonStoreList,
 } from './lib/types';
+// A probe per chain checks the storefront shape (plan 0219).
+export { probeElJamon } from './lib/probe';
+export type { ElJamonProbeOptions } from './lib/probe';

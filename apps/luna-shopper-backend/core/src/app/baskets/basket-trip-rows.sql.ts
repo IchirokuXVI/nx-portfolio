@@ -52,11 +52,12 @@ import { WRITABLE_LIST } from './basket.sql';
  * sides.
  */
 export const BASKET_TRIP_ROWS_FREEZE_SQL = `
-  INSERT INTO "basket_trip_rows" ("basketId", "listId", "lineId", "asked")
+  INSERT INTO "basket_trip_rows" ("basketId", "listId", "lineId", "asked", "unit")
   SELECT gl.id,
          sl.id,
          ll.id,
-         (ll.quantity + b."bought")::int
+         (ll.quantity + b."bought")::int,
+         ll."unit"
   FROM "baskets" gl
   JOIN "zone_memberships" m ON m."userId" = gl."ownerUserId"
   JOIN "shopping_lists" sl ON sl."zoneId" = m."zoneId"
@@ -68,6 +69,8 @@ export const BASKET_TRIP_ROWS_FREEZE_SQL = `
     FROM "line_settlements" s
     WHERE s."basketId" = gl.id
       AND s."lineId" = ll.id
+      -- Within one line, in its unit (plan 0246, section 3.4).
+      AND s."unit" = ll."unit"
       AND s."revertedAt" IS NULL
   ) b ON TRUE
   WHERE gl.id = $1::uuid

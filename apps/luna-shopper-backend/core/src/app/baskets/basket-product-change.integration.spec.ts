@@ -108,6 +108,7 @@ describeIntegration(
       unitSize: 1,
       packCount: 6,
       defaultUnit: 'LITER' as ItemSnapshot['defaultUnit'],
+      approxWeight: null,
     };
     const OAT_NAME: ItemSnapshot = {
       name: { en: 'Oat drink', es: 'Bebida de avena' },
@@ -115,6 +116,7 @@ describeIntegration(
       unitSize: 1,
       packCount: null,
       defaultUnit: 'LITER' as ItemSnapshot['defaultUnit'],
+      approxWeight: null,
     };
 
     /** A buy at a shop: the scope, the shop, its chain and a price. */
@@ -444,6 +446,7 @@ describeIntegration(
         rowKey: row.id,
         lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity,
         from,
         ...extra,
@@ -480,7 +483,9 @@ describeIntegration(
       (await settlementsOf(lineId)).filter((row) => row.revertedAt === null);
 
     const lineNow = (lineId: string) =>
-      dataSource.getRepository(ListLine).findOneOrFail({ where: { id: lineId } });
+      dataSource
+        .getRepository(ListLine)
+        .findOneOrFail({ where: { id: lineId } });
 
     const itemsOf = async (lineId: string) =>
       (
@@ -589,7 +594,7 @@ describeIntegration(
       expect(await settlementsOf(milk.id)).toHaveLength(0);
     });
 
-    it('copies only the five fields of the snapshot', async () => {
+    it('copies only the six fields of the snapshot', async () => {
       const { listId, a } = await world();
       const milk = await line(listId, a.userId, 'Milk', 1);
 
@@ -609,6 +614,7 @@ describeIntegration(
         userId: a.userId,
         lineId: milk.id,
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 1,
         itemSnapshot: MILK_NAME,
       });
@@ -788,6 +794,7 @@ describeIntegration(
         rowKey: milk.id,
         lineIds: [milk.id],
         outcome: SettlementOutcome.NOT_AVAILABLE,
+        unit: 'UNIT',
         from: 7,
       });
       await buy(b, milk, 1, 7);
@@ -938,10 +945,14 @@ describeIntegration(
       const standing = rows.filter((row) => row.revertedAt === null);
       expect(standing).toHaveLength(1);
       expect(standing[0].itemId).toBe(BREAD);
-      const middle = rows.find((row) => row.id === standing[0].replacesSettlementId);
+      const middle = rows.find(
+        (row) => row.id === standing[0].replacesSettlementId
+      );
       expect(middle).toMatchObject({ itemId: OAT_MILK });
       expect(middle?.revertedAt).not.toBeNull();
-      expect(rows.find((row) => row.id === middle?.replacesSettlementId)).toMatchObject({
+      expect(
+        rows.find((row) => row.id === middle?.replacesSettlementId)
+      ).toMatchObject({
         itemId: MILK,
       });
     });
@@ -1031,6 +1042,8 @@ describeIntegration(
       expect(scope.tripBuys).toEqual({
         priceScopeIds: [SCOPE],
         unscoped: true,
+        // The row's unit, so the gateway prices one of it (plan 0246 M7).
+        unit: 'UNIT',
       });
       // Not asked, not answered: a settle asks the same question without it.
       const plain = await addService.searchScope({
@@ -1435,6 +1448,7 @@ describeIntegration(
         userId: a.userId,
         lineId: milk.id,
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 1,
         itemSnapshot: MILK_NAME,
       });

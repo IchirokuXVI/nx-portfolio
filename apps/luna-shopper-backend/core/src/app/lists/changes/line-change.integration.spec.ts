@@ -15,6 +15,7 @@ import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { CoreAuditService } from '../../audit/core-audit.service';
 import { fakeBasketAnnouncer } from '../../baskets/basket-announcer.fake';
+import { fakeLineClaims } from '../../baskets/line-claims.fake';
 import {
   CORE_ENTITIES,
   LineSettlement,
@@ -27,7 +28,6 @@ import {
   Zone,
   ZoneMembership,
 } from '../../entities';
-import { fakeLineClaims } from '../../baskets/line-claims.fake';
 import { ZoneAuthzService } from '../../zones/zone-authz.service';
 import { LineMergeService } from '../line-merge.service';
 import { LineService } from '../line.service';
@@ -204,11 +204,14 @@ describeIntegration('what every write records (real Postgres)', () => {
       });
     });
 
+    // Changed on purpose by plan 0260 (R2, A1): an add raises only a line
+    // kept at zero now, so the raise this case records starts from zero, and
+    // an add that meets a wanted line records nothing at all.
     it('records an add that landed on a line the list held as a raise', async () => {
       // Plan 0091 made this a raise rather than an add, and the record says so:
       // the line was already there, and its quantity moved.
       const listId = await list('Raises');
-      const milk = await line(listId, 'Milk', 2);
+      const milk = await line(listId, 'Milk', 0);
 
       await lines.add({ userId: ids.owner, listId, content: 'milk' });
 
@@ -216,10 +219,24 @@ describeIntegration('what every write records (real Postgres)', () => {
       expect(written).toMatchObject({
         kind: LineChangeKind.QUANTITY_CHANGED,
         lineId: milk.id,
-        quantityBefore: 2,
-        quantityAfter: 3,
+        quantityBefore: 0,
+        quantityAfter: 1,
         contentBefore: null,
       });
+    });
+
+    it('records nothing for an add that met a wanted line (plan 0260 A1)', async () => {
+      const listId = await list('Already there');
+      await line(listId, 'Milk', 2);
+
+      const added = await lines.add({
+        userId: ids.owner,
+        listId,
+        content: 'milk',
+      });
+
+      expect(added.outcome).toBe('ALREADY_ON_LIST');
+      expect(await changesOf(listId)).toEqual([]);
     });
 
     it('records one row per written line of a batch', async () => {
@@ -289,6 +306,7 @@ describeIntegration('what every write records (real Postgres)', () => {
         userId: ids.owner,
         lineId: milk.id,
         delta: -1,
+        unit: 'UNIT',
       });
 
       const [written] = await changesOf(listId);
@@ -346,6 +364,7 @@ describeIntegration('what every write records (real Postgres)', () => {
         userId: ids.owner,
         lineId: milk.id,
         delta: 1,
+        unit: 'UNIT',
         via: { participantId, basketId, userId: null },
       });
 
@@ -367,6 +386,7 @@ describeIntegration('what every write records (real Postgres)', () => {
         userId: ids.owner,
         lineId: milk.id,
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 1,
       });
 
@@ -401,11 +421,13 @@ describeIntegration('what every write records (real Postgres)', () => {
         userId: ids.owner,
         lineId: milk.id,
         outcome: SettlementOutcome.NOT_AVAILABLE,
+        unit: 'UNIT',
       });
       await settlements.settle({
         userId: ids.owner,
         lineId: bread.id,
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 1,
       });
       await lines.reorder({

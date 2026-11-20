@@ -1,4 +1,7 @@
-import { PriceSourceKind } from '@portfolio/luna-shopper/contracts';
+import {
+  PriceSourceKind,
+  UnitOfMeasure,
+} from '@portfolio/luna-shopper/contracts';
 import {
   ForbiddenException,
   NotFoundException,
@@ -85,6 +88,8 @@ describe('SupermarketItemService', () => {
     } as unknown as Repository<SupermarketItem>;
     const items = {
       findOne: jest.fn(async () => item),
+      // The piece price's basis of the reads (plan 0244): no product here.
+      find: jest.fn(async () => []),
     } as unknown as Repository<Item>;
     const scopes = {
       findOne: jest.fn(async () => scope),
@@ -552,6 +557,56 @@ describe('SupermarketItemService', () => {
         value: 'scope-1',
       });
     });
+
+    it('listByItem answers the piece price from one read of the products on the page (plan 0244)', async () => {
+      // The product sheet's offers: velista shows the piece price from here.
+      const qb = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        addOrderBy: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getMany: jest.fn(async () => [
+          storedRow({ id: 'si1', itemId: 'cheese', price: 9.41 }),
+          storedRow({
+            id: 'si2',
+            itemId: 'cheese',
+            priceScopeId: 'scope-2',
+            price: null,
+          }),
+        ]),
+      };
+      const { svc, items } = build({
+        createQueryBuilder: jest.fn(() => qb),
+      } as unknown as Partial<Repository<SupermarketItem>>);
+      (items.find as jest.Mock).mockResolvedValue([
+        {
+          id: 'cheese',
+          defaultUnit: UnitOfMeasure.KILOGRAM,
+          approxWeight: '1540.0000',
+        },
+      ]);
+
+      const page = await svc.listByItem({ userId: 'reader', itemId: 'cheese' });
+
+      expect(items.find).toHaveBeenCalledTimes(1);
+      expect((items.find as jest.Mock).mock.calls[0][0].where.id.value).toEqual(
+        ['cheese']
+      );
+      expect(page.items.map((row) => row.piecePrice)).toEqual([14.49, null]);
+    });
+
+    it('get answers a null piece price when the product is not a kilo piece', async () => {
+      const { svc } = build({
+        findOne: jest.fn(async () => storedRow()),
+      } as unknown as Partial<Repository<SupermarketItem>>);
+      const view = await svc.get({
+        userId: 'reader',
+        itemId: 'item-1',
+        priceScopeId: 'scope-1',
+      });
+      expect(view.piecePrice).toBeNull();
+    });
   });
 });
 
@@ -684,6 +739,27 @@ describe('SupermarketItemService.adminList', () => {
       { en: 'Whole milk' },
       null,
     ]);
+  });
+
+  it('derives the piece price from the product the same read loaded (plan 0244)', async () => {
+    const { svc, qb, items } = build();
+    qb.getMany.mockResolvedValue([
+      storedRow({ id: 'si1', itemId: 'cheese', price: 9.41 }),
+      storedRow({ id: 'si2', itemId: 'item-gone', price: 9.41 }),
+    ]);
+    (items.find as jest.Mock).mockResolvedValue([
+      {
+        id: 'cheese',
+        name: { en: 'Cheese' },
+        defaultUnit: UnitOfMeasure.KILOGRAM,
+        approxWeight: '1540.0000',
+      },
+    ]);
+
+    const page = await svc.adminList({ userId: ADMIN });
+
+    expect(items.find).toHaveBeenCalledTimes(1);
+    expect(page.items.map((row) => row.piecePrice)).toEqual([14.49, null]);
   });
 
   it('asks for no product at all on an empty page', async () => {

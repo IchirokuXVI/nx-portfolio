@@ -22,7 +22,7 @@ import {
   type HarvestDocument,
   type SourceAdapterKey,
 } from '@portfolio/luna-shopper/contracts';
-import { PageQueryDto } from '@portfolio/luna-shopper/platform';
+import { asQueryFlag, PageQueryDto } from '@portfolio/luna-shopper/platform';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -45,7 +45,6 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { asBoolean } from '../catalog/catalog.dto';
 
 /**
  * What an operator may type into a postal code field.
@@ -367,28 +366,6 @@ export class ImportDiscoveredPlaceDto {
  */
 const asSent = ({ obj, key }: { obj: Record<string, unknown>; key: string }) =>
   obj[key];
-
-/**
- * A query flag read from the string the caller sent (plan 0220, section 12).
- *
- * `asBoolean` is handed the value after the implicit conversion, which has
- * already turned the string `"false"` into `true`. This reads the raw string
- * instead: `true` or a bare flag is true, `false` is false, and anything else
- * is handed on as it was spelled, so `@IsBoolean` refuses it.
- */
-const asQueryFlag = ({
-  obj,
-  key,
-}: {
-  obj: Record<string, unknown>;
-  key: string;
-}) => {
-  const spelled = obj[key];
-  if (spelled === '' || spelled === 'true' || spelled === true) {
-    return true;
-  }
-  return spelled === 'false' || spelled === false ? false : spelled;
-};
 
 /** Bind a discovered place to a shop the catalog already holds (plan 0152). */
 export class LinkDiscoveredPlaceDto {
@@ -743,9 +720,10 @@ export class HarvestRunListQueryDto extends PageQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'Reverted runs only, or unreverted runs only (plan 0082). Absent lists both. A filter of its own rather than a status, because a revert does not change how the run ended.',
+      'Reverted runs only, or unreverted runs only (plan 0082). Absent lists both. A filter of its own rather than a status, because a revert does not change how the run ended. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.',
   })
   @IsOptional()
+  @Transform(asQueryFlag)
   @IsBoolean()
   reverted?: boolean;
 
@@ -883,12 +861,30 @@ export class SourceEntryListQueryDto extends PageQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'True lists only the rows every counted scope lost (`delistedAt` set), false leaves them out, and omitted lists both (plan 0220). Parsed strictly: the string `false` is false.',
+      'True lists only the rows every counted scope lost (`delistedAt` set), false leaves them out, and omitted lists both (plan 0220). Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.',
   })
   @IsOptional()
   @Transform(asQueryFlag)
   @IsBoolean()
   delisted?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'True lists only the rows whose size their own price and comparison price disprove (`sizeDoubt` set, plan 0249), false leaves them out, and omitted lists both (admin plan 0072). Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.',
+  })
+  @IsOptional()
+  @Transform(asQueryFlag)
+  @IsBoolean()
+  sizeDoubt?: boolean;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The one row with this id, whatever its status, which is how the back office addresses one entry (admin plan 0073). Every other filter given still applies, and with no `status` the default CANDIDATE and UNRESOLVED clause is not added.',
+  })
+  @IsOptional()
+  @IsUUID()
+  entryId?: string;
 }
 
 /**
@@ -939,10 +935,10 @@ export class PostalCodeDiscoveryListQueryDto extends PageQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'Omitted lists the working set, which is the codes nobody has dismissed. True lists the dismissed ones alone, so one can be found and put back.',
+      'Omitted lists the working set, which is the codes nobody has dismissed. True lists the dismissed ones alone, so one can be found and put back. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.',
   })
   @IsOptional()
-  @Transform(asBoolean)
+  @Transform(asQueryFlag)
   @IsBoolean()
   dismissed?: boolean;
 }

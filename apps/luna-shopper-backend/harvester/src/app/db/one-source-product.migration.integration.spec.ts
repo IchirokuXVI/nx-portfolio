@@ -237,14 +237,15 @@ describeIntegration('OneSourceProduct1756900000000 (real Postgres)', () => {
       'CATALOG_DISCOVERY',
       'FILE_IMPORT',
     ]);
-    // This probe runs every later migration too, and plan 0155 adds
-    // SHARED_EAN after this one.
+    // This probe runs every later migration too: plan 0155 adds SHARED_EAN
+    // after this one, and plan 0221 adds NAME_WORDS_SIZE.
     expect(await labels('item_source_match')).toEqual([
       'EAN',
       'NAME_BRAND_SIZE',
       'NAME_SIZE',
       'MANUAL',
       'SHARED_EAN',
+      'NAME_WORDS_SIZE',
     ]);
   });
 

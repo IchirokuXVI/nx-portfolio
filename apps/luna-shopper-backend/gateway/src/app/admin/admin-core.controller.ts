@@ -534,6 +534,8 @@ export class AdminListsController {
       lineId,
       content: body.content,
       quantity: body.quantity,
+      // What the quantity counts (plan 0246, section 6).
+      unit: body.unit,
       itemIds: body.itemIds,
     });
   }

@@ -102,6 +102,29 @@ export function readListing(state: Record<string, unknown>): CarrefourListing {
 }
 
 /**
+ * The size of the result set as the page itself states it, or null when the
+ * page states none.
+ *
+ * {@link readListing} answers 0 for a missing total, which is right for the
+ * frontier and wrong for the one question this answers: whether an empty page
+ * is the end of its category. A page that states 0 says the set is empty; a
+ * page that states nothing says nothing, and a walk must not read that as an
+ * end.
+ */
+export function statedTotalResults(
+  state: Record<string, unknown>
+): number | null {
+  const raw = asRecord(asRecord(state['productCardList'])['results'])[
+    'total_results'
+  ];
+  if (typeof raw !== 'number' && typeof raw !== 'string') {
+    return null;
+  }
+  const total = Number(raw);
+  return raw !== '' && Number.isFinite(total) ? total : null;
+}
+
+/**
  * Read a product page for the one field it is loaded for (plan 0090, 12.1).
  *
  * `pdp.product.ean` is a real EAN-13. Everything else the page adds, the

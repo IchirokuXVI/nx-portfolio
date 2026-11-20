@@ -1,6 +1,12 @@
 import type { ConfigService } from '@nestjs/config';
-import { HarvestDetailFetch } from '@portfolio/luna-shopper/contracts';
-import { ElJamonClient } from '@portfolio/luna-shopper/eljamon';
+import {
+  HarvestDetailFetch,
+  HarvestWarningCode,
+} from '@portfolio/luna-shopper/contracts';
+import {
+  ElJamonClient,
+  ElJamonTimeoutError,
+} from '@portfolio/luna-shopper/eljamon';
 import {
   SourceBlockedError,
   SourceGuard,
@@ -10,9 +16,15 @@ import {
   DETAIL_FAILED_KEY,
   type CatalogDiscoveryInput,
 } from './catalog-runner';
-import { ElJamonCatalogRunner } from './eljamon-catalog.runner';
+import { mergeCategoryPaths } from './category-paths';
+import {
+  ElJamonCatalogRunner,
+  type SilentAttempts,
+} from './eljamon-catalog.runner';
+import { FailingRunReport } from './failing-run-report.fake';
 import type { RunContext } from './run-context';
 import { RecordingRunReport } from './run-report';
+import { ReportWriteFailedError } from './run-report.sink';
 
 /**
  * Catalog discovery against El Jamón's online shop (plan 0169, section 5).
@@ -118,27 +130,36 @@ const BEBIDAS_PAGE_1: Row[] = Array.from({ length: 20 }, (_, index) => ({
 class TestRunner extends ElJamonCatalogRunner {
   readonly sent: Array<{ url: string; method: string }> = [];
 
-  constructor(private readonly site: (url: URL, method: string) => Response) {
+  constructor(
+    private readonly site: (url: URL, method: string) => Response,
+    private readonly retries = 0
+  ) {
     super({
       getOrThrow: () => ({ userAgent: 'LunaShopperBot/1.0' }),
     } as unknown as ConfigService);
   }
 
-  protected override createClient(context: RunContext): ElJamonClient {
+  protected override createClient(
+    context: RunContext,
+    _source: SupermarketSource,
+    _postalCode: string,
+    silence: SilentAttempts
+  ): ElJamonClient {
     return new ElJamonClient({
       userAgent: 'LunaShopperBot/1.0',
       baseUrl: BASE,
       sleepImpl: async () => undefined,
-      retries: 0,
+      retries: this.retries,
       // The run's gate, guard and signal, as the runtime passes them.
       acquire: context.acquire,
       guard: context.guard,
       signal: context.signal,
-      fetchImpl: (async (url: string, init?: RequestInit) => {
+      // Counted as the runtime's transport is, so the stop reads the fake.
+      fetchImpl: silence.watch((async (url: string, init?: RequestInit) => {
         const method = init?.method ?? 'GET';
         this.sent.push({ url: String(url), method });
         return this.site(new URL(String(url)), method);
-      }) as unknown as typeof fetch,
+      }) as unknown as typeof fetch),
     });
   }
 }
@@ -194,8 +215,17 @@ function context(
     heartbeat: jest.fn(async () => undefined),
     flush: jest.fn(async () => undefined),
     warn: jest.fn(),
+    countProgressItself: jest.fn(),
   } as unknown as RunContext & { setReport: jest.Mock; report: jest.Mock };
 }
+
+/** Every `processed` the runner reported, summed. */
+const processedOf = (ctx: { report: jest.Mock }): number =>
+  ctx.report.mock.calls.reduce(
+    (sum, [counters]) =>
+      sum + ((counters as { processed?: number }).processed ?? 0),
+    0
+  );
 
 const source = {
   adapterKey: 'eljamon-web',
@@ -348,6 +378,101 @@ describe('ElJamonCatalogRunner', () => {
       ]);
     });
 
+    it('writes LISTING_SHORT on the run row for a short category, with both numbers (plan 0251)', async () => {
+      const runContext = context();
+      await new TestRunner(site(41)).run(
+        runContext,
+        new RecordingRunReport(),
+        input,
+        source
+      );
+
+      // One, for BEBIDAS: FRESCOS printed 2 and read 2.
+      expect(runContext.warn).toHaveBeenCalledTimes(1);
+      expect(runContext.warn).toHaveBeenCalledWith({
+        code: HarvestWarningCode.LISTING_SHORT,
+        name: expect.any(String),
+        offerId: null,
+        page: null,
+        message: expect.stringMatching(
+          /^Category 06 .*: 20 of 41 row\(s\) read\.$/
+        ),
+      });
+      // Before the last flush, which is what writes it onto the row.
+      expect(
+        (runContext.warn as jest.Mock).mock.invocationCallOrder[0]
+      ).toBeLessThan(
+        Math.max(...(runContext.flush as jest.Mock).mock.invocationCallOrder)
+      );
+    });
+
+    it('writes no listing warning for a walk that read what every category printed', async () => {
+      const runContext = context();
+      await new TestRunner(site(20)).run(
+        runContext,
+        new RecordingRunReport(),
+        input,
+        source
+      );
+
+      expect(runContext.warn).not.toHaveBeenCalled();
+    });
+
+    it('writes LISTING_SHORT for a category whose first page printed no count and gave rows (plan 0251)', async () => {
+      const runContext = context();
+      const noCount = (url: URL): Response =>
+        url.pathname === '/categorias/bebidas/06'
+          ? new Response(
+              listing(BEBIDAS_PAGE_1, 20, '06').replace(
+                '<p>20 Artículos</p>',
+                ''
+              )
+            )
+          : storefront(url);
+      await new TestRunner(noCount).run(
+        runContext,
+        new RecordingRunReport(),
+        input,
+        source
+      );
+
+      expect(runContext.warn).toHaveBeenCalledTimes(1);
+      expect(runContext.warn).toHaveBeenCalledWith({
+        code: HarvestWarningCode.LISTING_SHORT,
+        name: expect.any(String),
+        offerId: null,
+        page: null,
+        message: expect.stringMatching(
+          /^Category 06 .*: 20 row\(s\) read, no count printed\.$/
+        ),
+      });
+    });
+
+    it('writes LISTING_UNREAD for a category whose first page did not answer (plan 0251)', async () => {
+      const runContext = context();
+      const refused = (url: URL): Response =>
+        url.pathname === '/categorias/bebidas/06'
+          ? new Response('', { status: 403 })
+          : storefront(url);
+      await new TestRunner(refused).run(
+        runContext,
+        new RecordingRunReport(),
+        input,
+        source
+      );
+
+      expect(runContext.warn).toHaveBeenCalledTimes(1);
+      expect(runContext.warn).toHaveBeenCalledWith({
+        code: HarvestWarningCode.LISTING_UNREAD,
+        name: expect.any(String),
+        offerId: null,
+        page: null,
+        message: expect.stringMatching(
+          /^Category 06 .* printed no count: its first page did not answer, and 0 row\(s\) were read\.$/
+        ),
+      });
+    });
+
     it('declares nothing when the run is aborted', async () => {
       const controller = new AbortController();
       controller.abort();
@@ -438,11 +563,32 @@ describe('ElJamonCatalogRunner', () => {
       priceDisagreements: [{ code: '101', listing: 3.49, productPage: 3.59 }],
     });
     expect(written['categories']).toEqual([
-      { code: '04', name: 'FRESCOS', printedCount: 2, rowsRead: 2 },
-      { code: '06', name: 'BEBIDAS', printedCount: 25, rowsRead: 20 },
+      {
+        code: '04',
+        name: 'FRESCOS',
+        printedCount: 2,
+        rowsRead: 2,
+        rowsRepeated: 0,
+      },
+      {
+        code: '06',
+        name: 'BEBIDAS',
+        printedCount: 25,
+        rowsRead: 20,
+        rowsRepeated: 0,
+      },
     ]);
+    expect(written['detail']).toEqual({
+      pages: 22,
+      failed: 1,
+      timeouts: 0,
+      silentAttempts: 0,
+    });
     // One failed page and one failed product, both counted.
-    expect(ctx.report).toHaveBeenCalledTimes(2);
+    const failures = ctx.report.mock.calls
+      .map(([counters]) => (counters as { failed?: number }).failed ?? 0)
+      .filter((failed) => failed > 0);
+    expect(failures).toEqual([1, 1]);
 
     // A product whose page failed is still reported, with its top level category.
     const bacon = report.products.find(
@@ -700,6 +846,763 @@ describe('ElJamonCatalogRunner', () => {
 
       // FRESCOS was listed before BEBIDAS was refused.
       expect([...read(report).keys()].sort()).toEqual(['101', '102']);
+    });
+  });
+
+  describe('the detail stage (plan 0253)', () => {
+    const BEBIDAS_PAGE_2: Row[] = Array.from({ length: 20 }, (_, index) => ({
+      code: String(220 + index),
+      description: `agua ${index}, 1l`,
+      brand: 'SOLAN',
+      price: '0,40',
+      unit: '0,40 €/Litro',
+    }));
+
+    /**
+     * A whole listing of 42 products, two of FRESCOS and 40 of BEBIDAS, and
+     * product pages that `timesOut` makes as silent as the transport's idle
+     * timeout.
+     */
+    function site(timesOut: (code: string) => boolean) {
+      return siteAnswering((code) => (timesOut(code) ? 'silent' : undefined));
+    }
+
+    /**
+     * The same listing, and product pages `onPage` makes silent, reset, or a
+     * 404. It is asked once per attempt, so it can answer each retry apart.
+     */
+    function siteAnswering(
+      onPage: (code: string) => 'silent' | 'reset' | 'missing' | undefined
+    ) {
+      return (url: URL): Response => {
+        if (url.pathname === '/categorias/bebidas/06') {
+          return new Response(
+            url.search === ''
+              ? listing(BEBIDAS_PAGE_1, 40, '06')
+              : listing(BEBIDAS_PAGE_2, 40, '06')
+          );
+        }
+        const code = /\/detalle\/.*\/(\d+)$/.exec(url.pathname)?.[1];
+        const answer = code ? onPage(code) : undefined;
+        if (answer === 'silent') {
+          throw new ElJamonTimeoutError(url.toString(), 30_000);
+        }
+        if (answer === 'reset') {
+          throw Object.assign(new Error('socket hang up'), {
+            code: 'ECONNRESET',
+          });
+        }
+        if (answer === 'missing') {
+          return new Response('', { status: 404 });
+        }
+        return storefront(url);
+      };
+    }
+
+    const detailAsked = (runner: TestRunner) =>
+      runner.sent.filter((request) => request.url.includes('/detalle/')).length;
+
+    const oneWorker = { ...source, workers: 1 } as SupermarketSource;
+
+    const written = (ctx: { setReport: jest.Mock }) =>
+      ctx.setReport.mock.calls[0][0] as Record<string, unknown>;
+
+    it('moves processed as each product page is read, and ends at totalPlanned once', async () => {
+      const ctx = context();
+      await new TestRunner(site(() => false)).run(
+        ctx,
+        new RecordingRunReport(),
+        // 101 is known, so it counts when the stage starts.
+        { ...input, externalIdsWithoutEan: new Set(['101']) },
+        source
+      );
+
+      expect(ctx.countProgressItself).toHaveBeenCalled();
+      expect(ctx.setTotalPlanned).toHaveBeenCalledWith(42);
+      expect(processedOf(ctx)).toBe(42);
+      // The pages count during DETAIL, before INGEST starts.
+      const ingest = (ctx.setStage as jest.Mock).mock.calls.findIndex(
+        ([stage]) => stage === 'INGEST'
+      );
+      const ingestAt = (ctx.setStage as jest.Mock).mock.invocationCallOrder[
+        ingest
+      ];
+      const perPage = ctx.report.mock.calls
+        .map(([counters], index) => ({
+          counters: counters as { processed?: number },
+          at: ctx.report.mock.invocationCallOrder[index],
+        }))
+        .filter(({ counters }) => counters.processed === 1);
+      // 101 when the stage starts, then 41 pages: 40 read, and 102's, which
+      // carries no product and fails.
+      expect(perPage).toHaveLength(42);
+      expect(perPage.every(({ at }) => at < ingestAt)).toBe(true);
+    });
+
+    it('stops asking for pages after 20 silent attempts in a row, and still records every listed row', async () => {
+      const ctx = context();
+      const report = new RecordingRunReport();
+      const runner = new TestRunner(site((code) => code !== '101'));
+
+      // One worker, so the order is the listing's and the count exact.
+      await runner.run(ctx, report, input, {
+        ...source,
+        workers: 1,
+      } as SupermarketSource);
+
+      const asked = runner.sent.filter((request) =>
+        request.url.includes('/detalle/')
+      ).length;
+      // 101 answered, then 20 timed out in a row, and nothing after them was
+      // asked.
+      expect(asked).toBe(21);
+      const detail = written(ctx)['detail'] as Record<string, number>;
+      expect(detail).toEqual({
+        pages: asked,
+        failed: asked - 1,
+        timeouts: asked - 1,
+        silentAttempts: 20,
+      });
+
+      // Every listed row reaches the ingest; every new product whose page was
+      // not read is marked for the next walk.
+      expect(report.products).toHaveLength(42);
+      const unmarked = report.products.filter(
+        (product) => product.extra?.[DETAIL_FAILED_KEY] !== true
+      );
+      expect(unmarked.map((product) => product.externalId)).toEqual(['101']);
+      expect(processedOf(ctx)).toBe(42);
+
+      expect(ctx.warn).toHaveBeenCalledTimes(1);
+      expect(ctx.warn).toHaveBeenCalledWith({
+        code: HarvestWarningCode.DETAIL_UNREAD,
+        name: null,
+        offerId: null,
+        page: null,
+        message:
+          'Product pages stopped after 20 attempts in a row got no answer: ' +
+          `${asked} of 42 page(s) asked, ${asked - 1} failed, ` +
+          `${asked - 1} timed out. 41 product(s) had no page; the next ` +
+          'walk asks for them again.',
+      });
+      // The listing was whole, so the stop costs no listing declaration.
+      expect(report.wholeListings).toHaveLength(1);
+    });
+
+    it('reads every page when the timeouts never reach 20 in a row', async () => {
+      const ctx = context();
+      const report = new RecordingRunReport();
+      // Every other page times out, 20 in all, with an answer between each.
+      const runner = new TestRunner(
+        site((code) => Number(code) % 2 === 0 && code !== '102')
+      );
+
+      await runner.run(ctx, report, input, {
+        ...source,
+        workers: 1,
+      } as SupermarketSource);
+
+      const asked = runner.sent.filter((request) =>
+        request.url.includes('/detalle/')
+      ).length;
+      expect(asked).toBe(42);
+      const detail = written(ctx)['detail'] as Record<string, number>;
+      expect(detail.pages).toBe(42);
+      expect(detail.timeouts).toBe(20);
+      expect(ctx.warn).not.toHaveBeenCalled();
+      expect(processedOf(ctx)).toBe(42);
+    });
+
+    it('counts every silent retry, so a client that retries three times stops after 20 attempts and not 20 pages', async () => {
+      const ctx = context();
+      const runner = new TestRunner(
+        site((code) => code !== '101'),
+        3
+      );
+
+      await runner.run(ctx, new RecordingRunReport(), input, oneWorker);
+
+      // 101 answered once, then five pages were silent four times each.
+      expect(detailAsked(runner)).toBe(1 + 20);
+      expect(written(ctx)['detail']).toEqual({
+        pages: 6,
+        failed: 5,
+        timeouts: 5,
+        silentAttempts: 20,
+      });
+      expect(ctx.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ code: HarvestWarningCode.DETAIL_UNREAD })
+      );
+    });
+
+    it('never resets the count on a connection reset, which is no answer', async () => {
+      const ctx = context();
+      let attempts = 0;
+      // Silent, reset, silent, reset: each page ends in a reset, which is
+      // not a timed out page, and still adds two silent attempts.
+      const runner = new TestRunner(
+        siteAnswering(() => (attempts++ % 2 === 0 ? 'silent' : 'reset')),
+        3
+      );
+
+      await runner.run(ctx, new RecordingRunReport(), input, oneWorker);
+
+      expect(detailAsked(runner)).toBe(10 * 4);
+      expect(written(ctx)['detail']).toEqual({
+        pages: 10,
+        failed: 10,
+        timeouts: 0,
+        silentAttempts: 20,
+      });
+      expect(ctx.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ code: HarvestWarningCode.DETAIL_UNREAD })
+      );
+    });
+
+    it('resets the count on a 404, which is an answer', async () => {
+      const ctx = context();
+      // 12 silent pages, a 404, 19 silent, a 404, 9 silent: never 20 in a row.
+      const runner = new TestRunner(
+        siteAnswering((code) =>
+          code === '210' || code === '230' ? 'missing' : 'silent'
+        )
+      );
+
+      await runner.run(ctx, new RecordingRunReport(), input, oneWorker);
+
+      expect(detailAsked(runner)).toBe(42);
+      expect(written(ctx)['detail']).toEqual({
+        pages: 42,
+        failed: 42,
+        timeouts: 40,
+        silentAttempts: 40,
+      });
+      expect(ctx.warn).not.toHaveBeenCalled();
+    });
+
+    it('completes an ALL walk whose stage stops, and creates no row for a product whose page was never asked', async () => {
+      const ctx = context();
+      const report = new RecordingRunReport();
+      const runner = new TestRunner(site((code) => code !== '101'));
+
+      await runner.run(
+        ctx,
+        report,
+        { ...input, details: HarvestDetailFetch.ALL },
+        oneWorker
+      );
+
+      expect(ctx.signal.aborted).toBe(false);
+      expect(ctx.setReport).toHaveBeenCalled();
+      expect(processedOf(ctx)).toBe(42);
+      expect(ctx.warn).toHaveBeenCalledTimes(1);
+      expect(ctx.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: HarvestWarningCode.DETAIL_UNREAD,
+          message: expect.stringContaining(
+            '41 product(s) had no page; the next walk asks for them again.'
+          ),
+        })
+      );
+      // A full observation for the page that was read, and for each of the
+      // 20 that timed out, marked for the next walk. The 21 pages never asked
+      // for are reported from the listing alone, because an `ALL` walk was
+      // handed no ids: they name no product, and the ingest creates no row
+      // from them for a product the chain does not hold (`skipUnknownPartial`).
+      expect(report.products).toHaveLength(21);
+      expect(
+        report.products.filter(
+          (product) => product.extra?.[DETAIL_FAILED_KEY] !== true
+        )
+      ).toEqual([expect.objectContaining({ externalId: '101' })]);
+      const full = new Set(
+        report.products.map((product) => product.externalId)
+      );
+      expect(report.partialProducts).toHaveLength(21);
+      for (const product of report.partialProducts) {
+        expect(full.has(product.externalId)).toBe(false);
+        expect(product).not.toHaveProperty('name');
+        expect(product.prices).toHaveLength(1);
+      }
+    });
+  });
+
+  describe('a walk reports what it has read as it goes (plan 0267)', () => {
+    /** The storefront with a whole listing, and a product page `onPage` may answer instead. */
+    function site(onPage?: (code: string) => Response | undefined) {
+      return (url: URL): Response => {
+        if (url.pathname === '/categorias/bebidas/06' && url.search !== '') {
+          return new Response(listing([], 25, '06'));
+        }
+        const code = /\/detalle\/.*\/(\d+)$/.exec(url.pathname)?.[1];
+        return (code && onPage?.(code)) || storefront(url);
+      };
+    }
+
+    /** The stages the run had set when each product came, by its code. */
+    function watch(report: RecordingRunReport, ctx: RunContext) {
+      const at = new Map<string, string[]>();
+      const product = report.product.bind(report);
+      report.product = (observation) => {
+        expect(at.has(observation.externalId)).toBe(false);
+        at.set(
+          observation.externalId,
+          (ctx.setStage as jest.Mock).mock.calls.map(
+            ([stage]) => stage as string
+          )
+        );
+        product(observation);
+      };
+      return at;
+    }
+
+    it('reports a known product as it is listed, and a new one as its page answers or fails', async () => {
+      const ctx = context();
+      const report = new RecordingRunReport();
+      const at = watch(report, ctx);
+      const runner = new TestRunner(site());
+
+      await runner.run(
+        ctx,
+        report,
+        { ...input, externalIdsWithoutEan: new Set(['200']) },
+        { ...source, workers: 1 } as SupermarketSource
+      );
+
+      // 200 is known: it read no page and came while the listing was read.
+      expect(at.get('200')).toEqual(['LIST']);
+      expect(report.partialProducts.map((p) => p.externalId)).toEqual(['200']);
+      // 101 came when its page answered, with what the page said.
+      expect(at.get('101')).toEqual(['LIST', 'DETAIL']);
+      expect(
+        report.products.find((product) => product.externalId === '101')
+      ).toMatchObject({
+        categoryPath: ['Frescos', 'Arroz'],
+        // The listing price, read before any page, and not the page's 3.59.
+        prices: [expect.objectContaining({ price: 3.49 })],
+      });
+      // 102's page carried no product: it came when the page failed, with
+      // its top level category and the mark for the next walk.
+      expect(at.get('102')).toEqual(['LIST', 'DETAIL']);
+      expect(
+        report.products.find((product) => product.externalId === '102')
+      ).toMatchObject({
+        categoryPath: ['FRESCOS'],
+        imageUrl: null,
+        extra: { [DETAIL_FAILED_KEY]: true },
+      });
+      // Every one of the 22 listed products came once, and none waited for
+      // the end of the walk.
+      expect(at.size).toBe(22);
+      for (const stages of at.values()) {
+        expect(stages).not.toContain('INGEST');
+      }
+      // What needs the whole walk is still decided at its end: BEBIDAS
+      // printed 25 and listed 20, so the listing is not whole.
+      expect(report.notWhole).toEqual([
+        expect.objectContaining({ reason: 'short-category' }),
+      ]);
+      expect(ctx.setReport).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports a product listed in two categories once, at its first sighting, with the first category', async () => {
+      // 101 and 102 are new, 300 is known, and BEBIDAS lists all three again
+      // after FRESCOS, with one product of its own.
+      const known: Row = {
+        code: '300',
+        description: 'leche entera, 1l',
+        brand: 'PASCUAL',
+        price: '1,09',
+        unit: '1,09 €/Litro',
+      };
+      const fresh: Row = { ...BEBIDAS_PAGE_1[0], code: '301' };
+      const frescos = [...FRESCOS, known];
+      const bebidas = [FRESCOS[0], FRESCOS[1], known, fresh];
+      const twice = (url: URL): Response => {
+        if (url.pathname === '/categorias/frescos/04') {
+          return new Response(listing(frescos, frescos.length, '04'));
+        }
+        if (url.pathname === '/categorias/bebidas/06') {
+          return new Response(
+            url.search === ''
+              ? listing(bebidas, bebidas.length, '06')
+              : listing([], bebidas.length, '06')
+          );
+        }
+        return storefront(url);
+      };
+      const ctx = context();
+      const report = new RecordingRunReport();
+      const at = watch(report, ctx);
+      const runner = new TestRunner(twice);
+
+      await runner.run(
+        ctx,
+        report,
+        { ...input, externalIdsWithoutEan: new Set(['300']) },
+        { ...source, workers: 1 } as SupermarketSource
+      );
+
+      // `watch` fails on a second report of one code: each came once.
+      expect([...at.keys()].sort()).toEqual(['101', '102', '300', '301']);
+      expect(report.products.map((p) => p.externalId).sort()).toEqual([
+        '101',
+        '102',
+        '301',
+      ]);
+      // The known product came from its first listing, in FRESCOS.
+      expect(report.partialProducts.map((p) => p.externalId)).toEqual(['300']);
+      expect(at.get('300')).toEqual(['LIST']);
+      // One page per new product, however often it is listed.
+      const pages = runner.sent
+        .map((sent) => /\/detalle\/.*\/(\d+)$/.exec(sent.url)?.[1])
+        .filter((code): code is string => code !== undefined)
+        .sort();
+      expect(pages).toEqual(['101', '102', '301']);
+      // The second sighting adds no category: 102's page failed, so it keeps
+      // the top level category of its first sighting, FRESCOS, and not BEBIDAS.
+      expect(
+        report.products.find((product) => product.externalId === '102')
+      ).toMatchObject({
+        categoryPath: ['FRESCOS'],
+        extra: { [DETAIL_FAILED_KEY]: true },
+      });
+      // The repeats still count as rows each category read, so the listing
+      // is whole, and it names each product once.
+      expect(report.notWhole).toEqual([]);
+      expect(report.wholeListings).toHaveLength(1);
+      expect([...report.wholeListings[0].listed].sort()).toEqual([
+        '101',
+        '102',
+        '300',
+        '301',
+      ]);
+    });
+
+    it('has reported what it read while the pages are still asked, and never a held row whose page it has not read', async () => {
+      const controller = new AbortController();
+      const ctx = context(controller.signal);
+      const report = new RecordingRunReport();
+      let reached!: () => void;
+      const stalled = new Promise<void>((resolve) => (reached = resolve));
+      let cut!: (error: Error) => void;
+      const page205 = new Promise<Response>((_resolve, reject) => {
+        cut = reject;
+      });
+      page205.catch(() => undefined);
+      // One worker, so the pages are asked in the listing's order: 101, 102,
+      // 200 to 204, then 205, which never answers, as on a pod that dies.
+      const runner = new TestRunner(
+        site((code) => {
+          if (code !== '205') {
+            return undefined;
+          }
+          reached();
+          return page205 as unknown as Response;
+        })
+      );
+      const walk = runner.run(
+        ctx,
+        report,
+        {
+          ...input,
+          // 209 was written from a page that failed on an earlier walk, so
+          // its page is asked again and the chain holds a row for it.
+          externalIdsWithoutEan: new Set(['209']),
+          externalIdsWithFailedDetail: new Set(['209']),
+        },
+        { ...source, workers: 1 } as SupermarketSource
+      );
+      await stalled;
+
+      // Half way: what was read is with the sink.
+      expect(report.products.map((product) => product.externalId)).toEqual([
+        '101',
+        '102',
+        '200',
+        '201',
+        '202',
+        '203',
+        '204',
+      ]);
+      // A held row whose page is not read yet is reported not at all, so a
+      // walk that dies here clears nothing it holds.
+      expect(report.partialProducts).toEqual([]);
+      // Nothing that needs the whole walk was decided.
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole).toEqual([]);
+      expect(ctx.setReport).not.toHaveBeenCalled();
+
+      // A person aborts, and the page in flight fails with it.
+      controller.abort();
+      cut(new Error('aborted'));
+      await walk;
+
+      // The end reports what is left by the rule of plan 0215: the held row
+      // from the listing alone, never with a full observation.
+      expect(report.partialProducts.map((p) => p.externalId)).toEqual(['209']);
+      expect(
+        report.products.some((product) => product.externalId === '209')
+      ).toBe(false);
+      expect(report.products).toHaveLength(21);
+      // An aborted walk declares nothing whole.
+      expect(report.wholeListings).toEqual([]);
+    });
+
+    describe('a first chunk that fails to write stops the walk (plan 0269)', () => {
+      /** The paths of every request the walk sent, in order. */
+      const paths = (runner: TestRunner): string[] =>
+        runner.sent.map((sent) => new URL(sent.url).pathname);
+
+      it('in the listing: no next category and no product page is asked', async () => {
+        const controller = new AbortController();
+        const ctx = context(controller.signal);
+        const failing = new FailingRunReport(controller);
+        const runner = new TestRunner(site());
+
+        await runner.run(
+          ctx,
+          failing,
+          // 101 is known, so it goes to the sink as FRESCOS is listed.
+          { ...input, externalIdsWithoutEan: new Set(['101']) },
+          { ...source, workers: 1 } as SupermarketSource
+        );
+
+        expect(controller.signal.reason).toBeInstanceOf(ReportWriteFailedError);
+        expect(failing.partialProducts.map((p) => p.externalId)).toEqual([
+          '101',
+        ]);
+        // FRESCOS was read, and nothing after the failure was asked.
+        expect(paths(runner)).toContain('/categorias/frescos/04');
+        expect(paths(runner)).not.toContain('/categorias/bebidas/06');
+        expect(paths(runner).some((path) => path.includes('/detalle/'))).toBe(
+          false
+        );
+        // What the end still hands over is dropped by the sink, and nothing
+        // that needs the whole walk is stated.
+        expect(failing.products).toEqual([]);
+        expect(failing.wholeListings).toEqual([]);
+        expect(failing.notWhole).toEqual([]);
+        expect(ctx.warn).not.toHaveBeenCalled();
+      });
+
+      it('in the detail stage: no product page is asked after the failure', async () => {
+        const controller = new AbortController();
+        const ctx = context(controller.signal);
+        const failing = new FailingRunReport(controller);
+        const runner = new TestRunner(site());
+
+        // Nothing is known, so the first product goes to the sink when its
+        // page answers. One worker asks the pages in the listing's order.
+        await runner.run(ctx, failing, input, {
+          ...source,
+          workers: 1,
+        } as SupermarketSource);
+
+        expect(controller.signal.reason).toBeInstanceOf(ReportWriteFailedError);
+        const pages = paths(runner).filter((path) =>
+          path.includes('/detalle/')
+        );
+        expect(pages).toEqual(['/detalle/-/Producto/p/101']);
+        expect(failing.products.map((p) => p.externalId)).toEqual(['101']);
+        // The 21 rows whose pages were never read are still handed over at
+        // the end, and the sink writes none of them.
+        expect(failing.dropped).toBe(21);
+        expect(failing.wholeListings).toEqual([]);
+        expect(failing.notWhole).toEqual([]);
+        expect(ctx.warn).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('every path a product is filed under (plan 0268)', () => {
+    // 101 and 102 are new, 300 is known, and BEBIDAS lists all three again
+    // after FRESCOS, with 301 of its own. Every category reads what it
+    // printed, so the listing is whole.
+    const KNOWN: Row = {
+      code: '300',
+      description: 'leche entera, 1l',
+      brand: 'PASCUAL',
+      price: '1,09',
+      unit: '1,09 €/Litro',
+    };
+    const FRESH: Row = { ...BEBIDAS_PAGE_1[0], code: '301' };
+    const frescos = [...FRESCOS, KNOWN];
+    const bebidas = [FRESCOS[0], FRESCOS[1], KNOWN, FRESH];
+    function twice(onPage?: (code: string) => Response | undefined) {
+      return (url: URL): Response => {
+        if (url.pathname === '/categorias/frescos/04') {
+          return new Response(listing(frescos, frescos.length, '04'));
+        }
+        if (url.pathname === '/categorias/bebidas/06') {
+          return new Response(
+            url.search === ''
+              ? listing(bebidas, bebidas.length, '06')
+              : listing([], bebidas.length, '06')
+          );
+        }
+        const code = /\/detalle\/.*\/(\d+)$/.exec(url.pathname)?.[1];
+        return (code && onPage?.(code)) || storefront(url);
+      };
+    }
+    const knownInput: CatalogDiscoveryInput = {
+      ...input,
+      externalIdsWithoutEan: new Set(['300']),
+    };
+    const oneWorker = { ...source, workers: 1 } as SupermarketSource;
+    const callOf = (report: RecordingRunReport, externalId: string) =>
+      report.categoryPathCalls.find((call) => call.externalId === externalId);
+
+    it('gives a product met in two categories both, in walk order, after its breadcrumb, and replaces when its page was read', async () => {
+      const report = new RecordingRunReport();
+      await new TestRunner(twice()).run(
+        context(),
+        report,
+        knownInput,
+        oneWorker
+      );
+
+      expect(callOf(report, '101')).toEqual({
+        externalId: '101',
+        // The breadcrumb of the page, then each listing category, verbatim:
+        // the listing prints its names in capitals.
+        paths: [['Frescos', 'Arroz'], ['FRESCOS'], ['BEBIDAS']],
+        mode: 'REPLACE',
+      });
+      // The first path is the one `categoryPath` holds, which is unchanged.
+      const rice = report.products.find((p) => p.externalId === '101');
+      expect(rice?.categoryPath).toEqual(['Frescos', 'Arroz']);
+      expect(callOf(report, '101')?.paths[0]).toEqual(rice?.categoryPath);
+      expect(callOf(report, '301')).toEqual({
+        externalId: '301',
+        paths: [['Frescos', 'Arroz'], ['BEBIDAS']],
+        mode: 'REPLACE',
+      });
+      // One call a product, in the order the walk first listed them.
+      expect(report.categoryPathCalls.map((call) => call.externalId)).toEqual([
+        '101',
+        '102',
+        '300',
+        '301',
+      ]);
+    });
+
+    it('adds for a known row and for a row whose page was not read, so a stored breadcrumb stays', async () => {
+      const report = new RecordingRunReport();
+      await new TestRunner(twice()).run(
+        context(),
+        report,
+        knownInput,
+        oneWorker
+      );
+
+      // 300 is known, so no page was read: its listing categories are added.
+      const known = callOf(report, '300');
+      expect(known).toEqual({
+        externalId: '300',
+        paths: [['FRESCOS'], ['BEBIDAS']],
+        mode: 'ADD',
+      });
+      // 102's page carried no product, so it adds too.
+      expect(callOf(report, '102')).toEqual({
+        externalId: '102',
+        paths: [['FRESCOS'], ['BEBIDAS']],
+        mode: 'ADD',
+      });
+      // What the drain then writes keeps the breadcrumb an earlier walk read.
+      const stored = [['Lácteos', 'Leche']];
+      expect(
+        mergeCategoryPaths(stored, known?.paths ?? [], known?.mode ?? 'ADD')
+      ).toEqual([['Lácteos', 'Leche'], ['FRESCOS'], ['BEBIDAS']]);
+    });
+
+    it('adds for the rows an aborted walk did not read, and never replaces', async () => {
+      const controller = new AbortController();
+      const report = new RecordingRunReport();
+      await new TestRunner(
+        twice((code) => {
+          if (code === '102') {
+            controller.abort();
+          }
+          return undefined;
+        })
+      ).run(
+        context(controller.signal),
+        report,
+        { ...input, details: HarvestDetailFetch.ALL },
+        oneWorker
+      );
+
+      expect(report.categoryPathCalls).toHaveLength(4);
+      expect(
+        report.categoryPathCalls.every((call) => call.mode === 'ADD')
+      ).toBe(true);
+      // 101's page was read before the abort, so its breadcrumb is added.
+      expect(callOf(report, '101')?.paths[0]).toEqual(['Frescos', 'Arroz']);
+      // 300 was never read: only its listing categories, nothing to clear.
+      expect(callOf(report, '300')?.paths).toEqual([['FRESCOS'], ['BEBIDAS']]);
+    });
+
+    it('adds for a row whose page was read when the listing is not whole', async () => {
+      // BEBIDAS printed 25 and its page 2 is refused, so a category the walk
+      // did not finish may list 101 too.
+      const report = new RecordingRunReport();
+      await new TestRunner(storefront).run(context(), report, input, source);
+
+      expect(report.notWhole).toHaveLength(1);
+      expect(callOf(report, '101')).toEqual({
+        externalId: '101',
+        paths: [['Frescos', 'Arroz'], ['FRESCOS']],
+        mode: 'ADD',
+      });
+    });
+
+    it('puts the paths on no observation, and makes every call after the last product and before the run returns', async () => {
+      const report = new RecordingRunReport();
+      const events: string[] = [];
+      const product = report.product.bind(report);
+      report.product = (observation) => {
+        events.push('product');
+        product(observation);
+      };
+      const paths = report.categoryPaths.bind(report);
+      report.categoryPaths = (externalId, list, mode) => {
+        events.push('paths');
+        paths(externalId, list, mode);
+      };
+
+      await new TestRunner(twice()).run(
+        context(),
+        report,
+        knownInput,
+        oneWorker
+      );
+      // The executor drains the sink after the run returns, so every call is
+      // with the sink by then.
+      events.push('drain');
+
+      for (const observed of [...report.products, ...report.partialProducts]) {
+        expect(observed).not.toHaveProperty('categoryPaths');
+      }
+      expect(events.lastIndexOf('product')).toBeLessThan(
+        events.indexOf('paths')
+      );
+      expect(events.filter((event) => event === 'paths')).toHaveLength(4);
+      expect(events.at(-1)).toBe('drain');
+    });
+
+    it('makes no call when the walk dies before its end', async () => {
+      const report = new RecordingRunReport();
+      await expect(
+        new TestRunner(() => new Response('', { status: 500 })).run(
+          context(),
+          report,
+          input,
+          source
+        )
+      ).rejects.toThrow();
+
+      expect(report.categoryPathCalls).toEqual([]);
     });
   });
 });

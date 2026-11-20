@@ -8,6 +8,8 @@ import type {
   ScheduleOutcomeWrite,
 } from './harvest-schedule.store';
 import { HarvestScheduleWorker } from './harvest-schedule.worker';
+import type { SourceProbeService } from './probes/source-probe.service';
+import type { SourceProbeStore } from './probes/source-probe.store';
 import { nextSlot, previousSlot } from './schedule-slot';
 
 /**
@@ -82,6 +84,16 @@ function build(
       };
     }),
     findInterrupted: jest.fn(async () => options.interrupted ?? []),
+    // A claimed slot with no outcome (plan 0247, review round 1), which the
+    // gate spec covers. None here.
+    findUndecided: jest.fn(async () => []),
+    claimUndecided: jest.fn(async () => false),
+    // The advisory hold of a slot being decided, which only real Postgres
+    // can contend for. Here it is always free.
+    holdSlot: jest.fn(async () => ({ release: async () => undefined })),
+    isUndecided: jest.fn(async () => true),
+    // The store's read never throws: a name it cannot read is null.
+    presetNameOf: jest.fn(async () => null),
     claimRetry: jest.fn(async (_id: string, runId: string) => {
       if (row.lastSlotAttempts !== 1 || row.lastRunId !== runId) {
         return false;
@@ -118,7 +130,16 @@ function build(
   } as unknown as ConfigService;
 
   let now = new Date('2026-10-14T03:01:00.000Z');
-  const worker = new HarvestScheduleWorker(store, runs, config, () => now);
+  // `startScheduled` is a fake here and never calls the gate, which
+  // `harvest-schedule.worker.gate.spec.ts` covers.
+  const worker = new HarvestScheduleWorker(
+    store,
+    runs,
+    config,
+    () => now,
+    {} as SourceProbeService,
+    {} as SourceProbeStore
+  );
   return {
     worker,
     store,
@@ -137,7 +158,9 @@ describe('HarvestScheduleWorker, a due slot', () => {
     await worker.tick();
 
     expect(runs.startScheduled).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'schedule-1', presetId: 'preset-1' })
+      expect.objectContaining({ id: 'schedule-1', presetId: 'preset-1' }),
+      // The probe gate of plan 0247.
+      expect.any(Function)
     );
     expect(outcomes).toEqual([
       expect.objectContaining({

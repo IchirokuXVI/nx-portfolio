@@ -250,6 +250,22 @@ function guardWarning(
   return { code, message, offerId: null, page: null, name: null };
 }
 
+/**
+ * A part of the listing a walk could not read, or read short (plan 0251).
+ *
+ * It names the part as the chain printed it and no offer or page: the part is
+ * a category or a section, and the message says what it cost. A runner writes
+ * one only for a walk that was not aborted, before it ends, so the warning is
+ * on the row of a run that ends `COMPLETED`.
+ */
+export function listingWarning(
+  code: HarvestWarningCode.LISTING_UNREAD | HarvestWarningCode.LISTING_SHORT,
+  name: string,
+  message: string
+): HarvestRunWarning {
+  return { code, message, offerId: null, page: null, name };
+}
+
 function emptyCounters(): Required<RunCounters> {
   return {
     processed: 0,

@@ -192,6 +192,13 @@ describeIntegration(
           priceObservedAt: OBSERVED,
           available: true,
           ...values,
+          // Since plan 0245 the orders read the catalog's own figure. It is seeded
+          // as the chain's figure on the basis of its label, which keeps each case
+          // below about what it tested; the derivation has its own spec.
+          comparablePrice:
+            values.price === null ? null : (values.unitPrice ?? null),
+          comparableBasis:
+            values.price === null || values.unitPrice === null ? null : 'LITER',
         });
       await prices.save([
         // Heineken, as plan 0150 found it.

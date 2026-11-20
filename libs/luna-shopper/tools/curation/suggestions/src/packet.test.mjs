@@ -369,3 +369,38 @@ test('a candidate lists every barcode of its product (backend plan 0185)', () =>
     ['96385074']
   );
 });
+
+test('the packet carries every shelf the chain files the entry under (backend plan 0268)', () => {
+  const paths = [
+    ['Agua y refrescos', 'Cola'],
+    ['Navidad', 'Ibéricos y quesos'],
+  ];
+  const filed = buildEntryPacket({
+    entry: entry({ categoryPath: paths[0], categoryPaths: paths }),
+    supermarket: MERCADONA,
+    candidates: [],
+    eanMatch: null,
+  });
+  assert.deepEqual(filed.entry.categoryPaths, paths);
+  assert.deepEqual(filed.entry.categoryPath, paths[0]);
+
+  // A gateway built before the field sends none, and a value of another
+  // shape reads as no paths rather than as a guess.
+  for (const categoryPaths of [
+    undefined,
+    null,
+    'Cola',
+    [['Cola', 3], 'x', []],
+  ]) {
+    const packet = buildEntryPacket({
+      entry: entry({ categoryPaths }),
+      supermarket: MERCADONA,
+      candidates: [],
+      eanMatch: null,
+    });
+    assert.deepEqual(
+      packet.entry.categoryPaths,
+      Array.isArray(categoryPaths) ? [['Cola']] : []
+    );
+  }
+});

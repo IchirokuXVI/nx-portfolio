@@ -352,6 +352,7 @@ export const CHANGE_LINES_SQL = `
          ll."listId" AS "listId",
          ll.content AS "content",
          ll.quantity AS "quantity",
+         ll."unit"::text AS "unit",
          ll.version AS "version",
          ll."itemSetHash" AS "itemSetHash",
          ll."favoriteItemId" AS "favoriteItemId",

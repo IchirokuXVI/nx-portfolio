@@ -14,7 +14,10 @@ import {
   CategoryNotFoundException,
   ForbiddenException,
   ITEM_EAN_HOLDER_DETAIL,
+  ITEM_GRAMS_DETAIL,
+  ITEM_UNIT_SIZE_DETAIL,
   ItemEanHeldException,
+  ItemKilogramHasSizeException,
 } from '@portfolio/luna-shopper/platform';
 import type { FindOperator, Repository } from 'typeorm';
 import type {
@@ -1186,7 +1189,11 @@ describe('SourceEntryService', () => {
 
         it.each([
           [kilo, UnitOfMeasure.GRAM, 250],
-          [kilo, UnitOfMeasure.KILOGRAM, 0.25],
+          [
+            { unitSize: 2.5, sizeUnit: UnitOfMeasure.GRAM, sizeFormat: 'g' },
+            UnitOfMeasure.GRAM,
+            2.5,
+          ],
           [
             { unitSize: 1.5, sizeUnit: UnitOfMeasure.LITER, sizeFormat: 'l' },
             UnitOfMeasure.MILLILITER,
@@ -1205,6 +1212,14 @@ describe('SourceEntryService', () => {
           expect(await sizeOf(row, { defaultUnit })).toHaveBeenCalledWith(
             expect.objectContaining({ unitSize, defaultUnit })
           );
+        });
+
+        it('refuses KILOGRAM over a row that states a size (plan 0237, section 3.3)', async () => {
+          // Expressed in the named unit, 0.25 kg is a sized KILOGRAM, which
+          // no product route stores. Refused here rather than one hop later.
+          await expect(
+            sizeOf(kilo, { defaultUnit: UnitOfMeasure.KILOGRAM })
+          ).rejects.toBeInstanceOf(ItemKilogramHasSizeException);
         });
 
         it('keeps the number when the two units are of different kinds', async () => {
@@ -1250,6 +1265,63 @@ describe('SourceEntryService', () => {
             defaultUnit: UnitOfMeasure.LITER,
           })
         );
+      });
+
+      describe('a named KILOGRAM beside a size (plan 0237, section 3.3)', () => {
+        const kilo = {
+          unitSize: 0.25,
+          sizeUnit: UnitOfMeasure.KILOGRAM,
+          sizeFormat: 'kg',
+        };
+
+        it('is refused with item_kilogram_has_size before anything is read or written', async () => {
+          const { service, createItem, saved, findItemByEan, fetchEnglish } =
+            build({
+              row: entry(kilo),
+              source: { adapterKey: 'mercadona-api' },
+            });
+
+          const refusal = await service
+            .createItem({
+              userId: ADMIN,
+              entryId: 'e-1',
+              unitSize: 400,
+              defaultUnit: UnitOfMeasure.KILOGRAM,
+            })
+            .then(
+              () => {
+                throw new Error('expected the create to be refused');
+              },
+              (error: unknown) => error
+            );
+
+          expect(refusal).toBeInstanceOf(ItemKilogramHasSizeException);
+          // The same details as catalog's own refusal of the pair.
+          expect((refusal as ItemKilogramHasSizeException).details).toEqual({
+            [ITEM_UNIT_SIZE_DETAIL]: 400,
+            [ITEM_GRAMS_DETAIL]: 400_000,
+          });
+          // Nothing created, nothing bound, and nothing asked of catalog or
+          // of the chain: the row is still waiting for a decision.
+          expect(createItem).not.toHaveBeenCalled();
+          expect(saved).toEqual([]);
+          expect(findItemByEan).not.toHaveBeenCalled();
+          expect(fetchEnglish).not.toHaveBeenCalled();
+        });
+
+        it('passes KILOGRAM with a null size, which is a product sold by weight', async () => {
+          expect(
+            await sizeOf(kilo, {
+              unitSize: null,
+              defaultUnit: UnitOfMeasure.KILOGRAM,
+            })
+          ).toHaveBeenCalledWith(
+            expect.objectContaining({
+              unitSize: null,
+              defaultUnit: UnitOfMeasure.KILOGRAM,
+            })
+          );
+        });
       });
     });
 
@@ -1620,6 +1692,98 @@ describe('SourceEntryService', () => {
 
       expect(clauses.some((c) => c.sql.includes('e."brandKey"'))).toBe(false);
       expect(clauses.some((c) => c.sql === 'FALSE')).toBe(false);
+    });
+  });
+
+  describe('list, addressed by entry id (admin plan 0073)', () => {
+    /**
+     * A query builder that keeps the rows the recorded clauses admit. It reads
+     * only the id and status clauses, which are the rule under test, so an
+     * `ACTIVE` row in the fixture is answered or not by the service's clauses
+     * and not by the fake.
+     */
+    function filteringBuilder(rows: SourceCatalogEntry[]) {
+      const clauses: { sql: string; params?: Record<string, unknown> }[] = [];
+      const admits = (row: SourceCatalogEntry) =>
+        clauses.every(({ sql, params }) => {
+          if (sql === 'e.id = :entryId') return row.id === params?.['entryId'];
+          if (sql === 'e.status = :status') {
+            return row.status === params?.['status'];
+          }
+          if (sql === 'e.status IN (:...queued)') {
+            return (params?.['queued'] as string[]).includes(row.status);
+          }
+          return true;
+        });
+      const qb = {
+        leftJoinAndSelect: () => qb,
+        orderBy: () => qb,
+        addOrderBy: () => qb,
+        take: () => qb,
+        andWhere: (sql: string, params?: Record<string, unknown>) => {
+          clauses.push({ sql, params });
+          return qb;
+        },
+        getMany: async () => rows.filter(admits),
+      };
+      return { qb, clauses };
+    }
+
+    const active = entry({
+      id: '00000000-0000-4000-8000-0000000000a1',
+      status: SourceEntryStatus.ACTIVE,
+      itemId: 'item-bound',
+    });
+    const waiting = entry({
+      id: '00000000-0000-4000-8000-0000000000a2',
+      status: SourceEntryStatus.CANDIDATE,
+    });
+
+    it('answers the row with that id and no status given, an ACTIVE row included', async () => {
+      const { service, entries } = build();
+      const { qb, clauses } = filteringBuilder([active, waiting]);
+      (entries.createQueryBuilder as jest.Mock).mockReturnValue(qb);
+
+      const page = await service.list({ userId: ADMIN, entryId: active.id });
+
+      expect(page.items.map((row) => row.id)).toEqual([active.id]);
+      expect(clauses.some((c) => c.sql.includes('IN (:...queued)'))).toBe(
+        false
+      );
+    });
+
+    it('answers a waiting row by its id as well', async () => {
+      const { service, entries } = build();
+      const { qb } = filteringBuilder([active, waiting]);
+      (entries.createQueryBuilder as jest.Mock).mockReturnValue(qb);
+
+      const page = await service.list({ userId: ADMIN, entryId: waiting.id });
+
+      expect(page.items.map((row) => row.id)).toEqual([waiting.id]);
+    });
+
+    it('answers nothing when a status is given that the row does not have', async () => {
+      const { service, entries } = build();
+      const { qb } = filteringBuilder([active, waiting]);
+      (entries.createQueryBuilder as jest.Mock).mockReturnValue(qb);
+
+      const page = await service.list({
+        userId: ADMIN,
+        entryId: active.id,
+        status: SourceEntryStatus.CANDIDATE,
+      });
+
+      expect(page.items).toEqual([]);
+    });
+
+    it('keeps the waiting statuses when no id is asked for', async () => {
+      const { service, entries } = build();
+      const { qb } = filteringBuilder([active, waiting]);
+      (entries.createQueryBuilder as jest.Mock).mockReturnValue(qb);
+
+      const page = await service.list({ userId: ADMIN });
+
+      expect(page.items.map((row) => row.id)).toEqual([waiting.id]);
     });
   });
 
@@ -2132,5 +2296,64 @@ describe('SourceEntryService, a bound row that is decided again (plan 0191)', ()
       expect(settle).toHaveBeenCalledWith('item-old', CHAIN, { dryRun: true });
       expect(result.dryRun).toBe(true);
     });
+  });
+});
+
+describe('SourceEntryService, a row whose size is in doubt (plan 0249)', () => {
+  /** A litre the row states, and a doubt that its prices imply 100 ml. */
+  const doubted = () =>
+    entry({
+      unitSize: 1,
+      sizeUnit: UnitOfMeasure.LITER,
+      sizeDoubtImplied: 100,
+      sizeDoubtRatio: 0.1,
+      sizeDoubtRunId: 'run-monday',
+    });
+
+  it('refuses a create that names no size, with both sizes, and writes nothing', async () => {
+    const { service, createItem, saved } = build({ row: doubted() });
+
+    await expect(
+      service.createItem({ userId: ADMIN, entryId: 'e-1' })
+    ).rejects.toThrow(/states 1 LITER.*imply 0\.1 LITER/);
+    expect(createItem).not.toHaveBeenCalled();
+    expect(saved).toHaveLength(0);
+  });
+
+  it('creates with the size the person names', async () => {
+    const { service, createItem } = build({ row: doubted() });
+
+    await service.createItem({ userId: ADMIN, entryId: 'e-1', unitSize: 0.1 });
+
+    expect(createItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        unitSize: 100,
+        defaultUnit: UnitOfMeasure.MILLILITER,
+      })
+    );
+  });
+
+  it('still accepts the row onto an existing product, which takes no size', async () => {
+    const { service, saved } = build({ row: doubted() });
+
+    const result = await service.accept({
+      userId: ADMIN,
+      entryId: 'e-1',
+      itemId: 'item-1',
+    });
+
+    expect(result.entry).toMatchObject({
+      status: SourceEntryStatus.ACTIVE,
+      itemId: 'item-1',
+      unitSize: 1,
+      sizeDoubt: expect.objectContaining({
+        implied: 100,
+        unit: UnitOfMeasure.MILLILITER,
+        ratio: 0.1,
+        runId: 'run-monday',
+      }),
+    });
+    // The doubt stays: an accept is a decision about the product, not the size.
+    expect(saved[0].sizeDoubtImplied).toBe(100);
   });
 });

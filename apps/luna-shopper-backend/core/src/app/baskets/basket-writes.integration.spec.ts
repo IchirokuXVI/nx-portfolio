@@ -1,4 +1,3 @@
-import { LineChangeRecorder } from '../lists/changes/line-change.recorder';
 import {
   BasketKind,
   BasketRowState,
@@ -18,10 +17,10 @@ import {
 import { randomUUID } from 'node:crypto';
 import { DataSource, IsNull } from 'typeorm';
 import {
-  BasketSource,
-  CORE_ENTITIES,
   Basket,
   BasketParticipant,
+  BasketSource,
+  CORE_ENTITIES,
   LineSettlement,
   ListLine,
   ShoppingList,
@@ -29,6 +28,7 @@ import {
   ZoneMembership,
 } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
+import { LineChangeRecorder } from '../lists/changes/line-change.recorder';
 import { BasketAnnouncer } from './basket-announcer.service';
 import { fakeCoreConfig } from './basket-config.fake';
 import { BasketCoverageService } from './basket-coverage.service';
@@ -129,11 +129,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
       // The real rows, because the read looks its caller up in them: a
       // participant the list does not name is a revocation that landed between
       // the guard and the read, and the answer would be a refusal.
-      listParticipants: async ({
-        basketId,
-      }: {
-        basketId: string;
-      }) => ({
+      listParticipants: async ({ basketId }: { basketId: string }) => ({
         participants: (
           await dataSource
             .getRepository(BasketParticipant)
@@ -336,6 +332,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         rowKey: row.id,
         lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 2,
         from: 2,
       });
@@ -385,6 +382,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
           rowKey: row.id,
           lineIds: [row.id],
           outcome: SettlementOutcome.BOUGHT,
+          unit: 'UNIT',
           quantity: 1,
           from: 3,
         })
@@ -404,6 +402,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
         quantity: 2,
+        unit: 'UNIT' as const,
         from: 2,
       };
 
@@ -427,6 +426,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         rowKey: row.id,
         lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 3,
         from: 2,
       });
@@ -451,6 +451,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         rowKey: first.id,
         lineIds: [first.id, second.id],
         outcome: SettlementOutcome.NOT_AVAILABLE,
+        unit: 'UNIT',
         from: 2,
       });
 
@@ -478,6 +479,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         rowKey: row.id,
         lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 1,
         from: 1,
       });
@@ -491,6 +493,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
           rowKey: row.id,
           lineIds: [row.id],
           outcome: SettlementOutcome.NOT_AVAILABLE,
+          unit: 'UNIT',
           from: 0,
         })
       ).rejects.toMatchObject({ code: 'conflict' });
@@ -512,6 +515,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         rowKey: row.id,
         lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 1,
         from: 1,
         itemId: swapped,
@@ -538,6 +542,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         // the order the request named them in.
         lineIds: [newer.id, older.id],
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 2,
         from: 3,
       });
@@ -586,6 +591,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
           rowKey: older.id,
           lineIds: [older.id, newer.id],
           outcome: SettlementOutcome.BOUGHT,
+          unit: 'UNIT',
           quantity: 4,
           from: 4,
           paid: PAID,
@@ -611,6 +617,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
           rowKey: row.id,
           lineIds: [row.id],
           outcome: SettlementOutcome.NOT_AVAILABLE,
+          unit: 'UNIT',
           from: 1,
           paid: PAID,
         });
@@ -694,6 +701,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
           rowKey: atShop.id,
           lineIds: [atShop.id],
           outcome: SettlementOutcome.BOUGHT,
+          unit: 'UNIT',
           quantity: 1,
           from: 1,
           paid: { ...PAID, supermarketId: CHAIN },
@@ -704,6 +712,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
           rowKey: anyShop.id,
           lineIds: [anyShop.id],
           outcome: SettlementOutcome.BOUGHT,
+          unit: 'UNIT',
           quantity: 1,
           from: 1,
           paid: { ...PAID, supermarketLocationId: null, supermarketId: null },
@@ -788,6 +797,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
           rowKey: first.id,
           lineIds: [first.id],
           outcome: SettlementOutcome.BOUGHT,
+          unit: 'UNIT',
           quantity: 1,
           from: 1,
         }),
@@ -797,6 +807,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
           rowKey: second.id,
           lineIds: [second.id],
           outcome: SettlementOutcome.BOUGHT,
+          unit: 'UNIT',
           quantity: 1,
           from: 1,
         }),
@@ -823,6 +834,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         rowKey: row.id,
         lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 1,
         from: 4,
       });
@@ -832,6 +844,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         rowKey: row.id,
         lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 2,
         from: 3,
       });
@@ -868,6 +881,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         rowKey: row.id,
         lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 6,
         from: 6,
       });
@@ -917,6 +931,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         rowKey: row.id,
         lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 6,
         from: 6,
         paid,
@@ -953,6 +968,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         rowKey: first.id,
         lineIds: [first.id, second.id],
         outcome: SettlementOutcome.NOT_AVAILABLE,
+        unit: 'UNIT',
         from: 2,
       });
       const result = await revertService.revert({
@@ -985,6 +1001,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         rowKey: row.id,
         lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 1,
         from: 2,
       });
@@ -1016,6 +1033,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         rowKey: first.id,
         lineIds: [first.id, second.id],
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 2,
         from: 2,
       });
@@ -1077,6 +1095,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         rowKey: row.id,
         lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 1,
         from: 1,
       });

@@ -114,22 +114,41 @@
             </div>
 
             @if (line.canStep) {
-              <lib-quantity-stepper
-                (stepped)="step($event)"
-                [controlled]="true"
-                [label]="'list.page.quantityLabel' | rokuT"
-                [value]="line.quantity"
-              />
+              <!--
+                What the line counts in, above the number, on a line whose products
+                offer more than one unit (velista 0183). Draws nothing otherwise.
+              -->
+              <div class="amount">
+                <lib-line-unit-chip
+                  (chosen)="chooseUnit($event)"
+                  [disabled]="unitPending()"
+                  [units]="line.units"
+                  [value]="line.unit"
+                />
+                <lib-quantity-stepper
+                  (stepped)="step($event)"
+                  [disabled]="unitPending()"
+                  [name]="line.content"
+                  [step]="line.step"
+                  [unit]="line.unit"
+                  [value]="quantityRuns.shown(lineId(), line.quantity)"
+                  variant="row"
+                />
+              </div>
             } @else {
               <!-- A reader who may not move the number sees it, with no buttons. -->
               <p class="quantity">
                 <span class="visually-hidden">{{
                   'list.page.quantityLabel' | rokuT
                 }}</span>
-                {{ line.quantity }}
+                {{ line.quantityWords }}
               </p>
             }
           </div>
+
+          @if (unitErrorKey(); as key) {
+            <p class="unit-error" role="alert">{{ key | rokuT }}</p>
+          }
         </div>
 
         <!--

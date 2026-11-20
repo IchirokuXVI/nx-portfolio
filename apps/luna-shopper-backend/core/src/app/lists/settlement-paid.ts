@@ -16,6 +16,11 @@ export interface SettlementPaidColumns {
   supermarketLocationId: string | null;
   /** The shop's chain, set exactly when the shop is (plan 0163, section 5). */
   supermarketId: string | null;
+  /**
+   * Whether the price recorded makes an estimate of what was spent (plan 0246
+   * M7). False whenever no price is recorded: there is no cost to estimate.
+   */
+  estimated: boolean;
 }
 
 /** Nothing was recorded, which is an ordinary settle. */
@@ -25,6 +30,7 @@ const NOTHING_PAID: SettlementPaidColumns = {
   priceScopeId: null,
   supermarketLocationId: null,
   supermarketId: null,
+  estimated: false,
 };
 
 /**
@@ -122,12 +128,20 @@ export function paidColumns(
   // malformed message is a bug wherever it lands, and dropping the price
   // silently first would hide it on exactly the outcome nobody looks at.
   const bought = outcome === SettlementOutcome.BOUGHT;
+  if (paid.estimated !== undefined && typeof paid.estimated !== 'boolean') {
+    throw new ValidationException('estimated must be a boolean', {
+      messageArgs: { field: 'estimated' },
+    });
+  }
   return {
     pricePaidCents: bought ? paid.pricePaidCents : null,
     pricePaidCurrency: bought ? paid.pricePaidCurrency : null,
     priceScopeId: paid.priceScopeId,
     supermarketLocationId: paid.supermarketLocationId,
     supermarketId,
+    // Kept only beside a price (plan 0246 M7): absent reads as exact.
+    estimated:
+      bought && paid.pricePaidCents !== null && paid.estimated === true,
   };
 }
 
@@ -135,10 +149,16 @@ export function paidColumns(
  * What a settlement stores in `itemSnapshot` (plan 0202, section 1).
  *
  * The gateway read the product and sends what it was called. **Core checks the
- * shape and copies the five fields it knows**, as {@link paidColumns} does for
+ * shape and copies the six fields it knows**, as {@link paidColumns} does for
  * the price: it has no catalog client, so it cannot say whether the name is
  * right, and a field it does not know is not written into a household's
  * history.
+ *
+ * The sixth is `approxWeight` (plan 0244, section 4), the weight in grams of
+ * the piece that was bought, so the purchase still reads "about 1.56 kg" after
+ * the product moves. A gateway older than that plan sends none, and it is
+ * stored as null. A buy recorded before the plan has no such key at all, and
+ * every reader passes the stored JSON through, so it reads as absent.
  *
  * **The caller writes it only on a settlement that records a product.** A name
  * with no product would be a name of nothing.
@@ -160,6 +180,7 @@ export function itemSnapshotColumn(
     throw malformed();
   }
   const { name, brand, unitSize, packCount, defaultUnit } = snapshot;
+  const approxWeight = snapshot.approxWeight ?? null;
   if (
     typeof name !== 'object' ||
     name === null ||
@@ -168,9 +189,17 @@ export function itemSnapshotColumn(
     (brand !== null && typeof brand !== 'string') ||
     (unitSize !== null && typeof unitSize !== 'number') ||
     (packCount !== null && !Number.isInteger(packCount)) ||
-    typeof defaultUnit !== 'string'
+    typeof defaultUnit !== 'string' ||
+    (approxWeight !== null && typeof approxWeight !== 'number')
   ) {
     throw malformed();
   }
-  return { name: { ...name }, brand, unitSize, packCount, defaultUnit };
+  return {
+    name: { ...name },
+    brand,
+    unitSize,
+    packCount,
+    defaultUnit,
+    approxWeight,
+  };
 }

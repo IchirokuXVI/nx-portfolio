@@ -1,6 +1,8 @@
 import {
+  LINE_UNITS,
   SettlementOutcome,
   type ItemSnapshot,
+  type LineUnit,
 } from '@portfolio/luna-shopper/contracts';
 import {
   Column,
@@ -112,6 +114,25 @@ export class LineSettlement {
   quantity!: number;
 
   /**
+   * What {@link quantity} counts: the line's unit when it was settled (plan
+   * 0246, section 3.5). {@link pricePaidCents} is the price of one of it (M7).
+   */
+  @Column({
+    type: 'enum',
+    enum: LINE_UNITS,
+    enumName: 'line_unit',
+    default: 'UNIT',
+  })
+  unit!: LineUnit;
+
+  /**
+   * Whether what this settlement cost is an estimate (plan 0246 M7): false
+   * only for a count of pieces or packs at a piece or pack price.
+   */
+  @Column({ type: 'boolean', default: false })
+  estimated!: boolean;
+
+  /**
    * Who settled it, when an account holder settled it from the list page.
    *
    * Nullable since plan 0051, which introduced people who settle and are not
@@ -199,7 +220,11 @@ export class LineSettlement {
    * What one unit cost when this was settled, in the minor unit of
    * {@link pricePaidCurrency} (plan 0143, section 2).
    *
-   * **One unit, never the row.** It is catalog's `price` of {@link itemId} at
+   * **One of {@link unit}, never the row** (plan 0246 M7): one piece or pack
+   * for `UNIT`, one kilo or one litre for `GRAM` and `MILLILITER`, so the cost
+   * of a weighed row is this times {@link quantity} over 1000.
+   *
+   * Before plan 0246 it was one unit. It is catalog's `price` of {@link itemId} at
    * {@link priceScopeId}, read by the gateway as the basket's owner at the
    * moment of the settle. It is not catalog's `unitPrice`, which is a per
    * kilogram number this product never derives. A row's cost is this times

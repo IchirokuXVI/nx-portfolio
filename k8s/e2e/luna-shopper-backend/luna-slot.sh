@@ -218,7 +218,7 @@ declare -A DERIVED_KEYS=(
   [auth]='PORT AUTH_DB_URL SMTP_PORT MAIL_VERIFY_BASE_URL MAIL_RESET_BASE_URL GOOGLE_CALLBACK_URL'
   [core]='PORT CORE_DB_URL'
   [catalog]='PORT CATALOG_DB_URL'
-  [harvester]='PORT HARVESTER_DB_URL'
+  [harvester]='PORT HARVESTER_DB_URL SMTP_PORT ENVIRONMENT_NAME'
   [assistant]='PORT GATEWAY_INTERNAL_URL TRANSCRIBER_URL'
   [auth-test]='AUTH_DB_URL'
   [core-test]='CORE_DB_URL'
@@ -1517,6 +1517,10 @@ HARVEST_ENABLED=false
 # Whether a due schedule starts its preset by itself (plan 0206). False on every
 # slot, as in staging: production is the one place schedules fire.
 HARVEST_SCHEDULER_ENABLED=false
+# Whether a shopper can make this slot fetch one product's price (plan 0216).
+# False on every slot. Not slot derived, so not in DERIVED_KEYS: turn it on by
+# hand for a refresh you mean to make, and a second run keeps your edit.
+HARVEST_REFRESH_ENABLED=false
 # What a run actually does once the switch above is on. Every one of these is
 # stated in the chart's ConfigMap too, and they are the knobs a local run wants
 # within reach: the pace it fetches at, how much work one run plans, and when a
@@ -1553,6 +1557,18 @@ NOMINATIM_URL=
 # The key LIDL ships in its own public store search bundle. Empty means the one
 # the library carries, which is the same string; set it when a 401 says it rotated.
 LIDL_STORES_API_KEY=
+# The owner's alerts (plan 0218). They go to this slot's Mailpit, and only once
+# HARVEST_ALERT_EMAIL names somebody: empty here, as in staging, so a slot sends
+# nothing by default. It is not a derived key, so an address set to test one
+# survives a second run. SMTP_PORT and ENVIRONMENT_NAME are this slot's own.
+HARVEST_ALERT_EMAIL=
+SMTP_HOST=localhost
+SMTP_PORT=${SMTP_PORT}
+SMTP_USER=
+SMTP_PASS=
+MAIL_FROM=Luna Shopper <no-reply@luna.localhost>
+ENVIRONMENT_NAME=slot${slot}
+ADMIN_APP_BASE_URL=
 PORT=${HARVESTER_PORT}
 EOF
   telemetry_env harvester

@@ -22,10 +22,13 @@ function offer(priceScopeId: string, price: number): ProductOffer {
     currency: 'EUR',
     unitPrice: null,
     unitPriceLabel: null,
+    comparablePrice: null,
+    comparableBasis: null,
     observedAt: null,
     sourceKind: 'OFFICIAL_WEB',
     stale: false,
     priceScopeId,
+    piecePrice: null,
   };
 }
 
@@ -35,6 +38,7 @@ function product(
 ): BasketProduct {
   return {
     id: 'p-milk',
+    quantityStep: null,
     name: { en: 'Milk', es: 'Leche' },
     brand: null,
     size: null,
@@ -51,6 +55,7 @@ function product(
         name: { en: 'Milk', es: 'Leche' },
       },
     ],
+    approxWeight: null,
   };
 }
 

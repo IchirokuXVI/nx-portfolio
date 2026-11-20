@@ -41,6 +41,7 @@ function line(over: Partial<KeyedLine> = {}): KeyedLine {
     itemIds: [],
     favoriteItemId: null,
     tripItemId: null,
+    unit: 'UNIT',
     ...over,
   };
 }
@@ -48,7 +49,7 @@ function line(over: Partial<KeyedLine> = {}): KeyedLine {
 /** The key of a line as a caller with no prices works it out. */
 function keyOf(over: Partial<KeyedLine>): string {
   const keyed = line(over);
-  return rowKeyOf(keyed.content, productOf(keyed, NO_PICKS));
+  return rowKeyOf(keyed.content, productOf(keyed, NO_PICKS), keyed.unit);
 }
 
 describe('rowKeyOf (plan 0201, section 2)', () => {
@@ -77,7 +78,16 @@ describe('rowKeyOf (plan 0201, section 2)', () => {
 
   it('falls back to normalized text for free text lines', () => {
     expect(keyOf({ content: 'Café' })).toBe(keyOf({ content: 'cafe' }));
-    expect(keyOf({ content: 'Café' })).toBe('text:cafe');
+    expect(keyOf({ content: 'Café' })).toBe('text:cafe:UNIT');
+  });
+
+  it('keeps two lines of one product in two units apart (plan 0246 M6)', () => {
+    // Possible only for lines with several products, and two rows then.
+    const grams = keyOf({ itemIds: ['i1', 'i2'], unit: 'GRAM' });
+    const pieces = keyOf({ itemIds: ['i1', 'i2'], unit: 'UNIT' });
+    expect(grams).toBe('item:i1:GRAM');
+    expect(pieces).toBe('item:i1:UNIT');
+    expect(grams).not.toBe(pieces);
   });
 
   it('never lets a product id collide with text somebody typed', () => {
@@ -140,9 +150,9 @@ describe('BasketLineKeys', () => {
       line({ lineId: 'l-3', content: 'Bread' }),
     ]);
 
-    expect(keys.keyOf({ id: 'l-1', content: 'Milk' })).toBe('item:i1');
-    expect(keys.keyOf({ id: 'l-2', content: 'Milk' })).toBe('item:i2');
-    expect(keys.keyOf({ id: 'l-3', content: 'Bread' })).toBe('text:bread');
+    expect(keys.keyOf({ id: 'l-1', content: 'Milk' })).toBe('item:i1:UNIT');
+    expect(keys.keyOf({ id: 'l-2', content: 'Milk' })).toBe('item:i2:UNIT');
+    expect(keys.keyOf({ id: 'l-3', content: 'Bread' })).toBe('text:bread:UNIT');
     expect(keys.productOf('l-2')).toBe('i2');
     expect(keys.productOf('l-3')).toBeNull();
   });
@@ -150,7 +160,7 @@ describe('BasketLineKeys', () => {
   it('keys a line it never read by its text, and guesses no product', () => {
     const keys = new BasketLineKeys();
 
-    expect(keys.keyOf({ id: 'l-9', content: 'Milk' })).toBe('text:milk');
+    expect(keys.keyOf({ id: 'l-9', content: 'Milk' })).toBe('text:milk:UNIT');
     expect(keys.productOf('l-9')).toBeNull();
   });
 });

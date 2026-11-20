@@ -37,6 +37,7 @@ import {
   CatalogSupermarketItemsController,
   CatalogSupermarketsController,
 } from './catalog.controller';
+import { ItemRefreshController } from './item-refresh.controller';
 import { CatalogNearbyShopsController } from './nearby-shops.controller';
 import { ScopeResolutionService } from './scope-resolution.service';
 import {
@@ -80,6 +81,9 @@ import {
     // the GET routes of the controller above.
     CatalogNearbyShopsController,
     CatalogSuggestController,
+    // Harvester plan 0216: a registered shopper refreshes one price. The
+    // harvester fetches it; these routes only forward and refuse guests.
+    ItemRefreshController,
     CatalogItemsController,
     // Plan 0207: the lookup, which also names the chains of its prices. The
     // one POST under `catalog/items`, so the GET routes above cannot take it.

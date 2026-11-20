@@ -32,12 +32,15 @@ export {
   HARVEST_SETUP_TAB,
   PLACES_GROUPED_VIEW,
   REVIEW_CHAIN_PARAM,
+  REVIEW_ENTRY_PARAM,
   REVIEW_QUEUES,
   SETUP_SOURCES_PART,
+  harvestEntryAddress,
   harvestReviewPath,
   harvestRunPath,
   harvestRunsPath,
   harvestSetupPath,
+  type HarvestAddress,
   type ReviewQueue,
 } from './lib/harvest/harvest-addresses';
 export {
@@ -58,12 +61,17 @@ export {
   PRICE_WRITING_MODES,
   canAbort,
   canRevert,
+  earlierTotal,
   failureBlockReason,
+  isNarrowedRun,
+  isReverted,
   isTerminalRun,
   runPriceCounters,
   runPricesPublished,
   runProgress,
+  runProgressLine,
   spawnBlockReason,
+  wantsEarlierTotal,
   type HarvestRun,
   type HarvestRunMode,
   type HarvestRunStatus,
@@ -91,10 +99,16 @@ export {
   harvesterDeployed,
 } from './lib/harvest/harvest-switches';
 export {
+  readsTheChain,
+  redProbe,
+  type ProbeVerdict,
+} from './lib/harvest/probe-verdict';
+export {
   isFileImportRun,
   queuedByRun,
   runWarningRows,
 } from './lib/harvest/run-warnings';
+export { toSizeDoubt, type SizeDoubt } from './lib/harvest/size-doubt';
 export {
   OFFICIAL_SOURCE_KINDS,
   SOURCE_ENTRY_STATUSES,
@@ -179,6 +193,7 @@ export {
   draftFor,
   isEmptyValue,
   orderedFieldNames,
+  settleDraft,
   toInput,
   validateDraft,
   type DraftValue,
@@ -191,8 +206,10 @@ export {
   type FieldDescriptor,
   type FieldMessage,
   type FieldName,
+  type FieldNote,
   type FilterValue,
   type FormMode,
+  type NumberUnit,
   type ReferenceField,
   type ReferenceScope,
   type ReferencesField,

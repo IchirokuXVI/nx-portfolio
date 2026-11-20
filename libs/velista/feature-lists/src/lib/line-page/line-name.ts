@@ -44,7 +44,8 @@ export function watchLineName(
           current,
           (itemId) => items.nameOf(itemId)?.name ?? null,
           locale(),
-          items.pricesOf
+          items.pricesOf,
+          items.sizingOf
         );
   });
 }

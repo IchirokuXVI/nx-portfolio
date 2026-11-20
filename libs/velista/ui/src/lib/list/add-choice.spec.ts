@@ -17,8 +17,10 @@ const ROWS: readonly AddChoiceRow[] = [
     name: 'Leche entera',
     product: 'Hacendado · 1 L',
     imageUrl: null,
-    from: 2,
+    from: 0,
     to: 3,
+    unit: 'UNIT',
+    outcome: 'raised',
   },
   {
     lineId: 'line-b',
@@ -27,8 +29,22 @@ const ROWS: readonly AddChoiceRow[] = [
     imageUrl: null,
     from: 0,
     to: 1,
+    unit: 'UNIT',
+    outcome: 'raised',
   },
 ];
+
+/** A line the list already asks for (the owner's ruling of 2026-11-16). */
+const ON_LIST: AddChoiceRow = {
+  lineId: 'line-w',
+  name: 'Plátanos',
+  product: 'Granel',
+  imageUrl: null,
+  from: 750,
+  to: 750,
+  unit: 'GRAM',
+  outcome: 'alreadyOnList',
+};
 
 async function render(
   inputs: Partial<{
@@ -36,7 +52,7 @@ async function render(
     rows: readonly AddChoiceRow[];
     scope: 'list' | 'basket';
     back: string | null;
-    added: number;
+    offerNewLine: boolean;
   }> = {}
 ): Promise<ComponentFixture<AddChoice>> {
   TestBed.resetTestingModule();
@@ -53,8 +69,8 @@ async function render(
   if (inputs.back !== undefined) {
     fixture.componentRef.setInput('back', inputs.back);
   }
-  if (inputs.added !== undefined) {
-    fixture.componentRef.setInput('added', inputs.added);
+  if (inputs.offerNewLine !== undefined) {
+    fixture.componentRef.setInput('offerNewLine', inputs.offerNewLine);
   }
   document.body.append(fixture.nativeElement);
   fixture.detectChanges();
@@ -86,12 +102,56 @@ describe('AddChoice', () => {
     expect(drawn[0].querySelector('.product')?.textContent?.trim()).toBe(
       'Hacendado · 1 L'
     );
-    expect(drawn[0].querySelector('.count')?.textContent).toMatch(/2\s*→\s*3/);
+    expect(drawn[0].querySelector('.count')?.textContent).toMatch(/0\s*→\s*3/);
     expect(drawn[1].querySelector('.product')).toBeNull();
     expect(drawn[1].querySelector('.count')?.textContent).toMatch(/0\s*→\s*1/);
     expect(drawn[2].classList.contains('new')).toBe(true);
     expect(drawn[2].textContent).toContain('list.addChoice.newLine');
     expect(drawn[2].querySelector('.dashed lib-plus-icon')).not.toBeNull();
+  });
+
+  it('draws a weighed line from 0 to one step in its own unit: "0 g" to "25 g" (velista 0185)', async () => {
+    const fixture = await render({
+      rows: [{ ...ROWS[0], from: 0, to: 25, unit: 'GRAM' }],
+    });
+
+    const row = rows(fixture)[0];
+    expect(row.querySelector('.count')?.textContent).toMatch(/0 g\s*→\s*25 g/);
+    expect(row.querySelector('.to')?.textContent).toBe('25 g');
+    expect(row.getAttribute('aria-label')).toBe('list.addChoice.row');
+  });
+
+  it('draws a line already on the list with its amount and the words that say so, no arrow (the ruling of 2026-11-16)', async () => {
+    const fixture = await render({ rows: [ON_LIST, ROWS[1]] });
+
+    const [onList, raised] = rows(fixture);
+    // Its amount alone: a choice leaves it as it is.
+    expect(onList.querySelector('.count')?.textContent?.trim()).toBe('750 g');
+    expect(onList.querySelector('.count')?.textContent).not.toContain('→');
+    // Said in words, not by colour alone.
+    expect(onList.querySelector('.state')?.textContent?.trim()).toBe(
+      'list.addChoice.onList'
+    );
+    expect(onList.getAttribute('aria-label')).toBe('list.addChoice.rowOnList');
+    // The row at zero still draws what a raise makes of it, and no such words.
+    expect(raised.querySelector('.state')).toBeNull();
+    expect(raised.querySelector('.count')?.textContent).toMatch(/0\s*→\s*1/);
+  });
+
+  it('names a line already on the list with no product by its own key', async () => {
+    const fixture = await render({ rows: [{ ...ON_LIST, product: null }] });
+
+    expect(rows(fixture)[0].getAttribute('aria-label')).toBe(
+      'list.addChoice.rowOnListNoProduct'
+    );
+  });
+
+  it('offers no new line when it is told not to, for a chosen product', async () => {
+    const fixture = await render({ offerNewLine: false });
+
+    const drawn = rows(fixture);
+    expect(drawn).toHaveLength(2);
+    expect(drawn.some((row) => row.classList.contains('new'))).toBe(false);
   });
 
   it('titles the list and the basket each in their own words', async () => {
@@ -105,7 +165,7 @@ describe('AddChoice', () => {
   });
 
   it('names each row for a screen reader, with what the add makes of it', async () => {
-    const fixture = await render({ added: 2 });
+    const fixture = await render();
 
     expect(rows(fixture)[0].getAttribute('aria-label')).toBe(
       'list.addChoice.row'

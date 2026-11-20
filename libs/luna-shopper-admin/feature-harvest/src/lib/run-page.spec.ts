@@ -1,16 +1,22 @@
 import { provideLocationMocks } from '@angular/common/testing';
+import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter } from '@angular/router';
-import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuTranslatorService,
+  RokuTranslatorTestingModule,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   DEPLOYMENT_SERVICE,
   DeploymentStore,
   HARVEST_SERVICE,
+  RESOURCE_GATEWAYS,
   ServerReachability,
   type HarvestServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { ResourceReferences } from '@portfolio/luna-shopper-admin/feature-resource';
 import type { HarvestRun } from '@portfolio/luna-shopper-admin/models';
+import { Viewport } from '@portfolio/luna-shopper-admin/ui';
 import { RunPage } from './run-page';
 
 /**
@@ -63,9 +69,17 @@ function run(over: Partial<HarvestRun> = {}): HarvestRun {
     revertedAt: null,
     revertedByUserId: null,
     revertedPriceCount: null,
+    // A walk of the whole chain, so its chain and mode are a fair reference
+    // for an estimate (owner decision 112b).
+    input: { mode: 'CATALOG_DISCOVERY' },
     ...over,
   };
 }
+
+/** The harvester's sentence for `DUPLICATE_KEY` (`file-import.runner.ts`). */
+const DUPLICATE_SENTENCE =
+  'Two products in this document have the same name and size, so ' +
+  'neither wrote a price.';
 
 /** A file import that finished, with one warning of each shape. */
 function importRun(over: Partial<HarvestRun> = {}): HarvestRun {
@@ -88,7 +102,7 @@ function importRun(over: Partial<HarvestRun> = {}): HarvestRun {
         offerId: 'p36-o01',
         page: 36,
         name: 'Champu Elvive',
-        message: 'Two products share one key. The second won.',
+        message: DUPLICATE_SENTENCE,
       },
       {
         // The producer's own lost tile, carried through, so what it lost and
@@ -104,18 +118,53 @@ function importRun(over: Partial<HarvestRun> = {}): HarvestRun {
   });
 }
 
+/** A gateway whose one list is the admins, or a refusal. */
+function gatewaysAnswering(admins: readonly unknown[] | 'fail') {
+  return {
+    for: () => ({
+      list: async () => {
+        if (admins === 'fail') {
+          throw new Error('refused');
+        }
+        return { items: admins, nextCursor: null };
+      },
+    }),
+  };
+}
+
 /** What the last export answered with, so a spec can assert on the file. */
 let exported: Readonly<Record<string, unknown>> = {};
 
+/** The screen around the run: its width, and the admins the gateway lists. */
+interface Around {
+  readonly compact?: boolean;
+  /** The rows of `GET /v1/admin/admins`, or `'fail'` for a refused read. */
+  readonly admins?: readonly unknown[] | 'fail';
+  /**
+   * Writes the words for a key, for a case about the copy itself. The testing
+   * translator answers the key and ignores the values.
+   */
+  readonly words?: (key: string, values?: Record<string, unknown>) => string;
+  /** What the runs list answers, which the approximate total is read from. */
+  readonly earlier?: readonly HarvestRun[];
+  /** Called on every read of the runs list, to count the lookups. */
+  readonly onList?: () => void;
+}
+
 async function render(
   answer: HarvestRun,
-  reverted?: HarvestRun
+  reverted?: HarvestRun,
+  around: Around = {}
 ): Promise<ComponentFixture<RunPage>> {
   const service = {
     readRun: async () => answer,
     abortRun: async () => answer,
     revertRun: async () => reverted ?? answer,
     exportRun: async () => exported,
+    listRuns: async () => {
+      around.onList?.();
+      return { items: around.earlier ?? [], nextCursor: null };
+    },
   } as unknown as HarvestServiceI;
 
   TestBed.resetTestingModule();
@@ -153,6 +202,38 @@ async function render(
         provide: ActivatedRoute,
         useValue: { snapshot: { paramMap: new Map([['id', 'run-1']]) } },
       },
+      {
+        provide: Viewport,
+        useValue: {
+          compact: signal(around.compact ?? false),
+          split: signal(false),
+        },
+      },
+      ...(around.words === undefined
+        ? []
+        : [
+            {
+              provide: RokuTranslatorService,
+              useValue: {
+                loaded: signal(true),
+                locale: signal('en'),
+                t: (
+                  key: string,
+                  _ns?: string,
+                  _locale?: string,
+                  values?: Record<string, unknown>
+                ) => around.words?.(key, values) ?? key,
+              },
+            },
+          ]),
+      ...(around.admins === undefined
+        ? []
+        : [
+            {
+              provide: RESOURCE_GATEWAYS,
+              useValue: gatewaysAnswering(around.admins),
+            },
+          ]),
     ],
   }).compileComponents();
 
@@ -198,6 +279,244 @@ describe('RunPage, arriving mid run', () => {
     ).toBeNull();
     expect(text(fixture)).toContain('harvest.run.progress.unsized');
     fixture.componentInstance.watch.stop();
+  });
+
+  /**
+   * A DEZA walk never knows its total while it runs (backend plan 0267), so
+   * the screen reads one from the last completed walk of the chain (decision
+   * 86 of the harvester round).
+   */
+  describe('a walk that does not know its total', () => {
+    const going = run({
+      supermarketId: 'sm_deza',
+      status: 'ABORTED',
+      totalPlanned: null,
+      processed: 824,
+    });
+    const whole = run({
+      id: 'run-0',
+      supermarketId: 'sm_deza',
+      status: 'COMPLETED',
+      totalPlanned: null,
+      processed: 2361,
+    });
+    // The earlier run is read once the run has arrived, so one more pass.
+    async function open(answer: HarvestRun, earlier: readonly HarvestRun[]) {
+      const fixture = await render(answer, undefined, { earlier });
+      await drain();
+      fixture.detectChanges();
+      return fixture;
+    }
+    const count = (fixture: ComponentFixture<RunPage>) =>
+      (
+        fixture.nativeElement.querySelector('[data-progress-count]')
+          ?.textContent ?? ''
+      ).trim();
+
+    it('says "of about" the earlier walk while it runs, against a bar short of full', async () => {
+      const fixture = await open({ ...going, status: 'RUNNING' }, [whole]);
+
+      expect(fixture.componentInstance.progress()).toEqual({
+        processed: 824,
+        total: null,
+        percent: 35,
+        about: 2361,
+        ended: false,
+      });
+      expect(count(fixture)).toBe('harvest.run.progress.ofAbout');
+      const bar = fixture.nativeElement.querySelector('[role="progressbar"]');
+      expect(bar?.getAttribute('aria-valuenow')).toBe('35');
+      expect(bar?.getAttribute('aria-valuetext')).toBe(
+        'harvest.run.progress.ofAbout'
+      );
+      expect(text(fixture)).toContain('harvest.run.progress.approximate');
+      expect(text(fixture)).not.toContain('harvest.run.progress.unsized');
+      fixture.componentInstance.watch.stop();
+    });
+
+    /** Owner decision 97b: the number stays, in the past, and no bar. */
+    it('keeps the estimate on an ended walk, in the past tense, with no bar', async () => {
+      const fixture = await open(going, [whole]);
+
+      expect(count(fixture)).toBe('harvest.run.progress.ofAboutEnded');
+      expect(
+        fixture.nativeElement.querySelector('[role="progressbar"]')
+      ).toBeNull();
+      expect(
+        fixture.nativeElement
+          .querySelector('[data-progress-approximate]')
+          ?.textContent.trim()
+      ).toBe('harvest.run.progress.approximateEnded');
+      expect(text(fixture)).not.toContain('harvest.run.progress.unsized');
+      fixture.componentInstance.watch.stop();
+    });
+
+    /**
+     * Owner decision 111c: a completed walk did the whole walk, so it shows
+     * its count as before the estimate existed, and nothing is read for one.
+     */
+    it('shows a completed walk its count alone and reads nothing for it', async () => {
+      let reads = 0;
+      const fixture = await render(
+        { ...going, status: 'COMPLETED' },
+        undefined,
+        {
+          earlier: [whole],
+          onList: () => (reads += 1),
+        }
+      );
+      await drain();
+      fixture.detectChanges();
+
+      expect(reads).toBe(0);
+      expect(fixture.componentInstance.progress()).toEqual({
+        processed: 824,
+        total: null,
+        percent: null,
+      });
+      expect(count(fixture)).toBe('harvest.run.progress.processed');
+      expect(
+        fixture.nativeElement.querySelector('[data-progress-approximate]')
+      ).toBeNull();
+      expect(
+        fixture.nativeElement.querySelector('[role="progressbar"]')
+      ).toBeNull();
+      // Owner decision 120b: no note either, only the count.
+      expect(text(fixture)).not.toContain('harvest.run.progress.unsized');
+      fixture.componentInstance.watch.stop();
+    });
+
+    /**
+     * Owner decision 113b: the page reads the estimate again each time it
+     * opens, so a reference run reverted since is not still quoted, while a
+     * poll of the open page reads nothing.
+     */
+    it('reads the estimate again when the page opens again, never on a poll', async () => {
+      let reads = 0;
+      let earlier: readonly HarvestRun[] = [whole];
+      const fixture = await render({ ...going, status: 'RUNNING' }, undefined, {
+        get earlier() {
+          return earlier;
+        },
+        onList: () => (reads += 1),
+      });
+      await drain();
+      fixture.detectChanges();
+      const perOpen = reads;
+      expect(perOpen).toBeGreaterThan(0);
+      expect(count(fixture)).toBe('harvest.run.progress.ofAbout');
+
+      // Two polls: a new run object each, and no new lookup.
+      await fixture.componentInstance.watch.refresh();
+      await fixture.componentInstance.watch.refresh();
+      await drain();
+      fixture.detectChanges();
+      expect(reads).toBe(perOpen);
+
+      // The reference walk is reverted meanwhile, and the page opens again.
+      earlier = [{ ...whole, revertedAt: '2026-09-01T11:20:00.000Z' }];
+      fixture.componentInstance.watch.stop();
+      fixture.destroy();
+      const again = TestBed.createComponent(RunPage);
+      again.detectChanges();
+      await drain();
+      again.detectChanges();
+      await drain();
+      again.detectChanges();
+
+      expect(reads).toBe(perOpen * 2);
+      expect(
+        (
+          again.nativeElement.querySelector('[data-progress-count]')
+            ?.textContent ?? ''
+        ).trim()
+      ).toBe('harvest.run.progress.processed');
+      again.componentInstance.watch.stop();
+    });
+
+    it('keeps the form it had before for a walk that processed nothing', async () => {
+      const fixture = await open({ ...going, processed: 0 }, [whole]);
+
+      expect(count(fixture)).toBe('harvest.run.progress.processed');
+      expect(text(fixture)).toContain('harvest.run.progress.unsized');
+      expect(
+        fixture.nativeElement.querySelector('[data-progress-approximate]')
+      ).toBeNull();
+      fixture.componentInstance.watch.stop();
+    });
+
+    /**
+     * Owner decision 112b: a store discovery of two postal codes is not "of
+     * about" the chain's whole discovery, and reads nothing for one.
+     */
+    it('draws no estimate for a narrowed run with no preset, and reads nothing', async () => {
+      let reads = 0;
+      const postal = run({
+        supermarketId: 'sm_deza',
+        mode: 'STORE_DISCOVERY',
+        status: 'RUNNING',
+        totalPlanned: null,
+        processed: 14,
+        input: { mode: 'STORE_DISCOVERY', postalCodes: ['15001', '15002'] },
+      });
+      const fixture = await render(postal, undefined, {
+        earlier: [
+          {
+            ...whole,
+            mode: 'STORE_DISCOVERY',
+            input: { mode: 'STORE_DISCOVERY' },
+          },
+        ],
+        onList: () => (reads += 1),
+      });
+      await drain();
+      fixture.detectChanges();
+
+      expect(reads).toBe(0);
+      expect(count(fixture)).toBe('harvest.run.progress.processed');
+      expect(
+        fixture.nativeElement.querySelector('[data-progress-approximate]')
+      ).toBeNull();
+      fixture.componentInstance.watch.stop();
+    });
+
+    it('keeps the unknown form with no earlier walk', async () => {
+      const fixture = await open(going, []);
+
+      expect(count(fixture)).toBe('harvest.run.progress.processed');
+      expect(text(fixture)).toContain('harvest.run.progress.unsized');
+      fixture.componentInstance.watch.stop();
+    });
+
+    it('keeps the unknown form when the run has passed the estimate', async () => {
+      const fixture = await open({ ...going, processed: 2400 }, [whole]);
+
+      expect(count(fixture)).toBe('harvest.run.progress.processed');
+      expect(
+        fixture.nativeElement.querySelector('[role="progressbar"]')
+      ).toBeNull();
+      fixture.componentInstance.watch.stop();
+    });
+
+    it.each([
+      ['reverted', { revertedAt: '2026-09-01T11:20:00.000Z' }],
+      ['failed', { status: 'FAILED' as const }],
+    ])('takes nothing from a %s earlier walk', async (_name, over) => {
+      const fixture = await open(going, [{ ...whole, ...over }]);
+
+      expect(count(fixture)).toBe('harvest.run.progress.processed');
+      fixture.componentInstance.watch.stop();
+    });
+
+    it('never replaces a known total', async () => {
+      const fixture = await open(
+        { ...going, status: 'RUNNING', totalPlanned: 4383 },
+        [whole]
+      );
+
+      expect(count(fixture)).toBe('harvest.run.progress.of');
+      fixture.componentInstance.watch.stop();
+    });
   });
 
   it('offers the abort on a run still going', async () => {
@@ -312,7 +631,7 @@ describe('RunPage, for a file import', () => {
         offerId: 'p36-o01',
         page: '36',
         name: 'Champu Elvive',
-        message: 'Two products share one key. The second won.',
+        message: DUPLICATE_SENTENCE,
       },
       {
         key: '1',
@@ -707,6 +1026,752 @@ describe('RunPage, who started it', () => {
     const fixture = await render(run({ status: 'COMPLETED' }));
 
     expect(fixture.nativeElement.querySelector('[data-scheduled]')).toBeNull();
+    fixture.componentInstance.watch.stop();
+  });
+});
+
+/** What a walk did not read, by the runner that says so (admin plan 0071). */
+describe('RunPage, what a walk did not read', () => {
+  function walk(report: Record<string, unknown>): HarvestRun {
+    return run({
+      status: 'COMPLETED',
+      finishedAt: '2026-09-03T09:30:00.000Z',
+      report,
+    });
+  }
+
+  const part = (fixture: ComponentFixture<RunPage>, selector: string) =>
+    fixture.nativeElement.querySelector(selector) as HTMLElement | null;
+
+  /** A part the case expects drawn, so a missing one fails by its selector. */
+  function drawn(fixture: ComponentFixture<RunPage>, selector: string) {
+    const found = part(fixture, selector);
+    if (found === null) {
+      throw new Error(`Nothing drawn at ${selector}`);
+    }
+    return found;
+  }
+
+  it('draws a Carrefour run: the unread, the asked again and the stop', async () => {
+    const fixture = await render(
+      walk({
+        unreadableCategories: ['/supermercado/congelados/cat21449123/c'],
+        askedAgain: [
+          { id: 'cat1', name: 'Lácteos', read: true },
+          { id: 'cat2', name: 'Congelados', read: false },
+        ],
+        blockedAfter: 'HTTP 403 on 4 categories in a row',
+      })
+    );
+
+    expect(part(fixture, '[data-unreadable]')?.textContent).toContain(
+      '/supermercado/congelados/cat21449123/c'
+    );
+    const asked = drawn(fixture, '[data-asked-again]');
+    expect(asked.querySelectorAll('li')[0].textContent).toContain(
+      'harvest.run.report.askedAgainRead'
+    );
+    expect(asked.querySelector('li.lost')?.textContent).toContain(
+      'harvest.run.report.askedAgainLost'
+    );
+    expect(part(fixture, '[data-blocked-after]')?.textContent).toContain(
+      'HTTP 403 on 4 categories in a row'
+    );
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('draws a DEZA run: its sections, the unfinished first, and the open queries of a GROWTH one', async () => {
+    const fixture = await render(
+      walk({
+        incompleteSections: [{ code: 'S2', name: 'Bebidas' }],
+        sections: [
+          {
+            code: 'S1',
+            name: 'Droguería',
+            products: 412,
+            queries: 14,
+            stoppedBy: 'GROWTH',
+            openQueries: ['champú', 'gel'],
+          },
+          {
+            code: 'S2',
+            name: 'Bebidas',
+            products: 900,
+            queries: 25,
+            stoppedBy: 'BUDGET',
+            openQueries: [],
+          },
+        ],
+      })
+    );
+
+    const rows = drawn(fixture, '[data-sections]').querySelectorAll('tbody tr');
+    expect(rows[0].textContent).toContain('Bebidas');
+    expect(rows[0].textContent).toContain(
+      'harvest.run.report.stoppedBy.BUDGET'
+    );
+    expect(rows[1].textContent).toContain(
+      'harvest.run.report.stoppedBy.GROWTH'
+    );
+    expect(rows[1].textContent).toContain('champú, gel');
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('draws a DEZA section that threw as failed, and keeps the other words', async () => {
+    const fixture = await render(
+      walk({
+        // As `deza-catalog.runner.ts` records a section that threw: null
+        // queries and stop, the error in its `incompleteSections` entry.
+        incompleteSections: [
+          {
+            code: 'S2',
+            name: 'Bebidas',
+            queries: 25,
+            stoppedBy: 'BUDGET',
+            openQueries: [],
+          },
+          {
+            code: 'S3',
+            name: 'Congelados',
+            queries: null,
+            stoppedBy: null,
+            openQueries: ['Error: socket hang up'],
+          },
+        ],
+        sections: [
+          {
+            code: 'S1',
+            name: 'Droguería',
+            products: 412,
+            queries: 14,
+            stoppedBy: 'LATER',
+            openQueries: [],
+          },
+          {
+            code: 'S2',
+            name: 'Bebidas',
+            products: 900,
+            queries: 25,
+            stoppedBy: 'BUDGET',
+            openQueries: [],
+          },
+          {
+            code: 'S3',
+            name: 'Congelados',
+            products: 0,
+            queries: null,
+            stoppedBy: null,
+            openQueries: [],
+          },
+        ],
+      })
+    );
+
+    const rows = drawn(fixture, '[data-sections]').querySelectorAll('tbody tr');
+    const stops = [...rows].map((row) =>
+      row.querySelectorAll('td')[2].textContent?.trim()
+    );
+    expect(rows[1].textContent).toContain('Congelados');
+    expect(stops).toEqual([
+      'harvest.run.report.stoppedBy.BUDGET',
+      'harvest.run.report.stoppedBy.FAILED',
+      '',
+    ]);
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('draws a dash, never a 0, for the queries of a section that threw', async () => {
+    const fixture = await render(
+      walk({
+        incompleteSections: [
+          { code: 'S3', name: 'Mascotas', queries: null, stoppedBy: null },
+        ],
+        sections: [
+          {
+            code: 'S1',
+            name: 'Droguería',
+            products: 412,
+            queries: 0,
+            stoppedBy: 'COMPLETE',
+            openQueries: [],
+          },
+          {
+            code: 'S3',
+            name: 'Mascotas',
+            products: 259,
+            queries: null,
+            stoppedBy: null,
+            openQueries: [],
+          },
+        ],
+      })
+    );
+
+    const cells = [
+      ...drawn(fixture, '[data-sections]').querySelectorAll('[data-queries]'),
+    ];
+    // Mascotas first, as the unfinished one.
+    expect(cells[0].querySelector('[aria-hidden="true"]')?.textContent).toBe(
+      '–'
+    );
+    expect(cells[0].textContent).toContain(
+      'harvest.run.report.sections.queriesNotStated'
+    );
+    expect(cells[0].textContent).not.toContain('0');
+    // A section that stated 0 queries still reads 0.
+    expect(cells[1].textContent?.trim()).toBe('0');
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('draws a part that was not read alike, whether the runner named it or not', async () => {
+    const fixture = await render(
+      run({
+        status: 'COMPLETED',
+        finishedAt: '2026-09-03T09:30:00.000Z',
+        warnings: [
+          {
+            // The runner set a name the sentence does not quote as it came:
+            // the code alone hides it.
+            code: 'LISTING_UNREAD',
+            offerId: null,
+            page: null,
+            name: 'Mascotas y animales',
+            message: 'Section 07 Mascotas failed: Error: socket hang up',
+          },
+          {
+            code: 'LISTING_UNREAD',
+            offerId: null,
+            page: null,
+            name: null,
+            message:
+              'Category cat21449123 Congelados was refused twice and was not read.',
+          },
+        ],
+      })
+    );
+
+    const items = [
+      ...fixture.nativeElement.querySelectorAll('.warnings li'),
+    ] as HTMLElement[];
+    expect(items).toHaveLength(2);
+    expect(items.map((item) => item.querySelector('strong'))).toEqual([
+      null,
+      null,
+    ]);
+    expect(items[0].textContent).toContain('Section 07 Mascotas failed');
+    expect(items[0].textContent).not.toContain('Mascotas y animales');
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('draws the bold product name of an import warning whose sentence quotes it', async () => {
+    const fixture = await render(
+      importRun({
+        warnings: [
+          {
+            code: 'NO_MATCH',
+            offerId: 'p04-o02',
+            page: 4,
+            name: 'Yogur natural',
+            message:
+              '"Yogur natural" matched nothing, so it is queued for a person.',
+          },
+        ],
+      })
+    );
+
+    const [item] = [
+      ...fixture.nativeElement.querySelectorAll('.warnings li'),
+    ] as HTMLElement[];
+    expect(item.querySelector('strong')?.textContent).toBe('Yogur natural');
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('draws an El Jamón run: the categories that read short, and the detail sentence', async () => {
+    const fixture = await render(
+      walk({
+        categories: [
+          {
+            code: '01',
+            name: 'DESPENSA',
+            printedCount: 1200,
+            rowsRead: 1188,
+            rowsRepeated: 12,
+          },
+          {
+            code: '02',
+            name: 'BEBIDAS',
+            printedCount: 300,
+            rowsRead: 300,
+            rowsRepeated: 0,
+          },
+        ],
+        detail: { pages: 800, failed: 3, timeouts: 2, silentAttempts: 1 },
+      })
+    );
+
+    const rows = drawn(fixture, '[data-categories]').querySelectorAll(
+      'tbody tr'
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].textContent).toContain('1188');
+    expect(part(fixture, '[data-detail-stage]')?.textContent).toContain(
+      'harvest.run.report.detail'
+    );
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('draws the sizes a walk found disproved, the pack count as a guess', async () => {
+    const fixture = await render(
+      walk({
+        sizesDisproved: 2,
+        probablePackCounts: 1,
+        sizesDisprovedExamples: [
+          {
+            entryId: 'entry-1',
+            name: 'Yogur natural',
+            stated: 125,
+            implied: 333.333,
+            unit: 'GRAM',
+            label: '1,20 €/kg',
+          },
+        ],
+      })
+    );
+
+    const sizes = drawn(fixture, '[data-sizes]');
+    expect(sizes.textContent).toContain('harvest.run.report.sizesDisproved');
+    expect(sizes.textContent).toContain(
+      'harvest.run.report.probablePackCounts'
+    );
+    const row = drawn(fixture, '[data-sizes] tbody tr');
+    expect(row.textContent).toContain('Yogur natural');
+    expect(row.textContent).toContain('333.3');
+    expect(row.textContent).toContain('harvest.unit.GRAM');
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('links a size example that names its entry to that entry on the run chain, and draws the name alone otherwise (admin plan 0073)', async () => {
+    const entryId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01';
+    const fixture = await render(
+      run({
+        status: 'COMPLETED',
+        finishedAt: '2026-09-03T09:30:00.000Z',
+        supermarketId: 'sm_carrefour',
+        report: {
+          sizesDisproved: 2,
+          probablePackCounts: 0,
+          sizesDisprovedExamples: [
+            {
+              entryId,
+              name: 'Yogur natural',
+              stated: 125,
+              implied: 500,
+              unit: 'GRAM',
+              label: '2,36 €/kg',
+            },
+            {
+              name: 'Aceite de oliva',
+              stated: 1000,
+              implied: 750,
+              unit: 'MILLILITER',
+              label: '9,99 €/l',
+            },
+          ],
+        },
+      })
+    );
+
+    const rows = [
+      ...fixture.nativeElement.querySelectorAll('[data-sizes] tbody tr'),
+    ] as HTMLElement[];
+    const link = rows[0].querySelector(
+      'a[data-size-entry]'
+    ) as HTMLAnchorElement | null;
+    expect(link?.textContent?.trim()).toBe('Yogur natural');
+    const href = new URL(link?.getAttribute('href') ?? '', 'http://admin');
+    expect(href.pathname).toBe('/harvest/review/products');
+    expect(href.searchParams.get('entry')).toBe(entryId);
+    expect(href.searchParams.get('chain')).toBe('sm_carrefour');
+
+    expect(rows[1].querySelector('a')).toBeNull();
+    expect(rows[1].querySelector('th')?.textContent?.trim()).toBe(
+      'Aceite de oliva'
+    );
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('draws the size doubts of an import, and none of the chain parts', async () => {
+    // The harvester writes the two counts for an imported run, with no
+    // examples (run-executor.service.ts, plan 0249). The owner chose on
+    // 2026-11-11 that an import shows them.
+    const fixture = await render(
+      importRun({ report: { sizesDisproved: 3, probablePackCounts: 1 } })
+    );
+
+    expect(fixture.componentInstance.hasReport()).toBe(true);
+    const sizes = drawn(fixture, '[data-sizes]');
+    expect(sizes.textContent).toContain('harvest.run.report.sizesDisproved');
+    expect(sizes.textContent).toContain(
+      'harvest.run.report.probablePackCounts'
+    );
+    expect(part(fixture, '[data-sizes] tbody tr')).toBeNull();
+    for (const selector of [
+      '[data-unreadable]',
+      '[data-asked-again]',
+      '[data-blocked-after]',
+      '[data-sections]',
+      '[data-categories]',
+      '[data-detail-stage]',
+    ]) {
+      expect(part(fixture, selector)).toBeNull();
+    }
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('draws none of it for an import with an empty report', async () => {
+    const fixture = await render(importRun());
+
+    expect(fixture.componentInstance.hasReport()).toBe(false);
+    for (const selector of [
+      '[data-unreadable]',
+      '[data-asked-again]',
+      '[data-blocked-after]',
+      '[data-sections]',
+      '[data-categories]',
+      '[data-detail-stage]',
+      '[data-sizes]',
+      '[data-unslotted-only]',
+    ]) {
+      expect(part(fixture, selector)).toBeNull();
+    }
+    fixture.componentInstance.watch.stop();
+  });
+});
+
+/**
+ * The DIA products whose every leaf has no category of ours (backend plan
+ * 0268, section 5), drawn in the report section (admin plan 0071, section 2).
+ * The copy goes through a real i18next on `en.json`, because the testing
+ * translator answers the key and the plural is the point.
+ */
+describe('RunPage, the DIA products only in leaves with no slug', () => {
+  let words: (key: string, values?: Record<string, unknown>) => string;
+
+  beforeAll(async () => {
+    const { readFileSync } = await import('fs');
+    const { resolve } = await import('path');
+    const i18next = (await import('i18next')).default;
+    const file = resolve(__dirname, '../../../ui/assets/i18n/en.json');
+    const instance = i18next.createInstance();
+    await instance.init({
+      lng: 'en',
+      interpolation: { escapeValue: false },
+      resources: {
+        en: { translation: JSON.parse(readFileSync(file, 'utf8')) },
+      },
+    });
+    words = (key, values) => instance.t(key, values ?? {});
+  });
+
+  function walk(report: Record<string, unknown>): HarvestRun {
+    return run({
+      status: 'COMPLETED',
+      finishedAt: '2026-09-03T09:30:00.000Z',
+      report,
+    });
+  }
+
+  const block = (fixture: ComponentFixture<RunPage>) =>
+    fixture.nativeElement.querySelector(
+      '[data-unslotted-only]'
+    ) as HTMLElement | null;
+
+  const said = (element: Element | null | undefined) =>
+    (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
+  const EXAMPLES = [
+    'Paleta de cebo ibérica loncheada',
+    'Queso curado de oveja cuña',
+    'Lomo ibérico de bellota',
+    'Tabla de quesos variados',
+    'Chorizo ibérico cular',
+  ];
+
+  it('draws the count, one line a leaf and its examples', async () => {
+    const fixture = await render(
+      walk({
+        unslottedOnly: {
+          products: 9,
+          leaves: [
+            {
+              id: 'L2222',
+              rootName: 'Especial Navidad',
+              name: 'Ibéricos y quesos',
+              products: 7,
+              examples: EXAMPLES.map((name, i) => ({
+                externalId: `28000${i}`,
+                name,
+              })),
+            },
+            {
+              id: 'L2255',
+              rootName: 'Especial Navidad',
+              name: 'Platos especiales',
+              products: 2,
+              examples: [],
+            },
+          ],
+        },
+      }),
+      undefined,
+      { words: (key, values) => words(key, values) }
+    );
+
+    const drawn = block(fixture);
+    expect(fixture.componentInstance.hasReport()).toBe(true);
+    expect(said(drawn?.querySelector('h3'))).toBe(
+      'Products only in chain categories we do not map'
+    );
+    expect(said(drawn?.querySelector('p'))).toBe(
+      '9 products sit only in chain categories with no category of ours. They wait as uncategorised.'
+    );
+    const leaves = [
+      ...(drawn?.querySelectorAll('[data-unslotted-leaf]') ?? []),
+    ];
+    expect(leaves).toHaveLength(2);
+    expect(said(leaves[0])).toContain(
+      'Especial Navidad / Ibéricos y quesos: 7 products'
+    );
+    expect(said(leaves[0].querySelector('[data-unslotted-examples]'))).toBe(
+      `For example: ${EXAMPLES.join(', ')}`
+    );
+    expect(said(leaves[1])).toBe(
+      'Especial Navidad / Platos especiales: 2 products'
+    );
+    expect(leaves[1].querySelector('[data-unslotted-examples]')).toBeNull();
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('reads one product in the singular', async () => {
+    const fixture = await render(
+      walk({
+        unslottedOnly: {
+          products: 1,
+          leaves: [
+            {
+              id: 'L2255',
+              rootName: 'Especial Navidad',
+              name: 'Platos especiales',
+              products: 1,
+              examples: [{ externalId: '282840', name: 'Cordero asado' }],
+            },
+          ],
+        },
+      }),
+      undefined,
+      { words: (key, values) => words(key, values) }
+    );
+
+    const drawn = block(fixture);
+    expect(said(drawn?.querySelector('p'))).toBe(
+      '1 product sits only in chain categories with no category of ours. It waits as uncategorised.'
+    );
+    expect(said(drawn?.querySelector('[data-unslotted-leaf]'))).toBe(
+      'Especial Navidad / Platos especiales: 1 product For example: Cordero asado'
+    );
+    fixture.componentInstance.watch.stop();
+  });
+
+  it.each([
+    ['absent', {}],
+    ['not an object', { unslottedOnly: 'nine' }],
+    ['a count that is not a number', { unslottedOnly: { products: '9' } }],
+    ['zero products', { unslottedOnly: { products: 0, leaves: [] } }],
+  ])('draws nothing for a block that is %s', async (_case, report) => {
+    const fixture = await render(walk(report), undefined, {
+      words: (key, values) => words(key, values),
+    });
+
+    expect(block(fixture)).toBeNull();
+    expect(fixture.componentInstance.hasReport()).toBe(false);
+    fixture.componentInstance.watch.stop();
+  });
+});
+
+/**
+ * The run page on a phone, who reverted a run, and the report tables (admin
+ * plan 0074).
+ */
+describe('RunPage, on a phone and after a revert', () => {
+  const REVERTED = {
+    status: 'COMPLETED' as const,
+    finishedAt: '2026-09-03T09:30:00.000Z',
+    revertedAt: '2026-09-05T10:00:00.000Z',
+    revertedByUserId: 'admin-1',
+    revertedPriceCount: 214,
+  };
+
+  const ADMINS = [
+    {
+      adminId: 'admin-1',
+      username: 'ichiroku',
+      displayName: 'Ichiroku',
+      lastLoginAt: null,
+      disabledAt: null,
+    },
+    {
+      adminId: 'admin-2',
+      username: 'retired',
+      displayName: null,
+      lastLoginAt: null,
+      disabledAt: null,
+    },
+  ];
+
+  const one = (fixture: ComponentFixture<RunPage>, selector: string) =>
+    fixture.nativeElement.querySelector(selector) as HTMLElement | null;
+
+  async function settled(fixture: ComponentFixture<RunPage>) {
+    await drain();
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  const revertedBy = (fixture: ComponentFixture<RunPage>) =>
+    one(fixture, '[data-fact="revertedBy"] dd');
+
+  it('draws the chips in the overview and not in the header on a phone', async () => {
+    const fixture = await render(run(REVERTED), undefined, {
+      compact: true,
+      admins: ADMINS,
+    });
+
+    const line = one(fixture, '[data-run-chips]');
+    expect(line?.textContent).toContain('harvest.status.COMPLETED');
+    expect(line?.textContent).toContain('harvest.run.reverted.chip');
+    expect(one(fixture, 'lib-page-header .status')).toBeNull();
+    expect(one(fixture, 'lib-page-header .reverted')).toBeNull();
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('draws the chips in the header and not in the overview when wide', async () => {
+    const fixture = await render(run(REVERTED), undefined, { admins: ADMINS });
+
+    expect(one(fixture, '[data-run-chips]')).toBeNull();
+    expect(one(fixture, 'lib-page-header .status')?.textContent).toContain(
+      'harvest.status.COMPLETED'
+    );
+    expect(one(fixture, 'lib-page-header .reverted')).not.toBeNull();
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('names the admin who reverted it, with the id in the hover', async () => {
+    const fixture = await settled(
+      await render(run(REVERTED), undefined, { admins: ADMINS })
+    );
+
+    expect(revertedBy(fixture)?.textContent?.trim()).toBe('Ichiroku');
+    expect(revertedBy(fixture)?.getAttribute('title')).toBe('admin-1');
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('names the admin by username when the display name is null', async () => {
+    const fixture = await settled(
+      await render(
+        run({ ...REVERTED, revertedByUserId: 'admin-2' }),
+        undefined,
+        { admins: ADMINS }
+      )
+    );
+
+    expect(revertedBy(fixture)?.textContent?.trim()).toBe('retired');
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('says an admin is no longer listed, and never shows the id alone', async () => {
+    const fixture = await settled(
+      await render(
+        run({ ...REVERTED, revertedByUserId: 'admin-gone' }),
+        undefined,
+        { admins: ADMINS }
+      )
+    );
+
+    expect(revertedBy(fixture)?.textContent?.trim()).toBe(
+      'harvest.run.revertedByUnknown'
+    );
+    expect(revertedBy(fixture)?.getAttribute('title')).toBe('admin-gone');
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('says the list could not be read, not that the admin is gone', async () => {
+    const fixture = await settled(
+      await render(run(REVERTED), undefined, { admins: 'fail' })
+    );
+
+    expect(revertedBy(fixture)?.textContent?.trim()).toBe(
+      'harvest.run.revertedByUnread'
+    );
+    expect(revertedBy(fixture)?.getAttribute('title')).toBe('admin-1');
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('puts every report table inside a scroll box', async () => {
+    const fixture = await render(
+      run({
+        status: 'COMPLETED',
+        finishedAt: '2026-09-03T09:30:00.000Z',
+        report: {
+          writes: 'PRICES',
+          copies: [
+            {
+              from: 'scope-national',
+              to: ['t1'],
+              pricesCopied: 3,
+              availabilityCopied: 0,
+            },
+          ],
+          sections: [
+            {
+              code: 'S1',
+              name: 'Droguería',
+              products: 412,
+              queries: 14,
+              stoppedBy: 'GROWTH',
+              openQueries: [],
+            },
+          ],
+          categories: [
+            {
+              code: '01',
+              name: 'DESPENSA',
+              printedCount: 1200,
+              rowsRead: 1188,
+              rowsRepeated: 12,
+            },
+          ],
+          sizesDisproved: 1,
+          sizesDisprovedExamples: [
+            {
+              entryId: '',
+              name: 'Yogur natural',
+              stated: 125,
+              implied: 333.333,
+              unit: 'GRAM',
+              label: '1,20 €/kg',
+            },
+          ],
+        },
+      })
+    );
+
+    const tables = [
+      ...fixture.nativeElement.querySelectorAll('.report table'),
+    ] as HTMLElement[];
+    expect(tables).toHaveLength(4);
+    for (const table of tables) {
+      expect(table.parentElement?.classList.contains('scroll')).toBe(true);
+    }
     fixture.componentInstance.watch.stop();
   });
 });

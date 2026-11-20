@@ -150,6 +150,8 @@ describe('AdminListService.getBasket: settlements (plan 0160)', () => {
       itemId: 'i1',
       outcome: SettlementOutcome.BOUGHT,
       quantity: 1,
+      // A row read before plan 0246's column counts pieces.
+      unit: 'UNIT',
       pricePaidCents: 129,
       pricePaidCurrency: 'EUR',
       priceScopeId: 's1',

@@ -7,6 +7,7 @@ import { TestBed } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
   ApiUrl,
+  ContentLocaleStore,
   GatewayError,
   HARVEST_SERVICE,
   RESOURCE_GATEWAYS,
@@ -45,6 +46,8 @@ function setUp() {
         },
       },
       { provide: ResourceReferences, useValue: { resolve: async () => null } },
+      // The locale a doubted row's sizes are written in (admin plan 0072).
+      ContentLocaleStore,
     ],
   });
 

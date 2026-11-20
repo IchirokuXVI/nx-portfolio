@@ -16,6 +16,7 @@ import {
   recordTabs,
   toInput,
   toRowView,
+  validateDraft,
   type AnyResourceDescriptor,
   type ResourceGateway,
   type ResourceRow,
@@ -983,12 +984,28 @@ describe('the list line descriptor', () => {
     }
   });
 
-  it('changes what a line says and how many, and nothing else', () => {
+  it('changes what a line says, how many and in what unit, and nothing else', () => {
+    // The unit rides beside the quantity (backend plan 0246, section 6).
     const editable = LIST_LINES.fields
       .filter((field) => field.editable !== false)
       .map((field) => field.name);
 
-    expect(editable).toEqual(['content', 'quantity']);
+    expect(editable).toEqual(['content', 'quantity', 'unit']);
+  });
+
+  it('takes a quantity of 99 999 and refuses 100 000 (backend plan 0262, 2026-11-17)', () => {
+    const original = draftFor(
+      LIST_LINES,
+      LIST_LINE_SEED[0] as ResourceRow,
+      'edit'
+    );
+    const problems = (quantity: string) =>
+      validateDraft(LIST_LINES, { ...original, quantity }, 'edit', original);
+
+    expect(problems('99999')).toEqual({});
+    expect(problems('100000').quantity).toEqual([
+      expect.objectContaining({ key: 'resource.error.tooLarge' }),
+    ]);
   });
 
   it('addresses a row by the pair of list and line', () => {
@@ -1208,7 +1225,10 @@ describe('the record pages of a list, a line and a shopping list', () => {
 
   it('draws a line as one section, with no field left over', () => {
     expect(drawn(LIST_LINES, 'read')).toEqual([
-      ['people.lines.section.line', ['content', 'quantity', 'approvalStatus']],
+      [
+        'people.lines.section.line',
+        ['content', 'quantity', 'unit', 'approvalStatus'],
+      ],
     ]);
   });
 

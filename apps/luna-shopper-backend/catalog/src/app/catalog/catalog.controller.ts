@@ -54,6 +54,8 @@ import {
   type FillPackCountsResult,
   type FindItemByEanRequest,
   type FindItemByEanResult,
+  type FindItemCreatedFromEntryRequest,
+  type FindItemCreatedFromEntryResult,
   type FindItemsByEansRequest,
   type FindItemsByEansResult,
   type GetItemsRequest,
@@ -112,6 +114,8 @@ import {
   type SearchItemsRequest,
   type SearchOffersRequest,
   type SearchShopsRequest,
+  type SetApproxWeightsRequest,
+  type SetApproxWeightsResult,
   type SetSupermarketItemAvailabilityRequest,
   type SetSupermarketItemAvailabilityResult,
   type SetSupermarketLinkedImagesRequest,
@@ -462,6 +466,18 @@ export class CatalogController {
     return this.items.searchOffers(req);
   }
 
+  /**
+   * The product a create stated for one queue row (plan 0244, section 7.4),
+   * read from its `CREATE` audit row. Release task 0006 asks it before it
+   * creates, so a stopped run never creates twice.
+   */
+  @MessagePattern(ITEM_PATTERNS.findCreatedFromEntry)
+  findItemCreatedFromEntry(
+    @Payload() req: FindItemCreatedFromEntryRequest
+  ): Promise<FindItemCreatedFromEntryResult> {
+    return this.items.findCreatedFromEntry(req);
+  }
+
   @MessagePattern(ITEM_PATTERNS.findByEan)
   findItemByEan(
     @Payload() req: FindItemByEanRequest
@@ -526,6 +542,17 @@ export class CatalogController {
     @Payload() req: FillPackCountsRequest
   ): Promise<FillPackCountsResult> {
     return this.items.fillPackCounts(req);
+  }
+
+  /**
+   * The approximate weights a run read (plan 0244, section 3.4), written only
+   * onto products with no size whose weight no person typed.
+   */
+  @MessagePattern(ITEM_PATTERNS.setApproxWeights)
+  setApproxWeights(
+    @Payload() req: SetApproxWeightsRequest
+  ): Promise<SetApproxWeightsResult> {
+    return this.items.setApproxWeights(req);
   }
 
   // --- Product groups (plan 0048, section 1) -------------------------------

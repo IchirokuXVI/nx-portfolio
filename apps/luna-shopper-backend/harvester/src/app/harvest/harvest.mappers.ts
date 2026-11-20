@@ -13,13 +13,17 @@ import type {
   RunEstimate,
   SourceCatalogEntryView,
   SourceEntryPriceView,
+  SourceEntrySizeDoubtView,
   SourceLocationCandidate,
   SourceLocationView,
+  SourceProbeSummary,
   SupermarketSourceView,
 } from '@portfolio/luna-shopper/contracts';
 import {
   HarvestRunStatus,
+  toBaseUnit,
   unitBasisOf,
+  UnitOfMeasure,
 } from '@portfolio/luna-shopper/contracts';
 import type {
   DiscoveredPlace,
@@ -33,6 +37,8 @@ import type {
   SupermarketSource,
 } from '../entities';
 import { declaredScopeKey } from './place-matching';
+import { readRunInput } from './run-input';
+import { dimensionOf, labelAmount } from './size-check';
 
 /**
  * Postgres `numeric` comes back as a **string** through node-postgres, so every
@@ -47,8 +53,14 @@ function iso(value: Date | null): string | null {
   return value ? value.toISOString() : null;
 }
 
+/**
+ * A source row on the wire. `lastProbe` is the newest probe that is not
+ * `ABORTED` (plan 0219, section 8), or null when it has none. A caller that
+ * did not read the probes passes nothing and the field is left out.
+ */
 export function toSupermarketSourceView(
-  row: SupermarketSource
+  row: SupermarketSource,
+  lastProbe?: SourceProbeSummary | null
 ): SupermarketSourceView {
   return {
     id: row.id,
@@ -62,6 +74,7 @@ export function toSupermarketSourceView(
     lastRunAt: iso(row.lastRunAt),
     lastSuccessAt: iso(row.lastSuccessAt),
     consecutiveFailures: row.consecutiveFailures,
+    ...(lastProbe !== undefined ? { lastProbe } : {}),
   };
 }
 
@@ -130,6 +143,14 @@ export function toHarvestRunView(row: HarvestRun): HarvestRunView {
     revertedPriceCount: row.revertedPriceCount ?? null,
     // Plan 0120. The preset a run came from, which may since have been deleted.
     presetId: row.presetId ?? null,
+    // Owner decision 114a. The run's own request, read back from what it
+    // stored, and null when that cannot be read.
+    input: readRunInput(row.mode, row.input),
+    // Owner decisions 130b and 127b. What the walk ran under outside its
+    // request, as a digest, and the adapter of its row. A run stored before
+    // the columns reads null in both, which draws no estimate from it.
+    configFingerprint: row.configFingerprint ?? null,
+    adapterKey: row.adapterKey ?? null,
     // Plan 0206. The schedule that started it, and whether a shutdown or the
     // reaper ended it rather than a person.
     scheduleId: row.scheduleId ?? null,
@@ -253,9 +274,12 @@ export function toSourceCatalogEntryView(
     unitSize: toNumber(row.unitSize),
     sizeUnit: row.sizeUnit ?? null,
     soldByWeight: row.soldByWeight ?? false,
+    approxWeight: toNumber(row.approxWeight ?? null),
     sizeFormat: row.sizeFormat,
+    packaging: row.packaging ?? null,
     packCount: row.packCount ?? null,
     categoryPath: row.categoryPath ?? [],
+    categoryPaths: row.categoryPaths ?? [],
     url: row.url,
     imageUrl: row.imageUrl ?? null,
     extra: row.extra ?? null,
@@ -272,6 +296,48 @@ export function toSourceCatalogEntryView(
     decidedAt: iso(row.decidedAt),
     delistedAt: iso(row.delistedAt ?? null),
     prices: (row.prices ?? []).map(toSourceEntryPriceView),
+    sizeDoubt: toSizeDoubtView(row),
+  };
+}
+
+/**
+ * A row's size doubt (plan 0249), or null. The label is read from the row's
+ * prices when the caller loaded them: the first one the check knows whose
+ * dimension is the size's, the same rule `checkSize` compares by. A mass row
+ * with a `ud` price beside a `kg` one shows `kg`, and a row with no such
+ * price shows no label.
+ */
+export function toSizeDoubtView(
+  row: SourceCatalogEntry
+): SourceEntrySizeDoubtView | null {
+  if (
+    row.sizeDoubtImplied === null ||
+    row.sizeDoubtImplied === undefined ||
+    row.sizeDoubtRatio === null ||
+    row.sizeDoubtRatio === undefined ||
+    !row.sizeDoubtRunId
+  ) {
+    return null;
+  }
+  const dimension =
+    row.sizeUnit === null
+      ? null
+      : dimensionOf(toBaseUnit(1, row.sizeUnit).unit);
+  const label =
+    dimension === null
+      ? null
+      : ((row.prices ?? []).find(
+          (price) => labelAmount(price.unitPriceLabel)?.dimension === dimension
+        )?.unitPriceLabel ?? null);
+  return {
+    implied: Number(row.sizeDoubtImplied),
+    unit:
+      row.sizeUnit === null
+        ? UnitOfMeasure.UNIT
+        : toBaseUnit(1, row.sizeUnit).unit,
+    ratio: Number(row.sizeDoubtRatio),
+    label,
+    runId: row.sizeDoubtRunId,
   };
 }
 

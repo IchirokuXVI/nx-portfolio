@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import {
   purchaseEntryKey,
+  type LineUnit,
   type Page,
   type PurchaseEntry,
   type PurchaseEntryPage,
@@ -27,8 +28,15 @@ export class PurchaseMemory implements PurchaseServiceI {
       kind: 'SESSION',
       name: null,
       startedAt: hoursAgo(2),
-      purchaseCount: 3,
-      spend: { cents: 1240, currency: 'EUR', unpricedCount: 1 },
+      purchaseCount: 4,
+      // Per unit, never one number (velista `0182`): the bananas were weighed.
+      bought: { UNIT: 6, GRAM: 750 },
+      spend: {
+        cents: 1389,
+        currency: 'EUR',
+        unpricedCount: 1,
+        estimated: true,
+      },
       unpricedCount: 1,
     },
     {
@@ -37,7 +45,13 @@ export class PurchaseMemory implements PurchaseServiceI {
       name: 'Saturday shop',
       startedAt: hoursAgo(80),
       purchaseCount: 2,
-      spend: { cents: 385, currency: 'EUR', unpricedCount: 0 },
+      bought: { UNIT: 2 },
+      spend: {
+        cents: 385,
+        currency: 'EUR',
+        unpricedCount: 0,
+        estimated: false,
+      },
       unpricedCount: 0,
     },
     {
@@ -46,6 +60,7 @@ export class PurchaseMemory implements PurchaseServiceI {
       name: null,
       startedAt: hoursAgo(190),
       purchaseCount: 1,
+      bought: { UNIT: 4 },
       spend: null,
       unpricedCount: 1,
     },
@@ -58,6 +73,8 @@ export class PurchaseMemory implements PurchaseServiceI {
         row('r-1', 'Milk', 3, 115, 'Home'),
         row('r-2', 'Bread', 1, 895, 'Home'),
         row('r-3', null, 2, null, null),
+        // 750 g at 1,99 € a kilo, which is an estimate until it is weighed.
+        row('r-7', 'Bananas', 750, 199, 'Home', 'GRAM'),
       ],
     ],
     [
@@ -103,13 +120,16 @@ function row(
   content: string | null,
   quantity: number,
   unitPriceCents: number | null,
-  listName: string | null
+  listName: string | null,
+  unit: LineUnit = 'UNIT'
 ): PurchaseEntryRow {
   return {
     id,
     content,
     itemId: null,
     quantity,
+    unit,
+    estimated: unit !== 'UNIT' && unitPriceCents !== null,
     unitPriceCents,
     currency: unitPriceCents === null ? null : 'EUR',
     listName,

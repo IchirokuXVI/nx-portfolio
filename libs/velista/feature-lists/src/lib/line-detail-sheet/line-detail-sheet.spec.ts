@@ -37,9 +37,10 @@ import {
   SheetNavigation,
   StorageKeys,
 } from '@portfolio/velista/platform';
-import { QuantityReel, SheetShell } from '@portfolio/velista/ui';
+import { QuantityStepper, SheetShell } from '@portfolio/velista/ui';
 import { BehaviorSubject } from 'rxjs';
 import { LineDetailSheet } from './line-detail-sheet';
+import { LineSheetEvents } from './line-sheet-events';
 
 /**
  * The sheet, at the DOM, for the four things velista plan `0047` puts on it.
@@ -62,11 +63,13 @@ const READ_ONLY: readonly ListPermission[] = ['READ'];
 
 const MILK: CatalogItem = {
   id: 'item-milk-a',
+  quantityStep: null,
   name: { es: 'Leche entera', en: 'Whole milk' },
   brand: 'Hacendado',
   size: 1,
   unit: 'LITER',
   productGroupId: null,
+  approxWeight: null,
 };
 
 function line(overrides: Partial<Line> = {}): Line {
@@ -246,8 +249,8 @@ function moveReel(
   fixture: ComponentFixture<LineDetailSheet>,
   to: number
 ): void {
-  const reel = fixture.debugElement.query(By.directive(QuantityReel));
-  reel.triggerEventHandler('committedTo', { from: 2, to });
+  const reel = fixture.debugElement.query(By.directive(QuantityStepper));
+  reel.triggerEventHandler('valueChange', to);
   fixture.detectChanges();
 }
 
@@ -383,21 +386,21 @@ describe('LineDetailSheet', () => {
   });
 
   describe('editing the line (velista plan 0083)', () => {
-    it('draws the name and Save for both scopes, the reel only for full, and neither with no scope', async () => {
+    it('draws the name and Save for both scopes, the stepper only for full, and neither with no scope', async () => {
       const full = await render();
       expect(nameField(full.fixture)?.value).toBe('Milk');
       expect(saveButton(full.fixture)).not.toBeNull();
       expect(
-        full.fixture.debugElement.query(By.directive(QuantityReel))
+        full.fixture.debugElement.query(By.directive(QuantityStepper))
       ).not.toBeNull();
-      // The header's pill goes, because the reel is the same number.
+      // The header's pill goes, because the stepper is the same number.
       expect(full.fixture.nativeElement.querySelector('.quantity')).toBeNull();
 
       const content = await render({ permissions: WRITER });
       expect(nameField(content.fixture)).not.toBeNull();
       expect(saveButton(content.fixture)).not.toBeNull();
       expect(
-        content.fixture.debugElement.query(By.directive(QuantityReel))
+        content.fixture.debugElement.query(By.directive(QuantityStepper))
       ).toBeNull();
       expect(
         content.fixture.nativeElement.querySelector('.shown')?.textContent
@@ -500,6 +503,91 @@ describe('LineDetailSheet', () => {
         kind: 'update',
         lineId: LINE_ID,
         quantity: 5,
+      });
+    });
+
+    it('saves an amount typed into the field, before the field is left (velista 0188)', async () => {
+      const { fixture, lines } = await render();
+      const stepper = fixture.debugElement.query(By.directive(QuantityStepper));
+      expect(stepper.componentInstance.variant()).toBe('sheet');
+      const input = stepper.nativeElement.querySelector(
+        'input[role="spinbutton"]'
+      ) as HTMLInputElement;
+
+      input.focus();
+      input.value = '7';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      fixture.detectChanges();
+      expect(document.activeElement).toBe(input);
+      saveButton(fixture)?.click();
+      await settle(fixture);
+
+      expect(lines.calls.at(-1)).toEqual({
+        kind: 'update',
+        lineId: LINE_ID,
+        quantity: 7,
+      });
+    });
+
+    describe('a save that lowers the line to 0 (velista 0192, owner ruling of 2026-11-16)', () => {
+      const typeAmount = (
+        fixture: ComponentFixture<LineDetailSheet>,
+        to: string
+      ) => {
+        const input = fixture.debugElement
+          .query(By.directive(QuantityStepper))
+          .nativeElement.querySelector(
+            'input[role="spinbutton"]'
+          ) as HTMLInputElement;
+        input.focus();
+        input.value = to;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        fixture.detectChanges();
+      };
+
+      it('tells the page under it once, after the write is accepted', async () => {
+        const { fixture, lines } = await render();
+        const lowered = jest.spyOn(TestBed.inject(LineSheetEvents), 'lowered');
+
+        typeAmount(fixture, '0');
+        saveButton(fixture)?.click();
+        await settle(fixture);
+
+        expect(lines.calls.at(-1)).toEqual({
+          kind: 'update',
+          lineId: LINE_ID,
+          quantity: 0,
+        });
+        expect(lowered.mock.calls).toEqual([[LINE_ID]]);
+      });
+
+      it('tells it nothing for a failed save, or a save that leaves an amount', async () => {
+        const failed = await render();
+        const lowered = jest.spyOn(TestBed.inject(LineSheetEvents), 'lowered');
+        failed.lines.answerNextUpdate({
+          state: 'failed',
+          error: new Error('offline'),
+        });
+        typeAmount(failed.fixture, '0');
+        saveButton(failed.fixture)?.click();
+        await settle(failed.fixture);
+        expect(lowered).not.toHaveBeenCalled();
+
+        const raised = await render();
+        const told = jest.spyOn(TestBed.inject(LineSheetEvents), 'lowered');
+        typeAmount(raised.fixture, '7');
+        saveButton(raised.fixture)?.click();
+        await settle(raised.fixture);
+        expect(told).not.toHaveBeenCalled();
+      });
+
+      it('tells it the sheet closed, however it closed', async () => {
+        const { fixture } = await render();
+        const closed = jest.spyOn(TestBed.inject(LineSheetEvents), 'closed');
+
+        fixture.destroy();
+
+        expect(closed.mock.calls).toEqual([[LINE_ID]]);
       });
     });
 
@@ -625,8 +713,8 @@ describe('LineDetailSheet', () => {
         expect(nameField(fixture)?.readOnly).toBe(true);
         expect(
           fixture.debugElement
-            .query(By.directive(QuantityReel))
-            .componentInstance.readonly()
+            .query(By.directive(QuantityStepper))
+            .componentInstance.disabled()
         ).toBe(true);
         expect(saveButton(fixture)?.getAttribute('aria-busy')).toBe('true');
         for (const key of [
@@ -1064,6 +1152,16 @@ describe('LineDetailSheet', () => {
       expect(lines.calls.at(-1)).not.toHaveProperty('supermarketLocationId');
     });
 
+    it('starts how many at one step of the unit: 1, or 25 g (velista 0188)', async () => {
+      const counted = await render();
+      expect(counted.fixture.componentInstance.howManyFloor()).toBe(1);
+
+      const weighed = await render({
+        lines: [line({ unit: 'GRAM', quantity: 500 })],
+      });
+      expect(weighed.fixture.componentInstance.howManyFloor()).toBe(25);
+    });
+
     it('remembers a picked shop, back on the step, and sends it', async () => {
       const storage = new Map<string, string>();
       const { fixture, lines } = await render({ storage });
@@ -1093,5 +1191,212 @@ describe('LineDetailSheet', () => {
       expect(lines.calls.at(-1)).toMatchObject({ outcome: 'NOT_AVAILABLE' });
       expect(lines.calls.at(-1)).not.toHaveProperty('supermarketLocationId');
     });
+  });
+});
+
+describe('LineDetailSheet: the unit chip (velista 0183)', () => {
+  // Loose bananas by the kilo, and a bunch sold as a kilo piece of 700 g.
+  const LOOSE: CatalogItem = {
+    ...MILK,
+    id: 'item-loose',
+    name: { es: 'Plátano a granel', en: 'Loose bananas' },
+    size: null,
+    unit: 'KILOGRAM',
+  };
+  const PIECE: CatalogItem = {
+    ...MILK,
+    id: 'item-piece',
+    name: { es: 'Plátano en racimo', en: 'Banana bunch' },
+    size: null,
+    unit: 'KILOGRAM',
+    approxWeight: 700,
+  };
+  const bananas = () =>
+    render({
+      lines: [
+        line({ itemIds: [LOOSE.id, PIECE.id], quantity: 2, unit: 'UNIT' }),
+      ],
+      itemNames: fakeItemNames({ items: [LOOSE, PIECE] }),
+    });
+  const segments = (fixture: ComponentFixture<LineDetailSheet>) =>
+    [
+      ...(fixture.nativeElement as HTMLElement).querySelectorAll(
+        'lib-line-unit-chip [role="radio"]'
+      ),
+    ] as HTMLButtonElement[];
+
+  it("steps both steppers and the how many floor by the product's step (velista 0186)", async () => {
+    const stepped: CatalogItem = { ...LOOSE, quantityStep: 100 };
+    const { fixture } = await render({
+      lines: [line({ itemIds: [LOOSE.id], unit: 'GRAM', quantity: 1000 })],
+      itemNames: fakeItemNames({ items: [stepped] }),
+    });
+
+    expect(fixture.componentInstance.productStep()).toBe(100);
+    expect(fixture.componentInstance.howManyFloor()).toBe(100);
+    const steppers = fixture.debugElement
+      .queryAll(By.directive(QuantityStepper))
+      .map((one) => one.componentInstance as QuantityStepper);
+    expect(steppers.length).toBeGreaterThan(0);
+    expect(steppers.every((one) => one.step() === 100)).toBe(true);
+  });
+
+  describe('how many takes any typed amount (the owner, ruling 44 of 2026-11-16)', () => {
+    const stepped: CatalogItem = { ...LOOSE, quantityStep: 100 };
+    const howMany = (fixture: ComponentFixture<LineDetailSheet>) =>
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.step-row lib-quantity-stepper input'
+      ) as HTMLInputElement;
+    const typeInto = (
+      fixture: ComponentFixture<LineDetailSheet>,
+      text: string
+    ) => {
+      const input = howMany(fixture);
+      input.value = text;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+      fixture.detectChanges();
+    };
+
+    it('opens at one step when nothing is wanted, and records 10 g typed under it', async () => {
+      const { fixture, lines } = await render({
+        lines: [line({ itemIds: [LOOSE.id], unit: 'GRAM', quantity: 0 })],
+        itemNames: fakeItemNames({ items: [stepped] }),
+      });
+      fixture.componentInstance.startBought();
+      await settle(fixture);
+      expect(fixture.componentInstance.howMany()).toBe(100);
+
+      typeInto(fixture, '10');
+      expect(fixture.componentInstance.howMany()).toBe(10);
+      typeInto(fixture, '0');
+      // Recording nothing is never offered: the least typed is one gram.
+      expect(fixture.componentInstance.howMany()).toBe(1);
+
+      typeInto(fixture, '10');
+      await fixture.componentInstance.recordBought();
+      await settle(fixture);
+      expect(lines.calls.at(-1)).toMatchObject({
+        kind: 'settle',
+        outcome: 'BOUGHT',
+        quantity: 10,
+      });
+    });
+
+    it('opens at what is wanted under one step, and its minus stops at one step', async () => {
+      const { fixture } = await render({
+        lines: [line({ itemIds: [LOOSE.id], unit: 'GRAM', quantity: 10 })],
+        itemNames: fakeItemNames({ items: [stepped] }),
+      });
+      fixture.componentInstance.startBought();
+      await settle(fixture);
+      expect(fixture.componentInstance.howMany()).toBe(10);
+      const stepper = fixture.debugElement
+        .queryAll(By.directive(QuantityStepper))
+        .map((one) => one.componentInstance as QuantityStepper)
+        .find((one) => one.typedMin() === 1);
+      expect(stepper?.min()).toBe(100);
+      expect(stepper?.minusAtEnd()).toBe(true);
+    });
+  });
+
+  it('draws no chip on a line of one product of one unit', async () => {
+    const { fixture } = await render({
+      lines: [line({ itemIds: [LOOSE.id], unit: 'GRAM', quantity: 500 })],
+      itemNames: fakeItemNames({ items: [LOOSE] }),
+    });
+    expect(segments(fixture)).toEqual([]);
+  });
+
+  it('draws pieces and weight above the reel, the line unit chosen', async () => {
+    const { fixture } = await bananas();
+    expect(segments(fixture).map((s) => s.textContent?.trim())).toEqual([
+      'line.unit.UNIT',
+      'line.unit.GRAM',
+    ]);
+    expect(segments(fixture)[0].getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('still draws the chip when a third record is gone from the catalog', async () => {
+    // `item-gone` is neither held nor pending: its lookup answered nothing, which
+    // `sizingOf` reads as null and not as "still loading".
+    const { fixture } = await render({
+      lines: [
+        line({
+          itemIds: ['item-gone', LOOSE.id, PIECE.id],
+          quantity: 2,
+          unit: 'UNIT',
+        }),
+      ],
+      itemNames: fakeItemNames({ items: [LOOSE, PIECE] }),
+    });
+    expect(segments(fixture).map((s) => s.textContent?.trim())).toEqual([
+      'line.unit.UNIT',
+      'line.unit.GRAM',
+    ]);
+  });
+
+  it('sends one updateLine with the unit and its default amount, and moves the reel there', async () => {
+    const { fixture, lines } = await bananas();
+
+    segments(fixture)[1].click();
+    await settle(fixture);
+
+    expect(lines.calls.filter((call) => call.kind === 'update')).toEqual([
+      { kind: 'update', lineId: LINE_ID, unit: 'GRAM', quantity: 1000 },
+    ]);
+    expect(fixture.componentInstance.amount()).toBe(1000);
+    expect(fixture.componentInstance.unit()).toBe('GRAM');
+    expect(segments(fixture)[1].getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('disables the chip while the write is out', async () => {
+    const { fixture, lines } = await bananas();
+    lines.holdWrites();
+
+    segments(fixture)[1].click();
+    await settle(fixture);
+    expect(
+      segments(fixture).every(
+        (segment) => segment.getAttribute('aria-disabled') === 'true'
+      )
+    ).toBe(true);
+
+    lines.releaseWrites();
+    await settle(fixture);
+    expect(
+      segments(fixture).some((segment) => segment.hasAttribute('aria-disabled'))
+    ).toBe(false);
+  });
+
+  it('puts the segment and the amount back on line_unit_not_offered, with the error line', async () => {
+    const { fixture, lines } = await bananas();
+    lines.answerNextUpdate({
+      state: 'failed',
+      error: new GatewayError({
+        code: 'line_unit_not_offered',
+        status: 422,
+        correlationId: 'cid-422',
+        details: { offered: ['UNIT'] },
+      }),
+    });
+
+    segments(fixture)[1].click();
+    await settle(fixture);
+
+    expect(
+      segments(fixture).map((s) => s.getAttribute('aria-checked'))
+    ).toEqual(['true', 'false']);
+    expect(fixture.componentInstance.amount()).toBe(2);
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.error')
+        ?.textContent
+    ).toContain('line.unit.notOffered');
   });
 });

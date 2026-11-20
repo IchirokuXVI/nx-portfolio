@@ -1,6 +1,8 @@
 > **PR:** [#625](https://github.com/IchirokuXVI/nx-portfolio/pull/625)
 > Three things were left out, because the gateway does not serve them.
-> Target 2: the "Not sold here" state of the list. The price read takes `available=false` as true.
+> Target 2: the "Not sold here" state of the list. The price read took `available=false` as true.
+> Since PR #1031 (2026-11-20) the gateway reads it as false, so that reason is gone. The state
+> waits for a plan of its own (owner decision 108b).
 > Target 3: the number of shops a scope covers.
 > Target 3: who typed a price, and a link to the run that wrote one.
 

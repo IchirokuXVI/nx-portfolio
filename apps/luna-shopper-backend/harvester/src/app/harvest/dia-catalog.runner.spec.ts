@@ -6,6 +6,7 @@ import {
 import type { HarvestRun, SupermarketSource } from '../entities';
 import { TokenBucket } from '../runner/token-bucket';
 import type { CatalogDiscoveryInput } from './catalog-runner';
+import { categorySlugsFor, UNCATEGORISED_SLUG } from './category-resolution';
 import { DiaCatalogRunner } from './dia-catalog.runner';
 import {
   fakeDiaSite,
@@ -286,6 +287,283 @@ describe('DiaCatalogRunner', () => {
     });
   });
 
+  describe('every path a product is filed under (plan 0268)', () => {
+    /** A leaf DIA_CATEGORY_NAMES names and DIA_CATEGORY_SLUGS does not map. */
+    const IBERICOS: FakeDiaLeaf = {
+      id: 'L2222',
+      name: 'Ibéricos y quesos',
+      path: '/navidad/ibericos-y-quesos/c/L2222',
+      rootId: 'L124',
+      rootName: 'Navidad',
+    };
+    const OTONO: FakeDiaLeaf = {
+      id: 'L2354',
+      name: 'Especial otoño',
+      path: '/novedades-y-recomendados/especial-otono/c/L2354',
+      rootId: 'L128',
+      rootName: 'Novedades y recomendados',
+    };
+    const HAM: FakeDiaRow = {
+      sku: '90001',
+      name: 'Jamón ibérico Dia 100 g',
+      brand: 'Dia',
+      price: 3.5,
+      unitPrice: 35,
+    };
+    const CHEESE: FakeDiaRow = {
+      sku: '90002',
+      name: 'Queso curado Dia 250 g',
+      brand: 'Dia',
+      price: 4.2,
+      unitPrice: 16.8,
+    };
+
+    it('states every leaf of a product as a path, in walk order, with its first path its category path', async () => {
+      const runner = new TestRunner(
+        world({
+          leaves: [COLA, PACKS, IBERICOS],
+          listings: {
+            '13835': {
+              L2108: [COKE, COKE_PACK],
+              L2286: [COKE_PACK],
+              L2222: [COKE_PACK],
+            },
+          },
+        })
+      );
+      await runner.run(
+        context(),
+        report,
+        input({ priceScopes: [MADRID] }),
+        source()
+      );
+
+      const pack = report.categoryPathCalls.find(
+        (call) => call.externalId === '38406'
+      );
+      expect(pack).toEqual({
+        externalId: '38406',
+        paths: [
+          ['Agua y refrescos', 'Cola'],
+          ['Agua y refrescos', 'Packs de agua y refrescos'],
+          ['Navidad', 'Ibéricos y quesos'],
+        ],
+        // The store's listing was whole, so these are every leaf it sits in.
+        mode: 'REPLACE',
+      });
+      const observed = report.products.find(
+        (product) => product.externalId === '38406'
+      );
+      expect(pack?.paths[0]).toEqual(observed?.categoryPath);
+      // The ids stay, and they are what files the product.
+      expect(observed?.extra).toMatchObject({
+        diaCategoryIds: ['L2108', 'L2286', 'L2222'],
+      });
+      // A product under one leaf gets that one path.
+      expect(
+        report.categoryPathCalls.find((call) => call.externalId === '659')
+      ).toEqual({
+        externalId: '659',
+        paths: [['Agua y refrescos', 'Cola']],
+        mode: 'REPLACE',
+      });
+      // The call travels apart from the observation (section 2).
+      expect(observed).not.toHaveProperty('categoryPaths');
+    });
+
+    it('adds its paths and replaces none when no store that listed the product read its whole listing', async () => {
+      const many = Array.from({ length: 45 }, (_, index) => ({
+        ...COKE,
+        sku: `sku-${index}`,
+      }));
+      const runner = new TestRunner(
+        world({
+          leaves: [COLA],
+          listings: { '13835': { L2108: many } },
+          fail: (_, path) => (path.endsWith('?page=2') ? 404 : undefined),
+        })
+      );
+      await runner.run(
+        context(),
+        report,
+        input({ priceScopes: [MADRID] }),
+        source()
+      );
+
+      expect(report.categoryPathCalls.length).toBeGreaterThan(0);
+      expect(
+        report.categoryPathCalls.every((call) => call.mode === 'ADD')
+      ).toBe(true);
+    });
+
+    it('adds and replaces nothing in a run that was aborted', async () => {
+      const controller = new AbortController();
+      const runner = new TestRunner(
+        world({
+          fail: (_, path) => {
+            if (path.includes('new_postal_code=08820')) {
+              controller.abort();
+            }
+            return undefined;
+          },
+        })
+      );
+      await runner
+        .run(context(controller.signal), report, input(), source())
+        .catch(() => undefined);
+
+      expect(report.categoryPathCalls.length).toBeGreaterThan(0);
+      expect(
+        report.categoryPathCalls.every((call) => call.mode === 'ADD')
+      ).toBe(true);
+    });
+
+    it('replaces when one store that listed the product read its whole listing, and adds for a product only an unfinished store listed', async () => {
+      const barcelonaOnly = Array.from({ length: 45 }, (_, index) => ({
+        ...COKE,
+        sku: `bcn-${index}`,
+      }));
+      const runner = new TestRunner(
+        world({
+          leaves: [COLA],
+          listings: {
+            // Madrid's listing is one page, and it is read whole.
+            '13835': { L2108: [COKE] },
+            // Barcelona's is three pages, and its second page fails, so its
+            // walk did not finish.
+            '959': { L2108: [COKE, ...barcelonaOnly] },
+          },
+          fail: (_, path) => (path.endsWith('?page=2') ? 404 : undefined),
+        })
+      );
+      const ctx = context();
+      await runner.run(ctx, report, input(), source());
+
+      const modeOf = (externalId: string) =>
+        report.categoryPathCalls.find((call) => call.externalId === externalId)
+          ?.mode;
+      // Listed by both stores, and Madrid's whole listing is enough.
+      expect(modeOf('659')).toBe('REPLACE');
+      // Listed only by Barcelona, whose walk did not finish.
+      expect(modeOf('bcn-0')).toBe('ADD');
+    });
+
+    it('counts a leaf that DIA_CATEGORY_NAMES does not name and that has no slug in unslottedOnly', async () => {
+      const UNKNOWN: FakeDiaLeaf = {
+        id: 'L9990001',
+        name: 'Hoja nueva',
+        path: '/agua-y-refrescos/hoja-nueva/c/L9990001',
+        rootId: 'L117',
+        rootName: 'Agua y refrescos',
+      };
+      const runner = new TestRunner(
+        world({
+          leaves: [COLA, UNKNOWN],
+          listings: { '13835': { L2108: [COKE], L9990001: [HAM] } },
+        })
+      );
+      const ctx = context();
+      await runner.run(ctx, report, input({ priceScopes: [MADRID] }), source());
+
+      // A leaf the table does not know at all is news to an operator...
+      expect(reportOf(ctx)['unmappedLeaves']).toEqual([
+        { id: 'L9990001', name: 'Hoja nueva' },
+      ]);
+      // ...and its product, filed under no other leaf, is counted too.
+      expect(reportOf(ctx)['unslottedOnly']).toEqual({
+        products: 1,
+        leaves: [
+          {
+            id: 'L9990001',
+            rootName: 'Agua y refrescos',
+            name: 'Hoja nueva',
+            products: 1,
+            examples: [
+              { externalId: '90001', name: 'Jamón ibérico Dia 100 g' },
+            ],
+          },
+        ],
+      });
+    });
+
+    it('names the products every leaf of which has no slug, by leaf, with at most five examples', async () => {
+      const cheeses = Array.from({ length: 6 }, (_, index) => ({
+        ...CHEESE,
+        sku: `9100${index}`,
+        name: `Queso ${index} Dia 250 g`,
+      }));
+      const runner = new TestRunner(
+        world({
+          leaves: [COLA, IBERICOS, OTONO],
+          listings: {
+            '13835': {
+              // The coke is also under a mapped leaf, so it is filed.
+              L2108: [COKE],
+              L2222: [HAM, COKE, ...cheeses],
+              L2354: [HAM],
+            },
+          },
+        })
+      );
+      const ctx = context();
+      await runner.run(ctx, report, input({ priceScopes: [MADRID] }), source());
+
+      // Both leaves are known, so neither is news to an operator.
+      expect(reportOf(ctx)['unmappedLeaves']).toEqual([]);
+      expect(reportOf(ctx)['unslottedOnly']).toEqual({
+        // The ham once, though it sits under two such leaves, and six cheeses.
+        products: 7,
+        leaves: [
+          {
+            id: 'L2222',
+            rootName: 'Navidad',
+            name: 'Ibéricos y quesos',
+            products: 7,
+            examples: [
+              { externalId: '90001', name: 'Jamón ibérico Dia 100 g' },
+              { externalId: '91000', name: 'Queso 0 Dia 250 g' },
+              { externalId: '91001', name: 'Queso 1 Dia 250 g' },
+              { externalId: '91002', name: 'Queso 2 Dia 250 g' },
+              { externalId: '91003', name: 'Queso 3 Dia 250 g' },
+            ],
+          },
+          {
+            id: 'L2354',
+            rootName: 'Novedades y recomendados',
+            name: 'Especial otoño',
+            products: 1,
+            examples: [
+              { externalId: '90001', name: 'Jamón ibérico Dia 100 g' },
+            ],
+          },
+        ],
+      });
+      // What the block counts is what the category resolution files as
+      // uncategorised, and nothing else.
+      for (const product of report.products) {
+        const slugs = categorySlugsFor(undefined, product.categoryPath, {
+          adapterKey: 'dia-api',
+          extra: product.extra,
+        });
+        expect([product.externalId, slugs[0] === UNCATEGORISED_SLUG]).toEqual([
+          product.externalId,
+          product.externalId !== '659',
+        ]);
+      }
+    });
+
+    it('names no product when every product has a leaf with a slug', async () => {
+      const runner = new TestRunner(world());
+      const ctx = context();
+      await runner.run(ctx, report, input(), source());
+
+      expect(reportOf(ctx)['unslottedOnly']).toEqual({
+        products: 0,
+        leaves: [],
+      });
+    });
+  });
+
   it('reads a dimension as one object and no pack (plan 0183)', async () => {
     const foil: FakeDiaRow = {
       sku: '70001',
@@ -431,6 +709,115 @@ describe('DiaCatalogRunner', () => {
       clubPrices: 1,
       promotions: 1,
       unitPriceScaled: 1,
+    });
+  });
+
+  describe('a row printed aprox. (plan 0244, section 5.3)', () => {
+    /** As `listing-weight.json` prints it: 1.59 the piece, 1.99 a kilo. */
+    const APPLES: FakeDiaRow = {
+      sku: '275431',
+      name: 'Manzana roja granel 800 g aprox.',
+      price: 1.59,
+      unitPrice: 1.99,
+      unit: 'KILO',
+    };
+    const run = async (row: FakeDiaRow) => {
+      const runner = new TestRunner(
+        world({ listings: { '13835': { L2108: [row] } } })
+      );
+      await runner.run(
+        context(),
+        report,
+        input({ priceScopes: [MADRID] }),
+        source()
+      );
+      return report.products[0];
+    };
+
+    it('is sold by weight at the price of a kilo, with no size and the weight of one piece', async () => {
+      const apples = await run(APPLES);
+
+      expect(apples).toMatchObject({
+        soldByWeight: true,
+        approxWeight: 800,
+        unitSize: null,
+        sizeUnit: null,
+        sizeFormat: '800 g aprox.',
+      });
+      // The piece price DIA prints is not written (D1).
+      expect(apples.prices.map((price) => price.price)).toEqual([1.99, 1.99]);
+      expect(apples.prices.map((price) => price.unitPrice)).toEqual([
+        1.99, 1.99,
+      ]);
+    });
+
+    it('is a piece priced as one when its comparison is not per kilo', async () => {
+      const tray = await run({ ...APPLES, unit: 'UNIDAD', unitPrice: 1.59 });
+
+      expect(tray).toMatchObject({
+        soldByWeight: false,
+        approxWeight: 800,
+        unitSize: null,
+        sizeUnit: null,
+      });
+      expect(tray.prices.map((price) => price.price)).toEqual([1.59, 1.59]);
+    });
+
+    it('applies the club scaling of plan 0174 to the price of a kilo', async () => {
+      // A club row: 1.59 for members, 1.79 regular, 1.99 a kilo at the club
+      // price. D2 scales the kilo to the regular price: 1.99 × 1.79 / 1.59.
+      const club = await run({
+        ...APPLES,
+        price: 1.59,
+        strikethrough: 1.79,
+        club: true,
+        promotions: [{ description: '10% DTO.', only_club_dia: true }],
+      });
+
+      expect(club.soldByWeight).toBe(true);
+      expect(club.prices.map((price) => price.price)).toEqual([2.24, 2.24]);
+      expect(club.prices[0].price).toBe(club.prices[0].unitPrice);
+    });
+
+    it('writes no price for a scope whose listing prints no price per kilo on a row sold by weight', async () => {
+      // Madrid is the identity row and compares per KILO. Barcelona lists
+      // the same piece compared per UNIDAD, so it prints only the piece.
+      const runner = new TestRunner(
+        world({
+          listings: {
+            '13835': { L2108: [APPLES] },
+            '959': { L2108: [{ ...APPLES, unit: 'UNIDAD', unitPrice: 1.59 }] },
+          },
+        })
+      );
+      await runner.run(context(), report, input(), source());
+      const [apples] = report.products;
+
+      expect(apples.soldByWeight).toBe(true);
+      expect(
+        apples.prices.map((price) => [price.scopeKey, price.price])
+      ).toEqual([
+        ['13835', 1.99],
+        [null, 1.99],
+      ]);
+    });
+
+    it('leaves a fixed pack beside it exactly as it was', async () => {
+      const pears = await run({
+        sku: '1',
+        name: 'Pera conferencia bandeja 700 g',
+        price: 1.79,
+        unitPrice: 2.56,
+        unit: 'KILO',
+      });
+
+      expect(pears).toMatchObject({
+        soldByWeight: false,
+        approxWeight: null,
+        unitSize: 700,
+        sizeUnit: 'GRAM',
+      });
+      expect(pears.prices[0].price).toBe(1.79);
     });
   });
 
@@ -648,6 +1035,138 @@ describe('DiaCatalogRunner', () => {
     expect(reportOf(ctx)['renamedLeaves']).toEqual([
       { id: 'L2108', was: 'Cola', is: 'Refrescos de cola' },
     ]);
+  });
+
+  it('knows every leaf and name of the menu of 2026-11-11 (plan 0254)', async () => {
+    const leaf = (
+      id: string,
+      name: string,
+      path: string,
+      rootId: string,
+      rootName: string
+    ): FakeDiaLeaf => ({ id, name, path: `${path}/c/${id}`, rootId, rootName });
+    const navidad = (id: string, name: string, slug: string) =>
+      leaf(id, name, `/navidad/${slug}`, 'L124', 'Navidad');
+    const belleza = (id: string, name: string, slug: string) =>
+      leaf(id, name, `/cabello-y-belleza/${slug}`, 'L130', 'Cabello y belleza');
+    const added = [
+      navidad('L2355', 'Caldos y cremas', 'caldos-y-cremas'),
+      navidad('L2222', 'Ibéricos y quesos', 'ibericos-y-quesos'),
+      navidad(
+        'L2230',
+        'Carnes, pescados y mariscos',
+        'carnes-pescados-y-mariscos'
+      ),
+      navidad('L2255', 'Platos especiales', 'platos-especiales'),
+      navidad(
+        'L2356',
+        'Bombones, chocolates y trufas',
+        'bombones-chocolates-y-trufas'
+      ),
+      navidad('L2258', 'Mesa y hogar', 'mesa-y-hogar'),
+      leaf(
+        'L2353',
+        'Turrones y dulces de Navidad',
+        '/chocolates-y-golosinas/turrones-y-dulces-de-navidad',
+        'L110',
+        'Chocolates y golosinas'
+      ),
+      leaf(
+        'L2354',
+        'Especial otoño',
+        '/novedades-y-recomendados/especial-otono',
+        'L128',
+        'Novedades y recomendados'
+      ),
+      belleza('L2358', 'Limpieza facial', 'limpieza-facial'),
+      belleza('L2359', 'Cremas y cuidado facial', 'cremas-y-cuidado-facial'),
+      belleza(
+        'L2360',
+        'Perfumes y colonias mujer',
+        'perfumes-y-colonias-mujer'
+      ),
+      belleza(
+        'L2361',
+        'Perfumes y colonias hombre',
+        'perfumes-y-colonias-hombre'
+      ),
+      belleza(
+        'L2362',
+        'Colonias infantiles y familiares',
+        'colonias-infantiles-y-familiares'
+      ),
+    ];
+    const renamed = [
+      leaf('L2030', 'Ensaladas', '/verduras/ensaladas', 'L104', 'Verduras'),
+      leaf(
+        'L2025',
+        'Verduras congeladas',
+        '/verduras/verduras-congeladas',
+        'L104',
+        'Verduras'
+      ),
+      leaf('L2015', 'Pavo y conejo', '/carnes/pavo-y-conejo', 'L102', 'Carnes'),
+      leaf(
+        'L2136',
+        'Roscones, tartas y churros',
+        '/congelados-y-helados/roscones-tartas-y-churros',
+        'L119',
+        'Congelados y helados'
+      ),
+      leaf(
+        'L2140',
+        'Pouches y snacks',
+        '/infantil/pouches-y-snacks',
+        'L120',
+        'Infantil'
+      ),
+    ];
+    const runner = new TestRunner(
+      world({ leaves: [...added, ...renamed], listings: {} })
+    );
+    const ctx = context();
+    await runner.run(ctx, report, input({ priceScopes: [MADRID] }), source());
+
+    expect(reportOf(ctx)['unmappedLeaves']).toEqual([]);
+    expect(reportOf(ctx)['renamedLeaves']).toEqual([]);
+
+    // A leaf with a name and no slug also passes the report, so the report
+    // alone cannot tell a mapped leaf from one left out. Each mapped leaf
+    // must file a product it holds under a real category. A leaf that mixes
+    // kinds is known and unmapped on purpose, by the owner's rule of
+    // 2026-11-11: a product listed only there is uncategorised and waits for
+    // the curator. A change to either list must change these lines.
+    const mapped = ['L2356', 'L2358', 'L2359', 'L2360', 'L2361', 'L2362'];
+    const unmapped = [
+      'L2354',
+      'L2222',
+      'L2230',
+      'L2258',
+      'L2355',
+      'L2353',
+      'L2255',
+      'L2015',
+    ];
+    const fileUnder = (id: string) =>
+      categorySlugsFor(undefined, null, {
+        adapterKey: 'dia-api',
+        extra: { diaCategoryIds: [id] },
+      });
+    expect(added).toHaveLength(13);
+    expect(
+      [...added, ...renamed]
+        .map(({ id }) => id)
+        .filter((id) => mapped.includes(id) || unmapped.includes(id))
+    ).toHaveLength(mapped.length + unmapped.length);
+    expect(
+      added.every(({ id }) => mapped.includes(id) || unmapped.includes(id))
+    ).toBe(true);
+    for (const id of mapped) {
+      expect([id, fileUnder(id)]).not.toEqual([id, [UNCATEGORISED_SLUG]]);
+    }
+    for (const id of unmapped) {
+      expect([id, fileUnder(id)]).toEqual([id, [UNCATEGORISED_SLUG]]);
+    }
   });
 
   it('walks every page of a leaf, and plans a leaf per store', async () => {

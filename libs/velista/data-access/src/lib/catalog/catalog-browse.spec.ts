@@ -38,6 +38,8 @@ const ITEM_VIEW = {
     currency: 'EUR',
     unitPrice: 0.89,
     unitPriceLabel: 'EUR/L',
+    comparablePrice: null,
+    comparableBasis: null,
     unitBasis: 'LITER',
     observedAt: '2026-09-20T10:00:00.000Z',
     sourceKind: 'OFFICIAL_API',
@@ -104,6 +106,8 @@ describe('CatalogBrowseApi', () => {
             imageUrl: null,
             size: 1,
             unit: 'LITER',
+            approxWeight: null,
+            quantityStep: null,
             categories: [
               {
                 id: 'cat-milk',
@@ -117,6 +121,9 @@ describe('CatalogBrowseApi', () => {
               currency: 'EUR',
               unitPrice: 0.89,
               unitPriceLabel: 'EUR/L',
+              comparablePrice: null,
+              comparableBasis: null,
+              piecePrice: null,
               observedAt: new Date('2026-09-20T10:00:00.000Z'),
               sourceKind: 'OFFICIAL_API',
               stale: false,
@@ -385,6 +392,8 @@ describe('CatalogBrowseApi', () => {
       currency: 'EUR',
       unitPrice: 0.89,
       unitPriceLabel: 'EUR/L',
+      comparablePrice: null,
+      comparableBasis: null,
       unitBasis: 'LITER',
       observedAt: '2026-09-20T10:00:00.000Z',
       sourceKind: 'OFFICIAL_API',
@@ -609,7 +618,7 @@ describe('CatalogBrowseMemory', () => {
       expect(page?.items.filter((row) => row.offer === null)).toHaveLength(1);
     });
 
-    it('orders by the lowest unit price, and puts the products with none last', async () => {
+    it('orders by the comparable figure, kilos and litres before units, and puts the products with none last', async () => {
       const page = await read(new CatalogBrowseMemory(), {
         order: 'unitPrice',
         ...MERCADONA,
@@ -617,22 +626,24 @@ describe('CatalogBrowseMemory', () => {
 
       const rows = page?.items ?? [];
       // Not the order of the prices: the tuna is cheap by the tin and dear by
-      // the kilo. The eggs and the yogurt cost the same and fall to the name.
+      // the kilo. The eggs are a price per egg, which comes after every price
+      // per kilo or litre (backend 0245, C5), however low it is.
       expect(rows.slice(0, 7).map((row) => row.id)).toEqual([
         'item-milk',
         'item-sugar',
         'item-rice',
-        'item-eggs',
         'item-yogurt',
         'item-oil',
         'item-tuna',
+        'item-eggs',
       ]);
-      const unitPrices = rows.slice(0, 7).map((row) => row.offer?.unitPrice);
-      expect(unitPrices).toEqual(
-        [...unitPrices].sort((a, b) => (a ?? 0) - (b ?? 0))
-      );
+      expect(rows[6]?.offer?.comparableBasis).toBe('UNIT');
+      const figures = rows.slice(0, 6).map((row) => row.offer?.comparablePrice);
+      expect(figures).toEqual([...figures].sort((a, b) => (a ?? 0) - (b ?? 0)));
       expect(
-        rows.slice(7).every((row) => (row.offer?.unitPrice ?? null) === null)
+        rows
+          .slice(7)
+          .every((row) => (row.offer?.comparablePrice ?? null) === null)
       ).toBe(true);
       expect(rows).toHaveLength(12);
     });

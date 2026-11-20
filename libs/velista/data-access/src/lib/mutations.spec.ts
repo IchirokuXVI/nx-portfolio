@@ -10,6 +10,7 @@ import {
   DroppedWrites,
   Mutations,
   overlayKey,
+  replayInUnit,
   type DroppedWriteDraft,
   type Overlay,
 } from './mutations';
@@ -376,5 +377,33 @@ describe('a write the network dropped', () => {
 
     expect(outcome.state).toBe('failed');
     expect(TestBed.inject(DroppedWrites).take(PAGE)).toEqual([]);
+  });
+});
+
+describe('replayInUnit (velista 0182)', () => {
+  const grams = {
+    kind: 'line-quantity' as const,
+    lineId: 'ln1',
+    delta: -250,
+    unit: 'GRAM' as const,
+  };
+
+  it('keeps the replay while the line counts in its unit', () => {
+    expect(replayInUnit(grams, 'GRAM')).toBe(grams);
+  });
+
+  it('drops it once the line counts in another unit', () => {
+    expect(replayInUnit(grams, 'UNIT')).toBeNull();
+  });
+
+  it('reads an entry written before the unit as a count', () => {
+    const old = { kind: 'line-quantity' as const, lineId: 'ln1', delta: 1 };
+    expect(replayInUnit(old, 'UNIT')).toBe(old);
+    expect(replayInUnit(old, 'GRAM')).toBeNull();
+  });
+
+  it('keeps it for a line the page does not hold', () => {
+    expect(replayInUnit(grams, undefined)).toBe(grams);
+    expect(replayInUnit(null, 'GRAM')).toBeNull();
   });
 });

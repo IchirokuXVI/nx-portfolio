@@ -7,6 +7,7 @@ import { ItemNames } from './item-names';
 function product(id: string, groupId: string): CatalogItem {
   return {
     id,
+    quantityStep: null,
     name: { es: id, en: id },
     brand: null,
     size: null,
@@ -25,6 +26,7 @@ function product(id: string, groupId: string): CatalogItem {
     imageUrl: null,
     packCount: null,
     unitBasis: null,
+    approxWeight: null,
   };
 }
 

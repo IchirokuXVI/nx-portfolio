@@ -107,6 +107,8 @@ describe('lineName', () => {
         offer: {
           price,
           unitPrice: price,
+          comparablePrice: price,
+          comparableBasis: 'LITER',
           currency: 'EUR',
         } as unknown as ProductOffer,
         cheapest: false,
@@ -116,7 +118,9 @@ describe('lineName', () => {
       line({ itemIds: ['tomato', 'milk'] }),
       nameOf,
       'es',
-      (itemId) => (itemId === 'milk' ? priced(1) : priced(2))
+      (itemId) => (itemId === 'milk' ? priced(1) : priced(2)),
+      // Both counted packs, so the count line compares the price of one.
+      () => ({ unit: 'UNIT', size: null, approxWeight: null })
     );
     expect(name.itemId).toBe('milk');
     expect(name.text).toBe('Leche semidesnatada');

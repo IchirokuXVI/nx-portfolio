@@ -126,6 +126,20 @@ export const ERROR_CATALOG: Record<
     en: 'This list already has more than one line called "{content}". Choose the line to add to, or add a new line.',
     es: 'Esta lista ya tiene más de una línea llamada "{content}". Elige la línea a la que sumar, o añade una línea nueva.',
   },
+  // The three unit refusals (plan 0246). Each says what is true of the line,
+  // so the person knows what to send instead.
+  [ERROR_CODES.LINE_UNIT_MISMATCH]: {
+    en: 'This line counts in another unit now. Look at it again and change the amount there.',
+    es: 'Esta línea cuenta ahora en otra unidad. Vuelve a mirarla y cambia la cantidad ahí.',
+  },
+  [ERROR_CODES.LINE_UNIT_DIFFERS]: {
+    en: 'These two lines count in different units, so they cannot be merged.',
+    es: 'Estas dos líneas cuentan en unidades distintas, así que no se pueden unir.',
+  },
+  [ERROR_CODES.LINE_UNIT_NOT_OFFERED]: {
+    en: 'The products of this line cannot be counted in that unit.',
+    es: 'Los productos de esta línea no se pueden contar en esa unidad.',
+  },
   // The brand registry's two refusals (plan 0115, section 5.3). Both name what
   // to do rather than what failed: type a real word, or open the brand that
   // already holds the key.
@@ -228,6 +242,14 @@ export const ERROR_CATALOG: Record<
     en: 'A product sold by the kilo has no size. Clear the size, or store the weight in grams.',
     es: 'Un producto que se vende por kilo no tiene tamaño. Quita el tamaño o guarda el peso en gramos.',
   },
+  [ERROR_CODES.ITEM_APPROX_WEIGHT_BESIDE_SIZE]: {
+    en: 'A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.',
+    es: 'Un producto tiene un tamaño fijo o un peso aproximado, nunca los dos, y el peso es mayor que cero. Quita uno de los dos.',
+  },
+  [ERROR_CODES.ITEM_QUANTITY_STEP_NOT_ALLOWED]: {
+    en: 'Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.',
+    es: 'Solo un producto que se vende por kilo tiene un paso, y el paso es uno de los permitidos. Elige un paso permitido o quita el paso.',
+  },
   [ERROR_CODES.ITEM_MERGED]: {
     en: 'This product was merged into another one. Work on the product it was merged into.',
     es: 'Este producto se fusionó con otro. Trabaja con el producto con el que se fusionó.',
@@ -237,8 +259,8 @@ export const ERROR_CATALOG: Record<
     es: 'La misma cadena vende los dos productos, así que el producto fusionado tendría dos artículos de esa cadena. Permite un segundo artículo para fusionarlos igualmente.',
   },
   [ERROR_CODES.ITEM_MERGE_FORMAT_DIFFERS]: {
-    en: 'The two products have a different size or unit, so they are two products. Allow the format difference to merge them anyway.',
-    es: 'Los dos productos tienen un tamaño o una unidad distintos, así que son dos productos. Permite la diferencia de formato para fusionarlos igualmente.',
+    en: 'The two products have a different size, unit or approximate weight, so they are two products. Allow the format difference to merge them anyway.',
+    es: 'Los dos productos tienen un tamaño, una unidad o un peso aproximado distintos, así que son dos productos. Permite la diferencia de formato para fusionarlos igualmente.',
   },
   [ERROR_CODES.ITEM_IN_USE]: {
     en: 'Prices, queue rows, shopping lists or other products still name this product. Merge it into the product that replaces it instead.',
@@ -363,11 +385,21 @@ export const ERROR_CATALOG: Record<
     en: 'The assistant is not available for now. It will be back later.',
     es: 'El asistente no está disponible por ahora. Volverá a estarlo más tarde.',
   },
+  [ERROR_CODES.PRICE_NOT_REFRESHABLE]: {
+    en: 'The price of this product cannot be refreshed here right now.',
+    es: 'Ahora mismo no se puede actualizar el precio de este producto aquí.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',
   },
 };
+
+/**
+ * The variant of `line_unit_differs` an add names (plan 0260, the owner's
+ * ruling of 2026-11-12). The code's own sentence is the merge's.
+ */
+export const LINE_UNIT_DIFFERS_ADD_VARIANT = 'add';
 
 /**
  * Codes whose sentence depends on which case refused, picked by
@@ -396,6 +428,14 @@ export const ERROR_CATALOG_VARIANTS: Partial<
     'deployment.month': {
       en: 'The assistant is resting for now. It is back on {time}.',
       es: 'El asistente está descansando. Vuelve a estar disponible el {time}.',
+    },
+  },
+  // An add met the product only on a line of another unit (plan 0260). It
+  // says what happened and what to do, naming the line.
+  [ERROR_CODES.LINE_UNIT_DIFFERS]: {
+    [LINE_UNIT_DIFFERS_ADD_VARIANT]: {
+      en: '"{content}" is already on this list in another unit. Change the amount on that line.',
+      es: '"{content}" ya está en esta lista en otra unidad. Cambia la cantidad en esa línea.',
     },
   },
 };

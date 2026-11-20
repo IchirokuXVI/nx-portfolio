@@ -148,9 +148,20 @@
       "versioning": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)\\+k3s(?<build>\\d+)$"
     },
     {
+      "description": "Playwright decides which runner images the browser jobs can run on: 1.59 had no Chromium for Ubuntu 26.04 and every pull request that touched Luna Shopper went red. Its update waited behind forty others for one of the ten pull request slots, so it takes the next free slot before them",
+      "matchPackageNames": ["playwright", "@playwright/test"],
+      "groupName": "playwright monorepo",
+      "prPriority": 10
+    },
+    {
       "description": "GitHub Actions in one weekly PR",
       "matchManagers": ["github-actions"],
       "groupName": "github actions"
+    },
+    {
+      "description": "The runner image of a pinned job (runs-on: ubuntu-24.04) moves in a pull request of its own, so the job that installs a browser tests the new image before it is used. It is a major, so it waits for a tick like any other",
+      "matchDatasources": ["github-runners"],
+      "groupName": "runner images"
     },
     {
       "description": "typeorm 1.1.2 nests a yargs 18 tree that the lock file Nx prunes for each Luna bundle cannot hold: npm ci in catalog, core and harvester images refuses it (Missing: string-width@7.2.0). PR checks build no image, so the update merged green and broke the staging deploy. Lift this once a bundle built with the newer version passes npm ci in its image",

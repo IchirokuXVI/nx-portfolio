@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   DOCUMENT,
   effect,
   inject,
@@ -22,30 +23,43 @@ import {
   BasketStore,
   BasketViewStore,
   GatewayError,
+  ItemNames,
   LINE_SERVICE,
   SessionStore,
   toBasketMergeRequired,
   type LineServiceI,
 } from '@portfolio/velista/data-access';
 import {
+  amountOfOne,
   APP_BASE_PATH,
   basketRowProduct,
   catalogName,
+  isMeasured,
   LINE_CONTENT_MAX_LENGTH,
+  lineAmount,
+  lineAmountProductOf,
+  lineStepOf,
+  priceWordsText,
   shownOffer,
+  soldAs,
   toSettlementRow,
   type BasketParticipant,
   type BasketProduct,
   type BasketProductList,
   type BasketRow as BasketRowModel,
   type BasketRowResult,
+  type LineUnit,
+  type QuantityStep,
   type SettlementOutcome,
   type SettlementRowVm,
 } from '@portfolio/velista/models';
 import {
+  formatAmount,
   formatMoney,
+  quantityRuns,
   rowKeyOf,
   SheetNavigation,
+  type QuantityRun,
 } from '@portfolio/velista/platform';
 import { CheckIcon, SheetShell, SpinnerIcon } from '@portfolio/velista/ui';
 import {
@@ -59,6 +73,7 @@ import {
   participantName,
   touchedCaption,
 } from '../basket-labels';
+import { basketLineStep } from '../basket-line-step';
 import { basketPath, settleSheetPath, shopAskPath } from '../basket-paths';
 import {
   changeableLineIds,
@@ -114,12 +129,21 @@ interface FrozenFailure {
  * One line of the basket: its product, what each household asked for and got, and
  * the ways to close it without buying (plan 0044, section 4.2).
  *
- * ## No "Got all" and no "Got some"
+ * ## No "Got some"
  *
- * The sheet had both, and they are gone. Buying the whole row is the row's own
- * control on the basket page, and buying part of it is the "got" reel below. Both
- * reels commit on release and **leave the sheet open**, because somebody moving
- * a number wants to see where it landed.
+ * Buying the whole row is the row's own control on the basket page, or "Got all"
+ * here. Buying part of a row has no control for now (velista `0190`, the owner's
+ * answer to its question 1): a household lowers what its list asks for instead.
+ *
+ * ## Each list's amount is saved after the presses stop (velista `0190`)
+ *
+ * Every list that holds the row draws the typed stepper of velista `0188`, which
+ * emits every step and saves nothing. This sheet is the logic layer for those
+ * amounts: {@link demandRuns} and {@link raiseRuns} gather the steps of one line
+ * or one list into a run and send it `QUANTITY_STEP_QUIET_MS` after the last
+ * press, and a typed amount at once. One write per line is out at a time, and a
+ * settle button sends the waiting runs before it settles (decision J). The sheet
+ * stays open, because somebody moving a number wants to see where it landed.
  *
  * ## What every list asked for and got, under the product (velista `0073`)
  *
@@ -214,7 +238,7 @@ export class SettleSheet {
    *
    * A row's key is its **anchor's** line id, and the anchor moves: somebody adds an
    * earlier line of the same name on another list, a rename merges two rows, the
-   * anchor is bought to zero and deleted. The sheet holds the key from its URL and
+   * anchor is deleted by hand. The sheet holds the key from its URL and
    * asks the store on every change, which is the third answer `rowFor` exists for.
    */
   private readonly _rowKeyParam = rowKeyOf(this._route);
@@ -236,6 +260,8 @@ export class SettleSheet {
   private readonly _held = inject(HeldBuy);
 
   private readonly _injector = inject(Injector);
+  /** The product records the basket read did not name (velista `0186`). */
+  private readonly _itemNames = inject(ItemNames);
   private readonly _pane = signal<Pane>('settle');
   private readonly _settling = signal(false);
   /**
@@ -266,6 +292,65 @@ export class SettleSheet {
    * settle controls are disabled and the sheet cannot be dismissed.
    */
   protected readonly busy = computed(() => this._settling() || this.saving());
+
+  /**
+   * The waiting saves of each list's ask, by line id (velista `0190`, section 4).
+   * The stepper of a line stays live while its save is out.
+   */
+  protected readonly demandRuns = quantityRuns<string>((lineId, run) => {
+    void this._write(`line:${lineId}`, run.to, (waited) =>
+      this.demand(lineId, waited ? this._fromNow(lineId, run) : run)
+    );
+  });
+
+  /** The waiting saves of the lists that do not ask yet, by list id (decision H). */
+  protected readonly raiseRuns = quantityRuns<string>((listId, run) => {
+    void this._write(`list:${listId}`, run.to, () => this.raise(listId, run));
+  });
+
+  /**
+   * The write in flight for each line or list, so a run sent while one is out
+   * waits for it. Each answers whether it landed.
+   */
+  private readonly _writes = new Map<string, Promise<boolean>>();
+  private readonly _writesOut = signal(0);
+
+  /**
+   * The amount the last write of each line or list sent, by write key, until
+   * the answer of the last one is back.
+   *
+   * `quantityRuns` drops a run from `pending` the moment it sends it, and
+   * `setDemand` and `addLine` change the row only once the server answers. A
+   * stepper drawn from `pending ?? stored` would show the old amount for the
+   * whole round trip, and a second run would step from that number and
+   * overwrite the first. So the stepper draws `pending ?? sent ?? stored`.
+   */
+  private readonly _sent = signal<ReadonlyMap<string, number>>(new Map());
+
+  /** What each list's stepper draws, by line id: its run, else its write in flight. */
+  protected readonly shownAsks = computed(() =>
+    this._shownOf('line:', this.demandRuns.pending())
+  );
+
+  /** What each list that does not ask yet draws, by list id. */
+  protected readonly shownRaises = computed(() =>
+    this._shownOf('list:', this.raiseRuns.pending())
+  );
+
+  /**
+   * Whether this sheet was destroyed, by `close()` or by a route change such as
+   * the browser's or Android's back. A write that answers after it must not
+   * navigate again.
+   */
+  private _destroyed = false;
+
+  /** Whether a step waits for its save, or a save of an amount is out. */
+  protected readonly amountSaving = computed(
+    () =>
+      this.demandRuns.pending().size > 0 ||
+      this.raiseRuns.pending().size > 0 ||
+      this._writesOut() > 0
+  );
   protected readonly result = this._result.asReadonly();
 
   /**
@@ -331,6 +416,10 @@ export class SettleSheet {
   private _left = false;
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => {
+      this._destroyed = true;
+    });
+
     // A sheet whose row was **re-keyed** follows it, in place (velista `0090`,
     // section 7.3).
     //
@@ -476,6 +565,43 @@ export class SettleSheet {
   });
 
   /**
+   * The step each list's stepper presses by, by line id: its line's step over
+   * every product the line holds (velista `0186`, decision A, which the owner
+   * ruled on 2026-11-12 wins over decision C), so a line steps here as it steps
+   * on its list. Null for the unit's default. The records the basket read did
+   * not name come from `ItemNames`, which the basket page underneath fills.
+   */
+  protected readonly lineSteps = computed<ReadonlyMap<string, number | null>>(
+    () => {
+      const row = this.row();
+      const products = this._store.products();
+      const steps = new Map<string, number | null>();
+      for (const entry of row?.entries ?? []) {
+        steps.set(
+          entry.lineId,
+          basketLineStep(entry, products, (itemId) =>
+            this._itemNames.nameOf(itemId)
+          )
+        );
+      }
+      return steps;
+    }
+  );
+
+  /**
+   * The step of a list that does not ask yet: the row's own product's, since the
+   * line that list gains holds that product (velista `0186`). Null for the
+   * unit's default.
+   */
+  protected readonly step = computed(() => {
+    const row = this.row();
+    const product = this._product();
+    return row === null || product === null
+      ? null
+      : lineStepOf({ unit: row.unit, itemIds: [product.id] }, () => product);
+  });
+
+  /**
    * Under the title: the price of one, and how many are left to get (velista
    * `0139`, section 3). "0.92 € each · 6 to get". The price is the one the row
    * underneath draws, at the chosen shop when the rows are read there, and none
@@ -489,20 +615,72 @@ export class SettleSheet {
       return null;
     }
     const locale = this._locale();
-    const offer = shownOffer(this._product(), this._view.readAtShop());
+    const price = this._onePrice();
+    // A weight or a volume is quoted per kilo or litre and counted in its words:
+    // "1,99 € / kg · 750 g to get" (velista `0182`, section 3).
+    const measured = isMeasured(row.unit);
     const parts = [
-      offer === null
+      price === null
         ? null
-        : this._translator.t('basket.sheet.each', undefined, locale, {
-            price: formatMoney(offer.price, offer.currency, locale),
-          }),
+        : measured
+          ? price
+          : this._translator.t('basket.sheet.each', undefined, locale, {
+              price,
+            }),
       this.finished()
         ? null
-        : this._translator.t('basket.sheet.toGet', undefined, locale, {
-            count: row.left,
-          }),
+        : measured
+          ? this._translator.t('basket.sheet.toGetAmount', undefined, locale, {
+              amount: formatAmount(row.left, row.unit, locale),
+            })
+          : this._translator.t('basket.sheet.toGet', undefined, locale, {
+              count: row.left,
+            }),
     ].filter((part): part is string => part !== null);
     return parts.length === 0 ? null : parts.join(' · ');
+  });
+
+  /**
+   * What the amount still to get comes to, for a weight or a volume: "≈ 1,49 €"
+   * for 750 g at 1,99 € a kilo (velista `0182`, section 3). Null for a count,
+   * whose price of one already says it, and for a row with nothing left or no
+   * price. Read off the row's `left`, so it moves when a saved amount lands.
+   */
+  protected readonly amountToGet = computed<string | null>(() => {
+    const row = this.row();
+    const product = this._product();
+    if (
+      row === null ||
+      product === null ||
+      !isMeasured(row.unit) ||
+      row.left === 0 ||
+      this.finished()
+    ) {
+      return null;
+    }
+    const offer = shownOffer(product, this._view.readAtShop());
+    if (offer === null) {
+      return null;
+    }
+    const amount = lineAmount(
+      row.left,
+      row.unit,
+      lineAmountProductOf(product),
+      {
+        price: offer.price,
+        piecePrice: offer.piecePrice,
+      }
+    );
+    if (amount === null) {
+      return null;
+    }
+    const locale = this._locale();
+    const money = formatMoney(amount.cents / 100, offer.currency, locale);
+    return amount.estimated
+      ? this._translator.t('basket.sheet.about', undefined, locale, {
+          price: money,
+        })
+      : money;
   });
 
   /**
@@ -519,7 +697,6 @@ export class SettleSheet {
       return null;
     }
     const locale = this._locale();
-    const offer = shownOffer(this._product(), this._view.readAtShop());
     const chosen = this._view.readAtShop() ? this._view.chosenShop() : null;
     const where =
       chosen === null
@@ -527,20 +704,63 @@ export class SettleSheet {
         : chosen.shop === null
           ? chosen.chain
           : `${chosen.chain}, ${chosen.shop}`;
-    const price =
-      offer === null ? null : formatMoney(offer.price, offer.currency, locale);
+    const price = this._onePrice();
     const key =
       price === null
         ? 'basket.sheet.got'
         : where === null
           ? 'basket.sheet.gotAt'
           : 'basket.sheet.gotAtShop';
-    return this._translator.t(key, undefined, locale, {
-      count: row.bought,
-      price: price ?? '',
-      shop: where ?? '',
-    });
+    // A weight says what was got in its words: "Got 250 g today" (velista `0182`).
+    const measured = isMeasured(row.unit);
+    return this._translator.t(
+      measured ? `${key}Amount` : key,
+      undefined,
+      locale,
+      measured
+        ? {
+            amount: formatAmount(row.bought, row.unit, locale),
+            price: price ?? '',
+            shop: where ?? '',
+          }
+        : { count: row.bought, price: price ?? '', shop: where ?? '' }
+    );
   });
+
+  /**
+   * What one unit costs as the row draws it, formatted, or null for none: the
+   * piece price of a kilo piece and the price of every other product (velista
+   * `0179`), so a kilo piece with no piece price says no price.
+   */
+  private _onePrice(): string | null {
+    const product = this._product();
+    const offer = shownOffer(product, this._view.readAtShop());
+    if (product === null || offer === null) {
+      return null;
+    }
+    const amount = amountOfOne(
+      offer,
+      soldAs(product.unit, product.size, product.approxWeight)
+    );
+    if (amount === null) {
+      return null;
+    }
+    const locale = this._locale();
+    const money = formatMoney(amount, offer.currency, locale);
+    const unit = this.row()?.unit ?? 'UNIT';
+    // A weight's price of one is a kilo, a volume's a litre (backend `0246` M7), and
+    // it says so: "1,99 € / kg".
+    return isMeasured(unit)
+      ? priceWordsText({
+          amount: money,
+          per: this._translator.t(
+            unit === 'GRAM' ? 'catalog.per.KILOGRAM' : 'catalog.per.LITER',
+            undefined,
+            locale
+          ),
+        })
+      : money;
+  }
 
   /**
    * The primary button: "Got all 6", or "Got the other 4" once some of it is
@@ -548,14 +768,18 @@ export class SettleSheet {
    */
   protected readonly gotAllLabel = computed(() => {
     const row = this.row();
-    return this._translator.t(
+    const key =
       row !== null && row.bought > 0
         ? 'basket.sheet.gotOther'
-        : 'basket.sheet.gotAll',
-      undefined,
-      this._locale(),
-      { count: row?.left ?? 0 }
-    );
+        : 'basket.sheet.gotAll';
+    // "Got all 750 g" for a weight (velista `0182`).
+    return row !== null && isMeasured(row.unit)
+      ? this._translator.t(`${key}Amount`, undefined, this._locale(), {
+          amount: formatAmount(row.left, row.unit, this._locale()),
+        })
+      : this._translator.t(key, undefined, this._locale(), {
+          count: row?.left ?? 0,
+        });
   });
 
   /**
@@ -694,18 +918,32 @@ export class SettleSheet {
    * not hold it gets a line named by the product, with that one product. Either
    * way the list then joins the lists that ask, and it leaves this read.
    */
-  protected async raise(change: {
-    readonly list: BasketProductList;
-    readonly to: number;
-  }): Promise<void> {
+  protected async raise(listId: string, run: QuantityRun): Promise<boolean> {
     const product = this._product();
     const row = this.row();
-    if (product === null || row === null || this.busy()) {
-      return;
+    // A run that ends at 0 sends nothing: the list still does not ask.
+    if (product === null || row === null || run.to === 0) {
+      return true;
     }
-    const { list, to } = change;
+    const read = this._others();
+    const list =
+      read !== null && read.state.state === 'ready'
+        ? read.state.lists.find((held) => held.listId === listId)
+        : undefined;
+    if (list === undefined) {
+      // An earlier raise of this list landed, so the list now asks through a
+      // line of the row, and this run moves it. Whether this run waited for that
+      // write or was sent after it does not matter.
+      const entry = row.entries.find((held) => held.listId === listId);
+      if (entry === undefined) {
+        // Nothing to send it to: said, not dropped in silence.
+        this._failedOp.set('basket.demand');
+        return false;
+      }
+      return this.demand(entry.lineId, { from: entry.left, to: run.to });
+    }
+    const to = run.to;
 
-    this._settling.set(true);
     this._failedOp.set(null);
     const result =
       list.lineId === null
@@ -713,6 +951,8 @@ export class SettleSheet {
             targetListId: list.listId,
             content: catalogName(product.name, this._locale()),
             quantity: to,
+            // The row's unit, which the amount was chosen in (velista `0182`).
+            unit: row.unit,
             itemIds: [product.id],
             // Made from the product, so not named (velista `0144`).
             named: false,
@@ -721,26 +961,132 @@ export class SettleSheet {
             lineId: list.lineId,
             quantity: to,
             from: list.quantity ?? 0,
+            unit: row.unit,
           });
-    this._settling.set(false);
 
     if (result === null) {
       this._failedOp.set(
         list.lineId === null ? 'basket.addLine' : 'basket.demand'
       );
-      return;
+      return false;
     }
 
-    const read = this._others();
-    if (read !== null && read.state.state === 'ready') {
+    const now = this._others();
+    if (now !== null && now.state.state === 'ready') {
       this._others.set({
-        itemId: read.itemId,
+        itemId: now.itemId,
         state: {
           state: 'ready',
-          lists: read.state.lists.filter((held) => held.listId !== list.listId),
+          lists: now.state.lists.filter((held) => held.listId !== listId),
         },
       });
     }
+    return true;
+  }
+
+  /** One step of one list's ask (velista `0190`, section 4). */
+  protected stepDemand(change: {
+    readonly lineId: string;
+    readonly step: QuantityStep;
+  }): void {
+    this.demandRuns.step(change.lineId, change.step);
+    if (change.step.typed === true) {
+      this.demandRuns.flush(change.lineId);
+    }
+  }
+
+  /** One step of a list that does not ask yet (decision H). */
+  protected stepRaise(change: {
+    readonly list: BasketProductList;
+    readonly step: QuantityStep;
+  }): void {
+    this.raiseRuns.step(change.list.listId, change.step);
+    if (change.step.typed === true) {
+      this.raiseRuns.flush(change.list.listId);
+    }
+  }
+
+  /** A run that waited for a write of its line starts from the line's answer. */
+  private _fromNow(lineId: string, run: QuantityRun): QuantityRun {
+    const entry = this.row()?.entries.find((held) => held.lineId === lineId);
+    return { from: entry?.left ?? run.from, to: run.to };
+  }
+
+  /**
+   * One write per line or list at a time (section 4): a write queued while one
+   * of the same key is out runs after it, and is told that it waited.
+   */
+  private _write(
+    key: string,
+    to: number,
+    send: (waited: boolean) => Promise<boolean>
+  ): Promise<boolean> {
+    const before = this._writes.get(key);
+    const next = (before ?? Promise.resolve(true)).then(
+      () => send(before !== undefined),
+      () => send(true)
+    );
+    this._writes.set(key, next);
+    this._sent.update((sent) => new Map(sent).set(key, to));
+    this._writesOut.update((count) => count + 1);
+    void next.finally(() => {
+      this._writesOut.update((count) => count - 1);
+      if (this._writes.get(key) === next) {
+        this._writes.delete(key);
+        // The answer is in the store now, landed or refused and read again.
+        this._sent.update((sent) => {
+          const left = new Map(sent);
+          left.delete(key);
+          return left;
+        });
+      }
+    });
+    return next;
+  }
+
+  /** The runs of one kind over the writes in flight of the same kind. */
+  private _shownOf(
+    prefix: 'line:' | 'list:',
+    pending: ReadonlyMap<string, number>
+  ): ReadonlyMap<string, number> {
+    const shown = new Map<string, number>();
+    for (const [key, to] of this._sent()) {
+      if (key.startsWith(prefix)) {
+        shown.set(key.slice(prefix.length), to);
+      }
+    }
+    for (const [id, to] of pending) {
+      shown.set(id, to);
+    }
+    return shown;
+  }
+
+  /**
+   * Send every waiting run now, and answer once every write is back whether all
+   * of them landed.
+   */
+  private _flushAll(): Promise<boolean> {
+    for (const lineId of [...this.demandRuns.pending().keys()]) {
+      this.demandRuns.flush(lineId);
+    }
+    for (const listId of [...this.raiseRuns.pending().keys()]) {
+      this.raiseRuns.flush(listId);
+    }
+    return Promise.all([...this._writes.values()]).then((landed) =>
+      landed.every(Boolean)
+    );
+  }
+
+  /**
+   * Before a settle, the amounts the sheet shows are saved (decision J): "Got all
+   * (1.25 kg)" buys what the steppers now say. Answers false when a save was
+   * refused, whose sentence is then drawn, or when the row left the basket.
+   */
+  private async _sendSteps(): Promise<boolean> {
+    this._settling.set(true);
+    const landed = await this._flushAll();
+    this._settling.set(false);
+    return landed && !this._left;
   }
 
   /**
@@ -749,6 +1095,9 @@ export class SettleSheet {
    * section 4), so the two gestures cannot record different things.
    */
   protected async settleAll(): Promise<void> {
+    if (this.amountSaving() && !(await this._sendSteps())) {
+      return;
+    }
     const left = this.outstanding();
     const got = this._got();
     await this._buy(() => ({
@@ -1123,6 +1472,9 @@ export class SettleSheet {
    * which every participant already may.
    */
   protected async skip(): Promise<void> {
+    if (this.amountSaving() && !(await this._sendSteps())) {
+      return;
+    }
     await this._run(() => this._store.skip(this._rowKey));
   }
 
@@ -1166,6 +1518,9 @@ export class SettleSheet {
    * bought. It carries `from` like every other write on a row.
    */
   protected async settleNone(): Promise<void> {
+    if (this.amountSaving() && !(await this._sendSteps())) {
+      return;
+    }
     // **No `itemId`**, and that is not an omission: a close buys nothing, so
     // there is no product to record against it. Naming one would put a product
     // in a purchase history that has no purchase in it.
@@ -1191,11 +1546,14 @@ export class SettleSheet {
    * household's list for everybody. So it has its own failures, its own sentence
    * and its own ending.
    *
+   * It is the send of {@link demandRuns}: one run of steps, after the presses
+   * stopped. It does not mark the sheet busy, so the line's stepper stays live
+   * while its save is out (velista `0190`, section 4).
+   *
    * Three endings:
    *
-   * - the row came back, and the sheet **stays open** on it, as it does for the
-   *   "got" reel beside it: the reel commits on release with no confirmation,
-   *   and the person moving it wants to see where it landed;
+   * - the row came back, and the sheet **stays open** on it: the person who
+   *   stepped the amount wants to see where it landed;
    * - the row is **gone**, which is a demand taken to zero on a row nothing was
    *   bought of. The list now asks for nothing, which is what was asked for, so
    *   the page is handed a sentence and the sheet closes over a row that is no
@@ -1203,22 +1561,20 @@ export class SettleSheet {
    * - it was refused, and the store has already read the basket again. The
    *   sentence is then about the row as it now stands.
    */
-  protected async demand(change: {
-    lineId: string;
-    from: number;
-    to: number;
-  }): Promise<void> {
+  protected async demand(lineId: string, run: QuantityRun): Promise<boolean> {
+    if (run.to === run.from) {
+      return true;
+    }
+    const change = { lineId, from: run.from, to: run.to };
     // The name the sheet is titled with, taken before the row can leave.
     const name = this.title();
 
-    this._settling.set(true);
     this._failedOp.set(null);
     const result = await this._store.setDemand({
       lineId: change.lineId,
       quantity: change.to,
       from: change.from,
     });
-    this._settling.set(false);
 
     if (result === null) {
       // `stale_quantity` and `forbidden` each get their own sentence, keyed on
@@ -1237,7 +1593,7 @@ export class SettleSheet {
         count: line?.asked ?? row?.asked ?? change.to,
         correlationId: correlationIdOf(error),
       });
-      return;
+      return false;
     }
 
     if (
@@ -1257,8 +1613,14 @@ export class SettleSheet {
           }
         )
       );
-      this.close();
+      // Not on a sheet already gone: a route change (back) destroys it without
+      // `close()`, its waiting run is sent on destroy, and a second dismissal
+      // would navigate past the basket or pull the person back.
+      if (!this._left && !this._destroyed) {
+        this.close();
+      }
     }
+    return true;
   }
 
   protected openPane(pane: Pane): void {
@@ -1286,6 +1648,10 @@ export class SettleSheet {
    * person was looking at before, and never reopens a spent sheet.
    */
   protected close(): void {
+    // Nothing a person stepped is dropped (velista `0190`, section 4): the waiting
+    // runs are sent and not awaited. A refusal after the sheet closed shows on the
+    // row through the store's re-read.
+    void this._flushAll();
     // Marked before the navigation and not after, so the effect above cannot
     // dismiss a second time for a line that went away as this sheet was leaving.
     this._left = true;
@@ -1442,6 +1808,7 @@ export class SettleSheet {
     id: string;
     outcome: SettlementOutcome;
     quantity: number;
+    unit?: LineUnit;
     settledByUserId: string | null;
     settledAt: Date;
   }): SettlementRowVm {
@@ -1449,7 +1816,8 @@ export class SettleSheet {
     const byUserId = this._byUserId();
 
     const row = toSettlementRow(
-      settlement,
+      // In the row's unit when the settlement does not name one (velista `0182`).
+      { ...settlement, unit: settlement.unit ?? this.row()?.unit ?? 'UNIT' },
       {
         nameOf: (userId) => {
           const person = byUserId.get(userId);
@@ -1459,6 +1827,7 @@ export class SettleSheet {
         },
         callerUserId: this._store.me()?.userId ?? null,
         locale,
+        formatAmount: (quantity, unit) => formatAmount(quantity, unit, locale),
       },
       null
     );
@@ -1535,8 +1904,7 @@ export class SettleSheet {
    * them do the same three things: mark the sheet busy, fold or report, and get out
    * of the way when there is nothing to say.
    *
-   * `stayOpen` is the entries pane's reels, which keep the sheet up after a write
-   * that landed. The buttons close it.
+   * `stayOpen` keeps the sheet up after a write that landed. The buttons close it.
    */
   private async _run(
     send: () => Promise<BasketRowResult | null>,

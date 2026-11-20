@@ -17,6 +17,16 @@ export * from './lib/units/source-size';
 // What a verbatim unit price label means (plan 0157), read by catalog and by
 // the harvester (plan 0189). Browser reachable too.
 export * from './lib/units/unit-basis';
+// The catalog's own comparison figure and its basis (plan 0245), derived from
+// the till price and the item's size. Browser reachable too.
+export * from './lib/units/comparable-price';
+// What a line's quantity counts, the amount of a line and the price of one
+// (plan 0246). Browser reachable too: velista mirrors both functions.
+export * from './lib/units/line-amount';
+export * from './lib/units/line-unit';
+// The step a curator gives a product sold by the kilo (plan 0261). Browser
+// reachable too: velista steps a line by it.
+export * from './lib/units/quantity-step';
 
 // The one barcode reader, shared by catalog, the harvester and the gateway
 // (plan 0184). Browser reachable, as the brand key is.
@@ -75,3 +85,18 @@ export * from './lib/events/realtime.events';
 // contract. Every NATS message and event payload has a schema here, validated in
 // tests, so a future .NET/Spring service can hold the same contract.
 export * from './schemas';
+
+// The harvester's alerts to the owner (plan 0218): the kind and status of an
+// alert row, and the one test subject.
+export * from './lib/enums/harvest-alert.enums';
+export * from './lib/messages/harvest-alert.messages';
+// A probe per chain checks the storefront shape (plan 0219): the status, the
+// views, the subjects, and the step helpers every adapter library's `probe`
+// shares. Framework free and browser reachable.
+export * from './lib/enums/source-probe.enums';
+export * from './lib/messages/source-probe.messages';
+export * from './lib/probes/source-probe-steps';
+// A shopper refreshes the price of one product (plan 0216): the status and
+// the refusal of a refresh, its views and its three subjects.
+export * from './lib/enums/price-refresh.enums';
+export * from './lib/messages/price-refresh.messages';

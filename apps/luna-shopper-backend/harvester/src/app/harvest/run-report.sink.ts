@@ -1,15 +1,20 @@
 import { Logger } from '@nestjs/common';
 import {
+  APPROX_WEIGHT_FILL_MAX,
   HarvestRunWrites,
+  HarvestWarningCode,
   PACK_COUNT_FILL_MAX,
   PriceSourceKind,
   SourceEntryStatus,
+  type ApproxWeightFill,
   type PackCountFill,
   type SupermarketItemAvailabilityEntry,
 } from '@portfolio/luna-shopper/contracts';
+import { describeError } from '@portfolio/luna-shopper/platform';
 import type { Repository } from 'typeorm';
 import type { SourceCatalogEntry } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
+import { distinctCategoryPaths } from './category-paths';
 import type { NotWholeListing } from './delisting';
 import type {
   BlockedPlace,
@@ -19,19 +24,23 @@ import type { RunScopeResolver } from './price-scope-resolver';
 import type { RunContext } from './run-context';
 import type {
   AvailabilityClaim,
+  CategoryPathsMode,
   ObservedPlace,
   RunReport,
   ScopeDeclaration,
 } from './run-report';
+import type { SizeDoubtExample } from './size-doubt';
 import type {
   SourceEntryAvailabilityWriter,
   StoredClaim,
 } from './source-entry-availability';
 import type {
+  CategoryPathsWrite,
   PriceConflict,
   ReportedObservation,
   SourceEntryOutcome,
   SourceIngest,
+  SourceIngestResult,
   SourceIngestSession,
 } from './source-ingest';
 import type { SourceLocationService } from './source-location.service';
@@ -48,16 +57,67 @@ import type { SourceLocationService } from './source-location.service';
  *
  * Every `RunReport` method here is synchronous and returns nothing (D1). The
  * work they name is appended to one serial promise chain, so declarations,
- * chunks and places are written in the order the runner produced them and a
- * failure in any of them surfaces at {@link drain}. A runner cannot await the
- * chain and cannot see what it decided.
+ * chunks and places are written in the order the runner produced them. A
+ * runner cannot await the chain and cannot see what it decided.
+ *
+ * **The first failure on the chain stops the run** (plan 0269, section 1).
+ * The chain keeps it, runs no later work, and calls `onWriteFailed` once,
+ * which aborts the run through the signal every runner already reads. The
+ * chain itself never rejects: a walk goes on with network I/O after a chunk
+ * is queued, and a rejection nobody handles in that time exits the process,
+ * with every run in it. {@link drain} then rejects with the failure it kept.
  */
+
+/**
+ * The reason a run was aborted when a write of what it read failed (plan
+ * 0269, section 1). The first failure is its `cause`.
+ */
+export class ReportWriteFailedError extends Error {
+  constructor(readonly cause: unknown) {
+    super(
+      `A write of what the run read failed: ${describeError(cause).message}`
+    );
+    this.name = 'ReportWriteFailedError';
+  }
+}
+
+/**
+ * The kind of queued work that failed (plan 0269, D11): a chunk of products,
+ * a chunk of places, or the declaration of a price scope. The stop sentence
+ * of the run names it.
+ *
+ * `placesCounted` is a chunk of places that was written and counted, whose
+ * progress write after it failed (D11, 2026-11-17). Its places are in the
+ * report, so its sentence must not say they are not.
+ */
+export type FailedWriteKind = 'products' | 'places' | 'placesCounted' | 'scope';
+
+/**
+ * A failure after a queued work's own writes landed and were counted, which
+ * the chain keeps under `kind` rather than the kind the work was queued as.
+ */
+class FailedAfterWrite extends Error {
+  constructor(
+    readonly kind: FailedWriteKind,
+    readonly cause: unknown
+  ) {
+    super(describeError(cause).message);
+    this.name = 'FailedAfterWrite';
+  }
+}
 
 /** How many products go into one ingest push. */
 const PRODUCT_CHUNK = 400;
 
 /** How many places are written in one pass. */
 const PLACE_CHUNK = 100;
+
+/** One bound row and the weight of one piece it states (plan 0244). */
+interface WeighedRow {
+  entryId: string;
+  externalId: string;
+  approxWeight: number;
+}
 
 /** How many availability rows go to catalog in one call. */
 const AVAILABILITY_BATCH = 200;
@@ -67,6 +127,24 @@ const AVAILABILITY_BATCH = 200;
  * them is always the whole number, so a report that names fewer says so.
  */
 const PRICE_CONFLICTS_NAMED = 200;
+
+/**
+ * The outcomes of a run with each item as the decisions read again at the
+ * drain state it (plan 0269, D8), by the rule the availability follows (D5).
+ * An outcome that named an item names the item its row is `ACTIVE` on now,
+ * and none when the row is no longer `ACTIVE`. An outcome that named none
+ * stays as it was.
+ */
+function currentOutcomes(
+  outcomes: readonly SourceEntryOutcome[],
+  decided: ReadonlyMap<string, string>
+): SourceEntryOutcome[] {
+  return outcomes.map((outcome) =>
+    outcome.itemId
+      ? { ...outcome, itemId: decided.get(outcome.entry.id) ?? null }
+      : outcome
+  );
+}
 
 export interface RunReportSinkInput {
   /** The chain this run writes for, and null for a run that names none. */
@@ -156,6 +234,35 @@ export interface RunReportResult {
    * of them: {@link pricesConflicted} is the whole number.
    */
   priceConflicts: PriceConflict[];
+  /**
+   * Rows this run proposed by the words of their name in any order (plan
+   * 0221), new and waiting rows together. Each waits for a person as a
+   * `CANDIDATE` with `NAME_WORDS_SIZE`.
+   */
+  wordOrderProposals: number;
+  /**
+   * Rows this run queued pointing at the one rejected row their words meet
+   * (plan 0221, the owner's answer of 2026-11-05). Not part of
+   * {@link wordOrderProposals}.
+   */
+  wordOrderRejectedPointers: number;
+  /**
+   * Observations whose stated size their own price and comparison price
+   * disprove (plan 0249). Each row keeps its size and carries a doubt; a
+   * product is created from it only with a size a person names.
+   */
+  sizesDisproved: number;
+  /**
+   * The first twenty of them, each with its name, the stated and the implied
+   * size and the label. {@link sizesDisproved} is the whole number.
+   */
+  sizesDisprovedExamples: SizeDoubtExample[];
+  /**
+   * Of {@link sizesDisproved}, the rows whose ratio is within 2% of a whole
+   * number from 2 to 48 and that state no pack count: a probable pack
+   * stated at the size of one of its units.
+   */
+  probablePackCounts: number;
   /**
    * Photo links this run sent for its bound rows (plan 0198): rows that had
    * no link or state a new address. Saved whatever the chain's switch says.
@@ -254,14 +361,40 @@ export interface RunReportResult {
    * {@link shopsUnmapped}.
    */
   packCountConflicts: { itemId: string; packCounts: number[] }[];
+  /**
+   * Products whose weight of one piece this run wrote (plan 0244, section
+   * 5.7). A product that already held the same weight is not counted.
+   */
+  approxWeightsWritten: number;
+  /** Products skipped because a person wrote their weight. */
+  approxWeightsSkippedSetByAdmin: number;
+  /** Products skipped because they are still a sized pack. */
+  approxWeightsSkippedHasSize: number;
+  /**
+   * Products skipped because a person gave them a step (plan 0261, S6): a
+   * weight would make them a kilo piece, which carries no step. The curator
+   * decides whether the product is a kilo piece after all.
+   */
+  approxWeightsSkippedHasStep: number;
+  /**
+   * Rows whose category paths this run changed (plan 0268, section 2). A row
+   * whose paths were already what the run stated is not counted.
+   */
+  categoryPathsWritten: number;
 }
 
 export class RunReportSink implements RunReport {
   private readonly logger = new Logger(RunReportSink.name);
 
-  /** Everything queued, in order. A failure anywhere surfaces at `drain`. */
+  /** Everything queued, in order. It never rejects: see {@link queue}. */
   private chain: Promise<void> = Promise.resolve();
+  /** The first failure on the chain, kept for `drain` (plan 0269). */
+  private firstFailure: { error: unknown; kind: FailedWriteKind } | null = null;
   private session: SourceIngestSession | null = null;
+  /** Whether the totals of a run that closes no session were taken. */
+  private totalsTaken = false;
+  /** Whether {@link settle} answered, after which no work is queued. */
+  private settled = false;
 
   private products: ReportedObservation[] = [];
   private places: ObservedPlace[] = [];
@@ -296,6 +429,14 @@ export class RunReportSink implements RunReport {
   private readonly entryIdByExternalId = new Map<string, string>();
   /** The item each `ACTIVE` row resolved to, which is what a scope claim uses. */
   private readonly activeItemByExternalId = new Map<string, string>();
+  /**
+   * The category paths the runner stated, by external id, written by the
+   * drain after the last chunk (plan 0268, section 2).
+   */
+  private readonly categoryPathCalls = new Map<
+    string,
+    { paths: string[][]; mode: CategoryPathsMode }
+  >();
 
   private readonly result: RunReportResult = {
     products: 0,
@@ -304,6 +445,11 @@ export class RunReportSink implements RunReport {
     pricesConfirmed: 0,
     pricesConflicted: 0,
     priceConflicts: [],
+    wordOrderProposals: 0,
+    wordOrderRejectedPointers: 0,
+    sizesDisproved: 0,
+    sizesDisprovedExamples: [],
+    probablePackCounts: 0,
     imagesLinked: 0,
     imagesMoved: 0,
     imagesUnchanged: 0,
@@ -332,6 +478,11 @@ export class RunReportSink implements RunReport {
     availabilityCopied: {},
     packCountsFilled: 0,
     packCountConflicts: [],
+    approxWeightsWritten: 0,
+    approxWeightsSkippedSetByAdmin: 0,
+    approxWeightsSkippedHasSize: 0,
+    approxWeightsSkippedHasStep: 0,
+    categoryPathsWritten: 0,
   };
 
   constructor(
@@ -346,10 +497,37 @@ export class RunReportSink implements RunReport {
       entries: Repository<SourceCatalogEntry>;
       /** Where per shop claims are kept, and what sends them (plan 0182). */
       availability: SourceEntryAvailabilityWriter;
+      /**
+       * Told once, with the first failure, when a queued write fails (plan
+       * 0269, section 1). The executor aborts the run with it.
+       */
+      onWriteFailed?: (error: unknown) => void;
     }
   ) {}
 
+  /** The first write that failed, or null while none has. */
+  get failure(): unknown {
+    return this.firstFailure?.error ?? null;
+  }
+
+  /** What kind of work the first failed write was, or null while none has. */
+  get failedWork(): FailedWriteKind | null {
+    return this.firstFailure?.kind ?? null;
+  }
+
+  /**
+   * Whether a chunk of places also imports shops into the catalog, each with
+   * a price scope when it names none (plan 0107), so the stop sentence can
+   * name those rows too.
+   */
+  get importsPlaces(): boolean {
+    return this.input.autoImportPlaces === true;
+  }
+
   scope(declaration: ScopeDeclaration): void {
+    if (this.firstFailure) {
+      return;
+    }
     const resolver = this.deps.scopes;
     if (!resolver) {
       // A run with no chain has nowhere to put a scope. Nothing declares one
@@ -360,28 +538,38 @@ export class RunReportSink implements RunReport {
       );
       return;
     }
-    this.result.scopesDeclared += 1;
-    this.queue(async () => {
+    // Counted once its work has run (plan 0269, D11): a declaration that a
+    // failed chunk before it skipped was never made.
+    this.queue('scope', async () => {
       await resolver.declare(declaration);
+      this.result.scopesDeclared += 1;
     });
   }
 
   product(observation: ReportedObservation): void {
+    // After a failed write the runner is stopping, and nothing it says can
+    // be written.
+    if (this.firstFailure) {
+      return;
+    }
     this.products.push(observation);
     this.observedIds.add(observation.externalId);
     if (this.products.length >= PRODUCT_CHUNK) {
       const chunk = this.products;
       this.products = [];
-      this.queue(() => this.pushProducts(chunk));
+      this.queue('products', () => this.pushProducts(chunk));
     }
   }
 
   place(place: ObservedPlace): void {
+    if (this.firstFailure) {
+      return;
+    }
     this.places.push(place);
     if (this.places.length >= PLACE_CHUNK) {
       const chunk = this.places;
       this.places = [];
-      this.queue(() => this.writePlaces(chunk));
+      this.queue('places', () => this.writePlaces(chunk));
     }
   }
 
@@ -391,6 +579,31 @@ export class RunReportSink implements RunReport {
 
   assortmentComplete(scopeKey: string | null): void {
     this.complete.add(scopeKey);
+  }
+
+  /**
+   * Collected, and written by {@link drain} after the last chunk (plan 0268,
+   * section 2). A second call for one product adds its paths after the
+   * first's, and the product is replaced when either call said so.
+   */
+  categoryPaths(
+    externalId: string,
+    paths: readonly (readonly string[])[],
+    mode: CategoryPathsMode
+  ): void {
+    if (this.firstFailure) {
+      return;
+    }
+    const before = this.categoryPathCalls.get(externalId);
+    const merged = distinctCategoryPaths([...(before?.paths ?? []), ...paths]);
+    if (merged.length === 0) {
+      return;
+    }
+    this.categoryPathCalls.set(externalId, {
+      paths: merged,
+      mode:
+        before?.mode === 'REPLACE' || mode === 'REPLACE' ? 'REPLACE' : 'ADD',
+    });
   }
 
   /**
@@ -453,51 +666,185 @@ export class RunReportSink implements RunReport {
     if (this.products.length > 0) {
       const chunk = this.products;
       this.products = [];
-      this.queue(() => this.pushProducts(chunk));
+      this.queue('products', () => this.pushProducts(chunk));
     }
     if (this.places.length > 0) {
       const chunk = this.places;
       this.places = [];
-      this.queue(() => this.writePlaces(chunk));
+      this.queue('places', () => this.writePlaces(chunk));
     }
     await this.chain;
+    // A failed chunk wrote nothing after it, and the drain writes nothing
+    // either: no close, no whole listing, no availability (plan 0269). What
+    // the chunks before it wrote is already saved, so the result still states
+    // it (D9), and the executor reads it through `writtenSoFar`.
+    if (this.firstFailure) {
+      this.takeTotals();
+      throw this.firstFailure.error;
+    }
 
+    const statesAvailability = this.input.writes !== HarvestRunWrites.PRICES;
     if (this.session) {
       // The ingest already counted every price this run wrote, and the close
       // used to be called for its side effect alone and the answer dropped on
       // the floor. That is why a walk's report named no price at all and the
       // screen fell back to `updated`, which is rows the ladder changed.
-      const { outcomes, counters, copies, priceConflicts, images } =
-        await this.session.close();
-      this.result.imagesLinked = images.linked;
-      this.result.imagesMoved = images.moved;
-      this.result.imagesUnchanged = images.unchanged;
-      this.result.imagesRejected = images.rejected;
-      this.result.imagesUnlinked = images.unlinked;
-      this.result.imageLinksFailed = images.failed;
-      this.result.pricesRecorded += counters.pricesRecorded;
-      this.result.pricesPublished += counters.pricesWritten;
-      this.result.pricesConfirmed += counters.pricesConfirmed;
-      this.result.pricesConflicted += counters.pricesConflicted;
-      this.result.priceConflicts = priceConflicts.slice(
-        0,
-        PRICE_CONFLICTS_NAMED
+      const ingested = await this.session.close();
+      this.takeIngested(ingested);
+      // The decisions as they are now, read once for the pack counts, the
+      // weights and the availability alike (plan 0269, D5 and D8): a row a
+      // person decided after its chunk sends nothing to the product it left.
+      const decided = await this.readDecisions(
+        ingested.outcomes,
+        statesAvailability
       );
-      this.result.pricedScopes = [...copies.pricedScopes];
-      this.result.pricesCopied = Object.fromEntries(copies.pricesCopied);
-      await this.fillPackCounts(outcomes);
+      const current = currentOutcomes(ingested.outcomes, decided);
+      await this.fillPackCounts(current);
+      await this.writeApproxWeights(current);
+      if (statesAvailability) {
+        this.applyDecisions(decided);
+      }
     }
     this.result.scopesCreated = this.deps.scopes?.createdCount ?? 0;
     this.resolveWholeListings();
 
     // A run that writes prices only states no stock, per shop or per scope, and
     // its copies state none either (plan 0119, section 7).
-    if (this.input.writes !== HarvestRunWrites.PRICES) {
+    if (statesAvailability) {
       await this.writeShopAvailability();
       await this.writeScopeAvailability();
       await this.writePricelessOffers();
     }
+    // Last of all (plan 0268, section 2): the paths are context and nothing
+    // else reads them, so a failed path write costs no pack count, weight or
+    // availability. It still fails the run (plan 0269), and the count holds
+    // the rows that landed before it.
+    if (this.session) {
+      await this.writeCategoryPaths(this.session);
+    }
     return this.result;
+  }
+
+  /**
+   * The category paths the runner stated, onto the rows this run wrote them
+   * to (plan 0268, section 2). After the last chunk, so every row the run
+   * created exists, and after every other write of the drain, so a failure
+   * here costs no pack count, weight or availability. A product the run did not report has no row of this run
+   * and is not touched, and neither is a row no call named.
+   *
+   * **An aborted run writes every call as `ADD`**, by the rule of
+   * {@link RunReport.assortmentComplete}: a walk that stopped early has not
+   * proved that a stored path is gone.
+   */
+  private async writeCategoryPaths(
+    session: SourceIngestSession
+  ): Promise<void> {
+    if (this.categoryPathCalls.size === 0) {
+      return;
+    }
+    const aborted = this.context.signal.aborted;
+    const writes: CategoryPathsWrite[] = [];
+    for (const [externalId, call] of this.categoryPathCalls) {
+      const entryId = this.entryIdByExternalId.get(externalId);
+      if (entryId === undefined) {
+        continue;
+      }
+      writes.push({
+        entryId,
+        paths: call.paths,
+        mode: aborted ? 'ADD' : call.mode,
+      });
+    }
+    if (writes.length === 0) {
+      return;
+    }
+    // Counted as each row lands, so a failure midway leaves the true count
+    // for the report of the failed run (plan 0269, D9).
+    await session.writeCategoryPaths(writes, () => {
+      this.result.categoryPathsWritten += 1;
+    });
+  }
+
+  /**
+   * What this run wrote so far, which is everything once {@link drain}
+   * answered (plan 0269, D9). A drain that failed leaves here what landed
+   * before the failure, and never more, for the report of the failed run.
+   */
+  get writtenSoFar(): RunReportResult {
+    return this.result;
+  }
+
+  /**
+   * Let the work already queued finish, for a run that failed before its
+   * drain (plan 0269, D11), and answer what it wrote.
+   *
+   * It awaits the chain and nothing else: it queues no partial chunk, closes
+   * no session, and writes no availability, pack count or weight, because the
+   * run failed. A chunk that fails while it settles is kept as any failure is,
+   * and the result counts the chunks before it. **It never rejects**, so the
+   * executor can always finish the run after it.
+   *
+   * It waits until the chain is quiet, not for one snapshot of it: another
+   * worker of the runner may queue a chunk while it waits, and that chunk is
+   * awaited too. Once quiet, the sink takes no more work, so nothing a late
+   * worker says lands after the run is finished (D11, 2026-11-17).
+   */
+  async settle(): Promise<RunReportResult> {
+    try {
+      let awaited: Promise<void>;
+      do {
+        awaited = this.chain;
+        await awaited;
+      } while (awaited !== this.chain);
+      this.settled = true;
+      this.takeTotals();
+    } catch (error) {
+      // The chain never rejects and the totals are a read of counters, so
+      // this is a guard, not a path.
+      this.logger.error(
+        `Run ${this.context.runId}: settling its writes failed: ` +
+          describeError(error).message
+      );
+    }
+    return this.result;
+  }
+
+  /**
+   * What the chunks written so far counted, into the result, once, for a run
+   * that closes no session (plan 0269, D9).
+   */
+  private takeTotals(): void {
+    if (this.totalsTaken) {
+      return;
+    }
+    this.totalsTaken = true;
+    if (this.session) {
+      this.takeIngested(this.session.totals());
+    }
+    this.result.scopesCreated = this.deps.scopes?.createdCount ?? 0;
+  }
+
+  /** What the ingest counted, into the result. */
+  private takeIngested(ingested: SourceIngestResult): void {
+    const { counters, copies, priceConflicts, images, sizeDoubts } = ingested;
+    this.result.imagesLinked = images.linked;
+    this.result.imagesMoved = images.moved;
+    this.result.imagesUnchanged = images.unchanged;
+    this.result.imagesRejected = images.rejected;
+    this.result.imagesUnlinked = images.unlinked;
+    this.result.imageLinksFailed = images.failed;
+    this.result.pricesRecorded += counters.pricesRecorded;
+    this.result.pricesPublished += counters.pricesWritten;
+    this.result.pricesConfirmed += counters.pricesConfirmed;
+    this.result.pricesConflicted += counters.pricesConflicted;
+    this.result.wordOrderProposals += counters.wordOrderProposals;
+    this.result.wordOrderRejectedPointers += counters.wordOrderRejectedPointers;
+    this.result.sizesDisproved += counters.sizesDisproved;
+    this.result.probablePackCounts += counters.probablePackCounts;
+    this.result.sizesDisprovedExamples = sizeDoubts;
+    this.result.priceConflicts = priceConflicts.slice(0, PRICE_CONFLICTS_NAMED);
+    this.result.pricedScopes = [...copies.pricedScopes];
+    this.result.pricesCopied = Object.fromEntries(copies.pricesCopied);
   }
 
   /**
@@ -548,6 +895,87 @@ export class RunReportSink implements RunReport {
   }
 
   /**
+   * The weight of one piece this run read, onto the products its rows are
+   * bound to (plan 0244, section 5.7). After the prices, in the shape of
+   * {@link fillPackCounts}.
+   *
+   * Only an `ACTIVE` row names its product. Unlike a pack count, a weight is
+   * rewritten on every run, so the latest run wins (D2). Catalog skips a
+   * product that has a size and one whose weight a person wrote, and the
+   * report counts both.
+   *
+   * **Rows that disagree write nothing.** Two pieces of different weight are
+   * two products (owner, 2026-11-03), so two `ACTIVE` rows of this chain on
+   * one product with two weights are a bad merge. That product is left out
+   * and the run warns `APPROX_WEIGHT_ROWS_DISAGREE`, naming it and the rows.
+   *
+   * A partial observation carries the row's stored weight, which is what the
+   * listing or the last full read said, so a walk that fetched no detail
+   * still writes.
+   */
+  private async writeApproxWeights(
+    outcomes: readonly SourceEntryOutcome[]
+  ): Promise<void> {
+    // Per product, per row: the same row twice in a run is one row.
+    const byItem = new Map<string, Map<string, WeighedRow>>();
+    for (const outcome of outcomes) {
+      const weight = outcome.entry.approxWeight ?? null;
+      if (!outcome.itemId || weight === null) {
+        continue;
+      }
+      const rows = byItem.get(outcome.itemId) ?? new Map<string, WeighedRow>();
+      rows.set(outcome.entry.id, {
+        entryId: outcome.entry.id,
+        externalId: outcome.entry.externalId,
+        approxWeight: Number(weight),
+      });
+      byItem.set(outcome.itemId, rows);
+    }
+
+    const fills: ApproxWeightFill[] = [];
+    for (const [itemId, rows] of byItem) {
+      const weights = new Set(
+        [...rows.values()].map((row) => row.approxWeight)
+      );
+      if (weights.size === 1) {
+        fills.push({ itemId, approxWeight: [...weights][0] });
+        continue;
+      }
+      this.warnWeightsDisagree(itemId, [...rows.values()]);
+    }
+    for (let i = 0; i < fills.length; i += APPROX_WEIGHT_FILL_MAX) {
+      const answer = await this.deps.catalog.setApproxWeights(
+        fills.slice(i, i + APPROX_WEIGHT_FILL_MAX)
+      );
+      this.result.approxWeightsWritten += answer.written;
+      this.result.approxWeightsSkippedSetByAdmin += answer.skippedSetByAdmin;
+      this.result.approxWeightsSkippedHasSize += answer.skippedHasSize;
+      // Absent from a catalog older than plan 0261, which skips nothing.
+      this.result.approxWeightsSkippedHasStep += answer.skippedHasStep ?? 0;
+    }
+  }
+
+  private warnWeightsDisagree(itemId: string, rows: WeighedRow[]): void {
+    const named = [...rows]
+      .sort((a, b) => a.approxWeight - b.approxWeight)
+      .map(
+        (row) => `${row.externalId} (${row.entryId}) at ${row.approxWeight} g`
+      )
+      .join(', ');
+    this.context.warn({
+      code: HarvestWarningCode.APPROX_WEIGHT_ROWS_DISAGREE,
+      message:
+        `The product ${itemId} is bound to rows of this chain that state ` +
+        `different weights of one piece: ${named}. Two pieces of different ` +
+        'weight are two products, so no weight was written onto it. Split ' +
+        'the product, or remove the row that does not belong.',
+      offerId: rows[0]?.externalId ?? null,
+      page: null,
+      name: null,
+    });
+  }
+
+  /**
    * Each whole listing to the scope it names, as the scope diff resolves a key:
    * null is the run's default scope, and any other key goes through the
    * resolver. A key that resolves to nothing is named and not counted.
@@ -570,9 +998,58 @@ export class RunReportSink implements RunReport {
       : (this.deps.scopes?.idFor(scopeKey) ?? null);
   }
 
-  /** Append to the serial chain, so writes happen in the order reported. */
-  private queue(work: () => Promise<void>): void {
-    this.chain = this.chain.then(work);
+  /**
+   * Append to the serial chain, so writes happen in the order reported.
+   *
+   * Work runs only while no failure is kept, and a failure is caught here, so
+   * the chain never holds a rejection (plan 0269, section 1).
+   */
+  private queue(kind: FailedWriteKind, work: () => Promise<void>): void {
+    if (this.settled) {
+      // The run failed and is finished, or about to be: a worker that was
+      // still going says this after it, and nothing of it is written (D11).
+      this.logger.warn(
+        `Run ${this.context.runId}: work of kind ${kind} came after the run ` +
+          'settled its writes, and was not written.'
+      );
+      return;
+    }
+    this.chain = this.chain.then(async () => {
+      if (this.firstFailure) {
+        return;
+      }
+      try {
+        await work();
+      } catch (error) {
+        if (error instanceof FailedAfterWrite) {
+          this.fail(error.cause, error.kind);
+        } else {
+          this.fail(error, kind);
+        }
+      }
+    });
+  }
+
+  /** Keep the first failure, log it, and tell the executor, all once. */
+  private fail(error: unknown, kind: FailedWriteKind): void {
+    if (this.firstFailure) {
+      return;
+    }
+    this.firstFailure = { error, kind };
+    this.logger.error(
+      `Run ${this.context.runId}: a write of what the run read failed, so ` +
+        `the run stops here: ${describeError(error).message}`
+    );
+    try {
+      this.deps.onWriteFailed?.(error);
+    } catch (callbackError) {
+      // The callback aborts a controller, which does not throw. If it ever
+      // did, the drain still rejects with the failure kept above.
+      this.logger.error(
+        `Run ${this.context.runId}: telling the executor about the failed ` +
+          `write failed too: ${describeError(callbackError).message}`
+      );
+    }
   }
 
   private async pushProducts(
@@ -628,13 +1105,78 @@ export class RunReportSink implements RunReport {
     this.result.placesRefreshed += written.refreshed;
     this.result.placesImported += written.imported;
     this.result.placesNotImported.push(...written.blocked);
-    await this.context.report({
-      created: written.created,
-      unchanged: written.refreshed,
-    });
-    // A place is the unit of a store discovery, unless the runner counts its
-    // own (plan 0217, section 4). Then this adds nothing.
-    await this.context.advance(chunk.length);
+    // The chunk is written and counted above. Either call below can flush the
+    // run's counters and fail, and then the report rightly counts this chunk,
+    // so the failure is kept as a kind whose sentence says so (D9 and D11).
+    try {
+      await this.context.report({
+        created: written.created,
+        unchanged: written.refreshed,
+      });
+      // A place is the unit of a store discovery, unless the runner counts
+      // its own (plan 0217, section 4). Then this adds nothing.
+      await this.context.advance(chunk.length);
+    } catch (error) {
+      throw new FailedAfterWrite('placesCounted', error);
+    }
+  }
+
+  /**
+   * The item of each row that is `ACTIVE` now, by row id, read again at the
+   * drain (plan 0269, section 5, D5 and D8). One read serves the pack counts,
+   * the weights and the availability.
+   *
+   * A chunk kept the item its row resolved to when it was written, and a
+   * person may have decided the row since. Only the rows that were `ACTIVE`
+   * when their chunk was written are read, because only those are owed
+   * anything at the drain: the availability of a run that states it, and the
+   * pack count and the weight a row carries. A run with none reads nothing.
+   */
+  private async readDecisions(
+    outcomes: readonly SourceEntryOutcome[],
+    statesAvailability: boolean
+  ): Promise<Map<string, string>> {
+    const entryIds = new Set<string>();
+    for (const outcome of outcomes) {
+      if (
+        outcome.itemId &&
+        (statesAvailability ||
+          (outcome.entry.packCount ?? null) !== null ||
+          (outcome.entry.approxWeight ?? null) !== null)
+      ) {
+        entryIds.add(outcome.entry.id);
+      }
+    }
+    if (statesAvailability) {
+      for (const externalId of this.activeItemByExternalId.keys()) {
+        const entryId = this.entryIdByExternalId.get(externalId);
+        if (entryId !== undefined) {
+          entryIds.add(entryId);
+        }
+      }
+    }
+    if (!this.session || entryIds.size === 0) {
+      return new Map();
+    }
+    return this.session.activeItemsOf([...entryIds]);
+  }
+
+  /**
+   * The availability of the drain follows the decisions read again (plan
+   * 0269, section 5). A row that is no longer `ACTIVE` states nothing for the
+   * product it left, and a row a person moved to another product states
+   * availability for that one.
+   */
+  private applyDecisions(decided: ReadonlyMap<string, string>): void {
+    for (const [externalId] of [...this.activeItemByExternalId]) {
+      const entryId = this.entryIdByExternalId.get(externalId);
+      const itemId = entryId === undefined ? null : decided.get(entryId);
+      if (itemId) {
+        this.activeItemByExternalId.set(externalId, itemId);
+      } else {
+        this.activeItemByExternalId.delete(externalId);
+      }
+    }
   }
 
   /**

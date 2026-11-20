@@ -11,6 +11,7 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import type { ListLine } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
+import { assertLineUnit, requireLineUnit } from '../lists/line-unit-rules';
 import { LineService } from '../lists/line.service';
 import { ListAccessService } from '../lists/list-access.service';
 import { canChangeDemand } from '../lists/list-acts';
@@ -82,8 +83,14 @@ export class BasketDemandService {
         messageArgs: { field: 'quantity' },
       });
     }
+    // Required, and checked like a delta's (plan 0246, section 3.4).
+    requireLineUnit(req.unit);
 
     const entry = await this.pick(opened, req);
+    // Asked of the line as read here, so a demand in another unit is refused
+    // even when it would write nothing; `addQuantity` asks it again under the
+    // lock.
+    assertLineUnit(entry, req.unit);
 
     // Plan 0131's rule, asked of the owner. The read serves the same answer as
     // `demandEditable`, and this is the enforcement behind it.
@@ -109,6 +116,7 @@ export class BasketDemandService {
       userId: opened.basket.ownerUserId,
       lineId: entry.id,
       delta,
+      unit: req.unit,
       expect: req.from,
       // The change record names the person who moved it and the basket they
       // moved it from, which is **not** the owner above (plan 0138, section 4):

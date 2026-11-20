@@ -44,6 +44,7 @@ import {
   type Line,
   type ListPermission,
   type MyZone,
+  QUANTITY_STEP_QUIET_MS,
   type ShoppingListSummary,
 } from '@portfolio/velista/models';
 import {
@@ -165,6 +166,8 @@ function offers(price: number): readonly CatalogScopeOffer[] {
       offer: {
         price,
         unitPrice: price * 2.5,
+        comparablePrice: price * 2.5,
+        comparableBasis: 'LITER',
         currency: 'EUR',
         priceScopeId: 'scope-m',
       } as CatalogScopeOffer['offer'],
@@ -179,6 +182,8 @@ interface Options {
   /** What the read of the lines failed with, beside `linesState: 'failed'`. */
   readonly linesError?: unknown;
   readonly alsoOn?: AlsoOnVm;
+  /** The catalog's records, in place of the two shampoos. */
+  readonly items?: readonly CatalogItem[];
 }
 
 async function render(options: Options = {}): Promise<{
@@ -296,7 +301,7 @@ function pageProviders(
     provideFakeMemberNames(fakeMemberNames({})),
     provideFakeItemNames(
       fakeItemNames({
-        items: [
+        items: options.items ?? [
           item('normal', 'Shampoo for normal hair'),
           item('classic', 'Classic care shampoo'),
         ],
@@ -409,20 +414,87 @@ describe('LinePage', () => {
   });
 
   describe('the number', () => {
-    it('sends one more and one fewer as a delta', async () => {
+    it('writes one run of presses once, after the quiet beat (velista 0188)', async () => {
+      const { fixture, lines } = await render();
+      const more = fixture.debugElement
+        .queryAll(By.css('lib-quantity-stepper button'))
+        .map((element) => element.nativeElement as HTMLButtonElement)[1];
+      jest.useFakeTimers();
+
+      more.click();
+      fixture.detectChanges();
+      more.click();
+      fixture.detectChanges();
+      more.click();
+      fixture.detectChanges();
+      expect(lines.calls.filter((call) => call.kind === 'quantity')).toEqual(
+        []
+      );
+      expect(
+        fixture.nativeElement
+          .querySelector('lib-quantity-stepper')
+          ?.getAttribute('data-value')
+      ).toBe('6');
+
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      jest.useRealTimers();
+      await drain(fixture);
+
+      expect(lines.calls.filter((call) => call.kind === 'quantity')).toEqual([
+        { kind: 'quantity', lineId: LINE_ID, delta: 3 },
+      ]);
+    });
+
+    it('writes a run 800 ms after its last step while the finger is still down (velista 0188)', async () => {
+      // The owner, 2026-11-12: kept. A minus hold from 3 repeats to 2 and 1 and stops
+      // there (S8b); the finger never lifts, and the run is written all the same.
+      const { fixture, lines } = await render();
+      const fewer = fixture.debugElement
+        .queryAll(By.css('lib-quantity-stepper button'))
+        .map((element) => element.nativeElement as HTMLButtonElement)[0];
+      const quantityCalls = () =>
+        lines.calls.filter((call) => call.kind === 'quantity');
+      jest.useFakeTimers();
+
+      fewer.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      // The repeats land at 400 and 700 ms; the next one would reach 0 and stops.
+      jest.advanceTimersByTime(700);
+      fixture.detectChanges();
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS - 1);
+      fixture.detectChanges();
+      expect(
+        fixture.nativeElement
+          .querySelector('lib-quantity-stepper')
+          ?.getAttribute('data-value')
+      ).toBe('1');
+      expect(quantityCalls()).toEqual([]);
+
+      jest.advanceTimersByTime(1);
+      jest.useRealTimers();
+      await drain(fixture);
+
+      expect(quantityCalls()).toEqual([
+        { kind: 'quantity', lineId: LINE_ID, delta: -2 },
+      ]);
+    });
+
+    it('sends a run back to where it started as nothing', async () => {
       const { fixture, lines } = await render();
       const [fewer, more] = fixture.debugElement
         .queryAll(By.css('lib-quantity-stepper button'))
         .map((element) => element.nativeElement as HTMLButtonElement);
+      jest.useFakeTimers();
 
       more.click();
+      fixture.detectChanges();
       fewer.click();
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      jest.useRealTimers();
       await drain(fixture);
 
-      expect(lines.calls.filter((call) => call.kind === 'quantity')).toEqual([
-        { kind: 'quantity', lineId: LINE_ID, delta: 1 },
-        { kind: 'quantity', lineId: LINE_ID, delta: -1 },
-      ]);
+      expect(lines.calls.filter((call) => call.kind === 'quantity')).toEqual(
+        []
+      );
     });
 
     it('asks for no record of a write the network drops (velista 0159)', async () => {
@@ -434,7 +506,10 @@ describe('LinePage', () => {
         .queryAll(By.css('lib-quantity-stepper button'))
         .map((element) => element.nativeElement as HTMLButtonElement);
 
+      jest.useFakeTimers();
       more.click();
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      jest.useRealTimers();
       await drain(fixture);
 
       expect(addQuantity).toHaveBeenCalledTimes(1);
@@ -450,6 +525,199 @@ describe('LinePage', () => {
       expect(
         fixture.nativeElement.querySelector('.quantity')?.textContent
       ).toContain('3');
+    });
+  });
+
+  describe('the unit chip (velista 0183)', () => {
+    // A line of bananas: loose by the kilo, and a bunch sold as a kilo piece.
+    const LOOSE = {
+      ...item('normal', 'Loose bananas'),
+      size: null,
+      unit: 'KILOGRAM',
+      approxWeight: null,
+    } as CatalogItem;
+    const PIECE = {
+      ...item('classic', 'Banana bunch'),
+      size: null,
+      unit: 'KILOGRAM',
+      approxWeight: 700,
+    } as CatalogItem;
+    const segments = (fixture: ComponentFixture<LinePage>) =>
+      [
+        ...(fixture.nativeElement as HTMLElement).querySelectorAll(
+          'lib-line-unit-chip [role="radio"]'
+        ),
+      ] as HTMLButtonElement[];
+
+    it('steps a weight line by the smallest step its products carry (velista 0186)', async () => {
+      const { fixture } = await render({
+        items: [{ ...LOOSE, quantityStep: 100 }, PIECE],
+        lines: [line({ unit: 'GRAM', quantity: 1000 })],
+      });
+      const fewer = fixture.debugElement
+        .queryAll(By.css('lib-quantity-stepper button'))
+        .map((element) => element.nativeElement as HTMLButtonElement)[0];
+
+      fewer.click();
+      fixture.detectChanges();
+
+      expect(
+        fixture.nativeElement
+          .querySelector('lib-quantity-stepper')
+          ?.getAttribute('data-value')
+      ).toBe('900');
+    });
+
+    it('draws no chip on a line whose products offer one unit', async () => {
+      // Two counted packs: six eggs and a dozen, which serve a count alone.
+      const { fixture } = await render({
+        items: [
+          {
+            ...item('normal', 'Six eggs'),
+            size: 6,
+            unit: 'UNIT',
+          } as CatalogItem,
+          {
+            ...item('classic', 'A dozen'),
+            size: 12,
+            unit: 'UNIT',
+          } as CatalogItem,
+        ],
+      });
+      expect(segments(fixture)).toEqual([]);
+    });
+
+    it('draws pieces and volume for two bottles sized in millilitres', async () => {
+      const { fixture } = await render();
+      expect(segments(fixture).map((s) => s.textContent?.trim())).toEqual([
+        'line.unit.UNIT',
+        'line.unit.MILLILITER',
+      ]);
+    });
+
+    it('draws pieces and weight on a line of a loose product and a kilo piece', async () => {
+      const { fixture } = await render({
+        items: [LOOSE, PIECE],
+        lines: [line({ unit: 'UNIT', quantity: 2 })],
+      });
+      expect(segments(fixture).map((s) => s.textContent?.trim())).toEqual([
+        'line.unit.UNIT',
+        'line.unit.GRAM',
+      ]);
+      expect(
+        segments(fixture).map((s) => s.getAttribute('aria-checked'))
+      ).toEqual(['true', 'false']);
+      // The loose product cannot serve a count, so its card says so.
+      expect(textOf(fixture)).toContain('line.unit.cannot.UNIT');
+    });
+
+    it('sends one updateLine with the unit and the amount it starts at', async () => {
+      const { fixture, lines } = await render({
+        items: [LOOSE, PIECE],
+        lines: [line({ unit: 'UNIT', quantity: 2 })],
+      });
+
+      segments(fixture)[1].click();
+      await drain(fixture);
+
+      expect(lines.calls.filter((call) => call.kind === 'update')).toEqual([
+        { kind: 'update', lineId: LINE_ID, unit: 'GRAM', quantity: 1000 },
+      ]);
+      expect(segments(fixture)[1].getAttribute('aria-checked')).toBe('true');
+    });
+
+    it('puts the segment back and says why on line_unit_not_offered', async () => {
+      const { fixture, lines } = await render({
+        items: [LOOSE, PIECE],
+        lines: [line({ unit: 'UNIT', quantity: 2 })],
+      });
+      lines.answerNextUpdate({
+        state: 'failed',
+        error: new GatewayError({
+          code: 'line_unit_not_offered',
+          status: 422,
+          correlationId: 'cid-422',
+        }),
+      });
+
+      segments(fixture)[1].click();
+      await drain(fixture);
+
+      expect(
+        segments(fixture).map((s) => s.getAttribute('aria-checked'))
+      ).toEqual(['true', 'false']);
+      expect(
+        fixture.nativeElement.querySelector('.unit-error')?.textContent
+      ).toContain('line.unit.notOffered');
+    });
+
+    it('takes the refusal away once a step lands', async () => {
+      const { fixture, lines } = await render({
+        items: [LOOSE, PIECE],
+        lines: [line({ unit: 'UNIT', quantity: 2 })],
+      });
+      lines.answerNextUpdate({
+        state: 'failed',
+        error: new GatewayError({
+          code: 'line_unit_not_offered',
+          status: 422,
+          correlationId: 'cid-422',
+        }),
+      });
+      segments(fixture)[1].click();
+      await drain(fixture);
+      expect(fixture.nativeElement.querySelector('.unit-error')).not.toBeNull();
+
+      fixture.componentInstance.step({ from: 2, to: 3, repeat: false });
+      fixture.componentInstance.quantityRuns.flush(LINE_ID);
+      await drain(fixture);
+
+      expect(lines.calls.at(-1)).toMatchObject({ kind: 'quantity', delta: 1 });
+      expect(fixture.nativeElement.querySelector('.unit-error')).toBeNull();
+    });
+
+    it('writes an open run before it changes the unit (velista 0188)', async () => {
+      const { fixture, lines } = await render({
+        items: [LOOSE, PIECE],
+        lines: [line({ unit: 'UNIT', quantity: 2 })],
+      });
+
+      fixture.componentInstance.step({ from: 2, to: 3, repeat: false });
+      segments(fixture)[1].click();
+      await drain(fixture);
+
+      const kinds = lines.calls.map((call) => call.kind);
+      expect(kinds.indexOf('quantity')).toBeGreaterThanOrEqual(0);
+      expect(kinds.indexOf('quantity')).toBeLessThan(
+        kinds.lastIndexOf('update')
+      );
+    });
+
+    it('sends the unit only after the open run has answered', async () => {
+      // A delta in the old unit that reached the server after the change would be
+      // refused, and the refusal would draw the line in the old unit again.
+      const { fixture, lines } = await render({
+        items: [LOOSE, PIECE],
+        lines: [line({ unit: 'UNIT', quantity: 2 })],
+      });
+      let answer: (outcome: 'succeeded') => void = () => undefined;
+      jest.spyOn(lines, 'addQuantity').mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          })
+      );
+
+      fixture.componentInstance.step({ from: 2, to: 3, repeat: false });
+      segments(fixture)[1].click();
+      await drain(fixture);
+      expect(lines.calls.filter((call) => call.kind === 'update')).toEqual([]);
+
+      answer('succeeded');
+      await drain(fixture);
+      expect(lines.calls.filter((call) => call.kind === 'update')).toEqual([
+        { kind: 'update', lineId: LINE_ID, unit: 'GRAM', quantity: 1000 },
+      ]);
     });
   });
 

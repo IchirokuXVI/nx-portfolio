@@ -396,6 +396,14 @@ interface PanelView {
       display: none;
     }
 
+    /* A part that hides itself when it has nothing to say (the probe panel of
+       a source) is still an element in here. Without this the host stays a
+       flex item of no height, and the page adds one gap after its last
+       section. Such a part must be truly empty: no element and no text. */
+    :host:not(:has(> :not(:empty))) {
+      display: none;
+    }
+
     .links {
       overflow: hidden;
       border: 1px solid var(--admin-border);

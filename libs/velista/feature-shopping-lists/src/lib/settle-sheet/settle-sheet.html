@@ -109,6 +109,13 @@
         @if (subtitle(); as sub) {
           <p class="subtitle">{{ sub }}</p>
         }
+        <!--
+          What a weight still to get comes to (velista 0182): an estimate until the
+          scale weighs it, so it carries the mark.
+        -->
+        @if (amountToGet(); as costs) {
+          <p class="subtitle">{{ costs }}</p>
+        }
         @if (finished()) {
           @if (whatHappened(); as caption) {
             <p class="happened">{{ caption }}</p>
@@ -133,15 +140,19 @@
         <lib-row-entries
           (changed)="changeLine($event)"
           (changedAll)="changeAll()"
-          (demanded)="demand($event)"
-          (raised)="raise($event)"
+          (demanded)="stepDemand($event)"
+          (raised)="stepRaise($event)"
           (retry)="retryOthers()"
           [busy]="busy()"
           [changeable]="changeable()"
           [finished]="basketFinished()"
           [lists]="lists()"
           [others]="others()"
+          [pending]="shownAsks()"
+          [pendingRaises]="shownRaises()"
           [row]="held"
+          [step]="step()"
+          [steps]="lineSteps()"
         />
       }
 
@@ -171,7 +182,11 @@
         anything was bought. "Not today" keeps its place after it.
       -->
       @if (canSettle()) {
-        <div class="actions">
+        <!--
+          Busy while a stepped amount waits for its save: a press here sends it
+          first and settles after it (velista 0190, decision J).
+        -->
+        <div [attr.aria-busy]="amountSaving() ? 'true' : null" class="actions">
           <button
             (click)="settleAll()"
             [disabled]="busy()"

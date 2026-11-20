@@ -79,6 +79,8 @@ export function selectTripGroups(
                 left: row.left,
                 bought: row.bought,
                 asked: row.asked,
+                // The line's unit (velista `0182`): a trip row is within one line.
+                unit: held?.unit ?? 'UNIT',
                 mark,
                 claimedBy: mark === 'claimed' ? line.claimedBy : null,
                 buyer:

@@ -9,7 +9,8 @@
  * It makes real requests to a third party, **one at a time and paced**, so it
  * obeys the same politeness rules the runtime does (plan 0038, section 8.1): one
  * honest User-Agent naming a contact address, a low fixed rate, and a fixed list
- * of four pages rather than a crawl.
+ * of eight requests rather than a crawl: four for the product listing and four
+ * for the shop list of plan 0222.
  *
  * Each page below is here because a test needs that exact shape, and each is
  * written **verbatim**, byte for byte as the server sent it. Nobody edits a
@@ -18,7 +19,11 @@
  */
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DEZA_PRODUCTS_PATH, DezaClient } from '../src/lib/deza.client';
+import {
+  DEZA_PRODUCTS_PATH,
+  DEZA_SHOPS_PATH,
+  DezaClient,
+} from '../src/lib/deza.client';
 
 const OUT_DIR = join(__dirname, '..', 'src', 'lib', '__fixtures__');
 
@@ -29,6 +34,23 @@ const USER_AGENT =
 /** Bolleria. Small enough that one search inside it fits on a single page. */
 const SEARCH_SECTION = 'W051000001';
 const SEARCH_TERM = 'croissant';
+
+/**
+ * Three shop pages under `/centros/`, each for a case of plan 0222: `T1` has a
+ * map category and a photo code that agree, `C2` (SuperCash Sector Sur) has no
+ * map category and only its photo names the code, and `Z1` (Zoco) shares its
+ * centre with a perfumery and a salon that are not shops. The paths are fixed
+ * here rather than read from the directory, so a capture never follows a link
+ * that third party markup chose.
+ */
+const SHOP_PAGES: ReadonlyArray<{ file: string; path: string }> = [
+  { file: 'shop-t1.html', path: `${DEZA_SHOPS_PATH}avda-de-jesus-rescatado/` },
+  { file: 'shop-c2.html', path: `${DEZA_SHOPS_PATH}supercash-sector-sur/` },
+  {
+    file: 'shop-z1.html',
+    path: `${DEZA_SHOPS_PATH}centro-comercial-zoco-calle-jose-maria-martorell/`,
+  },
+];
 
 async function main(): Promise<void> {
   // One request every 500 ms, sequential: a quarter of the rate the DEZA source
@@ -59,6 +81,17 @@ async function main(): Promise<void> {
     'page-past-the-end.html',
     await past.fetchDocument(`${DEZA_PRODUCTS_PATH}?wpdz-pagination=1&paged=21`)
   );
+
+  // 4. The shop directory (plan 0222): the `markers : [` array of the map, and
+  //    the `Centros` menu whose titles name each shop by its street.
+  const shops = new DezaClient(options);
+  write('centros.html', await shops.fetchDocument(DEZA_SHOPS_PATH));
+
+  // 5. Three shop pages. No session cookie matters here, so the same client
+  //    reads them all.
+  for (const page of SHOP_PAGES) {
+    write(page.file, await shops.fetchDocument(page.path));
+  }
 }
 
 function write(file: string, payload: string): void {

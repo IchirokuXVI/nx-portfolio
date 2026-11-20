@@ -185,6 +185,15 @@ export class SourceGuard {
   }
 
   /**
+   * The refusals in a row since the last clearing answer: how close the
+   * consecutive rule is to tripping. Zero after a clearing answer, after a
+   * trip and once the run stops.
+   */
+  get consecutiveRefusals(): number {
+    return this.state === 'stopped' ? 0 : this.streak.length;
+  }
+
+  /**
    * Awaited before every request. Waits through a pause, lets one probe at a
    * time through after it, and rejects with {@link SourceBlockedError} once
    * the run is stopped. An abort of `signal` while it waits rejects with the

@@ -3,13 +3,17 @@ import { RESOURCE_GATEWAYS } from '@portfolio/luna-shopper-admin/data-access';
 import {
   CONTENT_LOCALES,
   defineResource,
+  fieldMessage,
   localizedTextValue,
+  type FieldNote,
+  type NumberUnit,
   type ResourceGateway,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import { UNIT_OF_MEASURE_OPTIONS } from './catalog-enums';
 import { itemSource, priceSource } from './catalog-sources';
 import { ProductCounts } from './products/product-context';
+import { formatGrams, formatMillilitres } from './products/product-format';
 import {
   productListGateway,
   type ScopePriced,
@@ -91,6 +95,94 @@ export function itemGateway(
     remove: (id) => inner.remove(id),
   };
 }
+
+/**
+ * Who holds the weight of a product, as the line under it (admin plan 0068).
+ *
+ * A weight from the chain is rewritten by each run. One a person typed is
+ * never touched by a run, and the press empties it: an emptied nullable field
+ * submits `approxWeight: null`, which hands the weight back to the chain.
+ *
+ * Read from the weight the form holds, beside the row as it was read. No
+ * held weight, no line: a form that holds the weight empty has nothing left
+ * to hand back, and the save says who holds the next one. A held weight other
+ * than the row's was typed by a person, and the save marks it so, whoever
+ * set the one under it. That line has no press: the field holds a typed
+ * weight, and emptying it is one keystroke away.
+ */
+function approxWeightNote(
+  held: Partial<Item>,
+  row: Item | null
+): FieldNote | null {
+  const typed = String(held.approxWeight ?? '').trim();
+  if (typed === '') {
+    return null;
+  }
+  const admin = fieldMessage('catalog.items.approxWeightFrom.admin');
+  // The draft holds a string and the row a number, so they meet as numbers.
+  if (row === null || Number(typed) !== Number(row.approxWeight ?? NaN)) {
+    return { text: admin };
+  }
+  if (row.approxWeightSetBy === 'SOURCE') {
+    return { text: fieldMessage('catalog.items.approxWeightFrom.source') };
+  }
+  if (row.approxWeightSetBy !== 'ADMIN') {
+    return null;
+  }
+  return {
+    text: admin,
+    action: { label: 'catalog.items.approxWeightFrom.useChain', value: '' },
+  };
+}
+
+/** A step as the wire carries it: one of the values the gateway takes. */
+type WireStep = NonNullable<Wire.CatalogItemView['quantityStep']>;
+
+/**
+ * The steps a curator may give a loose product sold by the kilo, in grams
+ * (backend plan 0261 S2, admin plan 0070). Typed against
+ * the generated union, and `catalog-descriptors.spec.ts` asserts that every
+ * member of it is here, so a step the gateway adds fails a spec and not a
+ * curator's save.
+ */
+export const QUANTITY_STEP_CHOICES = [
+  1, 5, 10, 25, 50, 100, 200, 250, 500, 1000,
+] as const satisfies readonly WireStep[];
+
+/** Whether a value the form or the row holds is empty. */
+function blank(value: unknown): boolean {
+  return value === null || value === undefined || String(value).trim() === '';
+}
+
+/**
+ * What a step of this product is counted in: grams for a product sold by the
+ * kilo, millilitres for one sold by the litre, and `null` for a product that
+ * carries no step (backend plan 0261 S3, admin plan 0070 section 2.1).
+ *
+ * Only a product with no size and no weight is sold by the kilo: a weight makes
+ * it a piece, and a size a pack. No product by the litre carries a step (the
+ * owner, 2026-11-17): a write that names `LITER` is refused, and a liquid is
+ * stored in millilitres with a size. A legacy `LITER` row with no size still
+ * reads as `ml` here, as the server's rule admits it. The rule is the server's
+ * `carriesQuantityStep`, kept here as `0068` kept its own, and read over the
+ * row as the form holds it. `shown`, the unit, the options and the default
+ * line all read this one rule.
+ */
+export function measuredUnitOf(held: Partial<Item>): 'g' | 'ml' | null {
+  if (!blank(held.unitSize) || !blank(held.approxWeight)) {
+    return null;
+  }
+  if (held.defaultUnit === 'KILOGRAM') {
+    return 'g';
+  }
+  return held.defaultUnit === 'LITER' ? 'ml' : null;
+}
+
+/** A step in grams: "250 g", "1 kg". */
+const GRAM_STEP: NumberUnit = { word: 'g', format: formatGrams };
+
+/** A step in millilitres: "50 ml", "1 L". */
+const MILLILITRE_STEP: NumberUnit = { word: 'ml', format: formatMillilitres };
 
 /** The photo a shopper sees, or `null`: the first entry of `images`. */
 function shownImage(row: Item): Wire.CatalogItemImageView | null {
@@ -199,6 +291,12 @@ export const ITEMS = defineResource<Item>({
       required: true,
       // What most of the catalog is sold by, so a new product starts there.
       initial: 'UNIT',
+      // What a price means follows the unit, and only the kilo needs saying:
+      // a price of a piece sold by the kilo reads like the price of the piece.
+      note: (held) =>
+        held.defaultUnit === 'KILOGRAM'
+          ? { text: fieldMessage('catalog.items.pricesPerKilo') }
+          : null,
     },
     {
       kind: 'number',
@@ -208,6 +306,68 @@ export const ITEMS = defineResource<Item>({
       help: 'catalog.items.unitSizeHelp',
       nullable: true,
       min: 0,
+      // A product sold by the kilo has no size (backend plan 0237, section
+      // 3.3), so the field is not offered and the weight takes its place.
+      shown: (row) => row.defaultUnit !== 'KILOGRAM',
+      // A size or a weight, never both (backend plan 0244, section 1).
+      excludes: 'approxWeight',
+    },
+    {
+      // The grams of one piece, for a product with no size: a cheese sold by
+      // the kilo, or a melon priced as one (backend plan 0244).
+      kind: 'number',
+      name: 'approxWeight',
+      label: 'catalog.items.approxWeight',
+      nullable: true,
+      integer: true,
+      // The server refuses a weight of zero or less.
+      min: 1,
+      excludes: 'unitSize',
+      note: approxWeightNote,
+    },
+    {
+      // How far one press moves a shopper's amount of a loose product sold
+      // by the kilo (backend plan 0261, admin plan 0070). Empty is the
+      // default step.
+      kind: 'number',
+      name: 'quantityStep',
+      label: 'catalog.items.quantityStep',
+      help: 'catalog.items.quantityStepHelp',
+      nullable: true,
+      integer: true,
+      // Only a loose product sold by the kilo carries one. Hidden, it
+      // holds its empty value, so the edit that makes the product a pack or a
+      // piece sends `quantityStep: null` beside it, which the server asks of
+      // that edit.
+      shown: (held) => measuredUnitOf(held) !== null,
+      // The ten steps of the server, as a select, in the unit the shopper
+      // reads. Its empty option is the default and saves `null`.
+      choices: () => QUANTITY_STEP_CHOICES,
+      unit: (held) => {
+        const unit = measuredUnitOf(held);
+        if (unit === null) {
+          return null;
+        }
+        return unit === 'g' ? GRAM_STEP : MILLILITRE_STEP;
+      },
+      emptyText: (held) => {
+        const unit = measuredUnitOf(held);
+        if (unit === null) {
+          return null;
+        }
+        return fieldMessage(
+          unit === 'g'
+            ? 'catalog.items.quantityStepDefault.gram'
+            : 'catalog.items.quantityStepDefault.milliliter'
+        );
+      },
+      // A set step is a person's, and a run does not weigh a product that
+      // has one (backend plan 0261 S6). No source to name: only a person
+      // sets a step (S7).
+      note: (held) =>
+        blank(held.quantityStep)
+          ? null
+          : { text: fieldMessage('catalog.items.quantityStepSet') },
     },
     {
       kind: 'reference',
@@ -343,7 +503,14 @@ export const ITEMS = defineResource<Item>({
       },
       {
         title: 'catalog.items.section.sold',
-        fields: ['defaultUnit', 'unitSize', 'imageUrl', 'shownPhoto'],
+        fields: [
+          'defaultUnit',
+          'unitSize',
+          'approxWeight',
+          'quantityStep',
+          'imageUrl',
+          'shownPhoto',
+        ],
       },
     ],
     children: [
@@ -368,11 +535,15 @@ export const ITEMS = defineResource<Item>({
     deleteBody: 'catalog.products.deleteBody',
   },
 
-  // What the server refuses about a product's categories is said under them.
+  // What the server refuses about a product's categories is said under them,
+  // and a refusal about its size, weight or step under the field it names.
   errorFields: {
     category_not_a_leaf: 'categoryIds',
     item_needs_a_category: 'categoryIds',
     category_not_found: 'categoryIds',
+    item_kilogram_has_size: 'unitSize',
+    item_approx_weight_beside_size: 'approxWeight',
+    item_quantity_step_not_allowed: 'quantityStep',
   },
 
   gateway: () => {

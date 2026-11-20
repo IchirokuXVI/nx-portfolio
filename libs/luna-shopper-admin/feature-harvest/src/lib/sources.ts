@@ -1,5 +1,6 @@
 import { inject } from '@angular/core';
 import { defineResource } from '@portfolio/luna-shopper-admin/models';
+import { SOURCE_PROBE_PANEL, SourceProbePanel } from './source-probe-panel';
 import {
   SOURCE_ADAPTERS,
   SourcesGateway,
@@ -229,6 +230,16 @@ export const SOURCES = defineResource<Source>({
       },
     ],
     facts: { also: ['lastRunAt', 'lastSuccessAt', 'consecutiveFailures'] },
+    // The warning a start shows when the chain's newest finished probe did
+    // not pass (admin plan 0069). The panel draws nothing when it did.
+    children: [
+      {
+        as: 'panel',
+        name: SOURCE_PROBE_PANEL,
+        label: 'harvest.sources.section.probe',
+        component: SourceProbePanel,
+      },
+    ],
   },
 
   gateway: () => inject(SourcesGateway),

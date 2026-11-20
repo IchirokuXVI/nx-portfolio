@@ -215,6 +215,9 @@ lunaShopperBackend:
     # production data has been warned about the wrong thing in the harmless
     # direction only if the colour is alarming, so both clusters state their own.
     environmentName: development
+    # The back office origin a harvest alert mail links a run to (plan 0218).
+    # Empty names the run id only. Each environment file states its own.
+    adminAppBaseUrl: ''
     # Support sessions (plan 0194): an operator opens the app as a user, for
     # two hours at most. Off here, so a cluster allows it only when its own
     # values file says so. values.staging.yaml does. values.production.yaml
@@ -374,6 +377,13 @@ lunaShopperBackend:
     # double what the chain sees and add nothing. With it on and no schedule
     # row, nothing happens.
     schedulerEnabled: false
+
+    # Whether a registered shopper can make this cluster fetch the price of one
+    # product (plan 0216, section 9). A fourth decision: who can make this
+    # cluster contact a chain. A refresh needs it, `harvestEnabled` and the
+    # chain's row. False here and in production until velista ships the
+    # control; staging turns it on.
+    refreshEnabled: false
 
     # There is no per chain key here, and there is not meant to be (plan 0083).
     # Which chains may be fetched is a row per chain in the harvester's own

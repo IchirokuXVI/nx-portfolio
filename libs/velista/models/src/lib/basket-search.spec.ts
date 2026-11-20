@@ -43,6 +43,7 @@ function product(
 ): BasketProduct {
   return {
     id: 'item-1',
+    quantityStep: null,
     name: { en, es },
     brand,
     size: null,
@@ -57,6 +58,7 @@ function product(
         name: { en: 'Not yet categorised', es: 'Sin categoría' },
       },
     ],
+    approxWeight: null,
   };
 }
 

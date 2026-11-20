@@ -18,7 +18,12 @@ import { RunExecutor, SHUTDOWN_STOPPED_RUN } from './run-executor.service';
 import { RunReportSink } from './run-report.sink';
 import type { SupermarketSourceService } from './supermarket-source.service';
 
-jest.mock('./run-report.sink', () => ({ RunReportSink: jest.fn() }));
+// The sink is a fake, and the error a failed write aborts with is the real
+// one (plan 0269), because the executor tells it apart by its class.
+jest.mock('./run-report.sink', () => ({
+  ...jest.requireActual('./run-report.sink'),
+  RunReportSink: jest.fn(),
+}));
 
 /**
  * How a run ends when the chain keeps refusing it (plan 0215, sections 5 to 7).
@@ -86,6 +91,8 @@ function build(adapterKey: string, ending: Ending = 'returns') {
     pricedScopes: [],
     pricesCopied: {},
     availabilityCopied: {},
+    wordOrderProposals: 2,
+    wordOrderRejectedPointers: 1,
   }));
   (RunReportSink as unknown as jest.Mock).mockImplementation(() => ({
     drain,
@@ -178,6 +185,9 @@ describe('RunExecutor and the refusal guard (plan 0215)', () => {
     );
     // The drain's own report is kept beside the block.
     expect(row().report['productsWritten']).toBe(3);
+    // And the two word order counts of plan 0221.
+    expect(row().report['wordOrderProposals']).toBe(2);
+    expect(row().report['wordOrderRejectedPointers']).toBe(1);
   });
 
   it('drains what a runner reported when it throws after the stop', async () => {

@@ -748,6 +748,51 @@ describe('gatewayInterceptor', () => {
       expect(TestBed.inject(BackendReadiness).state()).toBe('too-old');
     });
 
+    // Plan 0180, row 12 of section 5. A request that asks for text gets its error body
+    // as text, so the refusal arrives as a string and must still be read as one.
+    it('reads a refusal whose problem document arrived as text', async () => {
+      const failure = expectFailure(
+        http.get(`${GATEWAY}/health/ready`, { responseType: 'text' })
+      );
+
+      httpMock
+        .expectOne(`${GATEWAY}/health/ready`)
+        .flush(
+          JSON.stringify({ code: 'client_too_old', correlationId: 'c1' }),
+          {
+            status: 426,
+            statusText: 'Upgrade Required',
+            headers: {
+              'content-type': 'application/problem+json; charset=utf-8',
+            },
+          }
+        );
+
+      const error = (await failure) as GatewayError;
+      expect(error.code).toBe('client_too_old');
+      expect(error.correlationId).toBe('c1');
+      expect(checkNow).toHaveBeenCalled();
+      expect(TestBed.inject(BackendReadiness).state()).toBe('too-old');
+    });
+
+    it('leaves a text body that does not say it is JSON unread', async () => {
+      const failure = expectFailure(
+        http.get(`${GATEWAY}/health/ready`, { responseType: 'text' })
+      );
+
+      httpMock
+        .expectOne(`${GATEWAY}/health/ready`)
+        .flush('{"code":"client_too_old"}', {
+          status: 426,
+          statusText: 'Upgrade Required',
+          headers: { 'content-type': 'text/html' },
+        });
+
+      const error = (await failure) as GatewayError;
+      expect(error.code).not.toBe('client_too_old');
+      expect(checkNow).not.toHaveBeenCalled();
+    });
+
     // A header is the server saying this build is old, which is worth a background
     // check. A refusal is the server saying it will not serve it, and only the second
     // one is worth a screen.

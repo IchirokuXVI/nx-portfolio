@@ -1,8 +1,11 @@
 import { provideLocationMocks } from '@angular/common/testing';
-import { Component, signal } from '@angular/core';
+import { Component, signal, type WritableSignal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuTranslatorService,
+  RokuTranslatorTestingModule,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   DASHBOARD_SERVICE,
   DashboardStore,
@@ -64,6 +67,8 @@ const drain = async () => {
 interface World {
   readonly running?: HarvestRun | null;
   readonly compact?: boolean;
+  /** Runs after the module is configured and before the header is created. */
+  readonly before?: () => void;
 }
 
 async function render<T>(component: new () => T, world: World = {}) {
@@ -98,6 +103,7 @@ async function render<T>(component: new () => T, world: World = {}) {
 
   const status = TestBed.inject(HarvestStatus);
   const follow = jest.spyOn(status, 'followRuns');
+  world.before?.();
 
   const fixture = TestBed.createComponent(component);
   fixture.detectChanges();
@@ -173,6 +179,47 @@ describe('HarvestHeader', () => {
       ).toBe(`/harvest/runs/${RUNNING.id}`);
     });
 
+    /**
+     * After a full reload the run can arrive before the strings do. The line
+     * used to keep the raw `harvest.mode.CATALOG_DISCOVERY` it computed then
+     * (decision 46a of the harvester round).
+     */
+    it('reads the kind of run in words once the strings load', async () => {
+      let translator!: {
+        readonly loaded: WritableSignal<boolean>;
+        t(key: string): string;
+      };
+      const words = 'A walk of the whole catalog';
+      // Read by the double through a plain variable and not the signal, so the
+      // double itself adds no dependency to what the header computes.
+      let ready = false;
+
+      const { fixture } = await render(HarvestHeader, {
+        before: () => {
+          translator = TestBed.inject(
+            RokuTranslatorService
+          ) as unknown as typeof translator;
+          translator.loaded.set(false);
+          jest
+            .spyOn(translator, 't')
+            .mockImplementation((key: string) =>
+              ready && key === `harvest.mode.${RUNNING.mode}` ? words : key
+            );
+        },
+      });
+      const what = () =>
+        one(fixture, '[data-running="header"] .what')?.textContent ?? '';
+
+      expect(what()).toContain(`harvest.mode.${RUNNING.mode}`);
+
+      ready = true;
+      translator.loaded.set(true);
+      fixture.detectChanges();
+
+      expect(what()).toContain(words);
+      expect(what()).not.toContain('harvest.mode.');
+    });
+
     it('is named for a screen reader', async () => {
       const { fixture } = await render(HarvestHeader);
 
@@ -203,6 +250,91 @@ describe('HarvestHeader', () => {
 
       expect(one(fixture, '[data-running="line"]')).toBeNull();
       expect(one(fixture, '[data-running="header"]')).not.toBeNull();
+    });
+  });
+
+  /**
+   * A walk that does not know its total reads an approximate one from the
+   * last completed run of its chain and mode (decision 86 of the harvester
+   * round). The memory back end holds a completed DEZA walk of 2,361.
+   */
+  describe('a run that does not know its total', () => {
+    const DEZA_GOING: HarvestRun = {
+      ...(HARVEST_RUN_SEED.find(
+        (run) => run.id === 'run-deza-aborted'
+      ) as HarvestRun),
+      id: 'run-deza-going',
+      status: 'RUNNING',
+      finishedAt: null,
+      abortRequestedAt: null,
+    };
+
+    it('says "of about" the earlier run’s count, with a bar', async () => {
+      const { fixture } = await render(HarvestHeader, { running: DEZA_GOING });
+      const run = one(fixture, '[data-running="header"]');
+
+      expect(run?.querySelector('.count')?.textContent).toContain(
+        'harvest.run.progress.ofAbout'
+      );
+      expect(run?.querySelector('.bar')).not.toBeNull();
+    });
+
+    /** The screen reader hears "about" too, not the raw count alone. */
+    it('labels the link with the estimate line, not the bare count', async () => {
+      const { fixture } = await render(HarvestHeader, { running: DEZA_GOING });
+
+      expect(
+        one(fixture, '[data-running="header"]')?.getAttribute('aria-label')
+      ).toBe('harvest.running.openAbout');
+      expect(fixture.componentInstance.label()).toEqual({
+        key: 'harvest.running.openAbout',
+        args: { what: expect.any(String), processed: '824', total: '2,361' },
+      });
+    });
+
+    it('keeps the label it had for a run with a known total', async () => {
+      const { fixture } = await render(HarvestHeader);
+
+      expect(fixture.componentInstance.label()).toEqual({
+        key: 'harvest.running.open',
+        args: { what: expect.any(String), processed: 1907 },
+      });
+    });
+
+    it('shows no estimate for a run that has processed nothing', async () => {
+      const { fixture } = await render(HarvestHeader, {
+        running: { ...DEZA_GOING, id: 'run-deza-zero', processed: 0 },
+      });
+      const run = one(fixture, '[data-running="header"]');
+
+      expect(run?.querySelector('.count')?.textContent).toContain(
+        'harvest.run.progress.processed'
+      );
+      expect(run?.getAttribute('aria-label')).toBe('harvest.running.open');
+      expect(run?.querySelector('.bar')).toBeNull();
+    });
+
+    it('keeps the unknown form once the run has passed the estimate', async () => {
+      const { fixture } = await render(HarvestHeader, {
+        running: { ...DEZA_GOING, id: 'run-deza-past', processed: 2400 },
+      });
+      const run = one(fixture, '[data-running="header"]');
+
+      expect(run?.querySelector('.count')?.textContent).toContain(
+        'harvest.run.progress.processed'
+      );
+      expect(run?.querySelector('.bar')).toBeNull();
+    });
+
+    it('keeps a known total', async () => {
+      const { fixture } = await render(HarvestHeader);
+
+      expect(
+        one(fixture, '[data-running="header"] .count')?.textContent
+      ).toContain('harvest.run.progress.of');
+      expect(
+        one(fixture, '[data-running="header"] .count')?.textContent
+      ).not.toContain('ofAbout');
     });
   });
 

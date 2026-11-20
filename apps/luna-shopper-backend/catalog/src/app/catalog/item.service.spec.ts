@@ -9,9 +9,11 @@ import {
   ForbiddenException,
   ITEM_EAN_DETAIL,
   ITEM_EAN_HOLDER_DETAIL,
+  ItemApproxWeightBesideSizeException,
   ItemEanHeldException,
   ItemEanInvalidException,
   ItemNeedsACategoryException,
+  ItemQuantityStepNotAllowedException,
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
@@ -719,7 +721,17 @@ describe('ItemService', () => {
     });
 
     it('is changed by an update, which can also clear it', async () => {
-      const { service, audit } = build({ items: items() });
+      // Plan 0245, section 3: the edit rewrites the comparison pair of the
+      // product's rows in the same transaction, one statement each time.
+      const statements: { sql: string; parameters?: unknown[] }[] = [];
+      const repository = {
+        ...items(),
+        query: async (sql: string, parameters?: unknown[]) => {
+          statements.push({ sql, parameters });
+          return [];
+        },
+      };
+      const { service, audit } = build({ items: repository });
       expect(
         (await service.update({ userId: ADMIN, itemId: 'i1', packCount: 4 }))
           .packCount
@@ -732,6 +744,12 @@ describe('ItemService', () => {
         { packCount: 4 },
         { packCount: null },
       ]);
+      expect(statements).toHaveLength(2);
+      for (const statement of statements) {
+        expect(statement.sql).toContain('UPDATE "supermarket_items" si');
+        expect(statement.sql).toContain('"comparablePrice"');
+        expect(statement.parameters).toEqual([['i1']]);
+      }
     });
 
     it('is left alone by an update that does not name it', async () => {
@@ -1767,6 +1785,334 @@ describe('ItemService', () => {
           })
         ).rejects.toBeInstanceOf(NotFoundException);
       });
+    });
+  });
+
+  describe("a run's weight comes from a service only (plan 0244, section 7)", () => {
+    // The gate of this file answers an operator, so every call here is a
+    // person's. The service actor's half needs the real gate and Postgres:
+    // `item-approx-weight.integration.spec.ts`.
+    const untouched = () =>
+      ({
+        find: jest.fn(),
+        findOne: jest.fn(),
+        save: jest.fn(),
+        create: jest.fn((x) => x),
+      }) as unknown as jest.Mocked<Repository<Item>>;
+
+    it('refuses a create from an operator that states SOURCE, before any write', async () => {
+      const items = untouched();
+      const { service } = build({ items });
+      await expect(
+        service.create({
+          userId: ADMIN,
+          name: { es: 'Queso' },
+          categoryIds: ['milk'],
+          defaultUnit: UnitOfMeasure.KILOGRAM,
+          approxWeight: 1560,
+          approxWeightSetBy: 'SOURCE',
+        })
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(items.save).not.toHaveBeenCalled();
+    });
+
+    it('refuses an edit and a batch from an operator that states SOURCE, before any read', async () => {
+      const items = untouched();
+      const { service } = build({ items });
+      await expect(
+        service.update({
+          userId: ADMIN,
+          itemId: 'i1',
+          approxWeight: 1560,
+          approxWeightSetBy: 'SOURCE',
+        })
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(
+        service.updateMany({
+          userId: ADMIN,
+          items: [{ itemId: 'i1', approxWeightSetBy: 'SOURCE' }],
+        })
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(items.find).not.toHaveBeenCalled();
+      expect(items.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('the step of a product (plan 0261, section 2.2)', () => {
+    const CHICKEN = {
+      id: 'i1',
+      name: { es: 'Pollo' },
+      brand: null,
+      imageUrl: null,
+      sku: null,
+      ean: null,
+      unitSize: null,
+      approxWeight: null,
+      approxWeightSetBy: null,
+      quantityStep: 100,
+      packCount: null,
+      defaultUnit: UnitOfMeasure.KILOGRAM,
+      productGroupId: null,
+    };
+
+    function items(held: Record<string, unknown> = CHICKEN) {
+      return {
+        create: jest.fn((x) => x),
+        save: jest.fn(async (x) => ({ id: 'i1', ...x })),
+        findOne: jest.fn(async () => ({ ...held })),
+        find: jest.fn(async () => [{ ...held }]),
+        // The comparison pair an edit of the size fields rewrites (plan 0245).
+        query: jest.fn(async () => []),
+      } as unknown as jest.Mocked<Repository<Item>>;
+    }
+
+    const create = (extra: Partial<CreateItemInput>) => ({
+      userId: ADMIN,
+      name: { es: 'Pollo' },
+      categoryIds: ['chicken'],
+      defaultUnit: UnitOfMeasure.KILOGRAM,
+      ...extra,
+    });
+
+    async function refusal(work: Promise<unknown>) {
+      try {
+        await work;
+      } catch (error) {
+        return error as ItemQuantityStepNotAllowedException;
+      }
+      throw new Error('expected a refusal');
+    }
+
+    it('saves a step on a product sold by the kilo and by the litre, and serves it', async () => {
+      const { service } = build({ items: items() });
+      expect(
+        (await service.create(create({ quantityStep: 100 }))).quantityStep
+      ).toBe(100);
+      // A new LITER product is refused by the unit rule (plan 0237), so a
+      // product by the litre is one the catalog already holds, and the edit
+      // that names only the step saves on it.
+      const litre = build({
+        items: items({
+          ...CHICKEN,
+          quantityStep: null,
+          defaultUnit: UnitOfMeasure.LITER,
+        }),
+      });
+      expect(
+        (
+          await litre.service.update({
+            userId: ADMIN,
+            itemId: 'i1',
+            quantityStep: 250,
+          })
+        ).quantityStep
+      ).toBe(250);
+    });
+
+    it('is null on a create that names none, and read from the row', async () => {
+      const { service } = build({ items: items() });
+      expect((await service.create(create({}))).quantityStep).toBeNull();
+      expect(
+        (await service.get({ userId: ADMIN, itemId: 'i1' })).quantityStep
+      ).toBe(100);
+    });
+
+    it.each([
+      ['a pack', { defaultUnit: UnitOfMeasure.GRAM, unitSize: 500 }],
+      [
+        'a kilo piece',
+        { defaultUnit: UnitOfMeasure.KILOGRAM, approxWeight: 1560 },
+      ],
+      [
+        'a piece priced as one',
+        { defaultUnit: UnitOfMeasure.UNIT, approxWeight: 580 },
+      ],
+      ['a counted product', { defaultUnit: UnitOfMeasure.UNIT, unitSize: 6 }],
+    ] as const)(
+      'refuses a step on %s with the 400 and its details',
+      async (_name, sizing) => {
+        const repository = items();
+        const { service } = build({ items: repository });
+        const error = await refusal(
+          service.create(create({ ...sizing, quantityStep: 100 }))
+        );
+        expect(error).toBeInstanceOf(ItemQuantityStepNotAllowedException);
+        expect(error.code).toBe('item_quantity_step_not_allowed');
+        expect(error.details).toEqual({
+          quantityStep: 100,
+          allowed: [1, 5, 10, 25, 50, 100, 200, 250, 500, 1000],
+          defaultUnit: sizing.defaultUnit,
+          unitSize: 'unitSize' in sizing ? sizing.unitSize : null,
+          approxWeight: 'approxWeight' in sizing ? sizing.approxWeight : null,
+        });
+        expect(repository.save).not.toHaveBeenCalled();
+      }
+    );
+
+    it('refuses a value off the list on a product sold by the kilo', async () => {
+      const { service } = build({ items: items() });
+      for (const quantityStep of [30, 0, 1500, 2.5]) {
+        const error = await refusal(service.create(create({ quantityStep })));
+        expect(error).toBeInstanceOf(ItemQuantityStepNotAllowedException);
+        expect(error.details).toMatchObject({ quantityStep });
+      }
+      const error = await refusal(
+        service.update({ userId: ADMIN, itemId: 'i1', quantityStep: 30 })
+      );
+      expect(error).toBeInstanceOf(ItemQuantityStepNotAllowedException);
+      expect(error.details).toMatchObject({ itemId: 'i1', quantityStep: 30 });
+    });
+
+    it('names the index of a batch entry', async () => {
+      const { service } = build({ items: items() });
+      const error = await refusal(
+        service.createMany({
+          userId: ADMIN,
+          items: [
+            create({ quantityStep: 100 }),
+            create({
+              defaultUnit: UnitOfMeasure.GRAM,
+              unitSize: 500,
+              quantityStep: 100,
+            }),
+          ],
+        })
+      );
+      expect(error).toBeInstanceOf(ItemQuantityStepNotAllowedException);
+      expect(error.details).toMatchObject({ index: 1, quantityStep: 100 });
+    });
+
+    it.each([
+      ['a change of unit', { defaultUnit: UnitOfMeasure.UNIT }],
+      ['a size', { defaultUnit: UnitOfMeasure.GRAM, unitSize: 1000 }],
+      ['a weight', { approxWeight: 1400 }],
+    ] as const)(
+      'refuses %s on a stepped product without a null step, and saves it with one',
+      async (_name, edit) => {
+        const { service } = build({ items: items() });
+        const error = await refusal(
+          service.update({ userId: ADMIN, itemId: 'i1', ...edit })
+        );
+        expect(error).toBeInstanceOf(ItemQuantityStepNotAllowedException);
+        expect(error.details).toMatchObject({
+          itemId: 'i1',
+          quantityStep: 100,
+        });
+
+        const saved = await service.update({
+          userId: ADMIN,
+          itemId: 'i1',
+          ...edit,
+          quantityStep: null,
+        });
+        expect(saved.quantityStep).toBeNull();
+      }
+    );
+
+    it('lets the weight rule answer first, as the order of the rules says', async () => {
+      const { service } = build({ items: items() });
+      await expect(
+        service.update({
+          userId: ADMIN,
+          itemId: 'i1',
+          defaultUnit: UnitOfMeasure.GRAM,
+          unitSize: 1000,
+          approxWeight: 1000,
+        })
+      ).rejects.toBeInstanceOf(ItemApproxWeightBesideSizeException);
+    });
+
+    it('sets a step with an update and audits it, and an update to null on an unstepped row audits nothing', async () => {
+      const { service, audit } = build({
+        items: items({ ...CHICKEN, quantityStep: null }),
+      });
+      expect(
+        (
+          await service.update({
+            userId: ADMIN,
+            itemId: 'i1',
+            quantityStep: 100,
+          })
+        ).quantityStep
+      ).toBe(100);
+      expect(
+        (
+          await service.update({
+            userId: ADMIN,
+            itemId: 'i1',
+            quantityStep: null,
+          })
+        ).quantityStep
+      ).toBeNull();
+      expect(audit.recorded.map((row) => [row.before, row.after])).toEqual([
+        [{ quantityStep: null }, { quantityStep: 100 }],
+      ]);
+    });
+
+    it('leaves the step alone on an edit that names nothing of the size', async () => {
+      const { service } = build({ items: items() });
+      const saved = await service.update({
+        userId: ADMIN,
+        itemId: 'i1',
+        sku: 'X-1',
+      });
+      expect(saved.quantityStep).toBe(100);
+    });
+
+    it('compares the step an edit expects', async () => {
+      const { service } = build({ items: items() });
+      await expect(
+        service.update({
+          userId: ADMIN,
+          itemId: 'i1',
+          sku: 'X-1',
+          expect: { quantityStep: 250 },
+        })
+      ).rejects.toMatchObject({ code: 'item_expectation_failed' });
+      await expect(
+        service.update({
+          userId: ADMIN,
+          itemId: 'i1',
+          sku: 'X-1',
+          expect: { quantityStep: 100 },
+        })
+      ).resolves.toMatchObject({ quantityStep: 100 });
+    });
+  });
+
+  describe('findCreatedFromEntry (plan 0244, section 7.4)', () => {
+    it('is gated, and refuses a blank row', async () => {
+      const items = { query: jest.fn(async () => []) };
+      const { service } = build({
+        items: items as unknown as Repository<Item>,
+      });
+      await expect(
+        service.findCreatedFromEntry({
+          userId: 'intruder',
+          createdFromEntry: 's:1',
+        })
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(
+        service.findCreatedFromEntry({ userId: ADMIN, createdFromEntry: ' ' })
+      ).rejects.toBeInstanceOf(ValidationException);
+      expect(items.query).not.toHaveBeenCalled();
+    });
+
+    it('answers null when no CREATE audit row names the row', async () => {
+      const items = { query: jest.fn(async () => []) };
+      const { service } = build({
+        items: items as unknown as Repository<Item>,
+      });
+      await expect(
+        service.findCreatedFromEntry({
+          userId: ADMIN,
+          createdFromEntry: 's:24700',
+        })
+      ).resolves.toEqual({ item: null });
+      expect(items.query).toHaveBeenCalledWith(
+        expect.stringContaining('catalog_audit'),
+        ['s:24700']
+      );
     });
   });
 });

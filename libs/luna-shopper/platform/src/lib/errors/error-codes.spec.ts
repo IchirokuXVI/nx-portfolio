@@ -1,3 +1,7 @@
+import {
+  PRICE_REFRESH_REASON_DETAIL,
+  PriceNotRefreshableException,
+} from './domain-exception';
 import { ERROR_CODES, ERROR_STATUS, type ErrorCode } from './error-codes';
 
 describe('ERROR_STATUS', () => {
@@ -18,5 +22,15 @@ describe('ERROR_STATUS', () => {
 
   it('answers an unconfigured deployment with 501, not 503', () => {
     expect(ERROR_STATUS[ERROR_CODES.NOT_CONFIGURED]).toBe(501);
+  });
+
+  it('refuses a price that cannot be refreshed with 409, and publishes its reason (plan 0216)', () => {
+    expect(ERROR_STATUS[ERROR_CODES.PRICE_NOT_REFRESHABLE]).toBe(409);
+    const refused = new PriceNotRefreshableException('off', {
+      details: { [PRICE_REFRESH_REASON_DETAIL]: 'SOURCE_OFF' },
+    });
+    expect(refused.code).toBe('price_not_refreshable');
+    expect(refused.exposesDetails).toBe(true);
+    expect(refused.details).toEqual({ reason: 'SOURCE_OFF' });
   });
 });

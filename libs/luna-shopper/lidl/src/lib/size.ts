@@ -41,8 +41,9 @@ const UNITS: Record<string, UnitToken> = {
 };
 
 /**
- * `6x200ml`, `500 g`, `1,5 l`, `4x 300 g`, `350 / g`. One optional multiplier,
- * one number, one unit, with the separators the chain actually prints.
+ * `6x200ml`, `2X100 g`, `500 g`, `1,5 l`, `4x 300 g`, `350 / g`. One optional
+ * multiplier, one number, one unit, with the separators the chain actually
+ * prints. A capital `X` multiplies as a small one does (plan 0270).
  *
  * Anchored at both ends, so a string that carries anything else does not parse.
  * That is the point: an unrecognised string is a missing size, which is honest,
@@ -51,7 +52,7 @@ const UNITS: Record<string, UnitToken> = {
  * numbers, and neither of them is the size of the pack.
  */
 const PRINTED_SIZE =
-  /^(?:(\d+)\s*[x×]\s*)?(\d+(?:[.,]\d+)?)\s*\/?\s*([A-Za-zÀ-ÿ]{1,8})\.?$/;
+  /^(?:(\d+)\s*[xX×]\s*)?(\d+(?:[.,]\d+)?)\s*\/?\s*([A-Za-zÀ-ÿ]{1,8})\.?$/;
 
 /** A unit with no number in front of it: `Ud` is one of that unit. */
 const BARE_UNIT = /^([A-Za-zÀ-ÿ]{1,8})\.?$/;
@@ -131,6 +132,37 @@ export function parseSize(printed: string | null | undefined): LidlSize | null {
 export function packCountIn(printed: string | null | undefined): number | null {
   const size = parseSize(printed);
   return size ? packCountOf(size.count) : null;
+}
+
+/** What one of a weight unit is worth in grams. */
+const GRAMS_IN: Partial<Record<UnitOfMeasure, number>> = {
+  [UnitOfMeasure.GRAM]: 1,
+  [UnitOfMeasure.KILOGRAM]: 1000,
+};
+
+/**
+ * The approximate weight of one piece in grams (plan 0244, section 5.2), or
+ * null when the printed size promises its number or is not a weight.
+ *
+ * `Aprox. 350 g` is a tray whose weight varies: LIDL prints one price for it
+ * and no price per kilo, so it is a piece priced as one, with a weight and no
+ * size. A printed range (`Aprox. 360-460g`) parses to no size at all, so it
+ * answers no weight either. An approximate volume (`Aprox. 24 l`) is not a
+ * weight and answers null, and its size stays as printed.
+ */
+export function approxWeightOf(size: LidlSize | null): number | null {
+  if (size === null || !size.approximate) {
+    return null;
+  }
+  const grams = GRAMS_IN[size.unit];
+  return grams === undefined ? null : round(size.unitSize * grams);
+}
+
+/** {@link approxWeightOf} of the printed size. */
+export function approxWeightIn(
+  printed: string | null | undefined
+): number | null {
+  return approxWeightOf(parseSize(printed));
 }
 
 function round(value: number): number {

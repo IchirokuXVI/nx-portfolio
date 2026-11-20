@@ -400,6 +400,17 @@ export class HarvestApi implements HarvestServiceI {
     return this._send('delete', `${ROOT}/sources/${segment(supermarketId)}`);
   }
 
+  listProbes(
+    supermarketId: string,
+    query: PageQuery
+  ): Promise<Wire.HarvestSourceProbePage> {
+    return this._send(
+      'get',
+      `${ROOT}/sources/${segment(supermarketId)}/probes`,
+      { params: toParams(query) }
+    );
+  }
+
   listSchedules(
     query: ScheduleQuery
   ): Promise<Wire.HarvestHarvestSchedulePage> {

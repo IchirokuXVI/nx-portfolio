@@ -1,3 +1,5 @@
+import type { LineUnit } from './line-unit';
+
 /**
  * The shopping trips of a zone list (velista `0088`, backend `0122`).
  *
@@ -105,6 +107,11 @@ export interface TripRowVm {
   readonly bought: number;
   /** What the basket asked for. Null on a session row. */
   readonly asked: number | null;
+  /**
+   * What the three numbers count: the line's unit, since a trip's numbers are
+   * within one line (velista `0182`, backend `0246`). Absent is a count.
+   */
+  readonly unit?: LineUnit;
   readonly mark: TripRowMark;
   /** Who holds the line, for `claimed`. Null draws the nameless form. */
   readonly claimedBy: string | null;

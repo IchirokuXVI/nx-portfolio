@@ -5,6 +5,7 @@ import {
   isEditable,
   isEmptyValue,
   orderedFieldNames,
+  settleDraft,
   toInput,
   validateDraft,
   type DraftValue,
@@ -332,7 +333,17 @@ export class RecordStore<T extends ResourceRow> {
       this._refusal.set(null);
     }
 
-    this._draft.update((draft) => ({ ...draft, [name]: value }));
+    // The value, then whatever it rules out: a typed size empties the
+    // weight, and a unit that hides the size empties it. Only the field that
+    // was typed into is touched; an emptied one has nothing to complain of.
+    this._draft.update((draft) =>
+      settleDraft(
+        this._descriptor,
+        { ...draft, [name]: value },
+        this._row(),
+        name
+      )
+    );
     this._touched.update((touched) => new Set(touched).add(name));
 
     // The server refused the value that was there. It has not seen this one.

@@ -1,3 +1,5 @@
+> **PR:** [#928](https://github.com/IchirokuXVI/nx-portfolio/pull/928)
+
 # 0222: deza shops come from its own site
 
 > DEZA shops reach the catalog today only through OpenStreetMap. The chain publishes its own
@@ -464,7 +466,8 @@ User-Agent. `robots.txt` disallows only `/wp-admin/` and allows `/centros/`.
   la Barca`, `Avda. de Libia`, `Fuente de la salud`, `Zoco`, `SuperCash (Quemadas)` and
   `SuperCash (Sector Sur)`, for T1 to T7, Z1, C1 and C2. The menu lists the shops in the same
   order.
-- The pin and the page disagree on one street: T4, `48` on the pin and `21` on the page.
+- The pin and the page disagree on one street: T4, `48` on the pin and `21` on the page. The
+  page is the registered address and the pin is where the shop is (owner answer 3).
   Plan `0154` quotes OpenStreetMap as `Isla de Fuerteventura 48`.
 - The calendar page holds no hours in its markup. `/wp-json/wp/v2/pages?parent=40` and
   `/wp-json/wp/v2/types` answer 404.
@@ -586,15 +589,22 @@ Chosen in this plan, and open to the owner's correction:
 - **The code match is a candidate and never a mapping**, by plan `0154`'s rule.
 - **No opening hours.** The calendar is filled by a script, and reading it is a separate cost.
 
-**Owner** (ask, do not choose):
+**Owner** (answered 2026-11-06):
 
-1. **May a code match map a source location by itself?** The code is the chain's own key on
-   both pages, so it is an identity and not a fuzzy name. Plan `0154` says that no automated
-   match maps a shop. A yes would add a `matchedBy` value and an automatic map on link or
-   import. This plan builds the proposal only.
-2. **Is the postal code queue to ask DEZA of every due code?** Turning `listsItsOwnStores` on
-   does that. The cost away from Córdoba is one request per code per cooldown period. The
-   alternative is a second capability that keeps DEZA out of the queue and only frees the
-   spawn from the postal code.
-3. **Which street is right for T4**, `21` on the shop page or `48` on the pin and in
-   OpenStreetMap. The plan writes the page street and reports the disagreement.
+1. **A code match may map a source location by itself, in principle.** The owner reads the
+   code as an identity. This plan still builds the proposal only (`sameCode` on the candidate),
+   because the automatic map on link or import touches the trusted import and the link of plan
+   `0193`, which the Scope leaves alone, and needs a `matchedBy` value. The automatic map is a
+   follow up. For the record: Mercadona and LIDL have no `source_locations` rows. Their places
+   carry a `scopeKey`, and the trusted import joins each one to a shop and a scope by that key
+   (plan `0152`). That is the analogy the owner had in mind.
+2. **`listsItsOwnStores` is on for `deza-web`.** The queue asks DEZA of every due code.
+3. **T4's street is `21`, the officially registered address, and it is known to be wrong.**
+   The shop page, Google Maps and DEZA's own listing all print
+   `Av. Isla Fuerteventura, 21, Noroeste, 14011 Córdoba`, and that is the address the shop is
+   registered with. The owner checked it on 2026-11-06: number 21 is a residential block some way
+   from the shop, and the shop stands where the pin puts it, beside number `48`. The place keeps
+   `21` for consistency with the registered address. The coordinates come from the pin and are
+   right. The run keeps naming T4 in `addressDisagreements`, and that entry is expected, not a
+   fault to fix. A comment in `deza-store-discovery.runner.ts` says the same where the street
+   is written.

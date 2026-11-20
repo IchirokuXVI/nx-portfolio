@@ -38,8 +38,23 @@ import type { SourceObservation } from './source-ingest';
  *    requests, keeping the rows the coarse category says are groceries.
  * 2. `DETAIL`. One product page per kept row, for the EAN and the region price
  *    map, which the index does not carry. A page that fails costs one product.
- * 3. `INGEST`. Group every observation by the scope its regions resolve to, and
- *    make one call per scope.
+ *    A product goes to the sink as soon as its page answers, after the
+ *    regions it names that the run has not declared yet (plan 0267). The sink
+ *    writes a chunk each time `PRODUCT_CHUNK` (400) products wait. For LIDL,
+ *    whose walk is about a hundred and fifty products, the chunk that is not
+ *    full is the whole walk, so it is written when the run drains. What a
+ *    walk that ends early keeps depends on how it ends:
+ *    - The process dies: the walk keeps the chunks the sink had written, less
+ *      what was still queued or in flight in it.
+ *    - The runner throws with no abort: the executor settles the sink, which
+ *      lets the queued chunks finish and writes no partial chunk. What is
+ *      lost is the chunk that never filled, which for LIDL is the whole walk.
+ *    - A person or a deploy aborts the run: the executor drains the sink,
+ *      which writes the partial chunk too, and every path call goes as `ADD`.
+ *    The paths of the walk are written only by the drain, after the last
+ *    chunk, so only an aborted or completed run writes any.
+ * 3. `INGEST`. Every path of each product read (plan 0268), then the sink
+ *    writes the last chunk when the run drains.
  * 4. `REPORT`.
  *
  * **A price belongs to a region and there are 59 of them** (section 4). The run
@@ -84,12 +99,20 @@ export class LidlCatalogRunner implements CatalogRunner {
       'DETAIL',
       `Reading ${grocery.length} product page(s)`
     );
+    /**
+     * Every product whose page answered, in the order it answered. Each one
+     * went to the sink at that moment (plan 0267, section 5), so this is kept
+     * only for what reads the whole walk at the end: its category paths (plan
+     * 0268) and {@link describeRun}.
+     */
     const products: LidlProduct[] = [];
+    /** Every offer region declared so far, by key, with its first name. */
+    const regions = new Map<string, string | null>();
     const unreadable: string[] = [];
     for (const row of grocery) {
       // An abort, a person's or the refusal guard's (plan 0215), ends the
-      // reading and not the run: what was read is reported below, as the end
-      // of the loop does. Products already read are valid data.
+      // reading and not the run. Every product read before it was already
+      // reported, and is valid data.
       if (context.signal.aborted) {
         break;
       }
@@ -97,6 +120,7 @@ export class LidlCatalogRunner implements CatalogRunner {
         const product = await client.getProduct(row);
         if (product) {
           products.push(product);
+          reportProduct(report, regions, product);
         } else {
           // Section 8: a page that fails names the product and costs that one
           // product. 152 written is worth more than a run that failed on one.
@@ -116,16 +140,17 @@ export class LidlCatalogRunner implements CatalogRunner {
       }
     }
 
-    // --- 3. Declare the regions, then report every product -----------------
-    //
-    // **The run declares its regions and creates none** (plan 0103, section
-    // 6.4). Scope creation used to live here and again in the store discovery
-    // runner, which meant no other runner could create one and the ingest could
-    // not create one at all. Declaring is all a source can honestly do: it says
-    // what it named, and the orchestrator decides what that is in catalog.
-    await context.setStage('INGEST', `Recording ${products.length} product(s)`);
-    const regions = declareRegions(report, products);
-    this.reportProducts(report, products);
+    // --- 3. What only the whole walk can say -------------------------------
+    // Every product and every region went to the sink as its page answered
+    // (plan 0267, section 5). The paths of each product follow, once a
+    // product, before the run flushes and the sink drains (plan 0268). The
+    // sink writes what is left of the last chunk when the run drains.
+    reportCategoryPaths(report, products, context.signal);
+    await context.setStage(
+      'INGEST',
+      `Finishing the walk: ${products.length} product(s) read, each full ` +
+        'chunk written as it filled and the rest written now'
+    );
 
     await context.flush();
     await context.setReport(
@@ -134,7 +159,7 @@ export class LidlCatalogRunner implements CatalogRunner {
         grocery.length,
         products,
         unreadable,
-        regions,
+        [...regions.keys()],
         client.requests
       )
     );
@@ -163,66 +188,94 @@ export class LidlCatalogRunner implements CatalogRunner {
       signal: context.signal,
     });
   }
-
-  /**
-   * Step 3: every product, with every price it publishes.
-   *
-   * **One pass, not one per scope** (plan 0103, D5, reversing plan 0089 section
-   * 8). A price carries the region it is for, so the week's 59 regions travel
-   * with their products instead of being grouped into roughly 54 ingest calls
-   * of the same 132 products. Widening the ingest was refused while it could
-   * hold one scope, for the reason that it changed a contract every caller used
-   * to save 53 batched calls a week. That reasoning was right for a plan whose
-   * job was LIDL and wrong for a plan whose job is the contract.
-   *
-   * **A product with no price is still reported** (section 8.1). 21 of the
-   * week's products are in the window with no price at all, and the catalog is
-   * allowed to know the article exists.
-   */
-  private reportProducts(
-    report: RunReport,
-    products: readonly LidlProduct[]
-  ): void {
-    for (const product of products) {
-      report.product(observationOf(product));
-    }
-  }
 }
 
 /**
- * Every offer region the run saw, declared once each (plan 0089, section 4).
+ * One product, as soon as its page answered (plan 0267, section 5): first each
+ * of its offer regions the run has not declared yet, then the product itself.
  *
- * **One scope per region, at the granularity the source publishes at.**
- * Collapsing the regions that agree this week into two or three groups reads as
- * an obvious simplification and cannot store next week's disagreement, so the
- * scope stays as fine as the price map is.
+ * **The region is declared before any price refers to it** (plan 0103, D4).
+ * The sink runs its writes in the order they were said, so a declaration made
+ * here is resolved before the chunk that holds this product is written.
  *
- * Declaring is all the run does. Whether catalog already holds the region, and
- * what to do when it does not, is the orchestrator's (plan 0103, section 3).
+ * **The run declares its regions and creates none** (plan 0103, section 6.4).
+ * Declaring is all a source can honestly do: it says what it named, and the
+ * orchestrator decides what that is in catalog.
+ *
+ * **One scope per region, at the granularity the source publishes at** (plan
+ * 0089, section 4), declared once, named by its first sighting. Collapsing the
+ * regions that agree this week into two or three groups reads as an obvious
+ * simplification and cannot store next week's disagreement.
+ *
+ * **One pass, not one per scope** (plan 0103, D5). A price carries the region
+ * it is for, so the regions travel with their products.
+ *
+ * **A product with no price is still reported** (plan 0089, section 8.1). Some
+ * of the week's products are in the window with no price at all, and the
+ * catalog is allowed to know the article exists.
  */
-function declareRegions(
+function reportProduct(
   report: RunReport,
-  products: readonly LidlProduct[]
-): string[] {
-  const seen = new Map<string, string | null>();
-  for (const product of products) {
-    for (const price of product.prices) {
-      for (const region of price.regions) {
-        if (seen.has(region.id)) {
-          continue;
-        }
-        seen.set(region.id, region.name ?? null);
-        report.scope({
-          key: region.id,
-          // A LIDL offer region is not a postal code and not a shop: it is a
-          // group of shops the chain prices together and names itself.
-          kind: PriceScopeKind.REGION,
-          name: region.name ?? null,
-        });
+  declared: Map<string, string | null>,
+  product: LidlProduct
+): void {
+  for (const price of product.prices) {
+    for (const region of price.regions) {
+      if (declared.has(region.id)) {
+        continue;
       }
+      declared.set(region.id, region.name ?? null);
+      report.scope({
+        key: region.id,
+        // A LIDL offer region is not a postal code and not a shop: it is a
+        // group of shops the chain prices together and names itself.
+        kind: PriceScopeKind.REGION,
+        name: region.name ?? null,
+      });
     }
   }
-  return [...seen.keys()];
+  report.product(observationOf(product));
+}
+
+/**
+ * Every category path of each product the walk read (plan 0268, section 3),
+ * once a product, at the end of the walk.
+ *
+ * **`REPLACE` when the page stated its paths, else `ADD`.** A product's paths
+ * are read from its own page, all at once: the need world path and the
+ * `wonCategoryBreadcrumbs` list of the online shop tree. A page that states
+ * a need world path and a list that is not empty and is read in full has
+ * said where the chain files the product now, so a stored path it does not
+ * name no longer holds. Anything less has disproved nothing, and says
+ * `ADD`: a path taken from the index row, a page that left the list out, an
+ * empty list (owner decision 95b), or a list with a part that could not be
+ * read. `categoryPathsStated` of the product holds that test. The index
+ * row's paths are among a product's paths only when the page's list was not
+ * read in full (owner decisions 101b and 115b), so they always go as `ADD`.
+ *
+ * **The rolling window does not change that.** What LIDL publishes is a week
+ * of offers, so a run proves nothing about a product it did not meet, and
+ * such a product gets no call: its stored paths stay as they are. The window
+ * decides which products a run reads, not which paths a product it read has.
+ *
+ * A product whose page did not answer was not reported and gets no call. An
+ * aborted run says `ADD`, and the sink would make it so anyway.
+ */
+function reportCategoryPaths(
+  report: RunReport,
+  products: readonly LidlProduct[],
+  signal: AbortSignal
+): void {
+  for (const product of products) {
+    if (product.categoryPaths.length === 0) {
+      continue;
+    }
+    report.categoryPaths(
+      product.externalId,
+      product.categoryPaths,
+      !signal.aborted && product.categoryPathsStated ? 'REPLACE' : 'ADD'
+    );
+  }
 }
 
 /**
@@ -245,6 +298,10 @@ function declareRegions(
  * weight item does not say it either: `product-short-code.json` carries one
  * and prints a fixed `400 g`. So the row is left as it is, and a person
  * decides the unit when the product is created.
+ *
+ * **It does state the weight of a tray printed `Aprox.`** (plan 0244, section
+ * 5.2). LIDL prints one price for that tray and none per kilo, so it is a
+ * piece priced as one: no size, the weight, and not sold by weight.
  */
 function observationOf(product: LidlProduct): SourceObservation {
   return {
@@ -256,6 +313,11 @@ function observationOf(product: LidlProduct): SourceObservation {
     // The unit the adapter converted the printed size into (plan 0177): `75cl`
     // is 750 here and `1,28 l` is 1.28, and this is what says which is which.
     sizeUnit: product.unitSize === null ? null : sourceSizeUnitOf(product.unit),
+    // `Aprox. 350 g` (plan 0244, section 5.2): a tray priced as one piece. The
+    // adapter answers the grams here and no size, the price is the tray's, and
+    // the row is not sold by weight. A printed range parses to neither.
+    soldByWeight: false,
+    approxWeight: product.approxWeight,
     sizeFormat: product.sizeFormat,
     packCount: product.packCount,
     categoryPath: product.categoryPath,

@@ -21,7 +21,8 @@
  * threw away the price it had already fetched for all 4,232 of them. Plan 0086
  * (D4) makes the walk write what it saw, which leaves the refresh with nothing
  * to do that the walk did not already do. A per item refresh for a shopper is a
- * different thing and stays in backlog 0006.
+ * different thing, and it is not a run at all: plan 0216 gives it its own
+ * table, its own cooldowns and no `harvest_runs` row.
  */
 export enum HarvestRunMode {
   /** Geocode a postal code, then one Overpass query for the supermarkets near it. */
@@ -154,6 +155,11 @@ export enum HarvestScheduleOutcome {
    * discovery at all, the postal code queue included.
    */
   SKIPPED_BUSY = 'SKIPPED_BUSY',
+  /**
+   * The probe that the slot ran, or waited for, was not `PASSED` (plan 0247).
+   * The note names the probe and its status.
+   */
+  SKIPPED_PROBE_FAILED = 'SKIPPED_PROBE_FAILED',
 }
 
 /**
@@ -170,6 +176,13 @@ export enum HarvestScheduleBlock {
   SOURCE_DISABLED = 'SOURCE_DISABLED',
   /** The source has three or more consecutive failures. */
   SOURCE_FAILING = 'SOURCE_FAILING',
+  /**
+   * The newest finished probe of the chain that is not `ABORTED` is not
+   * `PASSED` (plan 0247). A forecast and not a verdict: the slot runs a fresh
+   * probe and may pass. Answered for a schedule whose preset fetches the chain
+   * only, so a file import never says it.
+   */
+  PROBE_NOT_PASSED = 'PROBE_NOT_PASSED',
 }
 
 /**
@@ -243,6 +256,14 @@ export enum ItemSourceMatch {
    * never an ACTIVE, and writes no price until a person accepts the row.
    */
   SHARED_EAN = 'SHARED_EAN',
+  /**
+   * The words of the name in any order, without "de" and "en", and the size
+   * (plan 0221). Asked only between two rows keyed on their own printed text,
+   * which is how a reworded DEZA name finds its product. Produces a CANDIDATE,
+   * never an ACTIVE. With no product, it points at the one rejected row its
+   * words meet (the owner's decision of 2026-11-05).
+   */
+  NAME_WORDS_SIZE = 'NAME_WORDS_SIZE',
 }
 
 /**
@@ -274,9 +295,10 @@ export enum SourceLocationStatus {
  *
  * Every decision a file import makes that was not a write becomes one of these,
  * so a run page reads as a list of decisions rather than a set of counters that
- * lost their reasons. **A walk records counters and no warnings**: a file has
- * hundreds of rows and a person reads that list, a walk has 4,232 and nobody
- * does.
+ * lost their reasons. **A walk records counters and no warning per product**:
+ * a file has hundreds of rows and a person reads that list, a walk has 4,232
+ * and nobody does. What a walk does warn about is the run itself, a pause of
+ * its refusal guard, and a part of the listing it could not read (plan 0251).
  *
  * `LOYALTY_REQUIRED` and `CONDITIONAL_PRICE` are gone. They were the harvester
  * deciding which of a leaflet tile's numbers a shopper pays, and plan 0086
@@ -363,6 +385,34 @@ export enum HarvestWarningCode {
   SOURCE_PAUSED = 'SOURCE_PAUSED',
   /** A probe after the pause was answered, and the run goes on (plan 0215). */
   SOURCE_RESUMED = 'SOURCE_RESUMED',
+  /**
+   * Two or more `ACTIVE` rows of one chain bound to one product state
+   * different weights of one piece (plan 0244, section 5.7). Two pieces of
+   * different weight are two products, so this is a merge for a person to
+   * undo. No weight is written onto that product.
+   */
+  APPROX_WEIGHT_ROWS_DISAGREE = 'APPROX_WEIGHT_ROWS_DISAGREE',
+  /**
+   * A part of a chain's listing was not read at all, and the run still ended
+   * `COMPLETED` (plan 0251). One per part: a Carrefour category the storefront
+   * refused or that did not answer, a DEZA section that ran out of query
+   * budget or of narrowing terms. `name` is the part, as the chain printed it.
+   */
+  LISTING_UNREAD = 'LISTING_UNREAD',
+  /**
+   * A part of a chain's listing was read, and gave fewer rows than the chain
+   * printed for it (plan 0251). One per part: an El Jamón category, with the
+   * rows read and the count it printed in the message.
+   */
+  LISTING_SHORT = 'LISTING_SHORT',
+  /**
+   * A detail stage stopped because the chain stopped answering product pages,
+   * and the run went on with what its listing read and still ended
+   * `COMPLETED` (plan 0253). One per stage, with the counts in the message:
+   * pages asked, failed and timed out, and the products left without a page,
+   * which the next walk asks for again.
+   */
+  DETAIL_UNREAD = 'DETAIL_UNREAD',
 }
 
 /**

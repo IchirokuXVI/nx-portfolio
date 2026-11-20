@@ -1,5 +1,6 @@
 import { canDeleteLine, lastListId } from './catalog-holdings';
 import type { ListPermission } from './enums';
+import { addAmount, isMeasured, type LineUnit } from './line-unit';
 
 /**
  * One line that this visit to the catalog put a product on (velista `0134`,
@@ -143,9 +144,22 @@ export function visitWithout(
 /**
  * The lowest quantity the sheet's stepper shows: one more than the line held
  * before the visit. A minus pressed there takes the product back.
+ *
+ * A weight or a volume line the visit made starts at one step of its unit, 25 g
+ * or 25 ml (velista `0185`), and that is its floor: one minus takes it back,
+ * where a floor of one gram would ask for twenty five presses.
+ *
+ * `step` is the line's product step (velista `0186`, ruling 43): a line of a
+ * product stepped at 100 the visit made starts at 100, and that is its floor.
  */
-export function visitFloor(entry: VisitAddition): number {
-  return entry.before + 1;
+export function visitFloor(
+  entry: VisitAddition,
+  unit: LineUnit = 'UNIT',
+  step?: number | null
+): number {
+  return entry.created && isMeasured(unit)
+    ? addAmount(unit, step)
+    : entry.before + 1;
 }
 
 /** What the record needs to know about the list of an entry. */

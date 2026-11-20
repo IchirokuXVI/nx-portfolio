@@ -8,8 +8,10 @@ import type {
   CatalogProduct,
   HoldingRow,
   ProductOffer,
+  QuantityStep,
 } from '@portfolio/velista/models';
 import { readFileSync } from 'fs';
+import i18next from 'i18next';
 import { join } from 'path';
 import {
   ProductRow,
@@ -31,14 +33,18 @@ const OFFER: ProductOffer = {
   currency: 'EUR',
   unitPrice: 8.45,
   unitPriceLabel: 'EUR/L',
+  comparablePrice: null,
+  comparableBasis: null,
   observedAt: new Date('2026-09-20T10:00:00.000Z'),
   sourceKind: 'OFFICIAL_API',
   stale: false,
   priceScopeId: 'scope-m',
+  piecePrice: null,
 };
 
 const OIL: CatalogProduct = {
   id: 'item-oil',
+  quantityStep: null,
   name: { es: 'Aceite de oliva virgen extra', en: 'Extra virgin olive oil' },
   brand: 'Hacendado',
   imageUrl: null,
@@ -54,6 +60,7 @@ const OIL: CatalogProduct = {
   ],
   offer: OFFER,
   unitBasis: 'LITER',
+  approxWeight: null,
 };
 
 function options(
@@ -74,7 +81,7 @@ describe('productRowView', () => {
 
     expect(view.name).toBe('Extra virgin olive oil');
     expect(view.detail).toBe('Hacendado · list.add.size.LITER {"size":"1"}');
-    expect(view.price).toBe('€8.45');
+    expect(view.price).toEqual({ amount: '€8.45', per: null });
     expect(view.chains).toEqual({
       lead: 'Mercadona',
       marks: [{ id: 'scope-m', initial: 'M' }],
@@ -88,7 +95,7 @@ describe('productRowView', () => {
   it('leaves the chain line out while one chain is chosen, where every card would name it', () => {
     const view = productRowView(OIL, options({ chainChosen: true }));
 
-    expect(view.price).toBe('€8.45');
+    expect(view.price).toEqual({ amount: '€8.45', per: null });
     expect(view.chains).toBeNull();
   });
 
@@ -99,7 +106,10 @@ describe('productRowView', () => {
         options()
       );
 
-      expect(view.unitPrice).toBe('catalog.unit.LITER {"price":"€8.45"}');
+      expect(view.unitPrice).toEqual({
+        amount: '€8.45',
+        per: 'catalog.per.LITER',
+      });
     });
 
     it('is not drawn when it is the same number, a one litre bottle', () => {
@@ -112,6 +122,113 @@ describe('productRowView', () => {
         options()
       );
 
+      expect(view.unitPrice).toBeNull();
+    });
+  });
+
+  describe('under the unit price order, the figure that placed the row (velista 0181)', () => {
+    const comparable = options({ unitPriceFigure: 'comparable' });
+    const LIDL: CatalogProduct = {
+      ...OIL,
+      size: 0.5,
+      unit: 'KILOGRAM',
+      unitBasis: null,
+      offer: {
+        ...OFFER,
+        price: 0.99,
+        unitPrice: null,
+        unitPriceLabel: null,
+        comparablePrice: 1.98,
+        comparableBasis: 'KILOGRAM',
+      },
+    };
+
+    it('prints the pair of a LIDL offer, whose chain printed no unit price', () => {
+      expect(productRowView(LIDL, comparable).unitPrice).toEqual({
+        amount: '€1.98',
+        per: 'catalog.per.KILOGRAM',
+      });
+    });
+
+    it('prints no unit price line for the same offer under another order', () => {
+      expect(productRowView(LIDL, options()).unitPrice).toBeNull();
+    });
+
+    it('prints the pair of a Mercadona offer and not the chain figure', () => {
+      const view = productRowView(
+        {
+          ...OIL,
+          size: 0.75,
+          offer: {
+            ...OFFER,
+            price: 6.34,
+            unitPrice: 8.4,
+            comparablePrice: 8.45,
+            comparableBasis: 'LITER',
+          },
+        },
+        comparable
+      );
+
+      expect(view.unitPrice).toEqual({
+        amount: '€8.45',
+        per: 'catalog.per.LITER',
+      });
+    });
+
+    it('prints the pair of a stale offer too, and keeps its age', () => {
+      const stale: CatalogProduct = {
+        ...LIDL,
+        offer: { ...LIDL.offer!, stale: true },
+      };
+      const view = productRowView(stale, {
+        ...comparable,
+        now: new Date('2026-10-08T10:00:00.000Z'),
+      });
+
+      expect(view.stale).toBe(true);
+      expect(view.unitPrice).toEqual({
+        amount: '€1.98',
+        per: 'catalog.per.KILOGRAM',
+      });
+      expect(view.seen).toBe('18 days ago');
+    });
+
+    it('still says only the age of a stale offer under another order', () => {
+      const view = productRowView(
+        { ...LIDL, offer: { ...LIDL.offer!, stale: true } },
+        options({ now: new Date('2026-10-08T10:00:00.000Z') })
+      );
+
+      expect(view.unitPrice).toBeNull();
+      expect(view.seen).toBe('18 days ago');
+    });
+
+    it('prints nothing for an offer with no pair', () => {
+      expect(
+        productRowView({ ...OIL, size: 0.75 }, comparable).unitPrice
+      ).toBeNull();
+    });
+
+    it('prints nothing that repeats the headline of a product sold by the kilo', () => {
+      const view = productRowView(
+        {
+          ...OIL,
+          size: null,
+          unit: 'KILOGRAM',
+          unitBasis: 'KILOGRAM',
+          offer: {
+            ...OFFER,
+            price: 2.49,
+            unitPrice: 2.49,
+            comparablePrice: 2.49,
+            comparableBasis: 'KILOGRAM',
+          },
+        },
+        comparable
+      );
+
+      expect(view.price?.per).toBe('catalog.per.KILOGRAM');
       expect(view.unitPrice).toBeNull();
     });
   });
@@ -134,10 +251,147 @@ describe('productRowView', () => {
       options({ now: new Date('2026-10-08T10:00:00.000Z') })
     );
 
-    expect(view.price).toBe('€6.34');
+    expect(view.price).toEqual({ amount: '€6.34', per: null });
     expect(view.stale).toBe(true);
     expect(view.seen).toBe('18 days ago');
     expect(view.unitPrice).toBeNull();
+  });
+
+  describe('a piece whose weight varies (velista 0179)', () => {
+    /** The weight in the words the app ships, every other key echoed. */
+    function weighed(key: string, args?: Record<string, unknown>): string {
+      const size = String(args?.['size'] ?? '');
+      switch (key) {
+        case 'list.add.weight.KILOGRAM':
+          return `~${size}\u00a0kg`;
+        case 'list.add.weight.GRAM':
+          return `~${size}\u00a0g`;
+        default:
+          return translate(key, args);
+      }
+    }
+
+    const CHEESE_OFFER: ProductOffer = {
+      ...OFFER,
+      price: 13.42,
+      unitPrice: 13.42,
+      unitPriceLabel: 'EUR/kg',
+      comparablePrice: null,
+      comparableBasis: null,
+      piecePrice: 20.94,
+    };
+
+    const CHEESE: CatalogProduct = {
+      ...OIL,
+      id: 'item-cheese',
+      name: { es: 'Queso curado', en: 'Cured cheese' },
+      brand: null,
+      size: null,
+      unit: 'KILOGRAM',
+      approxWeight: 1560,
+      offer: CHEESE_OFFER,
+      unitBasis: 'KILOGRAM',
+    };
+
+    it('draws the weight, the piece price and the price per kilo of a kilo piece', () => {
+      const es = productRowView(
+        CHEESE,
+        options({ locale: 'es', translate: weighed })
+      );
+      expect(es.detail).toBe('~1,56\u00a0kg');
+      expect(es.price).toEqual({ amount: '20,94\u00a0€', per: null });
+      expect(es.unitPrice).toEqual({
+        amount: '13,42\u00a0€',
+        per: 'catalog.per.KILOGRAM',
+      });
+
+      const en = productRowView(CHEESE, options({ translate: weighed }));
+      expect(en.detail).toBe('~1.56\u00a0kg');
+      expect(en.price).toEqual({ amount: '€20.94', per: null });
+      expect(en.unitPrice).toEqual({
+        amount: '€13.42',
+        per: 'catalog.per.KILOGRAM',
+      });
+      // What a kilo costs is in the name too, so a screen reader hears both
+      // numbers the card draws.
+      expect(en.label).toBe(
+        'Cured cheese, ~1.56\u00a0kg, €20.94, €13.42 catalog.per.KILOGRAM'
+      );
+    });
+
+    it('says the weight of a piece under a kilo in grams', () => {
+      const view = productRowView(
+        { ...CHEESE, approxWeight: 395 },
+        options({ locale: 'es', translate: weighed })
+      );
+      expect(view.detail).toBe('~395\u00a0g');
+    });
+
+    it('still draws the price per kilo of a piece of exactly a kilo', () => {
+      const view = productRowView(
+        {
+          ...CHEESE,
+          approxWeight: 1000,
+          offer: { ...CHEESE_OFFER, price: 10, unitPrice: 10, piecePrice: 10 },
+        },
+        options({ translate: weighed })
+      );
+      expect(view.detail).toBe('~1\u00a0kg');
+      expect(view.price).toEqual({ amount: '€10.00', per: null });
+      expect(view.unitPrice).toEqual({
+        amount: '€10.00',
+        per: 'catalog.per.KILOGRAM',
+      });
+    });
+
+    it('says no price for a kilo piece with a price and no piece price', () => {
+      const view = productRowView(
+        { ...CHEESE, offer: { ...CHEESE_OFFER, piecePrice: null } },
+        options({ translate: weighed })
+      );
+      expect(view.price).toBeNull();
+      expect(view.label).toContain('catalog.row.noPrice');
+    });
+
+    it('draws a product sold by the kilo with its "/ kg" and no unit price line', () => {
+      const view = productRowView(
+        {
+          ...CHEESE,
+          approxWeight: null,
+          offer: { ...CHEESE_OFFER, piecePrice: null },
+        },
+        options({ locale: 'es', translate: weighed })
+      );
+      expect(view.detail).toBeNull();
+      expect(view.price).toEqual({
+        amount: '13,42\u00a0€',
+        per: 'catalog.per.KILOGRAM',
+      });
+      expect(view.unitPrice).toBeNull();
+      expect(view.label).toContain('13,42\u00a0€ catalog.per.KILOGRAM');
+    });
+
+    it('draws a piece priced as one as a pack, with its weight', () => {
+      const view = productRowView(
+        {
+          ...CHEESE,
+          unit: 'UNIT',
+          approxWeight: 580,
+          offer: { ...OFFER, price: 6.5, unitPrice: 6.5, piecePrice: null },
+          unitBasis: 'UNIT',
+        },
+        options({ locale: 'es', translate: weighed })
+      );
+      expect(view.detail).toBe('~580\u00a0g');
+      expect(view.price).toEqual({ amount: '6,50\u00a0€', per: null });
+      expect(view.unitPrice).toBeNull();
+    });
+
+    it('leaves the one litre bottle as it was', () => {
+      const view = productRowView(OIL, options({ translate: weighed }));
+      expect(view.price).toEqual({ amount: '€8.45', per: null });
+      expect(view.unitPrice).toBeNull();
+    });
   });
 
   it('puts the pack after the brand and the size (velista 0162)', () => {
@@ -182,6 +436,91 @@ describe('productRowView', () => {
       expect(view.summary).toBe(
         'Hacendado · list.add.size.LITER {"size":"1"} · ' +
           'catalog.row.priceAt {"price":"€8.45","chain":"Mercadona"}'
+      );
+    });
+
+    /**
+     * The real copy through i18next itself (2026-11-17): a price per kilo is words
+     * with a "/", which i18next escaped to "&#x2F;" in a sentence. The sentences
+     * that carry a price, a chain or a shop write them unescaped (`{{- price}}`),
+     * because Angular escapes the text when it draws it.
+     */
+    describe('through i18next and the real copy', () => {
+      const copy = (locale: 'en' | 'es') =>
+        JSON.parse(
+          readFileSync(
+            join(
+              __dirname,
+              '..',
+              '..',
+              '..',
+              'assets',
+              'i18n',
+              `${locale}.json`
+            ),
+            'utf8'
+          )
+        ) as Record<string, unknown>;
+
+      async function translator(locale: 'en' | 'es') {
+        const i18n = i18next.createInstance();
+        await i18n.init({
+          lng: locale,
+          showSupportNotice: false,
+          resources: { [locale]: { translation: copy(locale) } },
+        } as Parameters<typeof i18n.init>[0]);
+        return i18n;
+      }
+
+      it('writes the added sheet price line with its slash, not "&#x2F;"', async () => {
+        const i18n = await translator('en');
+        const loose: CatalogProduct = {
+          ...OIL,
+          size: null,
+          unit: 'KILOGRAM',
+          unitBasis: 'KILOGRAM',
+          offer: {
+            ...OFFER,
+            price: 2.49,
+            unitPrice: 2.49,
+            unitPriceLabel: 'EUR/kg',
+          },
+        };
+
+        const view = productRowView(
+          loose,
+          options({ translate: (key, args) => i18n.t(key, args) })
+        );
+
+        expect(view.summary).toContain('€2.49 / kg at Mercadona');
+        expect(view.summary).not.toContain('&#x2F;');
+      });
+
+      it.each(['en', 'es'] as const)(
+        'leaves a price, a chain and a shop unescaped in every price sentence (%s)',
+        async (locale) => {
+          const i18n = await translator(locale);
+          const values = {
+            price: '1,99 € / kg',
+            chain: 'M&S',
+            shop: "Calle O'Donnell",
+            count: 2,
+            amount: '750 g',
+          };
+          for (const key of [
+            'catalog.row.priceAt',
+            'basket.price.cheaperAt',
+            'list.supermarket.from',
+            'basket.sheet.gotAt',
+            'basket.sheet.gotAtShop',
+            'basket.sheet.gotAtAmount',
+            'basket.sheet.gotAtShopAmount',
+          ]) {
+            const text = i18n.t(key, values);
+            expect(text).toContain('1,99 € / kg');
+            expect(text).not.toMatch(/&#|&amp;/);
+          }
+        }
       );
     });
 
@@ -339,7 +678,7 @@ describe('ProductRow', () => {
       )
     );
     expect(host(differs).querySelector('.price .unit')?.textContent).toContain(
-      'catalog.unit.LITER'
+      'catalog.per.LITER'
     );
 
     const same = await render(productRowView(OIL, options()));
@@ -371,6 +710,35 @@ describe('ProductRow', () => {
     expect(seen?.textContent).toContain('18 days ago');
     expect(seen?.querySelector('lib-clock-icon')).not.toBeNull();
     expect(price?.children).toHaveLength(2);
+  });
+
+  it('draws the comparable figure of a stale price, with its age under it', async () => {
+    const fixture = await render(
+      productRowView(
+        {
+          ...OIL,
+          size: 0.75,
+          offer: {
+            ...OFFER,
+            stale: true,
+            price: 6.34,
+            comparablePrice: 8.45,
+            comparableBasis: 'LITER',
+          },
+        },
+        options({
+          now: new Date('2026-10-08T10:00:00.000Z'),
+          unitPriceFigure: 'comparable',
+        })
+      )
+    );
+
+    const price = host(fixture).querySelector('.price');
+    const lines = Array.from(price?.querySelectorAll('.unit') ?? []);
+    expect(lines).toHaveLength(2);
+    expect(lines[0].textContent).toContain('€8.45');
+    expect(lines[1].classList.contains('seen')).toBe(true);
+    expect(lines[1].textContent).toContain('18 days ago');
   });
 
   it('draws the carton when there is no picture, and the picture when there is', async () => {
@@ -498,11 +866,25 @@ describe('ProductRow', () => {
       ];
     }
 
-    function spinbutton(
+    /** A line's stepper, whose host carries the amount it draws (velista 0188, L). */
+    function stepper(
       fixture: ComponentFixture<ProductRow>,
       lineId: string
     ): Element | null {
-      return heldLine(fixture, lineId).querySelector('[role="spinbutton"]');
+      return heldLine(fixture, lineId).querySelector('lib-quantity-stepper');
+    }
+
+    /** What a line's stepper draws, in base units. */
+    function amountOf(
+      fixture: ComponentFixture<ProductRow>,
+      lineId: string
+    ): string | null | undefined {
+      return stepper(fixture, lineId)?.getAttribute('data-value');
+    }
+
+    /** Whether a stepper button is at an end or off: drawn, focusable, and deaf. */
+    function off(button: HTMLButtonElement | undefined): boolean {
+      return button?.getAttribute('aria-disabled') === 'true';
     }
 
     function record(fixture: ComponentFixture<ProductRow>): {
@@ -626,14 +1008,12 @@ describe('ProductRow', () => {
       ).toEqual(['Extra virgin olive oil', 'Oil for the fryer']);
       expect(
         heldLines(fixture).map(
-          (one) => one.querySelector('.value')?.textContent
+          (one) => one.querySelector('lib-amount-figure .number')?.textContent
         )
       ).toEqual(['2', '5']);
       expect(
         heldLines(fixture).map((one) =>
-          one
-            .querySelector('[role="spinbutton"]')
-            ?.getAttribute('aria-valuenow')
+          one.querySelector('lib-quantity-stepper')?.getAttribute('data-value')
         )
       ).toEqual(['2', '5']);
     });
@@ -651,37 +1031,46 @@ describe('ProductRow', () => {
       );
     });
 
-    it('names each stepper for its line and the list', async () => {
+    it('names the amount of each stepper for its line and the list', async () => {
       const fixture = await render(
         productRowView(OIL, options()),
         adding([OWN, TYPED])
       );
 
-      expect(spinbutton(fixture, 'line-oil')?.getAttribute('aria-label')).toBe(
-        'catalog.held.stepper'
-      );
-      expect(valuesOf('catalog.held.stepper')).toEqual([
-        { line: 'Extra virgin olive oil', list: LIST },
-        { line: 'Oil for the fryer', list: LIST },
+      expect(
+        stepper(fixture, 'line-oil')
+          ?.querySelector('[role="group"]')
+          ?.getAttribute('aria-label')
+      ).toBe('amount.group');
+      expect(valuesOf('amount.inList')).toEqual([
+        { name: 'Extra virgin olive oil', list: LIST },
+        { name: 'Oil for the fryer', list: LIST },
       ]);
     });
 
-    it('draws each stepper small, and in the quiet colour while the line holds some', async () => {
+    it('names the amount as the host words it', async () => {
+      await render(productRowView(OIL, options()), {
+        list: LIST,
+        lines: [{ ...held(), stepperName: 'Oil on Weekly, Home' }],
+      });
+
+      expect(valuesOf('amount.group')).toEqual([
+        { name: 'Oil on Weekly, Home' },
+      ]);
+      expect(valuesOf('amount.inList')).toEqual([]);
+    });
+
+    it('draws each stepper as a row, with no tint while the line holds some', async () => {
       const fixture = await render(
         productRowView(OIL, options()),
         adding([OWN, held({ lineId: 'line-zero', quantity: 0 })])
       );
 
-      const some = heldLine(fixture, 'line-oil').querySelector(
-        'lib-quantity-stepper'
-      );
-      const none = heldLine(fixture, 'line-zero').querySelector(
-        'lib-quantity-stepper'
-      );
-      expect(some?.classList.contains('is-compact')).toBe(true);
-      expect(some?.classList.contains('is-accent')).toBe(true);
-      expect(none?.classList.contains('is-compact')).toBe(true);
-      expect(none?.classList.contains('is-accent')).toBe(false);
+      for (const lineId of ['line-oil', 'line-zero']) {
+        const one = stepper(fixture, lineId);
+        expect(one?.classList.contains('variant-row')).toBe(true);
+        expect(one?.classList.contains('is-accent')).toBe(false);
+      }
     });
 
     it('says one more for the line whose plus was pressed', async () => {
@@ -693,10 +1082,26 @@ describe('ProductRow', () => {
 
       steps(fixture, 'line-fry')[1]?.click();
 
-      expect(heard.lineStepped).toEqual([{ lineId: 'line-fry', by: 1 }]);
+      expect(heard.lineStepped).toEqual([
+        { lineId: 'line-fry', step: { from: 5, to: 6, repeat: false } },
+      ]);
       // A step on a line is not an add, and it does not open the product.
       expect(heard.added).toEqual([]);
       expect(heard.opened).toEqual([]);
+    });
+
+    it("steps a held line by the product's step it carries (velista 0186)", async () => {
+      const fixture = await render(
+        productRowView(OIL, options()),
+        adding([held({ quantity: 1000, unit: 'GRAM', step: 100 })])
+      );
+      const heard = record(fixture);
+
+      steps(fixture, 'line-oil')[0]?.click();
+
+      expect(heard.lineStepped).toEqual([
+        { lineId: 'line-oil', step: { from: 1000, to: 900, repeat: false } },
+      ]);
     });
 
     it('says one fewer for the line whose minus was pressed', async () => {
@@ -708,7 +1113,9 @@ describe('ProductRow', () => {
 
       steps(fixture, 'line-oil')[0]?.click();
 
-      expect(heard.lineStepped).toEqual([{ lineId: 'line-oil', by: -1 }]);
+      expect(heard.lineStepped).toEqual([
+        { lineId: 'line-oil', step: { from: 2, to: 1, repeat: false } },
+      ]);
     });
 
     it('says one fewer at one too, which is how a line goes to zero', async () => {
@@ -718,13 +1125,12 @@ describe('ProductRow', () => {
       );
       const heard = record(fixture);
 
-      expect(
-        spinbutton(fixture, 'line-oil')?.getAttribute('aria-valuemin')
-      ).toBe('0');
-      expect(steps(fixture, 'line-oil')[0]?.disabled).toBe(false);
+      expect(off(steps(fixture, 'line-oil')[0])).toBe(false);
       steps(fixture, 'line-oil')[0]?.click();
 
-      expect(heard.lineStepped).toEqual([{ lineId: 'line-oil', by: -1 }]);
+      expect(heard.lineStepped).toEqual([
+        { lineId: 'line-oil', step: { from: 1, to: 0, repeat: false } },
+      ]);
     });
 
     it('has no minus to press on a line at zero', async () => {
@@ -734,8 +1140,8 @@ describe('ProductRow', () => {
       );
       const heard = record(fixture);
 
-      expect(steps(fixture, 'line-oil')[0]?.disabled).toBe(true);
-      expect(steps(fixture, 'line-oil')[1]?.disabled).toBe(false);
+      expect(off(steps(fixture, 'line-oil')[0])).toBe(true);
+      expect(off(steps(fixture, 'line-oil')[1])).toBe(false);
       steps(fixture, 'line-oil')[0]?.click();
 
       expect(heard.lineStepped).toEqual([]);
@@ -754,8 +1160,8 @@ describe('ProductRow', () => {
       fixture.detectChanges();
 
       expect(heard.lineStepped).toEqual([
-        { lineId: 'line-oil', by: -1 },
-        { lineId: 'line-oil', by: 1 },
+        { lineId: 'line-oil', step: { from: 2, to: 1, repeat: false } },
+        { lineId: 'line-oil', step: { from: 2, to: 3, repeat: false } },
       ]);
     });
 
@@ -770,13 +1176,10 @@ describe('ProductRow', () => {
       steps(fixture, 'line-oil')[1]?.click();
       fixture.detectChanges();
 
-      expect(heard.lineStepped).toEqual([{ lineId: 'line-oil', by: 1 }]);
-      expect(
-        heldLine(fixture, 'line-oil').querySelector('.value')?.textContent
-      ).toBe('2');
-      expect(
-        spinbutton(fixture, 'line-oil')?.getAttribute('aria-valuenow')
-      ).toBe('2');
+      expect(heard.lineStepped).toEqual([
+        { lineId: 'line-oil', step: { from: 2, to: 3, repeat: false } },
+      ]);
+      expect(amountOf(fixture, 'line-oil')).toBe('2');
     });
 
     it('draws the new quantity only once the list has taken the press', async () => {
@@ -787,9 +1190,7 @@ describe('ProductRow', () => {
 
       steps(fixture, 'line-oil')[1]?.click();
       fixture.detectChanges();
-      expect(
-        heldLine(fixture, 'line-oil').querySelector('.value')?.textContent
-      ).toBe('2');
+      expect(amountOf(fixture, 'line-oil')).toBe('2');
 
       fixture.componentRef.setInput(
         'add',
@@ -797,13 +1198,9 @@ describe('ProductRow', () => {
       );
       fixture.detectChanges();
 
-      expect(
-        heldLine(fixture, 'line-oil').querySelector('.value')?.textContent
-      ).toBe('3');
+      expect(amountOf(fixture, 'line-oil')).toBe('3');
       // The other line did not move.
-      expect(
-        heldLine(fixture, 'line-fry').querySelector('.value')?.textContent
-      ).toBe('5');
+      expect(amountOf(fixture, 'line-fry')).toBe('5');
     });
 
     it('disables the stepper of a line the person may not change, and still shows how many', async () => {
@@ -813,18 +1210,10 @@ describe('ProductRow', () => {
       );
       const heard = record(fixture);
 
-      expect(steps(fixture, 'line-oil').map((one) => one.disabled)).toEqual([
-        true,
-        true,
-      ]);
-      expect(
-        heldLine(fixture, 'line-oil').querySelector('.value')?.textContent
-      ).toBe('2');
+      expect(steps(fixture, 'line-oil').map(off)).toEqual([true, true]);
+      expect(amountOf(fixture, 'line-oil')).toBe('2');
       // The line beside it is the person's to change.
-      expect(steps(fixture, 'line-fry').map((one) => one.disabled)).toEqual([
-        false,
-        false,
-      ]);
+      expect(steps(fixture, 'line-fry').map(off)).toEqual([false, false]);
 
       for (const button of steps(fixture, 'line-oil')) {
         button.click();
@@ -984,7 +1373,7 @@ describe('ProductRow, the one card', () => {
   });
 
   describe('one control in the slot, by precedence', () => {
-    const STEPPER = { value: 1, label: 'How many of oil' };
+    const STEPPER = { value: 1, name: 'Extra virgin olive oil' };
     const ADD = { list: 'Weekly', lines: [] };
 
     it('draws the radio alone when a choice and a stepper are both set', async () => {
@@ -1045,16 +1434,17 @@ describe('ProductRow, the one card', () => {
     it('draws a stepper in the slot, and says each press', async () => {
       const fixture = await card({
         compact: true,
-        stepper: { value: 2, label: 'How many of oil', min: 1 },
+        stepper: { value: 2, name: 'Extra virgin olive oil', min: 1 },
       });
-      const stepped: number[] = [];
-      fixture.componentInstance.stepped.subscribe((by) => stepped.push(by));
+      const stepped: QuantityStep[] = [];
+      fixture.componentInstance.stepped.subscribe((step) => stepped.push(step));
 
-      const spin = el(fixture).querySelector(
-        '.cell > lib-quantity-stepper [role="spinbutton"]'
-      );
-      expect(spin?.getAttribute('aria-label')).toBe('How many of oil');
-      expect(spin?.getAttribute('aria-valuemin')).toBe('1');
+      const control = el(fixture).querySelector('.cell > lib-quantity-stepper');
+      expect(control?.classList.contains('variant-row')).toBe(true);
+      expect(control?.getAttribute('data-value')).toBe('2');
+      expect(
+        control?.querySelector('[role="group"]')?.getAttribute('aria-label')
+      ).toBe('amount.group');
       expect(
         el(fixture).querySelector('.row')?.classList.contains('has-control')
       ).toBe(true);
@@ -1064,9 +1454,14 @@ describe('ProductRow, the one card', () => {
         ),
       ];
       plus?.click();
+      // The caller keeps the amount; its redraw is the base of the next press.
+      fixture.detectChanges();
       minus?.click();
 
-      expect(stepped).toEqual([1, -1]);
+      expect(stepped).toEqual([
+        { from: 2, to: 3, repeat: false },
+        { from: 2, to: 1, repeat: false },
+      ]);
       expect(el(fixture).querySelector('button.add')).toBeNull();
     });
 
@@ -1085,7 +1480,7 @@ describe('ProductRow, the one card', () => {
       const fixture = await card({
         compact: true,
         openable: false,
-        stepper: { value: 1, label: 'How many of oil' },
+        stepper: { value: 1, name: 'Extra virgin olive oil' },
       });
 
       expect(el(fixture).querySelector('button.open')).toBeNull();
@@ -1115,11 +1510,17 @@ describe('ProductRow, the one card', () => {
 
   describe('every shop’s price (the search)', () => {
     const SHOPS: ProductRowShop[] = [
-      { id: 'c-m', name: 'Mercadona', price: '€8.45', note: null, best: true },
+      {
+        id: 'c-m',
+        name: 'Mercadona',
+        price: { amount: '€8.45', per: null },
+        note: null,
+        best: true,
+      },
       {
         id: 'c-e',
         name: 'El Jamón',
-        price: '€9.10',
+        price: { amount: '€9.10', per: '/ kg' },
         note: 'seen 3 days ago',
         best: false,
       },
@@ -1155,6 +1556,14 @@ describe('ProductRow, the one card', () => {
       expect(rows[1]?.querySelector('.shop-note')?.textContent).toBe(
         'seen 3 days ago'
       );
+      // What a price is per is drawn small after its number (velista 0179).
+      expect(
+        rows[0]?.querySelector('.shop-price')?.firstElementChild?.textContent
+      ).toBe('€8.45');
+      expect(rows[0]?.querySelector('.shop-price .per')).toBeNull();
+      expect(rows[1]?.querySelector('.shop-price .per')?.textContent).toBe(
+        '/ kg'
+      );
       expect(line?.getAttribute('aria-expanded')).toBe('true');
     });
   });
@@ -1174,7 +1583,7 @@ describe('ProductRow, the one card', () => {
       detail: 'Adds its 4 products',
       caption: null,
       imageUrl: null,
-      price: '€1.00',
+      price: { amount: '€1.00', per: null },
       unitPrice: null,
       seen: null,
       stale: false,
@@ -1295,5 +1704,205 @@ describe('ProductRow, its layers', () => {
 
     const host = /:host\s*\{([^}]*)\}/.exec(scss)?.[1] ?? '';
     expect(host).toMatch(/isolation:\s*isolate;/);
+  });
+});
+
+/** Velista `0185`, C1 and decisions D and G: a product already on the list. */
+describe('ProductRow, a product already on the list', () => {
+  const LINE: HoldingRow = {
+    lineId: 'line-oil',
+    name: 'Extra virgin olive oil',
+    quantity: 2,
+    editable: true,
+    pending: false,
+  };
+
+  async function render(add: ProductRowAdd): Promise<HTMLElement> {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [ProductRow, RokuTranslatorTestingModule.forTesting()],
+      providers: [provideRouter([])],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ProductRow);
+    fixture.componentRef.setInput('row', productRowView(OIL, options()));
+    fixture.componentRef.setInput('add', add);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('switches the plus off, keeps its name, and describes it by the sentence', async () => {
+    const host = await render({
+      list: 'Weekly shop',
+      lines: [LINE],
+      onList: { lineId: 'line-oil', path: '/en/zones/z1/lists/l1' },
+    });
+
+    const plus = host.querySelector<HTMLButtonElement>('button.add');
+    // Inert but focusable (decision G, the owner's on 2026-11-12).
+    expect(plus?.getAttribute('aria-disabled')).toBe('true');
+    expect(plus?.hasAttribute('disabled')).toBe(false);
+    expect(plus?.getAttribute('aria-label')).toBe('catalog.add.label');
+    const sentence = host.querySelector('.held-onlist');
+    expect(sentence).not.toBeNull();
+    // The reason alone describes the plus, not the link's words after it.
+    const reason = host.querySelector(
+      `#${plus?.getAttribute('aria-describedby') ?? 'none'}`
+    );
+    expect(reason).not.toBeNull();
+    expect(sentence?.contains(reason)).toBe(true);
+    expect(reason?.textContent?.trim()).toContain('catalog.held.alreadyOn');
+    expect(reason?.textContent).not.toContain('catalog.held.openLine');
+    expect(reason?.querySelector('a')).toBeNull();
+    expect(
+      sentence?.querySelector('lib-info-icon')?.getAttribute('aria-hidden')
+    ).toBe('true');
+    expect(sentence?.textContent).toContain('catalog.held.alreadyOn');
+    // In place of the heading of the lines.
+    expect(host.querySelector('.held-title')).toBeNull();
+  });
+
+  it('keeps a space between the reason and the link, so the sentence does not run together (velista 0185, C1)', async () => {
+    const host = await render({
+      list: 'Weekly shop',
+      lines: [LINE],
+      onList: { lineId: 'line-oil', path: '/en/zones/z1/lists/l1' },
+    });
+
+    const text = host.querySelector('.held-onlist-text')?.textContent ?? '';
+    expect(text.replace(/\s+/g, ' ').trim()).toBe(
+      'catalog.held.alreadyOn catalog.held.openLine'
+    );
+  });
+
+  it('keeps focus on the plus when an add lands and switches it off, and a second press adds nothing', async () => {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [ProductRow, RokuTranslatorTestingModule.forTesting()],
+      providers: [provideRouter([])],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ProductRow);
+    fixture.componentRef.setInput('row', productRowView(OIL, options()));
+    fixture.componentRef.setInput('add', { list: 'Weekly shop', lines: [] });
+    fixture.detectChanges();
+    document.body.appendChild(fixture.nativeElement);
+    const pressed: string[] = [];
+    fixture.componentInstance.added.subscribe((event) =>
+      pressed.push(event.id)
+    );
+    try {
+      const plus = (fixture.nativeElement as HTMLElement).querySelector(
+        'button.add'
+      ) as HTMLButtonElement;
+      plus.focus();
+      plus.click();
+      expect(pressed).toEqual([OIL.id]);
+
+      // The add landed: the line is on the list, and the plus switches off.
+      fixture.componentRef.setInput('add', {
+        list: 'Weekly shop',
+        lines: [LINE],
+        onList: { lineId: 'line-oil', path: '/en/zones/z1/lists/l1' },
+      });
+      fixture.detectChanges();
+
+      expect(document.activeElement).toBe(plus);
+      expect(plus.getAttribute('aria-disabled')).toBe('true');
+      expect(plus.hasAttribute('disabled')).toBe(false);
+      plus.click();
+      expect(pressed).toEqual([OIL.id]);
+    } finally {
+      (fixture.nativeElement as HTMLElement).remove();
+    }
+  });
+
+  it('links to the list at that line, and keeps the line and its stepper working', async () => {
+    const host = await render({
+      list: 'Weekly shop',
+      lines: [LINE],
+      onList: { lineId: 'line-oil', path: '/en/zones/z1/lists/l1' },
+    });
+
+    const link = host.querySelector<HTMLAnchorElement>('a.held-onlist-link');
+    expect(link?.textContent?.trim()).toBe('catalog.held.openLine');
+    expect(link?.getAttribute('href')).toBe(
+      '/en/zones/z1/lists/l1?line=line-oil'
+    );
+    const steps = host.querySelectorAll<HTMLButtonElement>(
+      'li.held-line lib-quantity-stepper button.step'
+    );
+    expect(steps).toHaveLength(2);
+    expect(
+      [...steps].some((step) => step.getAttribute('aria-disabled') === 'true')
+    ).toBe(false);
+  });
+
+  it('keeps the plus and the heading while the host sets neither reason, as for an add on its way', async () => {
+    const host = await render({
+      list: 'Weekly shop',
+      lines: [LINE],
+    });
+
+    expect(host.querySelector<HTMLButtonElement>('button.add')?.disabled).toBe(
+      false
+    );
+    expect(
+      host.querySelector('button.add')?.hasAttribute('aria-disabled')
+    ).toBe(false);
+    expect(
+      host.querySelector('button.add')?.hasAttribute('aria-describedby')
+    ).toBe(false);
+    expect(host.querySelector('.held-title')).not.toBeNull();
+    expect(host.querySelector('.held-onlist')).toBeNull();
+  });
+
+  it('switches the plus off for one line at zero, says to raise it below, and links nowhere (decision 51 of 2026-11-16)', async () => {
+    const host = await render({
+      list: 'Weekly shop',
+      lines: [{ ...LINE, quantity: 0 }],
+      atZero: true,
+    });
+
+    const plus = host.querySelector<HTMLButtonElement>('button.add');
+    expect(plus?.getAttribute('aria-disabled')).toBe('true');
+    expect(plus?.hasAttribute('disabled')).toBe(false);
+    const reason = host.querySelector(
+      `#${plus?.getAttribute('aria-describedby') ?? 'none'}`
+    );
+    expect(reason?.textContent?.trim()).toBe('catalog.held.atZero');
+    expect(host.querySelector('a.held-onlist-link')).toBeNull();
+    expect(host.querySelector('.held-title')).toBeNull();
+    // The line keeps its stepper, which is how it is raised, and its plus works.
+    const steps = host.querySelectorAll<HTMLButtonElement>(
+      'li.held-line lib-quantity-stepper button.step'
+    );
+    expect(steps).toHaveLength(2);
+    expect(steps[1]?.getAttribute('aria-disabled')).not.toBe('true');
+  });
+
+  it('switches the plus off the same way for two lines at zero', async () => {
+    const host = await render({
+      list: 'Weekly shop',
+      lines: [
+        { ...LINE, quantity: 0 },
+        { ...LINE, lineId: 'line-oil-b', name: 'Oil for frying', quantity: 0 },
+      ],
+      atZero: true,
+    });
+
+    const plus = host.querySelector<HTMLButtonElement>('button.add');
+    expect(plus?.getAttribute('aria-disabled')).toBe('true');
+    expect(plus?.hasAttribute('disabled')).toBe(false);
+    const reason = host.querySelector(
+      `#${plus?.getAttribute('aria-describedby') ?? 'none'}`
+    );
+    expect(reason?.textContent?.trim()).toBe('catalog.held.atZero');
+    expect(host.querySelector('a.held-onlist-link')).toBeNull();
+    expect(host.querySelector('.held-title')).toBeNull();
+    // Each line keeps its stepper, which is how one is raised.
+    const steps = host.querySelectorAll<HTMLButtonElement>(
+      'li.held-line lib-quantity-stepper button.step'
+    );
+    expect(steps).toHaveLength(4);
   });
 });

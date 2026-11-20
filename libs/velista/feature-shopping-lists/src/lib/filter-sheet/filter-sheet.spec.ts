@@ -899,6 +899,7 @@ describe('FilterSheet: the aisles of the shop', () => {
     productGroupId: null,
     categories: [],
     sectionIds: ['sec-dairy'],
+    approxWeight: null,
   } satisfies BasketProduct;
 
   const DAIRY = {

@@ -26,6 +26,7 @@ import type {
   UpdateAdminListLineRequest,
   UpdateAdminListRequest,
 } from '@portfolio/luna-shopper/contracts';
+import { isLineUnit } from '@portfolio/luna-shopper/contracts';
 import {
   clampPageSize,
   decodeCursor,
@@ -34,13 +35,8 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
 import { BasketReadService } from '../baskets/basket-read.service';
-import {
-  BasketSource,
-  Basket,
-  ListLine,
-  ShoppingList,
-} from '../entities';
 import { BasketService } from '../baskets/basket.service';
+import { Basket, BasketSource, ListLine, ShoppingList } from '../entities';
 import { LineService } from '../lists/line.service';
 import { ListService } from '../lists/list.service';
 import { CorePlatformAdminService } from './platform-admin.service';
@@ -363,6 +359,8 @@ export class AdminListService {
       {
         content: req.content,
         quantity: req.quantity,
+        // What the quantity counts (plan 0246, section 6).
+        unit: req.unit,
         itemIds: req.itemIds,
       },
       actorId
@@ -556,6 +554,7 @@ export class AdminListService {
     return rows.map((row) => ({
       rowKey: row.rowKey,
       content: row.content,
+      unit: row.unit,
       left: row.left,
       bought: row.bought,
       asked: row.asked,
@@ -594,6 +593,7 @@ export class AdminListService {
         itemId: row.itemId,
         outcome: row.outcome,
         quantity: row.quantity,
+        unit: isLineUnit(row.unit) ? row.unit : 'UNIT',
         pricePaidCents: row.pricePaidCents,
         pricePaidCurrency: row.pricePaidCurrency,
         priceScopeId: row.priceScopeId,
@@ -648,6 +648,7 @@ const BASKET_SETTLEMENTS_SQL = `
          s."itemId" AS "itemId",
          s."outcome" AS "outcome",
          s."quantity" AS "quantity",
+         s."unit"::text AS "unit",
          s."pricePaidCents" AS "pricePaidCents",
          s."pricePaidCurrency" AS "pricePaidCurrency",
          s."priceScopeId" AS "priceScopeId",
@@ -669,6 +670,7 @@ interface SettlementRow {
   itemId: string | null;
   outcome: SettlementOutcome;
   quantity: number;
+  unit: string;
   pricePaidCents: number | null;
   pricePaidCurrency: string | null;
   priceScopeId: string | null;
@@ -724,6 +726,8 @@ function toLineView(line: ListLine, listName: string): AdminListLineView {
     listName,
     content: line.content,
     quantity: line.quantity,
+    // `UNIT` for a line built by hand (plan 0246, section 6).
+    unit: line.unit ?? 'UNIT',
     approvalStatus: line.approvalStatus,
     createdByUserId: line.createdByUserId,
     createdAt: line.createdAt.toISOString(),

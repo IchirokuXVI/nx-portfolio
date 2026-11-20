@@ -6,10 +6,15 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import type { HarvesterConfig } from '../config/app-config';
 import type { HarvestRun, SupermarketSource } from '../entities';
-import type { FileImportRunner } from './file-import.runner';
+import {
+  FileImportFailedAfterIngestError,
+  type FileImportRunner,
+  type FileImportStepAfterIngest,
+} from './file-import.runner';
 import type { HarvestRunStore } from './harvest-run.store';
 import type { RunContext } from './run-context';
 import { RunExecutor, SHUTDOWN_STOPPED_RUN } from './run-executor.service';
+import type { SourceIngestCounters } from './source-ingest';
 import type { SupermarketSourceService } from './supermarket-source.service';
 
 /**
@@ -26,6 +31,27 @@ import type { SupermarketSourceService } from './supermarket-source.service';
  */
 
 const CHAIN = '02060206-0000-4000-a000-000000000001';
+
+/** What a file import answers, every key of its type. */
+function counters(
+  overrides: Partial<SourceIngestCounters> = {}
+): SourceIngestCounters {
+  return {
+    created: 0,
+    updated: 0,
+    unchanged: 0,
+    pricesRecorded: 0,
+    pricesWritten: 0,
+    pricesConfirmed: 0,
+    pricesConflicted: 0,
+    pricesSoldAnotherWay: 0,
+    wordOrderProposals: 0,
+    wordOrderRejectedPointers: 0,
+    sizesDisproved: 0,
+    probablePackCounts: 0,
+    ...overrides,
+  };
+}
 
 type Ending = 'throws' | 'returns';
 
@@ -76,12 +102,7 @@ function build(ending: Ending = 'throws') {
             if (ending === 'throws') {
               reject(new Error('The operation was aborted.'));
             } else {
-              resolve({
-                pricesRecorded: 0,
-                pricesWritten: 0,
-                pricesConfirmed: 0,
-                pricesConflicted: 0,
-              });
+              resolve(counters());
             }
           });
         })
@@ -178,6 +199,143 @@ describe('RunExecutor, a run that is stopped (plan 0206)', () => {
       HarvestRunStatus.ABORTED,
       'The operation was aborted.'
     );
+  });
+
+  it('writes the two word order counts of a file import into the report (plan 0221)', async () => {
+    const { executor, store } = build();
+    const importing = executor['fileImport'] as unknown as {
+      run: jest.Mock;
+    };
+    importing.run.mockImplementationOnce(async () =>
+      counters({ wordOrderProposals: 2, wordOrderRejectedPointers: 1 })
+    );
+
+    await executor.runToCompletion('run-1');
+
+    expect(store.setReport).toHaveBeenCalledWith(
+      'run-1',
+      expect.objectContaining({
+        wordOrderProposals: 2,
+        wordOrderRejectedPointers: 1,
+      })
+    );
+  });
+
+  it('writes the category paths a file import changed into the report, under the key a walk uses (plan 0268)', async () => {
+    const { executor, store } = build();
+    const importing = executor['fileImport'] as unknown as {
+      run: jest.Mock;
+    };
+    importing.run.mockImplementationOnce(async () => ({
+      ...counters(),
+      categoryPathsWritten: 3,
+    }));
+
+    await executor.runToCompletion('run-1');
+
+    expect(store.setReport).toHaveBeenCalledWith(
+      'run-1',
+      expect.objectContaining({ categoryPathsWritten: 3 })
+    );
+  });
+
+  it.each<FileImportStepAfterIngest>(['OUTCOMES', 'CATEGORY_PATHS', 'FLUSH'])(
+    'ends FAILED and keeps the counters of what the ingest wrote when %s fails after it (owner decisions 96c and 102b)',
+    async (step) => {
+      const { executor, store } = build();
+      const importing = executor['fileImport'] as unknown as {
+        run: jest.Mock;
+      };
+      importing.run.mockImplementationOnce(async () => {
+        throw new FileImportFailedAfterIngestError(
+          step,
+          {
+            ...counters({ created: 4, pricesRecorded: 4, pricesWritten: 3 }),
+            categoryPathsWritten: 1,
+          },
+          new Error('connection terminated')
+        );
+      });
+
+      await expect(executor.runToCompletion('run-1')).resolves.toBe(
+        HarvestRunStatus.FAILED
+      );
+      expect(store.setReport).toHaveBeenCalledWith(
+        'run-1',
+        expect.objectContaining({
+          wordOrderProposals: 0,
+          sizesDisproved: 0,
+          categoryPathsWritten: 1,
+        })
+      );
+      // The same fields a completed import writes, prices included.
+      const completed = build();
+      (
+        completed.executor['fileImport'] as unknown as { run: jest.Mock }
+      ).run.mockImplementationOnce(async () => ({
+        ...counters({ created: 4, pricesRecorded: 4, pricesWritten: 3 }),
+        categoryPathsWritten: 1,
+      }));
+      await completed.executor.runToCompletion('run-1');
+      expect((store.setReport as jest.Mock).mock.calls[0][1]).toEqual(
+        (completed.store.setReport as jest.Mock).mock.calls[0][1]
+      );
+      // The step's own sentence.
+      expect((store.finish as jest.Mock).mock.calls[0].slice(0, 3)).toEqual([
+        'run-1',
+        HarvestRunStatus.FAILED,
+        'connection terminated',
+      ]);
+    }
+  );
+
+  it('ends ABORTED and still keeps the counters when a step after the ingest fails after a person’s abort', async () => {
+    const { executor, store } = build();
+    const importing = executor['fileImport'] as unknown as {
+      run: jest.Mock;
+    };
+    let started!: () => void;
+    const importStarted = new Promise<void>((resolve) => (started = resolve));
+    importing.run.mockImplementationOnce(
+      (context: RunContext) =>
+        new Promise((_resolve, reject) => {
+          started();
+          context.signal.addEventListener('abort', () =>
+            reject(
+              new FileImportFailedAfterIngestError(
+                'FLUSH',
+                { ...counters({ created: 2 }), categoryPathsWritten: 1 },
+                new Error('The operation was aborted.')
+              )
+            )
+          );
+        })
+    );
+
+    const done = executor.runToCompletion('run-1');
+    await importStarted;
+    executor.cancel('run-1');
+
+    await expect(done).resolves.toBe(HarvestRunStatus.ABORTED);
+    expect(store.setReport).toHaveBeenCalledWith(
+      'run-1',
+      expect.objectContaining({ categoryPathsWritten: 1 })
+    );
+  });
+
+  it('writes no import counters for an ingest that fails before it wrote anything', async () => {
+    const { executor, store } = build();
+    const importing = executor['fileImport'] as unknown as {
+      run: jest.Mock;
+    };
+    importing.run.mockImplementationOnce(async () => {
+      throw new Error('connection refused');
+    });
+
+    await expect(executor.runToCompletion('run-1')).resolves.toBe(
+      HarvestRunStatus.FAILED
+    );
+    expect(store.setReport).not.toHaveBeenCalled();
   });
 
   it('still counts a run that failed on its own', async () => {

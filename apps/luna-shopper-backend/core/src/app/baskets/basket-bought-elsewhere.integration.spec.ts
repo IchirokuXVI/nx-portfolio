@@ -42,8 +42,8 @@ import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { BasketAnnouncer } from './basket-announcer.service';
 import { fakeCoreConfig } from './basket-config.fake';
 import { BasketCoverageService } from './basket-coverage.service';
-import { BasketPatchReader } from './basket-patch.reader';
 import { BasketDemandService } from './basket-demand.service';
+import { BasketPatchReader } from './basket-patch.reader';
 import { BasketReadService } from './basket-read.service';
 import { BasketRedaction } from './basket-redaction';
 import { BasketRevertService } from './basket-revert.service';
@@ -362,6 +362,7 @@ describeIntegration(
         rowKey: row.id,
         lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity,
         from,
       });
@@ -696,6 +697,7 @@ describeIntegration(
           rowKey: milk.id,
           lineId: milk.id,
           quantity: 1,
+          unit: 'UNIT',
           from: 0,
         });
 

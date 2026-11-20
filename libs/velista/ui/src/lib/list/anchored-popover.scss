@@ -28,3 +28,25 @@
   padding: var(--app-space-3) 0 var(--app-space-2);
   overflow: hidden;
 }
+
+// One short sentence about the field under it (velista 0188, the owner's ruling of
+// 2026-11-17): the note's surface at the width of its words, with less padding. It
+// sits 8 px off the capsule, so it never covers the field or a button.
+.pop.hint {
+  inline-size: max-content;
+  padding: var(--app-space-2) var(--app-space-3);
+  color: var(--app-text-primary);
+  animation: hint-in var(--app-motion-fast) var(--app-motion-ease);
+}
+
+@keyframes hint-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pop.hint {
+    animation: none;
+  }
+}

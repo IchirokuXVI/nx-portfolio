@@ -1,9 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { HarvestDetailFetch } from '@portfolio/luna-shopper/contracts';
+import {
+  HarvestDetailFetch,
+  HarvestWarningCode,
+} from '@portfolio/luna-shopper/contracts';
 import {
   ELJAMON_DEFAULT_POSTAL_CODE,
   ElJamonClient,
+  ElJamonTimeoutError,
+  createElJamonFetch,
   photoAddressRead,
   splitSize,
   type ElJamonCategory,
@@ -19,12 +24,66 @@ import {
   type CatalogRunner,
 } from './catalog-runner';
 import { photoOf } from './photo-address';
-import type { RunContext } from './run-context';
+import { listingWarning, type RunContext } from './run-context';
 import type { RunReport } from './run-report';
 import type {
+  PartialSourceObservation,
+  ReportedObservation,
   SourceObservation,
   SourceObservationPrice,
 } from './source-ingest';
+
+/**
+ * How many silent attempts in a row, across every worker of the pool, stop the
+ * detail stage (plan 0253, D1). An attempt is one request the transport sent,
+ * a retry included, and it is silent when it timed out. With six workers and a
+ * 30 second idle timeout, 20 is about 100 seconds of a chain that answers
+ * nothing. Any attempt that gets an answer, a 404 included, starts the count
+ * again. A reset connection, a socket hang up or a DNS failure is no answer
+ * and no silence, so it leaves the count as it is.
+ */
+export const DETAIL_TIMEOUTS_IN_A_ROW = 20;
+
+/**
+ * The silent attempts in a row of one run, counted at the transport, below the
+ * client's retries, so a page that timed out on every retry counts each one.
+ */
+export class SilentAttempts {
+  /** Silent attempts since the last answer. */
+  inARow = 0;
+  /** Every silent attempt since the count was armed. On the report. */
+  total = 0;
+
+  /** Starts counting from nothing, at the start of the detail stage. */
+  reset(): void {
+    this.inARow = 0;
+    this.total = 0;
+  }
+
+  /** Whether the chain has been silent long enough to stop asking. */
+  get exhausted(): boolean {
+    return this.inARow >= DETAIL_TIMEOUTS_IN_A_ROW;
+  }
+
+  /** `fetchImpl`, counted: a `Response` resets, a timeout counts. */
+  watch(fetchImpl: typeof fetch): typeof fetch {
+    return (async (input: string | URL | Request, init?: RequestInit) => {
+      try {
+        const response = await fetchImpl(input, init);
+        // The transport resolves only once the whole body arrived, so any
+        // status is an answer.
+        this.inARow = 0;
+        return response;
+      } catch (error) {
+        if (isTimeout(error)) {
+          this.inARow += 1;
+          this.total += 1;
+        }
+        throw error;
+      }
+    }) as typeof fetch;
+  }
+}
 
 /**
  * `CATALOG_DISCOVERY` against the `eljamon-web` adapter (plan 0169, section 5).
@@ -48,7 +107,41 @@ import type {
  *    serial, because page N is a POST of the filters page N - 1 carried.
  * 2. `DETAIL`. One product page per product this chain has no row for, for the
  *    category path. A known product skips it (plan 0119, section 3).
- * 3. `INGEST`. Report every product, with its listing price.
+ * 3. `INGEST`. Report what is left, with its listing price.
+ *
+ * **Each product goes to the sink as soon as its observation is whole** (plan
+ * 0267): a known one when it is listed, a new one when its page answers or
+ * fails. The sink writes a chunk each time `PRODUCT_CHUNK` products wait, so a
+ * walk that ends part way keeps the chunks that were written. An abort by a
+ * person or a deploy also writes the chunk that was not full, at the drain. A
+ * runner that throws loses that chunk, and a process that dies loses it too,
+ * with what was still queued or in flight (plan 0267, notes of 2026-11-20).
+ * Only a row whose page the walk did not read waits for the end, because only
+ * the end knows whether its page will be read.
+ *
+ * **Every category path of a product is stated at the end** (plan 0268): the
+ * breadcrumb of its page when this run read it, and each top level category
+ * that listed it. It replaces the stored paths only when this run read the
+ * page and the whole listing; otherwise it adds to them, so a breadcrumb read
+ * on an earlier walk is never cleared by a walk that did not read the page.
+ *
+ * **`processed` counts products**, the unit of `totalPlanned` (plan 0217,
+ * section 4), and this runner counts it itself (plan 0253, section 2): a known
+ * product when the detail stage starts, a new one when its page is read or
+ * fails, and one whose page was never asked for when the ingest records it.
+ * So the counter moves during the hour of product pages and not only at the
+ * end, and it ends at `totalPlanned` once.
+ *
+ * **The detail stage stops when the chain stops answering** (plan 0253,
+ * section 3, D1 (b)): {@link DETAIL_TIMEOUTS_IN_A_ROW} silent attempts in a
+ * row across the pool, retries included, about 100 seconds of six workers with
+ * nothing answered, and no new page is asked. The run still records every
+ * listed row and ends `COMPLETED` with one `DETAIL_UNREAD` warning. On a `NEW`
+ * walk a new product whose page was not read is written with
+ * {@link DETAIL_FAILED_KEY}, so the next walk asks for it. An `ALL` walk was
+ * handed no ids, so it reports every product whose page it never asked for
+ * from the listing alone, and the ingest creates no row from that for a
+ * product the chain does not hold yet.
  *
  * **No number here claims the catalog is complete.** The sum of the counts
  * the categories printed is what the site said, and the report says it in those
@@ -68,8 +161,11 @@ export class ElJamonCatalogRunner implements CatalogRunner {
   ): Promise<void> {
     const postalCode =
       readString(source.config, 'postalCode') ?? ELJAMON_DEFAULT_POSTAL_CODE;
-    const client = this.createClient(context, source, postalCode);
+    const silence = new SilentAttempts();
+    const client = this.createClient(context, source, postalCode, silence);
     const walk = new Walk();
+    context.countProgressItself();
+    const known = knownIds(input);
 
     // --- 1. The listing ----------------------------------------------------
     await context.setStage('LIST', 'Reading the top level categories');
@@ -80,7 +176,7 @@ export class ElJamonCatalogRunner implements CatalogRunner {
       if (context.signal.aborted) {
         break;
       }
-      await this.listCategory(context, client, walk, category);
+      await this.listCategory(context, client, report, walk, known, category);
     }
     await context.setTotalPlanned(walk.rows.size);
     this.logger.log(
@@ -89,7 +185,6 @@ export class ElJamonCatalogRunner implements CatalogRunner {
     );
 
     // --- 2. One product page per new product -------------------------------
-    const known = knownIds(input);
     const fresh = [...walk.rows.values()].filter(
       (listed) => !known.has(listed.row.code)
     );
@@ -98,44 +193,17 @@ export class ElJamonCatalogRunner implements CatalogRunner {
       `Reading ${fresh.length} product page(s), ` +
         `${walk.rows.size - fresh.length} product(s) already known`
     );
-    await runWorkerPool({
-      items: fresh,
-      workers: source.workers,
-      signal: context.signal,
-      handle: async (listed) => {
-        const product = await client.getProduct(listed.row.url);
-        if (!product) {
-          throw new Error('The page carried no product JSON-LD.');
-        }
-        walk.details.set(listed.row.code, product);
-        if (product.price !== null && product.price !== listed.row.price) {
-          walk.priceDisagreements.push({
-            code: listed.row.code,
-            listing: listed.row.price,
-            productPage: product.price,
-          });
-        }
-        await context.heartbeat();
-      },
-      onError: async (error, listed) => {
-        // The page the abort cut short is not a failed page: it was not read,
-        // and is reported below as the pages never asked for are.
-        if (context.signal.aborted) {
-          return;
-        }
-        // One page costs one product's category path, never the product: it
-        // is still reported, with its top level category (section 5.3).
-        this.logger.warn(
-          `Run ${context.runId}: product ${listed.row.code} failed: ${String(error)}`
-        );
-        walk.failedProducts.push({
-          code: listed.row.code,
-          url: listed.row.url,
-          error: String(error),
-        });
-        await context.report({ failed: 1 });
-      },
-    });
+    // A known product needs no page, so its share of the plan is done now.
+    await context.report({ processed: walk.rows.size - fresh.length });
+    const detail = await this.readDetails(
+      context,
+      client,
+      report,
+      walk,
+      fresh,
+      source,
+      silence
+    );
     for (const disagreement of walk.priceDisagreements) {
       // The listing wins: it is what a shopper sees with the session's postal
       // code (section 5.2). The disagreement is named on the report.
@@ -145,46 +213,188 @@ export class ElJamonCatalogRunner implements CatalogRunner {
       );
     }
 
-    // --- 3. Report every product -------------------------------------------
-    await context.setStage('INGEST', `Recording ${walk.rows.size} product(s)`);
+    // --- 3. Report what is left --------------------------------------------
+    // A known product was reported when it was listed, and a new one when its
+    // page answered or failed (plan 0267). What is left is a row whose page
+    // the walk did not read, because of an abort or the stop of plan 0253.
+    // It is reported here, by the rule below, and a walk that dies before
+    // this point reports it not at all, which clears nothing.
+    await context.setStage(
+      'INGEST',
+      `Finishing the walk: ${walk.rows.size - walk.reported.size} of ` +
+        `${walk.rows.size} product(s) left to record`
+    );
     const observedAt = new Date();
     const failed = new Set(walk.failedProducts.map((product) => product.code));
     const holdsRow = rowsHeld(input);
+    // The pages never asked for, or cut short by an abort, were counted by
+    // nobody: they count as their rows are recorded here.
+    await context.report({
+      processed: fresh.filter(
+        (listed) =>
+          !walk.details.has(listed.row.code) && !failed.has(listed.row.code)
+      ).length,
+    });
+    const pagesNotRead = context.signal.aborted || detail.stopped;
     for (const listed of walk.rows.values()) {
       const code = listed.row.code;
+      if (walk.reported.has(code)) {
+        continue;
+      }
       // An aborted walk still reports every listed row (plan 0215, section
-      // 6.1). A row whose page it never read, and that the chain may already
-      // hold, is reported from the listing alone, as a known one is: a full
+      // 6.1), and so does one whose detail stage stopped (plan 0253). A row
+      // whose page it never read, and that the chain may already hold, is
+      // reported from the listing alone, as a known one is: a full
       // observation would state no photo and the top level category, and the
       // ingest would clear the stored photo and category path with them.
       const unread =
-        context.signal.aborted && !walk.details.has(code) && !failed.has(code);
-      if (known.has(code) || (unread && holdsRow(code))) {
-        // What the listing said and nothing else, so the stored name, brand
-        // and category path stay what the last full read wrote (plan 0119,
-        // section 6). The photo address is on the product page alone (plan
-        // 0198), so it is not stated here and the stored one stays too. A row
-        // held from a page that failed keeps its `DETAIL_FAILED_KEY`, so the
-        // next `NEW` walk reads it.
-        report.product({
-          externalId: listed.row.code,
-          detailFetched: false,
-          observedAt,
-          prices: pricesOf(listed.row),
-        });
+        pagesNotRead && !walk.details.has(code) && !failed.has(code);
+      if (unread && holdsRow(code)) {
+        // What the listing said and nothing else, as a known product is
+        // reported (see {@link listingOnly}).
+        report.product(listingOnly(listed.row, observedAt));
       } else {
-        report.product(
-          observationOf(listed, walk.details.get(listed.row.code), observedAt)
-        );
+        // A page that was read was reported then, so no page is at hand here.
+        report.product(observationOf(listed, undefined, observedAt));
       }
     }
 
-    declareListing(report, walk, context.signal);
+    const whole = declareListing(report, walk, context.signal);
+    // Every path of every product, after the walk and before the drain (plan
+    // 0268). Never on an observation: a streamed one was written at the first
+    // sighting, before the later categories were listed.
+    for (const listed of walk.rows.values()) {
+      const code = listed.row.code;
+      report.categoryPaths(
+        code,
+        walk.pathsOf(code),
+        whole && walk.details.has(code) ? 'REPLACE' : 'ADD'
+      );
+    }
+    warnShortCategories(context, walk);
+    warnDetailUnread(context, walk, detail, fresh.length);
 
     await context.flush();
     await context.setReport(
-      walk.toReport(postalCode, fresh.length, client.requests)
+      walk.toReport(postalCode, fresh.length, client.requests, detail)
     );
+  }
+
+  /**
+   * One product page per new product, over the source's workers (section 8).
+   *
+   * Each page read or failed is one product of `processed`. The pool runs on
+   * a signal of its own, which the run's abort reaches too, so this stage can
+   * stop alone: {@link DETAIL_TIMEOUTS_IN_A_ROW} silent attempts in a row,
+   * across every worker and every retry, and no new page is asked. `silence`
+   * counts them at the transport; the pool reads it as each page fails. A
+   * page already in flight finishes or fails as it would have, its retries
+   * included. What stopping costs is on the report, and in the
+   * `DETAIL_UNREAD` warning the run writes.
+   */
+  private async readDetails(
+    context: RunContext,
+    client: ElJamonClient,
+    report: RunReport,
+    walk: Walk,
+    fresh: readonly ListedRow[],
+    source: SupermarketSource,
+    silence: SilentAttempts
+  ): Promise<DetailStage> {
+    const stage: DetailStage = {
+      pages: 0,
+      failed: 0,
+      timeouts: 0,
+      silentAttempts: 0,
+      stopped: false,
+    };
+    // A listing that ended in silence is not this stage's to count.
+    silence.reset();
+    const pool = new AbortController();
+    const stopPool = (): void => pool.abort();
+    if (context.signal.aborted) {
+      pool.abort();
+    } else {
+      context.signal.addEventListener('abort', stopPool, { once: true });
+    }
+    try {
+      await runWorkerPool({
+        items: fresh,
+        workers: source.workers,
+        signal: pool.signal,
+        handle: async (listed) => {
+          stage.pages += 1;
+          const product = await client.getProduct(listed.row.url);
+          if (!product) {
+            throw new Error('The page carried no product JSON-LD.');
+          }
+          walk.details.add(listed.row.code);
+          if (product.categoryPath.length > 0) {
+            walk.breadcrumbs.set(listed.row.code, product.categoryPath);
+          }
+          if (product.price !== null && product.price !== listed.row.price) {
+            walk.priceDisagreements.push({
+              code: listed.row.code,
+              listing: listed.row.price,
+              productPage: product.price,
+            });
+          }
+          // Its observation is whole now (plan 0267). It carries the listing
+          // price, which the walk read before any page.
+          walk.report(
+            report,
+            observationOf(listed, product, new Date()),
+            listed.row.code
+          );
+          await context.report({ processed: 1 });
+        },
+        onError: async (error, listed) => {
+          // The page the abort cut short is not a failed page: it was not
+          // read, and is reported below as the pages never asked for are.
+          if (context.signal.aborted) {
+            return;
+          }
+          // One page costs one product's category path, never the product:
+          // it is still reported, with its top level category (section 5.3).
+          this.logger.warn(
+            `Run ${context.runId}: product ${listed.row.code} failed: ${String(error)}`
+          );
+          walk.failedProducts.push({
+            code: listed.row.code,
+            url: listed.row.url,
+            error: String(error),
+          });
+          // Reported now, as the end of the walk reported it: with its top
+          // level category and `DETAIL_FAILED_KEY`, so the next walk reads
+          // its page again (plan 0267). A page that was read before the
+          // failure was reported then, and is not reported twice.
+          if (!walk.reported.has(listed.row.code)) {
+            walk.report(
+              report,
+              observationOf(listed, undefined, new Date()),
+              listed.row.code
+            );
+          }
+          stage.failed += 1;
+          if (isTimeout(error)) {
+            stage.timeouts += 1;
+          }
+          if (silence.exhausted && !stage.stopped) {
+            stage.stopped = true;
+            this.logger.warn(
+              `Run ${context.runId}: ${silence.inARow} attempts in a row got ` +
+                'no answer; no new page is asked, and the listing is recorded'
+            );
+            pool.abort();
+          }
+          await context.report({ failed: 1, processed: 1 });
+        },
+      });
+    } finally {
+      context.signal.removeEventListener('abort', stopPool);
+    }
+    stage.silentAttempts = silence.total;
+    return stage;
   }
 
   /**
@@ -192,11 +402,17 @@ export class ElJamonCatalogRunner implements CatalogRunner {
    * included, is named on the report. One after the first is skipped and the
    * walk goes on to the next page; page 1, or a second failure in a row, ends
    * the category and the walk moves to the next one.
+   *
+   * A product the walk reads no page for is reported at its first sighting
+   * here (plan 0267): what the listing says is all its observation will ever
+   * carry.
    */
   private async listCategory(
     context: RunContext,
     client: ElJamonClient,
+    report: RunReport,
     walk: Walk,
+    known: ReadonlySet<string>,
     category: ElJamonCategory
   ): Promise<void> {
     const summary = {
@@ -204,7 +420,10 @@ export class ElJamonCatalogRunner implements CatalogRunner {
       name: category.name,
       printedCount: null as number | null,
       rowsRead: 0,
+      rowsRepeated: 0,
     };
+    /** Every row the pages printed, the repeated ones included. */
+    let rowsPrinted = 0;
     walk.categories.push(summary);
     let page = 0;
     /** Every page that failed, named on the report, in the order they failed. */
@@ -214,6 +433,7 @@ export class ElJamonCatalogRunner implements CatalogRunner {
         category,
         (read, index) => {
           page = index;
+          rowsPrinted += read.rows.length;
           if (index === 1) {
             summary.printedCount = read.articleCount;
           }
@@ -226,7 +446,9 @@ export class ElJamonCatalogRunner implements CatalogRunner {
         }
       )) {
         summary.rowsRead += 1;
-        walk.record(category, row);
+        if (walk.record(category, row) && known.has(row.code)) {
+          walk.report(report, listingOnly(row, new Date()), row.code);
+        }
         await context.heartbeat();
       }
     } catch (error) {
@@ -237,6 +459,11 @@ export class ElJamonCatalogRunner implements CatalogRunner {
       }
       skipped.push({ page: page + 1, error });
     }
+    // The rows a page printed again after an earlier page of this category
+    // printed them (plan 0253, section 1): the walk keeps going past them, and
+    // the count says how often the chain's order shifted under the walk. A
+    // last page that repeats in full is how a clamping server ends a category.
+    summary.rowsRepeated = rowsPrinted - summary.rowsRead;
     for (const failure of skipped) {
       this.logger.warn(
         `Run ${context.runId}: ${category.path} page ${failure.page} failed: ` +
@@ -254,18 +481,22 @@ export class ElJamonCatalogRunner implements CatalogRunner {
 
   /**
    * The client this run drives. **A seam and not a knob**: a test hands back a
-   * client built on a fake fetch, and nothing in the runtime overrides it.
+   * client built on a fake fetch, and nothing in the runtime overrides it. The
+   * fetch goes through `silence`, which is how the detail stage knows the
+   * chain stopped answering, so an override wraps its fake the same way.
    */
   protected createClient(
     context: RunContext,
     source: SupermarketSource,
-    postalCode: string
+    postalCode: string,
+    silence: SilentAttempts
   ): ElJamonClient {
     const settings = this.config.getOrThrow<HarvesterConfig>('harvester');
     return new ElJamonClient({
       userAgent: settings.userAgent,
       baseUrl: readString(source.config, 'baseUrl'),
       postalCode,
+      fetchImpl: silence.watch(createElJamonFetch()),
       // The run's own bucket, so the rate the owner set on this row is the rate
       // the source sees, whatever the number of workers.
       acquire: context.acquire,
@@ -287,14 +518,18 @@ export class ElJamonCatalogRunner implements CatalogRunner {
  * so a category may read more than it printed, never fewer.
  *
  * The key is the chain's product code, so a renamed product keeps its key.
+ *
+ * Answers whether it declared the listing whole. Only a whole listing met
+ * every category a product is listed in, so only then can its category paths
+ * replace the stored ones (plan 0268).
  */
 function declareListing(
   report: RunReport,
   walk: Walk,
   signal: AbortSignal
-): void {
+): boolean {
   if (signal.aborted) {
-    return;
+    return false;
   }
   const listed = walk.rows.keys();
   if (walk.failedPages.length > 0) {
@@ -307,7 +542,7 @@ function declareListing(
       })),
       listed
     );
-    return;
+    return false;
   }
   const short = walk.categories.filter(
     (category) =>
@@ -325,9 +560,109 @@ function declareListing(
       })),
       listed
     );
-    return;
+    return false;
   }
   report.listingWhole(null, listed);
+  return true;
+}
+
+/**
+ * One warning per category that read fewer rows than it printed (plan 0251).
+ *
+ * The run still ends `COMPLETED`, and these are what say it is partial. Why a
+ * category comes back short is plan 0253's; this only names it, with both
+ * numbers. A category that printed no count and gave no row is a category
+ * whose first page never answered, which is a part not read at all rather
+ * than a short one. One that printed no count and gave rows answered without
+ * the count, and is short: what it read is named, against nothing.
+ * An aborted walk writes none: it does not end `COMPLETED`, and every
+ * category after the abort would read as short.
+ */
+function warnShortCategories(context: RunContext, walk: Walk): void {
+  if (context.signal.aborted) {
+    return;
+  }
+  for (const category of walk.categories) {
+    if (category.printedCount === null && category.rowsRead === 0) {
+      context.warn(
+        listingWarning(
+          HarvestWarningCode.LISTING_UNREAD,
+          category.name,
+          `Category ${category.code} ${category.name} printed no count: its ` +
+            `first page did not answer, and 0 row(s) were read.`
+        )
+      );
+    } else if (category.printedCount === null) {
+      // The first page answered and printed no count, so there is nothing to
+      // read the rows against: a part read, not a part never reached.
+      context.warn(
+        listingWarning(
+          HarvestWarningCode.LISTING_SHORT,
+          category.name,
+          `Category ${category.code} ${category.name}: ` +
+            `${category.rowsRead} row(s) read, no count printed.`
+        )
+      );
+    } else if (category.rowsRead < category.printedCount) {
+      context.warn(
+        listingWarning(
+          HarvestWarningCode.LISTING_SHORT,
+          category.name,
+          `Category ${category.code} ${category.name}: ${category.rowsRead} ` +
+            `of ${category.printedCount} row(s) read.`
+        )
+      );
+    }
+  }
+}
+
+/**
+ * The one warning of a detail stage that stopped on silence (plan 0253, D1
+ * (b)). The run ends `COMPLETED`, so this is what says the products listed in
+ * it have no page yet. An aborted walk writes none: it does not end
+ * `COMPLETED`, and its own reason says why.
+ *
+ * The words hold on both kinds of walk. A page that failed is written from the
+ * listing, marked for the next walk, on either. A page never asked for is
+ * written the same way on a `NEW` walk; an `ALL` walk reports it from the
+ * listing alone, and the ingest creates no row from that for a product the
+ * chain does not hold. Either way the next walk asks for its page.
+ */
+function warnDetailUnread(
+  context: RunContext,
+  walk: Walk,
+  detail: DetailStage,
+  planned: number
+): void {
+  if (!detail.stopped || context.signal.aborted) {
+    return;
+  }
+  const withoutPage = planned - walk.details.size;
+  context.warn({
+    code: HarvestWarningCode.DETAIL_UNREAD,
+    offerId: null,
+    page: null,
+    name: null,
+    message:
+      `Product pages stopped after ${DETAIL_TIMEOUTS_IN_A_ROW} attempts in a ` +
+      `row got no answer: ${detail.pages} of ${planned} page(s) asked, ` +
+      `${detail.failed} failed, ${detail.timeouts} timed out. ` +
+      `${withoutPage} product(s) had no page; the next walk asks for them ` +
+      'again.',
+  });
+}
+
+/**
+ * Whether a product page failed because the chain said nothing: the
+ * transport's idle timeout, or a socket that timed out below it.
+ */
+function isTimeout(error: unknown): boolean {
+  return (
+    error instanceof ElJamonTimeoutError ||
+    (typeof error === 'object' &&
+      error !== null &&
+      (error as { code?: unknown }).code === 'ETIMEDOUT')
+  );
 }
 
 /**
@@ -430,6 +765,29 @@ function observationOf(
 }
 
 /**
+ * What the listing said and nothing else, for a product whose page the walk
+ * does not read: a known one (plan 0119, section 3), or on a walk whose pages
+ * stopped, one the chain may already hold (plan 0215).
+ *
+ * So the stored name, brand and category path stay what the last full read
+ * wrote (plan 0119, section 6). The photo address is on the product page
+ * alone (plan 0198), so it is not stated here and the stored one stays too. A
+ * row held from a page that failed keeps its `DETAIL_FAILED_KEY`, so the next
+ * `NEW` walk reads it.
+ */
+function listingOnly(
+  row: ElJamonListingRow,
+  observedAt: Date
+): PartialSourceObservation {
+  return {
+    externalId: row.code,
+    detailFetched: false,
+    observedAt,
+    prices: pricesOf(row),
+  };
+}
+
+/**
  * One price, with no scope key, so it lands in the run's default scope, the
  * chain's `NATIONAL` one (section 2). The site states no offer dates, so the
  * window is open at both ends.
@@ -456,6 +814,20 @@ interface ListedRow {
   row: ElJamonListingRow;
 }
 
+/** What the detail stage did, on the report as `detail` (plan 0253). */
+interface DetailStage {
+  /** Product pages asked for, each once, retries not counted. */
+  pages: number;
+  /** Pages that failed, timeouts included. */
+  failed: number;
+  /** Failed pages whose last attempt timed out. */
+  timeouts: number;
+  /** Attempts that timed out, retries included: what the stop counts. */
+  silentAttempts: number;
+  /** Whether the silent attempts in a row stopped the stage. Not on the report. */
+  stopped: boolean;
+}
+
 /**
  * What one run accumulates. Shared by every detail worker, which is safe
  * because the pool is concurrency rather than parallelism.
@@ -463,12 +835,17 @@ interface ListedRow {
 class Walk {
   /** Article code -> the first category that listed it, and its row. */
   readonly rows = new Map<string, ListedRow>();
-  readonly details = new Map<string, ElJamonProduct>();
+  /**
+   * The article codes whose page was read. Only the code is kept: the product
+   * was reported when its page answered (plan 0267).
+   */
+  readonly details = new Set<string>();
   readonly categories: Array<{
     code: string;
     name: string;
     printedCount: number | null;
     rowsRead: number;
+    rowsRepeated: number;
   }> = [];
   readonly failedPages: Array<{
     category: string;
@@ -483,25 +860,73 @@ class Walk {
     listing: number | null;
     productPage: number | null;
   }> = [];
+  /**
+   * Every article code already handed to the sink (plan 0267), so no product
+   * is reported twice and the end of the walk reports only what is left.
+   */
+  readonly reported = new Set<string>();
+  /**
+   * Article code -> the breadcrumb of its page, for a page read this run whose
+   * breadcrumb named a level (plan 0268).
+   */
+  readonly breadcrumbs = new Map<string, string[]>();
+  /**
+   * Article code -> every top level category that listed it, in walk order
+   * (plan 0268). The first is the one {@link rows} keeps.
+   */
+  private readonly listedUnder = new Map<string, ElJamonCategory[]>();
   private repeated = 0;
 
   /**
    * One listing row. A product filed under two top level categories keeps the
-   * first, and the repeat is counted so the listed total reads against the
-   * printed one.
+   * first as its row and its category path, and keeps each later one for its
+   * category paths. The repeat is counted so the listed total reads against
+   * the printed one. Answers whether this was the first sighting.
    */
-  record(category: ElJamonCategory, row: ElJamonListingRow): void {
-    if (this.rows.has(row.code)) {
+  record(category: ElJamonCategory, row: ElJamonListingRow): boolean {
+    const under = this.listedUnder.get(row.code);
+    if (under) {
       this.repeated += 1;
-      return;
+      if (!under.some((other) => other.code === category.code)) {
+        under.push(category);
+      }
+      return false;
     }
     this.rows.set(row.code, { category, row });
+    this.listedUnder.set(row.code, [category]);
+    return true;
+  }
+
+  /**
+   * Every path this walk met for one product (plan 0268): the breadcrumb of
+   * its page when this run read it, then `[name]` of each top level category
+   * that listed it, in walk order. So the first path is the one
+   * `categoryPath` holds. The names are the chain's, verbatim: a breadcrumb
+   * level and a category name that differ only in case are two paths.
+   */
+  pathsOf(code: string): string[][] {
+    const breadcrumb = this.breadcrumbs.get(code);
+    return [
+      ...(breadcrumb ? [breadcrumb] : []),
+      ...(this.listedUnder.get(code) ?? []).map((category) => [category.name]),
+    ];
+  }
+
+  /** One product to the sink, once. */
+  report(
+    report: RunReport,
+    observation: ReportedObservation,
+    code: string
+  ): void {
+    this.reported.add(code);
+    report.product(observation);
   }
 
   toReport(
     postalCode: string,
     detailPlanned: number,
-    requests: number
+    requests: number,
+    detail: DetailStage
   ): Record<string, unknown> {
     const listed = [...this.rows.values()];
     return {
@@ -522,6 +947,13 @@ class Walk {
       detailPlanned,
       detailRead: this.details.size,
       detailFailed: this.failedProducts.length,
+      /** The detail stage's own counts (plan 0253, section 3). */
+      detail: {
+        pages: detail.pages,
+        failed: detail.failed,
+        timeouts: detail.timeouts,
+        silentAttempts: detail.silentAttempts,
+      },
       /** Named, never only counted. */
       failedPages: this.failedPages,
       failedProducts: this.failedProducts,

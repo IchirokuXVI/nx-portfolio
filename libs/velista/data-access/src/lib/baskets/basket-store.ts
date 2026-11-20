@@ -22,7 +22,7 @@ import {
   type BasketAccessEnded,
   type BasketAddLineRequest,
   type BasketAddress,
-  type BasketDemandRequest,
+  type BasketDemandInput,
   type BasketEntryPatch,
   type BasketListRef,
   type BasketLoad,
@@ -37,7 +37,7 @@ import {
   type BasketRow,
   type BasketRowResult,
   type BasketRowTarget,
-  type BasketSettleRequest,
+  type BasketSettleInput,
   type BasketShareLink,
   type CatalogSuggestion,
 } from '@portfolio/velista/models';
@@ -172,6 +172,8 @@ export class BasketStore {
   /** See {@link accessEnded}. */
   private readonly _accessEnded = signal<BasketAccessEnded | null>(null);
   private readonly _busyRows = signal<ReadonlySet<string>>(new Set());
+  /** How many writes are out per key of {@link _busyRows}. */
+  private readonly _busyCount = new Map<string, number>();
   private readonly _present = signal<readonly BasketPresenceEntry[]>([]);
   /** See {@link rowGone}. A counter, so the same sentence can be said twice. */
   private readonly _rowGone = signal(0);
@@ -429,7 +431,7 @@ export class BasketStore {
    * blocking a tap.
    *
    * Keyed by the row's own key and never by a line id, which is what the sheet and
-   * the reel both address a row by. A write on a row whose key changed underneath
+   * the row's glyph both address a row by. A write on a row whose key changed underneath
    * it clears the old key, which is right: the busy state belongs to the request,
    * and the request named that key.
    */
@@ -448,8 +450,8 @@ export class BasketStore {
   /**
    * The product id a `BOUGHT` settle on this row carries, or undefined.
    *
-   * **The one place the rule lives**, because three controls send a settle: the
-   * row's glyph, the row's reel and the sheet's buttons. Since backend `0201` it
+   * **The one place the rule lives**, because two places send a settle: the
+   * row's glyph and the settle sheet. Since backend `0201` it
    * is the row's own product: a row is one product, so there is nothing left to
    * choose between, and a row whose lines hold none names none.
    */
@@ -1122,10 +1124,12 @@ export class BasketStore {
    */
   async settle(
     rowKey: string,
-    body: BasketSettleRequest
+    body: BasketSettleInput
   ): Promise<BasketRowResult | null> {
+    // In the row's unit (velista `0182`): a row is one unit, and the store holds it.
+    const unit = this.rowFor(rowKey)?.unit ?? 'UNIT';
     return this._rowWrite(rowKey, (id, target) =>
-      this._service.settle(id, target, body)
+      this._service.settle(id, target, { ...body, unit })
     );
   }
 
@@ -1146,19 +1150,20 @@ export class BasketStore {
   }
 
   /**
-   * Move a row's reel, which is a settle or a revert depending on the direction.
+   * Move what a row has left, which is a settle or a revert depending on the
+   * direction.
    *
-   * **The row reel's one call**, so the control has one thing to call and cannot
-   * get the direction wrong. Below `from` the difference was bought; above it, the
-   * difference comes back. Equal is nothing, which is what a reel dropped where it
-   * was picked up means, and it costs no request.
+   * **One call for both directions**, so a caller cannot get the direction wrong.
+   * It was the row reel's call; the reel is gone (velista `0190`) and no screen calls
+   * it now. Below `from` the difference was bought; above it, the difference comes
+   * back. Equal is nothing, and it costs no request.
    *
    * `next` is an **absolute** number and `from` is where it started, which is
    * velista `0054`'s bargain unchanged: a gesture whose meaning depends on where it
    * started must be refused rather than reinterpreted when the number moved
    * underneath it.
    *
-   * The ceiling the reel offers is `row.asked`, which is read and never computed.
+   * The ceiling is `row.asked`, which is read and never computed.
    *
    * `at` is where the purchase happened and what was bought: the scope of the price
    * the row drew (velista `0095`, section 6), the shop the person is buying at
@@ -1170,7 +1175,7 @@ export class BasketStore {
     next: number,
     from: number,
     at: Pick<
-      BasketSettleRequest,
+      BasketSettleInput,
       'priceScopeId' | 'supermarketLocationId' | 'itemId'
     > = {}
   ): Promise<BasketRowResult | null> {
@@ -1262,10 +1267,14 @@ export class BasketStore {
    * of this basket: a list that holds the product at zero is raised this way,
    * and its line then joins the row of the product.
    */
-  async setDemand(body: BasketDemandRequest): Promise<BasketRowResult | null> {
-    const busyKey = this.rowFor(body.lineId)?.rowKey ?? body.lineId;
+  async setDemand(body: BasketDemandInput): Promise<BasketRowResult | null> {
+    const row = this.rowFor(body.lineId);
+    const busyKey = row?.rowKey ?? body.lineId;
+    // The unit of the entry that holds the line, else what the caller knows of a
+    // line the basket does not hold yet (velista `0182`).
+    const unit = row?.unit ?? body.unit ?? 'UNIT';
     return this._write(busyKey, async (id) => {
-      const result = await this._service.setDemand(id, body);
+      const result = await this._service.setDemand(id, { ...body, unit });
       this._fold(result, [body.lineId]);
       return result;
     });
@@ -1497,7 +1506,7 @@ export class BasketStore {
    *   patch does not carry: a rename and an add.
    */
   private _fold(
-    result: BasketRowResult,
+    answer: BasketRowResult,
     named: readonly string[],
     patchable = true
   ): void {
@@ -1505,6 +1514,7 @@ export class BasketStore {
     if (held === null) {
       return;
     }
+    const result = this._inRowUnits(answer);
 
     // The answer of a write that only moves numbers is applied with the same
     // function as an event, so the row and the count are right before the event
@@ -1527,6 +1537,24 @@ export class BasketStore {
     this._pruneHeld(stored);
     this._changed();
     this._eventReads.ask();
+  }
+
+  /**
+   * A write's entries in the unit of the row that holds each line (velista
+   * `0182`). The entry view names no unit, because a row is one unit (backend
+   * `0246` M6), so an entry of a write answer counts in its row's. A line no
+   * row holds keeps what it was read with, and the read that follows places it.
+   */
+  private _inRowUnits(result: BasketRowResult): BasketRowResult {
+    return {
+      ...result,
+      entries: result.entries.map((entry) => {
+        const unit = this.rowFor(entry.lineId)?.unit;
+        return unit === undefined || unit === entry.unit
+          ? entry
+          : { ...entry, unit };
+      }),
+    };
   }
 
   /**
@@ -1687,6 +1715,7 @@ export class BasketStore {
       return null;
     }
 
+    this._busyCount.set(rowKey, (this._busyCount.get(rowKey) ?? 0) + 1);
     this._busyRows.update((busy) => new Set(busy).add(rowKey));
     try {
       return await send(id);
@@ -1695,11 +1724,19 @@ export class BasketStore {
       await this._rereadIfOvertaken(error);
       return null;
     } finally {
-      this._busyRows.update((busy) => {
-        const next = new Set(busy);
-        next.delete(rowKey);
-        return next;
-      });
+      // Free only once the last write on this key is back: two lines of one row
+      // can each have a demand out (velista `0190`).
+      const left = (this._busyCount.get(rowKey) ?? 1) - 1;
+      if (left > 0) {
+        this._busyCount.set(rowKey, left);
+      } else {
+        this._busyCount.delete(rowKey);
+        this._busyRows.update((busy) => {
+          const next = new Set(busy);
+          next.delete(rowKey);
+          return next;
+        });
+      }
     }
   }
 
@@ -1729,6 +1766,14 @@ export class BasketStore {
     ) {
       await this.refresh();
       this._error.set(error);
+    }
+    if (error instanceof GatewayError && error.code === 'line_unit_mismatch') {
+      // The line counts in another unit now (velista `0182`, backend `0246`
+      // section 3.2). Read again as for `stale_quantity`, so the server's row
+      // replaces the preview, and **no error is kept**: the person did nothing
+      // wrong, and the row they see is already the true one.
+      await this.refresh();
+      this._error.set(null);
     }
   }
 

@@ -23,6 +23,7 @@ import {
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ChainNames } from './chain-names';
+import { SOURCE_PROBE_PANEL, SourceProbePanel } from './source-probe-panel';
 import { SOURCES } from './sources';
 import { SourcesGateway, type Source } from './sources-gateway';
 
@@ -34,7 +35,7 @@ import { SourcesGateway, type Source } from './sources-gateway';
  * not from a spy alone. The translator double answers a key with the key.
  */
 
-const MERCADONA = '11111111-1111-4111-8111-111111111111';
+const MERCADONA = 'sm_mercadona';
 /** A chain the seed gives no source. */
 const NEW_CHAIN = '99999999-9999-4999-8999-999999999999';
 
@@ -389,6 +390,22 @@ describe('SOURCES, the descriptor', () => {
         'autoImportPlaces',
         'config',
       ]);
+    });
+
+    /**
+     * The warning of a red probe (admin plan 0069, owner: "Show it"), as a
+     * panel the harvest library draws. No tab, and no count beside it.
+     */
+    it('holds one panel, the warning of the last probe', () => {
+      expect(SOURCES.record?.children).toEqual([
+        {
+          as: 'panel',
+          name: SOURCE_PROBE_PANEL,
+          label: 'harvest.sources.section.probe',
+          component: SourceProbePanel,
+        },
+      ]);
+      expect(SOURCE_PROBE_PANEL).toBe('probe');
     });
 
     /** The view carries no date of its own making, so there is no "Added". */

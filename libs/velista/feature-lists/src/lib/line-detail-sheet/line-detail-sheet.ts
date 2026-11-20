@@ -4,6 +4,7 @@ import {
   Component,
   computed,
   DestroyRef,
+  DOCUMENT,
   effect,
   ElementRef,
   inject,
@@ -31,17 +32,22 @@ import {
 import {
   APP_BASE_PATH,
   catalogName,
+  defaultQuantity,
   LINE_CONTENT_MAX_LENGTH,
   LINE_QUANTITY_MAX,
   lineName,
   lineNameChange,
   lineNameRefused,
+  priceWordsText,
+  stepAt,
   type BasketShop,
   type Line,
+  type LineUnit,
   type SettlementOutcome,
 } from '@portfolio/velista/models';
 import {
   appPath,
+  formatAmount,
   lineIdOf,
   listIdOf,
   SheetNavigation,
@@ -53,8 +59,8 @@ import {
   ChevronRightIcon,
   CloseIcon,
   CommentIcon,
+  LineUnitChip,
   ProductRow,
-  QuantityReel,
   QuantityStepper,
   SheetShell,
   SpinnerIcon,
@@ -74,6 +80,7 @@ import {
   selectAbilities,
 } from '../select-list-state';
 import { BoughtShopPane } from './bought-shop-pane';
+import { LineSheetEvents } from './line-sheet-events';
 import { selectLineDetail } from './select-line-detail';
 
 /**
@@ -134,7 +141,7 @@ type Step = 'summary' | 'howMany' | 'shop';
     RokuTranslatorPipe,
     SheetShell,
     QuantityStepper,
-    QuantityReel,
+    LineUnitChip,
     SpinnerIcon,
     CheckIcon,
     ChevronRightIcon,
@@ -150,6 +157,7 @@ type Step = 'summary' | 'howMany' | 'shop';
 })
 export class LineDetailSheet {
   private readonly _lines = inject(LineStore);
+  private readonly _document = inject(DOCUMENT);
   private readonly _lists = inject(ListStore);
   private readonly _names = inject(MemberNames);
   private readonly _itemNames = inject(ItemNames);
@@ -163,6 +171,7 @@ export class LineDetailSheet {
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
   private readonly _injector = inject(Injector);
   private readonly _boughtShop = inject(BoughtShopMemory);
+  private readonly _events = inject(LineSheetEvents);
 
   readonly zoneId = zoneIdOf(this._route);
   readonly listId = listIdOf(this._route);
@@ -185,8 +194,13 @@ export class LineDetailSheet {
   /** A save is out. Everything else on the sheet waits for it (section 7). */
   readonly saving = signal(false);
 
-  /** Either write is out, which is what keeps the sheet from closing under it. */
-  readonly submitting = computed(() => this._settling() || this.saving());
+  /** A unit change is out (velista `0183`): the chip and the stepper wait. */
+  readonly unitPending = signal(false);
+
+  /** Any write is out, which is what keeps the sheet from closing under it. */
+  readonly submitting = computed(
+    () => this._settling() || this.saving() || this.unitPending()
+  );
 
   readonly maxLength = LINE_CONTENT_MAX_LENGTH;
 
@@ -238,6 +252,33 @@ export class LineDetailSheet {
 
   /** How many the how many step is offering to record. */
   readonly howMany = signal(1);
+
+  /** What the line counts in (velista `0182`), a count while it is not read yet. */
+  readonly unit = computed<LineUnit>(() => this.detail()?.unit ?? 'UNIT');
+
+  /** The product's step (velista `0186`), or null for the unit's default. */
+  readonly productStep = computed(() => this.detail()?.step ?? null);
+
+  /**
+   * The least the how many step's minus reaches, and the amount it opens at when
+   * nothing is wanted: one step of the line's product. Only the buttons stop here
+   * (the owner's ruling 44 of 2026-11-16): a typed amount is kept down to
+   * {@link howManyTypedFloor}.
+   */
+  readonly howManyFloor = computed(() =>
+    stepAt(0, this.unit(), this.productStep())
+  );
+
+  /**
+   * The least a typed amount records: one base unit, 1 g, 1 ml or one piece
+   * (ruling 44). Recording nothing is never offered, so it is not 0.
+   */
+  readonly howManyTypedFloor = 1;
+
+  /** A quantity of this line in words: "3" for a count, "750 g" for a weight. */
+  wordsOf(quantity: number): string {
+    return formatAmount(quantity, this.unit(), this._localeStore.locale());
+  }
 
   /** Which product it will record, on a line carrying more than one. */
   readonly chosenItemId = signal<string | null>(null);
@@ -322,7 +363,7 @@ export class LineDetailSheet {
    * `WRITE`, since backend plan 0131: the list page and the basket now ask one
    * rule who may record a purchase, and a `WRITE` holder already settled the same
    * line from the basket. Approving, and moving an approved quantity, keep
-   * `DECIDE`, which is why the reel does not follow this.
+   * `DECIDE`, which is why the stepper does not follow this.
    */
   private readonly _canSettle = computed(
     () => this._abilities().canWrite || this._abilities().canManage
@@ -365,7 +406,8 @@ export class LineDetailSheet {
           line,
           (itemId) => this._itemNames.nameOf(itemId)?.name ?? null,
           this._localeStore.locale(),
-          this._itemNames.pricesOf
+          this._itemNames.pricesOf,
+          this._itemNames.sizingOf
         );
   });
 
@@ -401,7 +443,7 @@ export class LineDetailSheet {
     const line = this._line();
     return (
       line !== undefined &&
-      this.changed() &&
+      (this.changed() || this.amountTyping()) &&
       // A line with no product needs words: there is no product to be called by.
       !lineNameRefused(line, this.name()) &&
       !this.submitting()
@@ -486,6 +528,7 @@ export class LineDetailSheet {
       // missed, and this sheet told the reader their line had no products.
       itemNameOf: (itemId) => this._itemNames.nameOf(itemId),
       pricesOf: this._itemNames.pricesOf,
+      productOf: this._itemNames.sizingOf,
       namesUnavailable: this._itemNames.anyFailed(line?.itemIds ?? []),
       nameOf: (userId) => this._names.nameOf(this.zoneId(), userId),
       callerUserId: this._session.userId(),
@@ -508,7 +551,11 @@ export class LineDetailSheet {
   constructor() {
     // The announcement ends with the component, however the sheet closed. The route's
     // services are never destroyed, so this is the one hook every exit reaches.
-    inject(DestroyRef).onDestroy(() => this._stopEditing());
+    inject(DestroyRef).onDestroy(() => {
+      this._stopEditing();
+      // The page under it moves focus off a row that left while the sheet was open.
+      this._events.closed(this.lineId());
+    });
   }
 
   /**
@@ -524,7 +571,12 @@ export class LineDetailSheet {
       return;
     }
 
-    this.howMany.set(Math.max(1, detail.quantity));
+    // The whole wanted amount, even under one step (ruling 44: 10 g wanted opens
+    // at 10 g). A line that wants nothing opens at one step of its product
+    // (velista `0182`, `0186`): one piece, 25 g, or 100 g on a step of 100.
+    this.howMany.set(
+      detail.quantity > 0 ? detail.quantity : this.howManyFloor()
+    );
     this.chosenItemId.set(detail.preselectedItemId);
     // The shop this device named last, while it is still the same trip.
     this.chosenShop.set(this._boughtShop.read());
@@ -549,6 +601,7 @@ export class LineDetailSheet {
       // yet" (velista `0047`, section 1.2): it is one of the products this line
       // carries, offered as a choice.
       const name = choice.name ?? t('list.detail.unnamedProduct');
+      const price = choice.price === null ? null : priceWordsText(choice.price);
       return {
         id: choice.itemId,
         name,
@@ -558,14 +611,17 @@ export class LineDetailSheet {
         price: choice.price,
         // The line under the price names the chain that has it, as the mock
         // draws it, rather than a price per litre or kilo.
-        unitPrice: choice.price === null ? null : choice.chain,
+        unitPrice:
+          choice.price === null || choice.chain === null
+            ? null
+            : { amount: choice.chain, per: null },
         seen: null,
         stale: false,
         chains: null,
         label: [
           name,
           choice.detail,
-          choice.price ?? t('catalog.row.noPrice'),
+          price ?? t('catalog.row.noPrice'),
           choice.price === null ? null : choice.chain,
         ]
           .filter((part): part is string => part !== null && part !== '')
@@ -619,6 +675,7 @@ export class LineDetailSheet {
 
   /** Record the purchase. */
   async recordBought(): Promise<void> {
+    this._commitTyping();
     await this._settle('BOUGHT', this.howMany());
   }
 
@@ -685,26 +742,45 @@ export class LineDetailSheet {
   }
 
   /**
-   * The number under the thumb while the reel is worked, so a save that lands inside
-   * the reel's idle beat sends what is on screen. The reel moving is also the other
-   * thing that announces the edit (section 7).
+   * The stepper's next amount: a press, a repeat, a key or a typed commit (velista
+   * `0188`, section 5.3). The amount is a form value, so nothing is written until
+   * Save. A change is also the other thing that announces the edit (section 7).
    */
-  onAmountPreview(next: number | null): void {
-    if (next === null) {
-      return;
-    }
-    this.startEditing();
-    if (next !== this.amount()) {
-      this.amount.set(next);
-      this.saved.set(false);
-    }
-  }
-
-  onAmountCommitted(to: number): void {
+  onAmountChanged(to: number): void {
+    this.amountTyping.set(false);
     this.startEditing();
     if (to !== this.amount()) {
       this.amount.set(to);
       this.saved.set(false);
+    }
+  }
+
+  /**
+   * Whether the amount field holds typed text it has not committed yet (velista
+   * `0188`). Save is offered for it, and the save commits it first; leaving the field
+   * commits it or puts the shown amount back, so it ends there.
+   */
+  readonly amountTyping = signal(false);
+
+  /** The amount field was typed into: an edit, before it is committed. */
+  onAmountTyping(): void {
+    this.amountTyping.set(true);
+    this.startEditing();
+    this.saved.set(false);
+  }
+
+  /**
+   * Moves focus out of a sheet's typed amount, which commits what was typed (velista
+   * `0188`, section 5.3). A press on Save does not always take focus first (Safari
+   * does not focus a button), so the save itself makes sure it reads the typed amount.
+   */
+  private _commitTyping(): void {
+    const active = this._document.activeElement as HTMLElement | null;
+    if (
+      active?.tagName === 'INPUT' &&
+      active.getAttribute('role') === 'spinbutton'
+    ) {
+      active.blur();
     }
   }
 
@@ -732,8 +808,54 @@ export class LineDetailSheet {
     }
   }
 
+  /**
+   * A segment of the unit chip (velista `0183`, target state 3): one write of
+   * the unit with the amount it starts at (one piece, a kilo, a litre), which
+   * backend `0246` requires with every unit change. Written at once, not held for
+   * Save: it changes what the stepper counts, and the stepper moves to that amount
+   * and steps by the new unit. A refusal puts the line back in the store, which
+   * puts the chip back, and the amount follows it with the sheet's error line.
+   */
+  async chooseUnit(unit: LineUnit): Promise<void> {
+    const line = this._line();
+    if (
+      line === undefined ||
+      this.saving() ||
+      this.unitPending() ||
+      unit === line.unit
+    ) {
+      return;
+    }
+    const before = this.amount();
+    const quantity = defaultQuantity(unit);
+    this.unitPending.set(true);
+    this._clearError();
+    this.amount.set(quantity);
+    this.saved.set(false);
+
+    const outcome = await this._lines.updateLine(this.lineId(), {
+      unit,
+      quantity,
+    });
+    this.unitPending.set(false);
+
+    if (outcome.state === 'failed') {
+      this.amount.set(before);
+      this.saveErrorKey.set(
+        listErrorKey(outcome.error, 'lines.write') ?? 'list.detail.failed'
+      );
+      return;
+    }
+    this.amount.set(outcome.line.quantity);
+    this._shown = {
+      field: this._shown?.field ?? this.name(),
+      quantity: outcome.line.quantity,
+    };
+  }
+
   /** Save the name and the amount (section 4). */
   async save(): Promise<void> {
+    this._commitTyping();
     if (!this.canSave()) {
       return;
     }
@@ -799,6 +921,18 @@ export class LineDetailSheet {
     this.amount.set(outcome.line.quantity);
     this._shown = { field, quantity: outcome.line.quantity };
 
+    // An accepted save that lowered the line to 0 is said by the page under the sheet,
+    // which hides the row (velista `0192`, owner ruling of 2026-11-16). A merge keeps a
+    // line with the summed amount, so it never lowers one.
+    if (
+      'quantity' in changes &&
+      line.quantity > 0 &&
+      outcome.line.quantity <= 0 &&
+      outcome.line.id === this.lineId()
+    ) {
+      this._events.lowered(outcome.line.id);
+    }
+
     if (outcome.line.id !== this.lineId()) {
       // This line was the one absorbed. The survivor is the line that remains, so the
       // reader stays on it rather than on a sheet about a line that is gone. The router
@@ -822,7 +956,8 @@ export class LineDetailSheet {
       line,
       (itemId) => this._itemNames.nameOf(itemId)?.name ?? null,
       this._localeStore.locale(),
-      this._itemNames.pricesOf
+      this._itemNames.pricesOf,
+      this._itemNames.sizingOf
     ).field;
   }
 

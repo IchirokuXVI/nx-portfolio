@@ -1,8 +1,4 @@
-import {
-  LINE_QUANTITY_MAX,
-  type BasketRow,
-  type BasketRowTarget,
-} from '@portfolio/velista/models';
+import type { BasketRow, BasketRowTarget } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
 import { BasketMemory } from './basket-memory';
 
@@ -856,15 +852,15 @@ describe('BasketMemory: adding a line', () => {
     expect(rowOf(await rowsOf(memory), 'Batteries').productId).toBeNull();
   });
 
-  it('merges onto a line the list already holds, under its own key', async () => {
-    // The list\u2019s own add merges by the same key (backend `0091`), so the answer
-    // is a row that was already on the screen under a key nobody named. That is
-    // exactly what the store has to fold correctly.
+  it('answers the line the list already asks for, and changes nothing (backend 0260)', async () => {
+    // The list\u2019s own add meets by the same key (backend `0091`), so the answer
+    // is a row that was already on the screen under a key nobody named. It is
+    // shown, not raised (velista `0185`).
     const memory = new BasketMemory();
     const result = await memory.addLine(BASKET, {
       targetListId: 'list-weekly',
       content: '  milk ',
-      quantity: 2,
+      quantity: 1,
       // The products the list's Milk holds, in another order. The name alone
       // is not a match.
       itemIds: [
@@ -875,25 +871,103 @@ describe('BasketMemory: adding a line', () => {
     });
 
     expect(result.entries.map((entry) => entry.lineId)).toEqual(['zl-1']);
-    expect(result.entries[0].left).toBe(4);
+    expect(result.entries[0].left).toBe(2);
+    expect(result.addOutcome).toBe('alreadyOnList');
   });
 
-  it('makes a second line, and a row of its own, for the same name with another product', async () => {
-    // Two products of one name are two things to buy, so the list's Milk keeps
-    // its quantity and the add is a line of its own in the row of its product.
+  it('meets a line of several products that holds the product (backend 0260, R5)', async () => {
     const memory = new BasketMemory();
     const result = await memory.addLine(BASKET, {
       targetListId: 'list-weekly',
       content: 'Milk',
-      quantity: 2,
+      quantity: 1,
       itemIds: ['item-milk-pascual'],
     });
 
-    const rows = await rowsOf(memory);
-    const added = rows.find((row) => row.productId === 'item-milk-pascual');
-    expect(result.entries[0].lineId).not.toBe('zl-1');
-    expect(added?.entries.map((entry) => entry.left)).toEqual([2]);
-    expect(rowOf(rows, 'Milk').entries[0].left).toBe(2);
+    expect(result.entries.map((entry) => entry.lineId)).toEqual(['zl-1']);
+    expect(result.addOutcome).toBe('alreadyOnList');
+    expect(rowOf(await rowsOf(memory), 'Milk').entries[0].left).toBe(2);
+  });
+
+  it('makes a product on no line at one step of its unit when no amount is given', async () => {
+    const memory = new BasketMemory();
+    const result = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Plátanos',
+      unit: 'GRAM',
+      itemIds: ['item-bananas'],
+    });
+
+    expect(result.addOutcome).toBe('created');
+    expect(result.entries[0]).toMatchObject({ left: 25 });
+  });
+
+  it('draws a free text line in grams as a row in grams (the owner, 2026-11-17)', async () => {
+    const memory = new BasketMemory();
+    const result = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Queso de la feria',
+      quantity: 500,
+      unit: 'GRAM',
+    });
+
+    expect(result.addOutcome).toBe('created');
+    expect(result.entries[0]).toMatchObject({ left: 500, unit: 'GRAM' });
+    const row = rowOf(await rowsOf(memory), 'Queso de la feria');
+    expect(row.unit).toBe('GRAM');
+    expect(row.entries[0]).toMatchObject({ left: 500, unit: 'GRAM' });
+  });
+
+  it('refuses a product the list counts in another unit, naming the line', async () => {
+    const memory = new BasketMemory();
+    let refusal: unknown = null;
+    try {
+      await memory.addLine(BASKET, {
+        targetListId: 'list-weekly',
+        content: 'Milk',
+        quantity: 25,
+        unit: 'MILLILITER',
+        itemIds: ['item-milk-pascual'],
+      });
+    } catch (error) {
+      refusal = error;
+    }
+
+    expect(refusal).toMatchObject({
+      code: 'line_unit_differs',
+      status: 409,
+      details: {
+        line: { lineId: 'zl-1', content: 'Milk', unit: 'UNIT' },
+        unit: 'MILLILITER',
+        index: null,
+      },
+    });
+    expect(rowOf(await rowsOf(memory), 'Milk').entries[0].left).toBe(2);
+  });
+
+  it('lands on a later line in its own unit before refusing for an earlier one of another unit', async () => {
+    const memory = new BasketMemory();
+    const breakfast = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Desayuno',
+      quantity: 500,
+      unit: 'MILLILITER',
+      itemIds: ['item-milk-pascual', 'item-bread'],
+    });
+    expect(breakfast.addOutcome).toBe('created');
+    const breakfastId = breakfast.entries[0].lineId;
+
+    const met = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 25,
+      unit: 'MILLILITER',
+      itemIds: ['item-milk-pascual'],
+    });
+
+    expect(met.addOutcome).toBe('alreadyOnList');
+    expect(met.entries.map((entry) => entry.lineId)).toEqual([breakfastId]);
+    expect(rowOf(await rowsOf(memory), 'Milk').entries[0].left).toBe(2);
   });
 
   it('refuses a list this reader was not served', async () => {
@@ -909,48 +983,56 @@ describe('BasketMemory: adding a line', () => {
     ).toBe('forbidden');
   });
 
-  it('raises the one line that holds a product under a typed name (backend 0228)', async () => {
+  it('shows the one line that holds a product under a typed name, and raises it from zero (backend 0260)', async () => {
+    const memory = new BasketMemory();
+    const met = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'milk',
+      askIfAmbiguous: true,
+    });
+    expect(met.entries.map((entry) => entry.lineId)).toEqual(['zl-1']);
+    expect(met.entries[0].left).toBe(2);
+    expect(met.addOutcome).toBe('alreadyOnList');
+
+    await memory.setDemand(BASKET, { lineId: 'zl-1', quantity: 0, from: 2 });
+    const raised = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'milk',
+      askIfAmbiguous: true,
+    });
+    expect(raised.entries[0]).toMatchObject({ lineId: 'zl-1', left: 1 });
+    expect(raised.addOutcome).toBe('raised');
+  });
+
+  it('makes a typed name a line of one piece when it states no amount', async () => {
     const memory = new BasketMemory();
     const result = await memory.addLine(BASKET, {
       targetListId: 'list-weekly',
-      content: 'milk',
-      quantity: 1,
-      askIfAmbiguous: true,
+      content: 'Batteries',
     });
 
-    expect(result.entries.map((entry) => entry.lineId)).toEqual(['zl-1']);
-    expect(result.entries[0].left).toBe(3);
+    expect(result.addOutcome).toBe('created');
+    expect(result.entries[0]).toMatchObject({ left: 1 });
   });
 
-  it('caps a raise at the most a line can hold, as raiseForAdd does', async () => {
-    const memory = new BasketMemory();
-    const result = await memory.addLine(BASKET, {
-      targetListId: 'list-weekly',
-      content: 'milk',
-      quantity: LINE_QUANTITY_MAX,
-      askIfAmbiguous: true,
-    });
-
-    expect(result.entries.map((entry) => entry.lineId)).toEqual(['zl-1']);
-    expect(result.entries[0].left).toBe(LINE_QUANTITY_MAX);
-  });
-
-  it('asks which line when two hold a product under the name, and takes the answer', async () => {
+  it('asks which line when two lines at zero hold a product under the name, and takes the answer', async () => {
     const memory = new BasketMemory();
     const second = await memory.addLine(BASKET, {
       targetListId: 'list-weekly',
       content: 'Milk',
       quantity: 1,
-      itemIds: ['item-milk-pascual'],
+      itemIds: ['item-milk-oat'],
     });
     const secondId = second.entries[0].lineId;
+    expect(second.addOutcome).toBe('created');
+    await memory.setDemand(BASKET, { lineId: 'zl-1', quantity: 0, from: 2 });
+    await memory.setDemand(BASKET, { lineId: secondId, quantity: 0, from: 1 });
 
     let refusal: unknown = null;
     try {
       await memory.addLine(BASKET, {
         targetListId: 'list-weekly',
         content: 'Milk',
-        quantity: 1,
         askIfAmbiguous: true,
       });
     } catch (error) {
@@ -962,25 +1044,178 @@ describe('BasketMemory: adding a line', () => {
     });
     expect(
       (
-        refusal as { details: { lines: { lineId: string }[] } }
-      ).details.lines.map((line) => line.lineId)
-    ).toEqual(['zl-1', secondId]);
+        refusal as { details: { lines: { lineId: string; unit: string }[] } }
+      ).details.lines.map(({ lineId, unit }) => ({ lineId, unit }))
+    ).toEqual([
+      { lineId: 'zl-1', unit: 'UNIT' },
+      { lineId: secondId, unit: 'UNIT' },
+    ]);
 
     const into = await memory.addLine(BASKET, {
       targetListId: 'list-weekly',
       content: 'Milk',
-      quantity: 2,
       intoLineId: secondId,
     });
-    expect(into.entries[0]).toMatchObject({ lineId: secondId, left: 3 });
+    expect(into.entries[0]).toMatchObject({ lineId: secondId, left: 1 });
 
     const fresh = await memory.addLine(BASKET, {
       targetListId: 'list-weekly',
       content: 'Milk',
-      quantity: 1,
       newLine: true,
     });
     expect(['zl-1', secondId]).not.toContain(fresh.entries[0].lineId);
+  });
+
+  it('names every match that is a basket row when the add cannot ask, a line at zero that was bought included (backend 0260, rule 5)', async () => {
+    const memory = new BasketMemory();
+    // Milk is bought down to zero here, so its line stays a row of this basket.
+    const milk = rowOf(await rowsOf(memory), 'Milk');
+    await memory.settle(BASKET, await targetOf(memory, milk.rowKey), {
+      outcome: 'BOUGHT',
+      quantity: 2,
+      allocations: [{ lineId: 'zl-1', quantity: 2 }],
+      from: milk.left,
+    });
+    const second = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 1,
+      itemIds: ['item-milk-oat'],
+    });
+    const secondId = second.entries[0].lineId;
+
+    const shown = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Milk',
+    });
+
+    // Nothing is written; both lines are rows, the one at zero too.
+    expect(shown.addOutcome).toBe('alreadyOnList');
+    expect(shown.entries.map((entry) => entry.lineId).sort()).toEqual(
+      ['zl-1', secondId].sort()
+    );
+
+    // A line at zero with no buy is no row, so it has no entry.
+    await memory.setDemand(BASKET, { lineId: secondId, quantity: 0, from: 1 });
+    const third = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 1,
+      itemIds: ['item-milk-goat'],
+    });
+    const after = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Milk',
+    });
+    expect(after.entries.map((entry) => entry.lineId)).not.toContain(secondId);
+    expect(after.entries.map((entry) => entry.lineId)).toContain(
+      third.entries[0].lineId
+    );
+  });
+
+  it('asks about the lines of a typed name in the order the list draws them (backend 0260)', async () => {
+    const memory = new BasketMemory();
+    const second = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 1,
+      itemIds: ['item-milk-oat'],
+    });
+    const secondId = second.entries[0].lineId;
+    // The later line was moved above the first one on the list.
+    const stored = (
+      memory as unknown as {
+        _lines: { id: string; position?: number }[];
+      }
+    )._lines;
+    for (const held of stored) {
+      held.position = held.id === secondId ? 0 : 10;
+    }
+
+    let refusal: unknown = null;
+    try {
+      await memory.addLine(BASKET, {
+        targetListId: 'list-weekly',
+        content: 'Milk',
+        askIfAmbiguous: true,
+      });
+    } catch (error) {
+      refusal = error;
+    }
+    expect(
+      (
+        refusal as { details: { lines: { lineId: string }[] } }
+      ).details.lines.map(({ lineId }) => lineId)
+    ).toEqual([secondId, 'zl-1']);
+  });
+
+  it('asks about a chosen product two lines hold, above zero too, and refuses a new line beside it (the ruling of 2026-11-16)', async () => {
+    const memory = new BasketMemory();
+    const second = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Oat milk',
+      quantity: 1,
+      itemIds: ['item-milk-hacendado', 'item-milk-oat'],
+    });
+    const secondId = second.entries[0].lineId;
+    await memory.setDemand(BASKET, { lineId: secondId, quantity: 0, from: 1 });
+
+    let refusal: unknown = null;
+    try {
+      await memory.addLine(BASKET, {
+        targetListId: 'list-weekly',
+        content: 'Milk',
+        quantity: 1,
+        itemIds: ['item-milk-hacendado'],
+        askIfAmbiguous: true,
+      });
+    } catch (error) {
+      refusal = error;
+    }
+    expect(refusal).toMatchObject({ code: 'line_add_needs_choice' });
+    const lines = (
+      refusal as {
+        details: {
+          lines: {
+            lineId: string;
+            outcome: string;
+            resultingQuantity: number;
+          }[];
+        };
+      }
+    ).details.lines;
+    expect(lines).toEqual([
+      expect.objectContaining({
+        lineId: 'zl-1',
+        outcome: 'ALREADY_ON_LIST',
+      }),
+      expect.objectContaining({
+        lineId: secondId,
+        outcome: 'RAISED',
+        resultingQuantity: 1,
+      }),
+    ]);
+
+    expect(
+      await codeOf(
+        memory.addLine(BASKET, {
+          targetListId: 'list-weekly',
+          content: 'Milk',
+          quantity: 1,
+          itemIds: ['item-milk-hacendado'],
+          newLine: true,
+        })
+      )
+    ).toBe('validation_failed');
+
+    const shown = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 1,
+      itemIds: ['item-milk-hacendado'],
+      intoLineId: 'zl-1',
+    });
+    expect(shown.addOutcome).toBe('alreadyOnList');
   });
 
   it('refuses an add on a finished trip', async () => {

@@ -1,4 +1,4 @@
-> **Status: not built, pending re-evaluation.** Much of the catalog, pricing and line model changed after this plan was written. It will not be built as written: a later session re-evaluates it and writes a new plan if the need remains. The state as of 2026-09-17 is in [plan 0121](./0121-plan-status-2026-09-17.md).
+> **Status: replaced on 2026-11-05.** One unit per product is plan `0244` (the four kinds, the weight of a piece) and the unit a line counts in is plan `0246`. The owner decided on 2026-11-05 that a group keeps no unit list and that a single product cannot be counted in another unit (plan `0246` W1, W2, W4), so sections 3 to 5 are not built in any form.
 
 # 0096 A product is measured in one unit, and a group allows several
 

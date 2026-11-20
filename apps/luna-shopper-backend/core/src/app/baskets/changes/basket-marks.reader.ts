@@ -5,8 +5,10 @@ import {
   BASKET_CHANGE_LIMITS,
   BasketRowMark,
   BUY_CHANGE_KINDS,
+  isLineUnit,
   LineApprovalStatus,
   LineChangeKind,
+  type LineUnit,
 } from '@portfolio/luna-shopper/contracts';
 import { Repository } from 'typeorm';
 import type { CoreConfig } from '../../config/app-config';
@@ -280,6 +282,8 @@ export interface RemovedGroup {
   rowKey: string;
   /** The text it had when it went. */
   content: string;
+  /** What its quantities count: a row is one unit (plan 0246 M6). */
+  unit: LineUnit;
   /** Every gone line of this key, for the purchases the row still shows. */
   lineIds: string[];
   /**
@@ -452,6 +456,7 @@ export function foldRemoved(
       content:
         entries.find((entry) => entry.line.id === anchor.id)?.content ??
         anchor.content,
+      unit: isLineUnit(anchor.unit) ? anchor.unit : 'UNIT',
       lineIds: entries.map((entry) => entry.line.id),
       marked: entries.some((entry) => entry.marked),
     });

@@ -22,6 +22,7 @@ import {
   toMembership,
   toMyZone,
   toPage,
+  toProductOffer,
   toSessionTokens,
   toShoppingList,
   toZone,
@@ -304,6 +305,8 @@ describe('toLine', () => {
     listId: 'l1',
     content: 'Milk',
     quantity: 2,
+    // What the quantity counts (velista 0182, backend 0246).
+    unit: 'UNIT',
     // A product set, where this was a single nullable `itemId` that was null on every
     // line ever created (backend plan 0048, section 1.1).
     itemIds: ['item-milk'],
@@ -335,6 +338,23 @@ describe('toLine', () => {
     expect(toLine(valid)).toEqual(valid);
   });
 
+  describe('the unit (velista 0182, criterion 1)', () => {
+    it('reads a weight and a volume', () => {
+      expect(toLine({ ...valid, unit: 'GRAM', quantity: 750 })).toMatchObject({
+        unit: 'GRAM',
+        quantity: 750,
+      });
+      expect(toLine({ ...valid, unit: 'MILLILITER' })?.unit).toBe('MILLILITER');
+    });
+
+    it('reads a missing or unknown unit as a count', () => {
+      const { unit: _unit, ...before } = valid;
+      expect(toLine(before)?.unit).toBe('UNIT');
+      expect(toLine({ ...valid, unit: 'KILOGRAM' })?.unit).toBe('UNIT');
+      expect(toLine({ ...valid, unit: 3 })?.unit).toBe('UNIT');
+    });
+  });
+
   it('reads a comment count as known only when it is a whole number (velista 0158)', () => {
     expect(toLine({ ...valid, commentCount: 0 })?.commentCount).toBe(0);
     // Null is what an event and a write answer send, and it means unknown, as an
@@ -352,6 +372,9 @@ describe('toLine', () => {
     // Written to the schema the gateway answers with, not to suit the mapper.
     const wire = {
       ...valid,
+      // What the quantity counts, which the schema requires since backend
+      // plan 0246.
+      unit: 'UNIT',
       itemSetHash: null,
       approvedByUserId: null,
       createdAt: '2026-01-01T00:00:00.000Z',
@@ -1087,6 +1110,9 @@ describe('toCatalogItem: the size the catalog was always sending', () => {
       brand: 'Hacendado',
       size: 0.5,
       unit: 'LITER',
+      approxWeight: null,
+      // Absent on this fixture, so it has none (velista `0186`).
+      quantityStep: null,
       productGroupId: 'group-milk',
       // Absent on this fixture, so it has none (velista `0118`).
       categories: [],
@@ -1224,6 +1250,8 @@ describe('toCatalogItem: the price it used to drop', () => {
       currency: 'EUR',
       unitPrice: 1.05,
       unitPriceLabel: 'EUR/L',
+      comparablePrice: null,
+      comparableBasis: null,
       observedAt: '2026-09-01T08:00:00.000Z',
       sourceKind: 'OFFICIAL_WEB',
       stale: true,
@@ -1237,6 +1265,9 @@ describe('toCatalogItem: the price it used to drop', () => {
       currency: 'EUR',
       unitPrice: 1.05,
       unitPriceLabel: 'EUR/L',
+      comparablePrice: null,
+      comparableBasis: null,
+      piecePrice: null,
       observedAt: new Date('2026-09-01T08:00:00.000Z'),
       sourceKind: 'OFFICIAL_WEB',
       // Read off the wire (backend plan 0080, section 5), never inferred.
@@ -1340,6 +1371,8 @@ describe('toCatalogSuggestion', () => {
     currency: 'EUR',
     unitPrice: 1.05,
     unitPriceLabel: 'EUR/L',
+    comparablePrice: null,
+    comparableBasis: null,
     observedAt: '2026-09-01T08:00:00.000Z',
     sourceKind: 'OFFICIAL_WEB',
     stale: false,
@@ -1392,6 +1425,8 @@ describe('toCatalogSuggestions', () => {
     currency: 'EUR',
     unitPrice: price,
     unitPriceLabel: 'EUR/L',
+    comparablePrice: null,
+    comparableBasis: null,
     observedAt: '2026-09-20T08:00:00.000Z',
     sourceKind: 'OFFICIAL_WEB',
     stale,
@@ -1563,6 +1598,127 @@ describe('toCatalogSuggestions', () => {
 });
 
 /** Backend `0162`: how many units a pack holds, a whole number from 2. */
+describe('a piece whose weight varies (velista 0179, backend 0244)', () => {
+  const cheese = {
+    id: 'item-cheese',
+    name: { es: 'Queso curado', en: 'Cured cheese' },
+    brand: 'Hacendado',
+    unitSize: null,
+    defaultUnit: 'KILOGRAM',
+    approxWeight: 1560,
+    bestOffer: {
+      price: 13.42,
+      currency: 'EUR',
+      unitPrice: 13.42,
+      unitPriceLabel: 'EUR/kg',
+      comparablePrice: null,
+      comparableBasis: null,
+      piecePrice: 20.94,
+      observedAt: '2026-11-01T08:00:00.000Z',
+      sourceKind: 'OFFICIAL_API',
+      priceScopeId: 'scope-mercadona',
+    },
+  };
+
+  it('reads the approximate weight and the piece price', () => {
+    const mapped = toCatalogItem(cheese);
+    expect(mapped?.approxWeight).toBe(1560);
+    expect(mapped?.offer?.piecePrice).toBe(20.94);
+  });
+
+  it.each([
+    ['a string', '1560'],
+    ['a negative number', -1],
+    ['zero', 0],
+    ['not a finite number', Number.NaN],
+    ['an absent field', undefined],
+  ])('reads %s as no weight and no piece price', (_, value) => {
+    const mapped = toCatalogItem({
+      ...cheese,
+      approxWeight: value,
+      bestOffer: { ...cheese.bestOffer, piecePrice: value },
+    });
+    expect(mapped?.approxWeight).toBeNull();
+    expect(mapped?.offer?.piecePrice).toBeNull();
+    expect(
+      toProductOffer({ ...cheese.bestOffer, piecePrice: value })?.piecePrice
+    ).toBeNull();
+  });
+});
+
+describe("toCatalogItem: the product's step (velista 0186, backend 0261)", () => {
+  const loose = {
+    id: 'item-chicken',
+    name: { es: 'Pollo entero', en: 'Whole chicken' },
+    unitSize: null,
+    defaultUnit: 'KILOGRAM',
+  };
+
+  it('reads one of the ten steps', () => {
+    expect(toCatalogItem({ ...loose, quantityStep: 100 })?.quantityStep).toBe(
+      100
+    );
+    expect(toCatalogItem({ ...loose, quantityStep: 5 })?.quantityStep).toBe(5);
+  });
+
+  it.each([
+    ['an absent field', undefined],
+    ['null', null],
+    ['a step off the list', 30],
+    ['a string', '100'],
+    ['zero', 0],
+  ])('reads %s as no step', (_, value) => {
+    expect(
+      toCatalogItem({ ...loose, quantityStep: value })?.quantityStep
+    ).toBeNull();
+  });
+});
+
+describe('toProductOffer: the comparable pair (backend 0245)', () => {
+  const wire = {
+    price: 0.99,
+    currency: 'EUR',
+    unitPrice: null,
+    unitPriceLabel: null,
+    comparablePrice: 1.98,
+    comparableBasis: 'KILOGRAM',
+    observedAt: '2026-11-01T08:00:00.000Z',
+    sourceKind: 'OFFICIAL_WEB',
+    priceScopeId: 'scope-lidl',
+  };
+
+  it('reads the figure and its basis, apart from the chain unit price', () => {
+    const offer = toProductOffer(wire);
+    expect(offer?.comparablePrice).toBe(1.98);
+    expect(offer?.comparableBasis).toBe('KILOGRAM');
+    expect(offer?.unitPrice).toBeNull();
+  });
+
+  it.each(['KILOGRAM', 'LITER', 'UNIT'])('reads the basis %s', (basis) => {
+    expect(
+      toProductOffer({ ...wire, comparableBasis: basis })?.comparableBasis
+    ).toBe(basis);
+  });
+
+  it.each([
+    ['a string figure', { comparablePrice: '1.98' }],
+    ['a negative figure', { comparablePrice: -1 }],
+    ['a zero figure', { comparablePrice: 0 }],
+    ['a figure that is not finite', { comparablePrice: Number.NaN }],
+    ['an unknown basis', { comparableBasis: 'DOZEN' }],
+    ['a figure with no basis', { comparableBasis: null }],
+    ['a basis with no figure', { comparablePrice: null }],
+    [
+      'an absent pair',
+      { comparablePrice: undefined, comparableBasis: undefined },
+    ],
+  ])('reads %s as no pair at all', (_, patch) => {
+    const offer = toProductOffer({ ...wire, ...patch });
+    expect(offer?.comparablePrice).toBeNull();
+    expect(offer?.comparableBasis).toBeNull();
+  });
+});
+
 describe('toCatalogItem: the pack count', () => {
   it('reads a whole number from 2 and nothing else', () => {
     expect(toCatalogItem({ id: 'i', packCount: 6 })?.packCount).toBe(6);
@@ -1607,6 +1763,33 @@ describe('toLineSettlement, what one unit cost (velista 0095, section 7)', () =>
       expect(settlement?.currency).toBeNull();
     }
   });
+
+  it('maps the unit and whether its cost is an estimate (velista 0182, criterion 1)', () => {
+    const weighed = toLineSettlement({
+      ...RAW,
+      quantity: 750,
+      unit: 'GRAM',
+      estimated: true,
+      pricePaidCents: 199,
+    });
+
+    expect(weighed).toMatchObject({
+      quantity: 750,
+      unit: 'GRAM',
+      estimated: true,
+      unitPriceCents: 199,
+    });
+  });
+
+  it('reads a missing unit as a count and only a JSON true as an estimate', () => {
+    expect(toLineSettlement(RAW)).toMatchObject({
+      unit: 'UNIT',
+      estimated: false,
+    });
+    expect(
+      toLineSettlement({ ...RAW, unit: 'OUNCE', estimated: 'yes' })
+    ).toMatchObject({ unit: 'UNIT', estimated: false });
+  });
 });
 
 /** `GET /v1/items/:id/list-lines` (backend `0196`, section 3). */
@@ -1619,7 +1802,13 @@ describe('toItemLists', () => {
     autoApproveLines: true,
     myPermissions: ['READ', 'WRITE', 'DECIDE', 'MANAGE'],
     lines: [
-      { id: 'ln-1', content: 'Leche', quantity: 2, approvalStatus: 'APPROVED' },
+      {
+        id: 'ln-1',
+        content: 'Leche',
+        quantity: 2,
+        unit: 'UNIT',
+        approvalStatus: 'APPROVED',
+      },
       {
         id: 'ln-2',
         content: 'Leche para el café',
@@ -1667,6 +1856,7 @@ describe('toItemLists', () => {
           listId: 'list-weekly',
           name: 'Leche',
           quantity: 2,
+          unit: 'UNIT',
           pending: false,
           itemIds: ['item-milk'],
         },
@@ -1675,12 +1865,64 @@ describe('toItemLists', () => {
           listId: 'list-weekly',
           name: 'Leche para el café',
           quantity: 0,
+          unit: 'UNIT',
           pending: true,
           itemIds: ['item-milk'],
         },
       ],
       hasMore: false,
     });
+  });
+
+  it('takes the unit of a weight line from the answer, which the server names (velista 0187)', () => {
+    // The answer the product page reads for a list the app never loaded. The
+    // contract names each line's unit, so the mapper never has to guess pieces
+    // for a line that counts grams.
+    const wire = {
+      lists: [
+        {
+          ...SUNDAY,
+          lines: [
+            {
+              id: 'ln-ham',
+              content: 'Jamón cocido',
+              quantity: 1600,
+              unit: 'GRAM',
+              approvalStatus: 'APPROVED',
+            },
+          ],
+        },
+      ],
+      hasMore: false,
+    };
+    expect(
+      validateSchema(LIST_SCHEMA_IDS.listsWithItemLinesResult, wire).valid
+    ).toBe(true);
+    // A line with no unit is not the answer the server gives.
+    const unnamed = {
+      ...wire,
+      lists: [
+        {
+          ...SUNDAY,
+          lines: [{ ...wire.lists[0].lines[0], unit: undefined }],
+        },
+      ],
+    };
+    expect(
+      validateSchema(LIST_SCHEMA_IDS.listsWithItemLinesResult, unnamed).valid
+    ).toBe(false);
+
+    expect(toItemLists(wire, 'item-ham').lines).toEqual([
+      {
+        lineId: 'ln-ham',
+        listId: 'list-sunday',
+        name: 'Jamón cocido',
+        quantity: 1600,
+        unit: 'GRAM',
+        pending: false,
+        itemIds: ['item-ham'],
+      },
+    ]);
   });
 
   it('drops a permission it does not know, alone', () => {
@@ -1745,6 +1987,7 @@ describe('toItemLists', () => {
         listId: 'list-weekly',
         name: 'Leche',
         quantity: 0,
+        unit: 'UNIT',
         pending: false,
         itemIds: ['item-milk'],
       },

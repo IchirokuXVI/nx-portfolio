@@ -209,7 +209,10 @@ export function eanStaysDetail(
  * 2. **Every row is sold by weight: the lowest price per kilo** (plan 0181).
  *    Two pieces of one cheese are one product sold by the kilo, each figure
  *    is the price of a kilo, and {@link lowestPerKilo} picks the least a
- *    shopper pays for one.
+ *    shopper pays for one. Two pieces of different weight are two products
+ *    (owner, 2026-11-03), so two rows on one piece product are a curation
+ *    error, and the run warns `APPROX_WEIGHT_ROWS_DISAGREE` (plan 0244,
+ *    section 5.7).
  * 3. **The rows agree on the amount: that amount.** Two barcodes of one
  *    product at one price are not a question, and withholding it would leave
  *    a product unpriced that every row prices the same.

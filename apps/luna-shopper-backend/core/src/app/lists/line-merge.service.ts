@@ -6,7 +6,10 @@ import {
   LineItemSource,
   type LineMergeTooManyProductsDetails,
 } from '@portfolio/luna-shopper/contracts';
-import { LineMergeTooManyProductsException } from '@portfolio/luna-shopper/platform';
+import {
+  LineMergeTooManyProductsException,
+  LineUnitDiffersException,
+} from '@portfolio/luna-shopper/platform';
 import { In, type EntityManager } from 'typeorm';
 import {
   BasketLineSkip,
@@ -185,6 +188,16 @@ export class LineMergeService {
     absorbed: ListLine,
     record: MergeRecord
   ): Promise<ListLine> {
+    // Two units never fold into one (plan 0246 M5): the quantities could not
+    // be summed, and converting needs a product a merge has none to prefer.
+    // First, so a refusal moves nothing. Both callers ask it earlier too, with
+    // the words their client needs; this is the floor under them.
+    if ((survivor.unit ?? 'UNIT') !== (absorbed.unit ?? 'UNIT')) {
+      throw new LineUnitDiffersException(
+        `"${survivor.content}" and "${absorbed.content}" count in different units`,
+        { messageArgs: { content: survivor.content } }
+      );
+    }
     // What the line that went away was, which the change is about.
     //
     // `absorbedBefore` is why this is not simply read off the object: a rename

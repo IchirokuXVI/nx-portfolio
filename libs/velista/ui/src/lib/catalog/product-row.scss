@@ -55,6 +55,47 @@ label {
   touch-action: manipulation;
 }
 
+// The app's focus ring, written once for every control of the card that draws it
+// at its usual offset. The plus draws its own, inside its press area.
+.open,
+.chains-press,
+.reveal,
+.held-onlist-link {
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// One line of text that gives way by ellipsis.
+%one-line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Two lines at most, wrapping anywhere, then cut.
+%two-lines {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+// A small muted note.
+%muted-xs {
+  color: var(--app-text-muted);
+  font-size: var(--app-text-xs);
+}
+
+// Body text one step down, in the secondary colour.
+%secondary-sm {
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-sm);
+}
+
 // ---- the picture
 
 .thumb {
@@ -114,11 +155,6 @@ lib-product-picture.thumb:not(.has-photo),
     position: absolute;
     inset: 0;
   }
-
-  &:focus-visible {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
-  }
 }
 
 .row.has-control .open {
@@ -148,13 +184,9 @@ lib-product-picture.thumb:not(.has-photo),
 }
 
 .name {
-  display: -webkit-box;
-  overflow: hidden;
+  @extend %two-lines;
+
   font-size: var(--app-text-base);
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
 }
 
 // The word after a group's name: a plain label, not a control.
@@ -169,24 +201,36 @@ lib-product-picture.thumb:not(.has-photo),
   white-space: nowrap;
 }
 
-.detail,
+// The detail wraps at its separator rather than cutting the weight to "~1,…"
+// (velista `0179`, section 2): the brand gives way to a second line, and the
+// no-break spaces in each size keep its number beside its unit.
+.detail {
+  @extend %two-lines;
+  @extend %secondary-sm;
+}
+
 .also {
-  overflow: hidden;
-  color: var(--app-text-secondary);
-  font-size: var(--app-text-sm);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  @extend %one-line;
+  @extend %secondary-sm;
 }
 
 // The detail carries the price where the price column is empty (the sheet of
-// what a visit added), so it wraps rather than cutting the price off.
+// what a visit added), so it wraps in full rather than cutting the price off.
 .row.price-in-detail .detail {
-  white-space: normal;
+  display: block;
+  -webkit-line-clamp: none;
 }
 
 .caption {
   color: var(--app-text-secondary);
   font-size: var(--app-text-xs);
+}
+
+// The cost of a line's amount with this product (velista 0183).
+.line-cost {
+  color: var(--app-text-primary);
+  font-size: var(--app-text-xs);
+  font-variant-numeric: tabular-nums;
 }
 
 // ---- the chain line
@@ -221,11 +265,10 @@ lib-product-picture.thumb:not(.has-photo),
 // Only the cheapest chain is named, and it gives way by ellipsis rather than by
 // pushing its neighbours.
 .lead {
+  @extend %one-line;
+
   min-inline-size: 0;
   margin-inline: var(--app-space-hair);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .more {
@@ -269,11 +312,6 @@ lib-product-picture.thumb:not(.has-photo),
     &:hover {
       background: var(--app-action-quiet-bg);
     }
-  }
-
-  &:focus-visible {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
   }
 
   // The line stays small and its target grows to the touch target.
@@ -324,10 +362,20 @@ lib-product-picture.thumb:not(.has-photo),
 }
 
 .unit {
-  color: var(--app-text-muted);
-  font-size: var(--app-text-xs);
+  @extend %muted-xs;
+
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+// What a price is per ("/ kg", "/ L"): smaller than its number, muted, close
+// after it, so the number lines up with the other prices (velista `0179`).
+.per {
+  margin-inline-start: var(--app-space-hair);
+  color: var(--app-text-muted);
+  font-size: var(--app-text-2xs);
+  font-weight: 400;
+  word-spacing: calc(var(--app-space-hair) * -1);
 }
 
 .clock {
@@ -387,6 +435,18 @@ lib-product-picture.thumb:not(.has-photo),
   background: var(--app-surface-raised);
   color: var(--app-text-primary);
   font-size: var(--app-text-lg);
+}
+
+// A product the list already asks for (velista 0185, frame "catalog D3"): the plus
+// keeps its size and place and is drawn switched off, the outline and the glyph at
+// reduced strength, as the composer draws its own plus when it cannot send. It is
+// `aria-disabled`, so it keeps its place in the Tab order and its focus ring.
+.add[aria-disabled='true'] {
+  cursor: default;
+
+  .add-dot {
+    opacity: 0.4;
+  }
 }
 
 // In a mode that chooses (velista 0140, 0146), the radio or the tick at the
@@ -462,25 +522,23 @@ label.open .pick:focus-visible {
 }
 
 .shop-name {
+  @extend %one-line;
+  @extend %secondary-sm;
+
   flex: 1;
   min-inline-size: 0;
-  overflow: hidden;
-  color: var(--app-text-secondary);
-  font-size: var(--app-text-sm);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .shop-note {
+  @extend %muted-xs;
+
   flex: none;
-  color: var(--app-text-muted);
-  font-size: var(--app-text-xs);
 }
 
 .shop-price {
+  @extend %secondary-sm;
+
   flex: none;
-  color: var(--app-text-secondary);
-  font-size: var(--app-text-sm);
   font-variant-numeric: tabular-nums;
 }
 
@@ -538,19 +596,17 @@ label.open .pick:focus-visible {
 // The name gives way. The brand and the price never do: two packets of the same
 // milk differ by exactly those two.
 .inside-name {
+  @extend %one-line;
+  @extend %secondary-sm;
+
   flex: 0 1 auto;
   min-inline-size: 0;
-  overflow: hidden;
-  color: var(--app-text-secondary);
-  font-size: var(--app-text-sm);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .inside-brand {
+  @extend %muted-xs;
+
   flex: none;
-  color: var(--app-text-muted);
-  font-size: var(--app-text-xs);
 
   &::before {
     content: '·';
@@ -566,8 +622,7 @@ label.open .pick:focus-visible {
 }
 
 .inside-more {
-  color: var(--app-text-muted);
-  font-size: var(--app-text-xs);
+  @extend %muted-xs;
 }
 
 // The lines that hold this product (velista 0134, section 4.1). A hairline and no
@@ -583,13 +638,49 @@ label.open .pick:focus-visible {
 }
 
 .held-title {
-  color: var(--app-text-muted);
-  font-size: var(--app-text-xs);
+  @extend %muted-xs;
 }
 
+// "Already on Weekly shop. See it on the list", in place of the heading (velista
+// 0185). Body text in the secondary colour with the info glyph before it; the
+// sentence wraps, the link never breaks inside itself.
+.held-onlist {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--app-space-3);
+  margin: 0 0 var(--app-space-2);
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+}
+
+.held-onlist-icon {
+  flex: none;
+  // The glyph sits on the first line of the sentence, not on the middle of it.
+  margin-block-start: var(--app-space-hair);
+  font-size: var(--app-icon-sm);
+}
+
+.held-onlist-text {
+  min-inline-size: 0;
+}
+
+// The app's quiet action colour, underlined: inside a sentence a link must not
+// rest on colour alone.
+.held-onlist-link {
+  border-radius: var(--app-radius-sm);
+  color: var(--app-action-quiet-fg);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  white-space: nowrap;
+}
+
+// The held lines sit 12 px apart, as the stepper mock draws them (velista 0188).
 .held-lines {
   display: flex;
   flex-direction: column;
+  gap: var(--app-space-4);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -610,11 +701,8 @@ label.open .pick:focus-visible {
 }
 
 .held-list {
-  overflow: hidden;
-  color: var(--app-text-muted);
-  font-size: var(--app-text-xs);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  @extend %one-line;
+  @extend %muted-xs;
 }
 
 .held-name {
@@ -623,8 +711,7 @@ label.open .pick:focus-visible {
 }
 
 .held-pending {
-  color: var(--app-text-muted);
-  font-size: var(--app-text-xs);
+  @extend %muted-xs;
 }
 
 // ---- the skeleton: the same box, with bones where the text goes

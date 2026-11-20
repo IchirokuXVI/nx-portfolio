@@ -3,10 +3,6 @@ import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutransla
 import type { LineRowVm } from '@portfolio/velista/models';
 import { LineList } from './line-list';
 
-/** A row's height, and the gap under it, as the stubbed geometry lays them out. */
-const ROW_HEIGHT = 60;
-const ROW_STEP = 64;
-
 function vm(id: string): LineRowVm {
   return {
     id,
@@ -27,14 +23,8 @@ function vm(id: string): LineRowVm {
   };
 }
 
-const LINES = ['a', 'b', 'c', 'd', 'e'].map(vm);
+const LINES = ['a', 'b', 'c'].map(vm);
 
-/**
- * jsdom lays nothing out, so every rect is zero and the whole calculation degenerates.
- * The rows are given the geometry a phone would give them instead: five 60px rows, 4px
- * apart. That is the input the index maths actually reads, so stubbing it is stubbing
- * the browser and not the component.
- */
 function render(): ComponentFixture<LineList> {
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
@@ -43,23 +33,7 @@ function render(): ComponentFixture<LineList> {
 
   const fixture = TestBed.createComponent(LineList);
   fixture.componentRef.setInput('lines', LINES);
-  fixture.componentRef.setInput('reordering', true);
   fixture.detectChanges();
-
-  rows(fixture).forEach((row, index) => {
-    row.getBoundingClientRect = () =>
-      ({
-        top: index * ROW_STEP,
-        height: ROW_HEIGHT,
-        bottom: index * ROW_STEP + ROW_HEIGHT,
-        left: 0,
-        right: 0,
-        width: 0,
-        x: 0,
-        y: index * ROW_STEP,
-        toJSON: () => ({}),
-      }) as DOMRect;
-  });
 
   return fixture;
 }
@@ -70,168 +44,76 @@ function rows(fixture: ComponentFixture<LineList>): HTMLElement[] {
   );
 }
 
-/** A pointer event jsdom will construct, since it has no `PointerEvent`. */
-function pointer(type: string, clientY: number): PointerEvent {
-  const event = new MouseEvent(type, {
-    clientY,
-    bubbles: true,
-  }) as unknown as { pointerId: number };
-  event.pointerId = 1;
-
-  return event as unknown as PointerEvent;
-}
-
-/** Take hold of row `index`'s grip, at the vertical middle of that row. */
-function grab(fixture: ComponentFixture<LineList>, index: number): number {
-  const grip = rows(fixture)[index].querySelector(
-    '.grip-handle'
-  ) as HTMLElement;
-  grip.setPointerCapture = () => undefined;
-
-  const startY = index * ROW_STEP + ROW_HEIGHT / 2;
-  grip.dispatchEvent(pointer('pointerdown', startY));
-  fixture.detectChanges();
-
-  return startY;
-}
-
-function moveTo(fixture: ComponentFixture<LineList>, clientY: number): void {
-  fixture.nativeElement.dispatchEvent(pointer('pointermove', clientY));
-  fixture.detectChanges();
-}
-
-function release(
-  fixture: ComponentFixture<LineList>,
-  type = 'pointerup'
-): void {
-  fixture.nativeElement.dispatchEvent(pointer(type, 0));
-  fixture.detectChanges();
-}
-
 /**
- * Plan 0012 gave the list a manual order and a grip to set it with, and the grip
- * answered its two arrows and nothing else: the drag it draws went to the browser,
- * which read it as a scroll. Reaching the bottom of a dozen lines meant a dozen taps.
- *
- * These are about the index the drag lands on, because that is the part a refactor can
- * quietly get wrong and a screenshot cannot check. The transforms are asserted with it,
- * since a landing index the rows do not agree with is a list that snaps somewhere the
- * finger never went.
+ * The rows in the order they are given, each under its id, with nothing to drag
+ * (velista `0189`, section 6: the reorder mode went, and the grip and the drag with it).
  */
-describe('LineList reordering by drag', () => {
-  it('follows the finger and lifts the row it is on', () => {
+describe('LineList', () => {
+  it('draws one row per line, in order, each under its id', () => {
     const fixture = render();
-    const startY = grab(fixture, 0);
 
-    moveTo(fixture, startY + 40);
-
-    expect(rows(fixture)[0].style.transform).toBe('translateY(40px)');
-    expect(rows(fixture)[0].classList.contains('lifted')).toBe(true);
-    expect(rows(fixture)[1].classList.contains('shifting')).toBe(true);
+    expect(rows(fixture).map((row) => row.dataset['lineId'])).toEqual([
+      'a',
+      'b',
+      'c',
+    ]);
   });
 
-  it('opens a gap by moving the row it has passed the other way', () => {
-    // Past the second row's midpoint, so the drag is now asking to be second.
+  it('draws no grip and moves no row under a pointer', () => {
     const fixture = render();
-    const startY = grab(fixture, 0);
 
-    moveTo(fixture, startY + 70);
-
-    expect(rows(fixture)[1].style.transform).toBe(`translateY(-${ROW_STEP}px)`);
-    // Untouched: the drag has not reached them.
-    expect(rows(fixture)[2].style.transform).toBe('');
-  });
-
-  it('asks for the index it landed on, once, when the finger comes off', () => {
-    const fixture = render();
-    const moves: { lineId: string; to: number }[] = [];
-    fixture.componentInstance.reorderTo.subscribe((move) => moves.push(move));
-
-    const startY = grab(fixture, 0);
-    moveTo(fixture, startY + 70);
-    moveTo(fixture, startY + 140);
-    release(fixture);
-
-    // One request for the whole move, not one per row it crossed.
-    expect(moves).toEqual([{ lineId: 'a', to: 2 }]);
-  });
-
-  it('reads an upward drag the same way', () => {
-    const fixture = render();
-    const moves: { lineId: string; to: number }[] = [];
-    fixture.componentInstance.reorderTo.subscribe((move) => moves.push(move));
-
-    const startY = grab(fixture, 3);
-    moveTo(fixture, startY - 70);
-    release(fixture);
-
-    expect(moves).toEqual([{ lineId: 'd', to: 2 }]);
-    expect(rows(fixture)[2].style.transform).toBe('');
-  });
-
-  it('cannot be dragged past the ends of the list', () => {
-    const fixture = render();
-    const moves: { lineId: string; to: number }[] = [];
-    fixture.componentInstance.reorderTo.subscribe((move) => moves.push(move));
-
-    const startY = grab(fixture, 4);
-    moveTo(fixture, startY + 900);
-    release(fixture);
-
-    // Already last. A drag off the bottom of the screen asks for nothing.
-    expect(moves).toEqual([]);
-  });
-
-  it('asks for nothing when the row lands where it started', () => {
-    // The ending of an accidental drag, and of a deliberate one thought better of.
-    const fixture = render();
-    const moves: { lineId: string; to: number }[] = [];
-    fixture.componentInstance.reorderTo.subscribe((move) => moves.push(move));
-
-    const startY = grab(fixture, 1);
-    moveTo(fixture, startY + 20);
-    moveTo(fixture, startY + 2);
-    release(fixture);
-
-    expect(moves).toEqual([]);
-  });
-
-  it('asks for nothing when the browser takes the gesture over', () => {
-    const fixture = render();
-    const moves: { lineId: string; to: number }[] = [];
-    fixture.componentInstance.reorderTo.subscribe((move) => moves.push(move));
-
-    const startY = grab(fixture, 0);
-    moveTo(fixture, startY + 140);
-    release(fixture, 'pointercancel');
-
-    expect(moves).toEqual([]);
-  });
-
-  it('drops every transform as soon as the drag ends', () => {
-    // The container answers by reordering the lines. A row still carrying its offset
-    // would be drawn a row away from where its new index puts it.
-    const fixture = render();
-    const startY = grab(fixture, 0);
-    moveTo(fixture, startY + 140);
-    release(fixture);
-
+    expect(fixture.nativeElement.querySelector('.grip-handle')).toBeNull();
     for (const row of rows(fixture)) {
       expect(row.style.transform).toBe('');
-      expect(row.classList.contains('lifted')).toBe(false);
-      expect(row.classList.contains('shifting')).toBe(false);
     }
   });
 
-  it('ignores a pointer that never took hold of a grip', () => {
+  it('marks the line a link asked for, and only that one', () => {
     const fixture = render();
-    const moves: { lineId: string; to: number }[] = [];
-    fixture.componentInstance.reorderTo.subscribe((move) => moves.push(move));
+    fixture.componentRef.setInput('markedId', 'b');
+    fixture.detectChanges();
 
-    moveTo(fixture, 400);
-    release(fixture);
+    expect(
+      rows(fixture).map((row) => row.classList.contains('marked'))
+    ).toEqual([false, true, false]);
+  });
+});
 
-    expect(moves).toEqual([]);
-    expect(rows(fixture)[0].style.transform).toBe('');
+/** Velista `0191`: the layout the device chose reaches every row. */
+describe('LineList layout (velista 0191)', () => {
+  function drawn(layout?: 'default' | 'compact') {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [LineList, RokuTranslatorTestingModule.forTesting()],
+    });
+    const fixture = TestBed.createComponent(LineList);
+    fixture.componentRef.setInput('lines', LINES);
+    if (layout !== undefined) {
+      fixture.componentRef.setInput('layout', layout);
+    }
+    fixture.detectChanges();
+    return Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll(
+        'lib-line-row .row'
+      )
+    );
+  }
+
+  it('draws the row of today by default', () => {
+    const drawnRows = drawn();
+
+    expect(drawnRows).toHaveLength(LINES.length);
+    expect(drawnRows.some((row) => row.classList.contains('compact'))).toBe(
+      false
+    );
+  });
+
+  it('passes compact to every row', () => {
+    const drawnRows = drawn('compact');
+
+    expect(drawnRows).toHaveLength(LINES.length);
+    expect(drawnRows.every((row) => row.classList.contains('compact'))).toBe(
+      true
+    );
   });
 });

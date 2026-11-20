@@ -117,19 +117,26 @@ describe('splitCardName', () => {
   });
 
   it('still checks the unit of the name against what the card measures in', () => {
-    // The check is on the family, and a centilitre is still a volume: it is
-    // read on a card priced per litre and refused on one priced per unit.
+    // The check is on the family. A centilitre on a card priced per unit is
+    // the content of the unit and is read (plan 0250, D2). A weight on a card
+    // priced per litre is still refused.
     expect(
       splitCardName('Cerveza Mahou clásica lata 33 cl.', 'ud')
     ).toMatchObject({
-      name: 'Cerveza Mahou clásica lata 33 cl.',
+      name: 'Cerveza Mahou clásica lata',
+      sizeFormat: '33 cl.',
+      unitSize: 330,
+      sizeUnit: 'MILLILITER',
+    });
+    expect(splitCardName('Café molido 500 g', 'l')).toMatchObject({
+      name: 'Café molido 500 g',
       sizeFormat: null,
       unitSize: null,
       sizeUnit: null,
     });
   });
 
-  it('leaves a weight and a count in the unit the card measures in', () => {
+  it('states a weight in kilograms and a count in units, whatever the card measures in', () => {
     expect(splitCardName('Café molido 250 g', 'kg')).toMatchObject({
       unitSize: 0.25,
       sizeUnit: 'KILOGRAM',
@@ -252,6 +259,166 @@ describe('splitCardName', () => {
     });
   });
 
+  describe('count words, a wash and a capital X (plan 0270)', () => {
+    it('reads a count word on a card priced per unit', () => {
+      expect(splitCardName('Calcetines CARREFOUR 3 pares', 'ud')).toEqual({
+        name: 'Calcetines CARREFOUR',
+        sizeFormat: '3 pares',
+        unitSize: 3,
+        sizeUnit: 'UNIT',
+        packCount: null,
+      });
+      expect(
+        splitCardName('Infusión manzanilla CARREFOUR 20 bolsitas', 'ud')
+      ).toMatchObject({ sizeFormat: '20 bolsitas', unitSize: 20 });
+      expect(splitCardName('Queso CARREFOUR 8 porciones', 'ud')).toMatchObject({
+        sizeFormat: '8 porciones',
+        unitSize: 8,
+      });
+    });
+
+    it('refuses a count word on a card priced per kilogram', () => {
+      expect(splitCardName('Calcetines CARREFOUR 3 pares', 'kg')).toEqual({
+        name: 'Calcetines CARREFOUR 3 pares',
+        sizeFormat: null,
+        unitSize: null,
+        sizeUnit: null,
+        packCount: null,
+      });
+    });
+
+    it('splits a wash off the name and states no size and no pack', () => {
+      expect(splitCardName('Detergente ARIEL 40 lavados', 'ud')).toEqual({
+        name: 'Detergente ARIEL',
+        sizeFormat: '40 lavados',
+        unitSize: null,
+        sizeUnit: null,
+        packCount: null,
+      });
+      expect(splitCardName('Detergente ARIEL 2x40 lavados', 'ud')).toEqual({
+        name: 'Detergente ARIEL',
+        sizeFormat: '2x40 lavados',
+        unitSize: null,
+        sizeUnit: null,
+        packCount: null,
+      });
+    });
+
+    it('reads a capital X as a small one', () => {
+      expect(splitCardName('Yogur natural CARREFOUR 2X100 g', 'kg')).toEqual({
+        ...splitCardName('Yogur natural CARREFOUR 2x100 g', 'kg'),
+        // The text stays as printed.
+        sizeFormat: '2X100 g',
+      });
+      expect(
+        splitCardName('Yogur natural CARREFOUR 2X100 g', 'kg')
+      ).toMatchObject({
+        name: 'Yogur natural CARREFOUR',
+        sizeFormat: '2X100 g',
+        packCount: 2,
+      });
+    });
+
+    describe('hostile names', () => {
+      const unsplit = (name: string) => ({
+        name,
+        sizeFormat: null,
+        unitSize: null,
+        sizeUnit: null,
+        packCount: null,
+      });
+
+      it.each([
+        'Pañales DODOT talla 6 XL',
+        'Camiseta térmica hombre 2XL',
+        'Maquinilla GILLETTE Mach3 MAX',
+        'Pilas alcalinas DURACELL AA X2',
+        'Bombilla halógena 2X60 w',
+      ])('does not split %p, whose capital X multiplies nothing', (printed) => {
+        expect(splitCardName(printed, 'ud')).toEqual(unsplit(printed));
+      });
+
+      it.each([
+        ['Mantel CARREFOUR 55X60 cm', 'Mantel CARREFOUR', '55X60 cm'],
+        ['Toalla de playa 1.2X1.8 m', 'Toalla de playa', '1.2X1.8 m'],
+      ])(
+        'splits the length of %p on a card priced per metre, with no size and no pack',
+        (printed, name, sizeFormat) => {
+          expect(splitCardName(printed, 'm')).toEqual({
+            name,
+            sizeFormat,
+            unitSize: null,
+            sizeUnit: null,
+            packCount: null,
+          });
+        }
+      );
+
+      it('takes the last size after a wash and leaves the wash in the name', () => {
+        expect(
+          splitCardName('Detergente líquido ARIEL 40 lavados 2 l', 'l')
+        ).toEqual({
+          name: 'Detergente líquido ARIEL 40 lavados',
+          sizeFormat: '2 l',
+          unitSize: 2,
+          sizeUnit: 'LITER',
+          packCount: null,
+        });
+      });
+
+      it.each([
+        [
+          'Calcetines CARREFOUR 3 pares 40 g',
+          'Calcetines CARREFOUR 3 pares',
+          '40 g',
+          0.04,
+        ],
+        [
+          'Té verde CARREFOUR 10 bolsitas 1,5 g',
+          'Té verde CARREFOUR 10 bolsitas',
+          '1,5 g',
+          0.0015,
+        ],
+      ])(
+        'takes the last size of %p, a weight stated in kilograms',
+        (printed, name, sizeFormat, unitSize) => {
+          expect(splitCardName(printed, 'kg')).toEqual({
+            name,
+            sizeFormat,
+            unitSize,
+            sizeUnit: 'KILOGRAM',
+            packCount: null,
+          });
+        }
+      );
+
+      it.each([
+        ['Queso fundido CARREFOUR 1 PORCIÓN', '1 PORCIÓN', 1],
+        ['Queso fundido CARREFOUR 1 porción', '1 porción', 1],
+        ['Calcetines CARREFOUR 3 Pares.', '3 Pares.', 3],
+      ])(
+        'reads the count word of %p in capitals, accented or with a stop',
+        (printed, sizeFormat, unitSize) => {
+          expect(splitCardName(printed, 'ud')).toEqual({
+            name: printed.slice(0, printed.length - sizeFormat.length).trim(),
+            sizeFormat,
+            unitSize,
+            sizeUnit: 'UNIT',
+            packCount: null,
+          });
+        }
+      );
+
+      it.each([
+        'Detergente para lavado a mano CARREFOUR',
+        'Par de calcetines CARREFOUR',
+        'Calcetines 1 par de deporte',
+      ])('does not split %p, where lavado or par ends no size', (printed) => {
+        expect(splitCardName(printed, 'ud')).toEqual(unsplit(printed));
+      });
+    });
+  });
+
   it('keeps the whole name when the name is nothing but a size', () => {
     expect(splitCardName('1,5 l', 'l')).toEqual({
       name: '1,5 l',
@@ -259,6 +426,184 @@ describe('splitCardName', () => {
       unitSize: null,
       sizeUnit: null,
       packCount: null,
+    });
+  });
+});
+
+describe('the sizes the chain prints (plan 0250)', () => {
+  it('leaves a number that is no count in the name (section 2.1)', () => {
+    // "1880" is the brand. It read 1880 x 0.31 kg = 582.8 kg.
+    expect(
+      splitCardName(
+        'Polvorones de almendra artesanos 1880 estuche de 310 g.',
+        'kg'
+      )
+    ).toEqual({
+      name: 'Polvorones de almendra artesanos 1880',
+      sizeFormat: 'estuche de 310 g.',
+      unitSize: 0.31,
+      sizeUnit: 'KILOGRAM',
+      packCount: null,
+    });
+  });
+
+  it('still multiplies a container count within the bounds', () => {
+    expect(
+      splitCardName('Gelatina para gatos Carrefour 4 sobres de 100 g.', 'kg')
+    ).toEqual({
+      name: 'Gelatina para gatos Carrefour',
+      sizeFormat: '4 sobres de 100 g.',
+      unitSize: 0.4,
+      sizeUnit: 'KILOGRAM',
+      packCount: 4,
+    });
+  });
+
+  it('states no size for a pack count above the bound', () => {
+    // A number after `pack` is a count by its wording, so the phrase still
+    // moves across, and the size it would multiply into is not stated.
+    expect(
+      splitCardName('Bolsas CARREFOUR pack de 5000 unidades de 10 g.', 'kg')
+    ).toEqual({
+      name: 'Bolsas CARREFOUR',
+      sizeFormat: 'pack de 5000 unidades de 10 g.',
+      unitSize: null,
+      sizeUnit: null,
+      packCount: null,
+    });
+  });
+
+  it('reads `pack N <noun>` with no `de` as a pack phrase (section 2.2)', () => {
+    // The price, 20.72, is for 28 cans.
+    expect(
+      splitCardName('Cerveza Amstel 100% Malta pack 28 latas 33 cl.', 'l')
+    ).toEqual({
+      name: 'Cerveza Amstel 100% Malta',
+      sizeFormat: 'pack 28 latas 33 cl.',
+      unitSize: 9240,
+      sizeUnit: 'MILLILITER',
+      packCount: 28,
+    });
+  });
+
+  it('leaves the pack phrase with `de` as it was (section 2.2)', () => {
+    expect(
+      splitCardName('Leche entera CARREFOUR pack de 9 unidades de 1 l.', 'l')
+    ).toEqual({
+      name: 'Leche entera CARREFOUR',
+      sizeFormat: 'pack de 9 unidades de 1 l.',
+      unitSize: 9,
+      sizeUnit: 'LITER',
+      packCount: 9,
+    });
+  });
+
+  it('keeps the size of a name that opens with a pack phrase', () => {
+    // The phrase cannot move across: the name would be empty. The shape with
+    // no `de` is not read at the start, so the name keeps it and the trailing
+    // size is one can.
+    expect(splitCardName('Pack 6 latas 33 cl.', 'l')).toEqual({
+      name: 'Pack 6 latas',
+      sizeFormat: '33 cl.',
+      unitSize: 330,
+      sizeUnit: 'MILLILITER',
+      packCount: null,
+    });
+    // The shape with `de` is read anywhere, so it takes the whole name and the
+    // guard keeps the name unsized: `Pack de 6 latas de` is no name either.
+    expect(splitCardName('Pack de 6 latas de 33 cl.', 'l')).toEqual({
+      name: 'Pack de 6 latas de 33 cl.',
+      sizeFormat: null,
+      unitSize: null,
+      sizeUnit: null,
+      packCount: null,
+    });
+  });
+
+  it('does not read a word after `pack N` that is no container', () => {
+    expect(splitCardName('Cerveza CARREFOUR pack 6 rubia 33 cl.', 'l')).toEqual(
+      {
+        name: 'Cerveza CARREFOUR pack 6 rubia',
+        sizeFormat: '33 cl.',
+        unitSize: 330,
+        sizeUnit: 'MILLILITER',
+        packCount: null,
+      }
+    );
+  });
+
+  it('reads a volume on a card priced per unit (section 2.3, D2)', () => {
+    expect(splitCardName('Vino tinto CARREFOUR 75 cl.', 'ud')).toEqual({
+      name: 'Vino tinto CARREFOUR',
+      sizeFormat: '75 cl.',
+      unitSize: 750,
+      sizeUnit: 'MILLILITER',
+      packCount: null,
+    });
+    expect(splitCardName('Zumo DON SIMON 200 ml', 'ud')).toMatchObject({
+      unitSize: 200,
+      sizeUnit: 'MILLILITER',
+    });
+    expect(splitCardName('Aceite de girasol 1 l', 'ud')).toMatchObject({
+      unitSize: 1,
+      sizeUnit: 'LITER',
+    });
+  });
+
+  it('reads a weight on a card priced per unit (section 2.3, D2)', () => {
+    // The comment of plan 0090 named this as a misread. Plan 0249 now catches
+    // a misread by comparing the size with the price per unit.
+    expect(splitCardName('Café molido 500 g', 'ud')).toEqual({
+      name: 'Café molido',
+      sizeFormat: '500 g',
+      unitSize: 0.5,
+      sizeUnit: 'KILOGRAM',
+      packCount: null,
+    });
+  });
+
+  it('reads a volume on a card priced per kilogram (section 2.3, D1)', () => {
+    expect(splitCardName('Helado de vainilla CARREFOUR 900 ml.', 'kg')).toEqual(
+      {
+        name: 'Helado de vainilla CARREFOUR',
+        sizeFormat: '900 ml.',
+        unitSize: 900,
+        sizeUnit: 'MILLILITER',
+        packCount: null,
+      }
+    );
+  });
+
+  it('still refuses the pairs section 2.3 does not name', () => {
+    for (const [name, measureUnit] of [
+      ['Café molido 500 g', 'l'],
+      ['Papel higiénico 12 rollos', 'kg'],
+      ['Papel higiénico 12 rollos', 'l'],
+      ['Agua mineral 1,5 l.', 'm'],
+      ['Servilletas CARREFOUR 30 cm', 'ud'],
+    ]) {
+      expect(splitCardName(name, measureUnit)).toMatchObject({
+        name,
+        sizeFormat: null,
+        unitSize: null,
+      });
+    }
+  });
+
+  it('carries the size of a card priced per unit onto the product', () => {
+    const wine: CarrefourCard = {
+      product_id: 'VC4AECOMM-2',
+      name: 'Vino tinto CARREFOUR 75 cl.',
+      price: '3,00 €',
+      price_per_unit: '3,00 €',
+      measure_unit: 'ud',
+    };
+    expect(readCard(wine, ['Vinos'])).toMatchObject({
+      name: 'Vino tinto CARREFOUR',
+      sizeFormat: '75 cl.',
+      unitSize: 750,
+      sizeUnit: 'MILLILITER',
+      unitPriceLabel: '€/ud',
     });
   });
 });

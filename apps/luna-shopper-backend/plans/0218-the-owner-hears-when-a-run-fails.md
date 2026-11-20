@@ -1,3 +1,5 @@
+> **PR:** [#925](https://github.com/IchirokuXVI/nx-portfolio/pull/925)
+
 # 0218: the owner hears when a run fails
 
 > Today a failed run, a refused schedule slot and a chain whose schedules stopped are visible only
@@ -104,8 +106,10 @@ admin wire types are regenerated for the one new route.
   - `k8s/e2e/luna-shopper-backend/luna-slot.sh` (the harvester `.env` block and its derived keys).
   - The harvester section of `CLAUDE.md`, one paragraph.
   - Their specs, and the generated files.
+- The owner's answer 4 of 2026-11-05 widens this by one write: the final `markAttemptFailed` of
+  `postal-code-discovery.worker.ts` and that method in `postal-code-discovery.store.ts`.
 - Do NOT touch: auth and its `MailModule`, the runners, the adapter libraries, the sink, catalog,
-  the postal code worker, the stale reaper's rule, the slot rules of plan `0206`, the counter rule
+  the rest of the postal code worker, the stale reaper's rule, the slot rules of plan `0206`, the counter rule
   of `recordRunFinished`, `apps/luna-shopper-admin`, the deploy workflows and deploy scripts.
 
 ### Constraints
@@ -169,13 +173,18 @@ Report after each of these, with the spec output:
 
 ## 2. Which outcomes send an alert
 
-| Outcome                                                      | Alert            |
-| ------------------------------------------------------------ | ---------------- |
-| A run of trigger `MANUAL` or `SCHEDULED` ends `FAILED`       | `RUN_FAILED`     |
-| The same, and the run ended on a chain refusal (section 2.1) | `RUN_BLOCKED`    |
-| A failed run makes the chain's schedules stop (section 2.2)  | on the run alert |
-| A schedule slot or a retry ends `REFUSED` (section 2.3)      | `SLOT_REFUSED`   |
-| A person asks for a test (section 7)                         | `TEST`           |
+| Outcome                                                      | Alert                |
+| ------------------------------------------------------------ | -------------------- |
+| A run of trigger `MANUAL` or `SCHEDULED` ends `FAILED`       | `RUN_FAILED`         |
+| The same, and the run ended on a chain refusal (section 2.1) | `RUN_BLOCKED`        |
+| A failed run makes the chain's schedules stop (section 2.2)  | on the run alert     |
+| The reaper marks a run of any trigger `STALE` (section 2.4)  | `RUN_STALE`          |
+| The postal code queue gives up on a code (section 2.5)       | `POSTAL_CODE_FAILED` |
+| A schedule slot or a retry ends `REFUSED` (section 2.3)      | `SLOT_REFUSED`       |
+| A person asks for a test (section 7)                         | `TEST`               |
+
+The owner decided on 2026-11-05 that both `MANUAL` and `SCHEDULED` runs alert (answer 3), and
+added `RUN_STALE` (answer 5) and `POSTAL_CODE_FAILED` (answer 4).
 
 **Nothing else sends an alert.** In particular:
 
@@ -186,11 +195,12 @@ Report after each of these, with the spec output:
 - **`SKIPPED_FAILING`.** The stop itself was the alert (section 2.2). One mail for each skipped
   slot after it repeats what the owner already knows.
 - **`SKIPPED_LATE`.** The pod was down past half the gap. The next slot runs.
-- **`STALE`.** The reaper cannot tell a killed pod from a deploy that ran past 30 seconds, and
-  the scheduler retries a stale scheduled run. Owner question 5.
-- **A `SYSTEM` run that fails.** The postal code queue retries a code and leaves it `FAILED` for a
-  person after its attempts. Owner question 4.
+- **A `SYSTEM` run that fails, by itself.** The postal code queue retries a code, and its alert is
+  the code that gives up (section 2.5), not each run of it. The owner kept this rule on
+  2026-11-05 (answer 4).
 - **`COMPLETED` with failed items under the ratio.** The run did its job.
+
+`STALE` was on this list. The owner moved it off on 2026-11-05 (answer 5): section 2.4.
 
 ### 2.1 A run that a chain refused
 
@@ -234,9 +244,32 @@ A schedule for each day whose chain row is off thus sends one mail, not one a da
 that it will not repeat until the schedule starts a run or the reason changes. A retry that is
 refused always alerts, because the previous outcome of its schedule is `STARTED`.
 
+### 2.4 A stale run (the owner, 2026-11-05)
+
+A run the stale reaper marks `STALE` alerts like a failed run, whatever its trigger. The kind is
+`RUN_STALE`, the dedupe key `run:<runId>`, and the body has the layout of `RUN_FAILED`. Its error
+sentence says that the reaper marked the run after no heartbeat for the stale window, and that
+the scheduler starts a scheduled run again. Subject: `[production] Mercadona: catalog discovery
+went stale`.
+
+The reaper's rule of what counts as stale does not change. Only the draft is added to its `finish`
+call. A run whose process later finishes it anyway meets the same key and adds no second row.
+
+### 2.5 A postal code that gives up (the owner, 2026-11-05)
+
+A `SYSTEM` run that fails still sends nothing by itself. When the postal code worker marks a code
+`FAILED` after its last attempt, that final write inserts one alert in the same transaction: kind
+`POSTAL_CODE_FAILED`, dedupe key `code:<postalCode>:<the run that ended it>`, or
+`code:<postalCode>:attempt-<row id>-<last attempt instant>` when no run started. One mail per code
+that gives up, never one per attempt. Subject: `[production] Postal code 14013: store discovery
+gave up after 3 attempts`. The body has the code, the attempts, the last error and the run link
+when there is a run. Nothing else about the queue's attempts or retries changes.
+
 ## 3. The rules, as code
 
-`harvest-alert.rules.ts` exports two pure functions.
+`harvest-alert.rules.ts` exports these pure functions. `runAlertFor` answers `RUN_STALE` for a
+`STALE` status too, with an optional `staleAfterSeconds`, and two more were added for the owner's
+answers of 2026-11-05: `postalCodeAlertFor` (answer 4) and `testAlertFor` (section 7).
 
 ```ts
 function runAlertFor(input: {
@@ -259,7 +292,20 @@ function slotAlertFor(input: {
   adapterKey: string | null;
   at: Date;
 }): HarvestAlertDraft | null;
+
+function postalCodeAlertFor(input: {
+  request: { id: string; postalCode: string; country: string; attempts: number;
+    lastAttemptedAt: Date | null };
+  maxAttempts: number;
+  error: string;
+  runId: string | null;
+  at: Date;
+}): HarvestAlertDraft | null; // null unless attempts >= maxAttempts
 ```
+
+`SCHEDULES_STOP_AFTER` is 3, the number `SOURCE_FAILING_AFTER` holds, and a spec holds the two
+equal. The rules do not import it from `harvest-run.service.ts`, because that module imports the
+executor, which imports the rules.
 
 `HarvestAlertDraft` is `{ kind, dedupeKey, supermarketId, runId, scheduleId, payload }`. The payload
 holds every fact the message needs, so the worker reads no other table except for the chain name.
@@ -273,7 +319,7 @@ and only when the counter is about to reach 3. The read costs nothing on any oth
 
 | Column          | Type          | Notes                                                       |
 | --------------- | ------------- | ----------------------------------------------------------- |
-| `kind`          | enum          | `RUN_FAILED`, `RUN_BLOCKED`, `SLOT_REFUSED`, `TEST`         |
+| `kind`          | enum          | `RUN_FAILED`, `RUN_BLOCKED`, `RUN_STALE`, `POSTAL_CODE_FAILED`, `SLOT_REFUSED`, `TEST` (the owner added two on 2026-11-05) |
 | `dedupeKey`     | `varchar(200)`| unique                                                      |
 | `status`        | enum          | `PENDING`, `SENDING`, `SENT`, `SUPPRESSED`, `GAVE_UP`       |
 | `supermarketId` | `uuid`        | nullable, no foreign key                                    |
@@ -290,7 +336,8 @@ The dedupe keys:
 
 | Kind           | Key                                          |
 | -------------- | -------------------------------------------- |
-| `RUN_FAILED`, `RUN_BLOCKED` | `run:<runId>`                   |
+| `RUN_FAILED`, `RUN_BLOCKED`, `RUN_STALE` | `run:<runId>`        |
+| `POSTAL_CODE_FAILED` | `code:<postalCode>:<runId>`, or `code:<postalCode>:attempt-<row id>-<ms>` with no run |
 | `SLOT_REFUSED` | `slot:<scheduleId>:<slot ISO>` and `:retry` for a retry |
 | `TEST`         | `test:<uuid>`                                |
 
@@ -301,9 +348,13 @@ The tables of the harvester do not cascade, so the ids carry no foreign key, as
 
 - `HarvestRunStore.finish(runId, status, error?, stopReason?, alert?)` gains the optional draft as
   its fifth argument, after the `stopReason` that plan `0215` adds as the fourth. With a draft,
-  it runs the `UPDATE` and the insert in one transaction. Without one, it stays as it is, so the
-  reaper is untouched.
+  it runs the `UPDATE` and the insert in one transaction. Without one, it stays as it is.
+- The stale reaper passes a `RUN_STALE` draft to its `finish` call (the owner, 2026-11-05, answer
+  5). The rule of what counts as stale is unchanged.
 - `HarvestScheduleStore.recordOutcome(scheduleId, write, alert?)` does the same.
+- `PostalCodeDiscoveryStore.markAttemptFailed(row, reason, maxAttempts, runId, alert?)` does the
+  same for the write that leaves the row `FAILED`, and ignores a draft on any other attempt (the
+  owner, 2026-11-05, answer 4).
 - The insert is `INSERT ... ON CONFLICT ("dedupeKey") DO NOTHING`.
 
 ## 5. The worker
@@ -342,7 +393,10 @@ Subject, one alert: `[<ENVIRONMENT_NAME>] <chain>: <what happened>`, for example
 `[production] Mercadona: catalog discovery failed`,
 `[production] DIA: the chain refused the run`,
 `[production] Mercadona: catalog discovery failed, and its 2 schedules stopped`,
-`[production] DEZA: a scheduled run was refused`.
+`[production] DEZA: a scheduled run was refused`. The owner's answers of 2026-11-05 add
+`[production] Mercadona: catalog discovery went stale` (answer 5) and
+`[production] Postal code 14013: store discovery gave up after 3 attempts` (answer 4). A test is
+`[production] Harvest alerts: a test mail`.
 
 Body, one alert:
 
@@ -351,6 +405,10 @@ Body, one alert:
 - For a run: requested, started and finished times in `Europe/Madrid`, the duration, failed of
   planned, and the run's `error`.
 - For a slot: the slot time and the note.
+- For a stale run: the layout of a failed run, the stale window and the reaper's error sentence
+  (the owner, 2026-11-05).
+- For a postal code: the code, the attempts, the last error, and the run link when a run ended
+  it (the owner, 2026-11-05).
 - For `schedulesStopped`: the sentence of section 2.2.
 - A link `<ADMIN_APP_BASE_URL>/harvest/runs/<runId>` when the base URL is set and the alert has a
   run. With no base URL the body names the run id only.
@@ -361,6 +419,11 @@ oldest first.
 The chain name comes from `CatalogClient.getSupermarket` at send time, as the executor reads it
 (`run-executor.service.ts:95`). On any error the message uses the `adapterKey` from the payload.
 A name is never a reason not to send.
+
+Departure found by the review (2026-11-06): a slot alert falls back to the chain id when catalog
+cannot name the chain. The schedule worker reads no source row, and no existing read gives it the
+adapter key, so its draft carries `adapterKey: null`. A run alert still falls back to the adapter
+key.
 
 ## 7. The test alert
 
@@ -458,7 +521,11 @@ of a password that the cluster already distributes from one Secret key.
 - **`harvest-alert.rules.spec.ts`**:
   - `FAILED` of `MANUAL` and of `SCHEDULED` gives `RUN_FAILED` with key `run:<id>`.
   - `FAILED` with a refusal gives `RUN_BLOCKED`.
-  - `COMPLETED`, `ABORTED` by a person, `ABORTED` by a shutdown and `STALE` give nothing.
+  - `COMPLETED`, `ABORTED` by a person and `ABORTED` by a shutdown give nothing.
+  - `STALE` of any trigger gives `RUN_STALE` with key `run:<id>` (the owner, 2026-11-05).
+  - A postal code attempt that leaves the code queued gives nothing, and the attempt that gives
+    up gives `POSTAL_CODE_FAILED`, keyed on the run, or on the attempt with no run (the owner,
+    2026-11-05).
   - `FAILED` of `SYSTEM` gives nothing, unless it takes the counter to 3 with a schedule on.
   - The counter going from 2 to 3 with two schedules on sets `schedulesStopped: 2`. From 2 to 3
     with none on, and from 3 to 4, set nothing.
@@ -467,14 +534,16 @@ of a password that the cluster already distributes from one Secret key.
   - `SKIPPED_BUSY`, `SKIPPED_LATE`, `SKIPPED_FAILING` and `STARTED` give nothing.
   - `refusal` true gives `RUN_BLOCKED`, and `refusal` false with the same `FAILED` run gives
     `RUN_FAILED`.
-- **`harvest-alert.message.spec.ts`**: each subject of section 6, the link with and without a base
-  URL, the `schedulesStopped` sentence, a digest of four, the fallback to the adapter key, and no
-  dash as punctuation in any fixed sentence.
+- **`harvest-alert.message.spec.ts`**: each subject of section 6, the stale and postal code ones
+  included, the link with and without a base URL, the `schedulesStopped` sentence, a digest of
+  four, the fallback to the adapter key, and no dash as punctuation in any fixed sentence.
 - **Executor**: a run that fails passes a draft to `finish`. A run aborted by the shutdown hook
   passes none. A run that plan `0215`'s guard stopped, whether its runner returned or threw,
   gives `RUN_BLOCKED`.
 - **Schedule worker**: a refused slot passes a draft to `recordOutcome`, and a busy slot passes
   none.
+- **Postal code worker** (the owner, 2026-11-05): the attempt that gives up passes one
+  `POSTAL_CODE_FAILED` draft to `markAttemptFailed`, and an earlier attempt passes none.
 - **Alert worker**, with a fake transport and a clock passed in: one row is one mail, four rows
   are one digest, no address marks `SUPPRESSED`, a transport error moves `nextAttemptAt` by the
   table and gives up after six, a `SENDING` row older than 10 minutes is sent again, the daily
@@ -482,6 +551,8 @@ of a password that the cluster already distributes from one Secret key.
 - **Integration, on real Postgres**:
   - The migration creates the table, the enums, the unique key and the index.
   - `finish` with a draft writes both rows, and a failing insert rolls back the status.
+  - `recordOutcome` and `markAttemptFailed` with a draft write both rows, and an attempt that
+    leaves the code queued writes no alert.
   - Two inserts with one key leave one row.
   - Two workers on one database claim disjoint rows.
 - **Gateway**: `POST /v1/admin/harvest/alerts/test` reaches `harvestAlert.sendTest` and answers
@@ -498,7 +569,12 @@ of a password that the cluster already distributes from one Secret key.
 - [ ] The failure that takes a chain's counter to 3 while a schedule is on says that the schedules
       stopped, in the same mail as the run.
 - [ ] A refused slot alerts one time until the outcome or the note changes.
-- [ ] `ABORTED`, `STALE`, `SKIPPED_BUSY`, `SKIPPED_LATE` and `SKIPPED_FAILING` write no alert.
+- [ ] A run the reaper marks `STALE` writes one `RUN_STALE` alert in the transaction of that
+      status, whatever its trigger (the owner, 2026-11-05).
+- [ ] A postal code that gives up after its last attempt writes one `POSTAL_CODE_FAILED` alert in
+      the transaction of its `FAILED` row, and an earlier attempt writes none (the owner,
+      2026-11-05).
+- [ ] `ABORTED`, `SKIPPED_BUSY`, `SKIPPED_LATE` and `SKIPPED_FAILING` write no alert.
 - [ ] A restart of the harvester sends no alert two times in the normal path and loses none.
 - [ ] More than three alerts due in one tick are one digest mail.
 - [ ] With `HARVEST_ALERT_EMAIL` empty, rows end `SUPPRESSED` and no mail is sent.
@@ -526,11 +602,17 @@ helm template k8s/helm -f k8s/helm/values.yaml -f k8s/helm/values.production.yam
 
 The slot check, on an ephemeral slot:
 
-1. `bash k8s/e2e/luna-shopper-backend/luna-slot.sh --ephemeral --up <n>` with
-   `HARVEST_ALERT_EMAIL=owner@example.test` in the environment of the harvester.
+1. Run `bash k8s/e2e/luna-shopper-backend/luna-slot.sh --ephemeral --up <n>`. Ephemeral mode
+   exports the rendered env files, and they override the caller's environment, so a
+   `HARVEST_ALERT_EMAIL` in your shell does not reach the harvester. Edit
+   `$TMPDIR/luna-slot-ephemeral/slot<n>/env/apps/luna-shopper-backend/harvester/.env`, set
+   `HARVEST_ALERT_EMAIL` to a test address, and run
+   `--ephemeral --restart <n> --services harvester`.
 2. Call the test route with an operator token. The mail is in the slot's Mailpit within a minute.
-3. Turn a source row on, set `HARVEST_ENABLED=true`, point its adapter at an unreachable base URL,
-   start a run, and see the `RUN_FAILED` mail with the run link.
+3. Turn a source row on and point its adapter at an unreachable base URL. Set
+   `HARVEST_ENABLED=true` in the same harvester `.env` of step 1, because the env file overrides
+   the caller's environment here too, and run `--ephemeral --restart <n> --services harvester`.
+   Start a run, and see the `RUN_FAILED` mail with the run link.
 4. Restart the harvester and confirm that Mailpit holds one copy of each mail.
 5. `--ephemeral --down <n>`.
 
@@ -551,7 +633,28 @@ Chosen in this plan, and open to the owner's correction:
 - A test route, so the path is proven before a real failure (section 7).
 - Rows are kept 90 days. Six send attempts, then `GAVE_UP` (section 5).
 
-**Owner**: ask, do not choose.
+**Owner** (answered 2026-11-05):
+
+1. **The channel is email**, as section 9 recommends. The worker keeps the one method
+   `AlertChannel` interface (`send(subject, body)`), so a chat webhook can be a second class later.
+   No webhook is built.
+2. **One recipient for now, and a comma separated list stays accepted.** The owner sets the value
+   in the production Secret through `provision-release.sh`. No address is written in the
+   repository, a values file or the PR.
+3. **Both `MANUAL` and `SCHEDULED` runs that end `FAILED` alert**, as section 2 says.
+4. **The postal code queue alerts when a code gives up.** A `SYSTEM` run that fails still sends
+   nothing by itself. The worker's final write that leaves a code `FAILED` inserts one
+   `POSTAL_CODE_FAILED` alert in the same transaction (section 2.5). This widened the Scope to that
+   write in `postal-code-discovery.worker.ts` and `postal-code-discovery.store.ts`.
+5. **A `STALE` run alerts like a failed run, with the reaper's error.** The kind is `RUN_STALE`,
+   for a run of any trigger (section 2.4). The reaper's rule of what counts as stale does not
+   change: only the draft is added to its `finish` call.
+6. **Staging stays quiet by default**, as section 8 says. The key is prompted for with `--env
+   production` only, and kept or written empty elsewhere. The harvester is not enabled on staging
+   anyway, and the Secret per environment is the whole switch.
+7. **SPF and DKIM should pass.** No change. The test route confirms it after the deploy.
+
+The questions as they were asked:
 
 1. **The channel.** Email to a configured address (recommended, section 9), or a Telegram or
    Discord webhook first.
@@ -575,3 +678,17 @@ Chosen in this plan, and open to the owner's correction:
 - `values.production.yaml:117` to :120 says SMTP is off in production because `smtpHost` is empty,
   and :122 sets `smtpHost: in-v3.mailjet.com`. The comment is out of date. This plan does not
   touch it.
+
+Found by the builder (2026-11-05):
+
+- The chart moved under the deploy units (k8s plan 0015). The files of section 8 are
+  `k8s/helm/velista/templates/luna-shopper-backend/_env.tpl`, `configmap.yaml.tpl` and
+  `k8s/helm/velista/values*.yaml`, and the render is
+  `helm template velista k8s/helm/velista -f k8s/helm/velista/values.yaml -f k8s/helm/velista/values.production.yaml`.
+- `nodemailer` being a root dependency is not enough for the image. The harvester's runtime
+  manifest `apps/luna-shopper-backend/harvester/package.json` is hand written, the image installs
+  from the lockfile `nx prune` derives from it, and `manifest-check` failed with `nodemailer
+  required by main.js`. The package is listed there at auth's range. No dependency was added to
+  the workspace.
+- `ENVIRONMENT_NAME` reached the gateway pod only. The harvester block of `_env.tpl` now names it
+  too, with the SMTP keys and `ADMIN_APP_BASE_URL`.

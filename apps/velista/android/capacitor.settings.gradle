@@ -13,3 +13,9 @@ project(':capacitor-geolocation').projectDir = new File('../../../node_modules/@
 
 include ':capacitor-share'
 project(':capacitor-share').projectDir = new File('../../../node_modules/@capacitor/share/android')
+
+include ':capawesome-capacitor-app-update'
+project(':capawesome-capacitor-app-update').projectDir = new File('../../../node_modules/@capawesome/capacitor-app-update/android')
+
+include ':capgo-capacitor-updater'
+project(':capgo-capacitor-updater').projectDir = new File('../../../node_modules/@capgo/capacitor-updater/android')

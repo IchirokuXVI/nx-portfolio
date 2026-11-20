@@ -4,6 +4,7 @@ import {
   inLocale,
   lineName,
   lineProductPrices,
+  lineStepOf,
   PURCHASE_SESSION_GAP_MS,
   toSettlementRow,
   type CatalogItem,
@@ -14,10 +15,16 @@ import {
   type LineItemChipVm,
   type LineProductPriceRead,
   type LineSettlement,
+  type LineUnit,
+  type LineUnitProductRead,
+  type PriceWords,
   type ProductOffer,
 } from '@portfolio/velista/models';
-import { formatMoney } from '@portfolio/velista/platform';
+import { formatAmount } from '@portfolio/velista/platform';
+import { offeredUnits } from '../line-page/select-line-page';
+
 import {
+  priceWords,
   productBrandSizeText,
   type SizeTranslate,
 } from '@portfolio/velista/ui';
@@ -64,6 +71,13 @@ export interface LineDetailInput {
   /** The prices of a product, for the product the line shows (velista `0145`). */
   readonly pricesOf?: (itemId: string) => LineProductPriceRead;
   /**
+   * The size fields of a product, as `ItemNames.sizingOf` reads them (velista
+   * `0183`): `undefined` while its record is not read, `null` once the lookup
+   * answered nothing. Not `itemNameOf`, whose null means both, so a gone record
+   * would read as still loading and the sheet would never draw the chip.
+   */
+  readonly productOf: (itemId: string) => LineUnitProductRead;
+  /**
    * Whether the name lookup failed, as opposed to answering with nothing.
    *
    * The two are different sentences and neither may be drawn as the other (section
@@ -85,6 +99,20 @@ export interface LineDetailInput {
   readonly busy: boolean;
 }
 
+/**
+ * The input of `toSettlementRow`, with the words of a quantity in its unit
+ * ("3", "750 g") in the reader's language (velista `0182`).
+ */
+export function withAmounts<T extends { readonly locale: string }>(
+  input: T
+): T & { formatAmount: (quantity: number, unit: LineUnit) => string } {
+  return {
+    ...input,
+    formatAmount: (quantity, unit) =>
+      formatAmount(quantity, unit, input.locale),
+  };
+}
+
 export function selectLineDetail(input: LineDetailInput): LineDetailVm | null {
   const { line } = input;
   if (line === undefined) {
@@ -92,7 +120,7 @@ export function selectLineDetail(input: LineDetailInput): LineDetailVm | null {
   }
 
   const rows = (input.settlements ?? []).map((settlement) =>
-    toSettlementRow(settlement, input, null)
+    toSettlementRow(settlement, withAmounts(input), null)
   );
   const purchases = (input.settlements ?? []).filter(
     (settlement) => settlement.outcome === 'BOUGHT'
@@ -107,9 +135,14 @@ export function selectLineDetail(input: LineDetailInput): LineDetailVm | null {
       line,
       (itemId) => input.itemNameOf(itemId)?.name ?? null,
       input.locale,
-      input.pricesOf
+      input.pricesOf,
+      input.productOf
     ).text,
     quantity: line.quantity,
+    unit: line.unit,
+    units: offeredUnits(line, input.productOf),
+    // The product's step (velista `0186`), for both of the sheet's steppers.
+    step: lineStepOf(line, input.itemNameOf),
     ...productsPhrase(line, input, purchases),
     namesUnavailable: input.namesUnavailable && line.itemIds.length > 0,
     lastPurchase: rows.find((row) => row.outcome === 'BOUGHT') ?? null,
@@ -163,12 +196,23 @@ function chipOf(itemId: string, input: LineDetailInput): LineItemChipVm {
       item === null
         ? null
         : productBrandSizeText(item, input.locale, input.translate),
-    price:
-      offer === null || offer.price === null
-        ? null
-        : formatMoney(offer.price, offer.currency, input.locale),
+    price: chipPrice(offer, item, input),
     chain: chain === '' ? null : chain,
   };
+}
+
+/**
+ * The chip's price as two words: the piece price of a kilo piece, a price per
+ * kilo with its "/ kg", or the price (velista `0179`), or null for none. A
+ * product the catalog has not named yet is priced by its offer alone
+ * (`soldAsOf`), so a kilo piece still draws its piece price.
+ */
+function chipPrice(
+  offer: ProductOffer | null,
+  item: CatalogItem | null,
+  input: LineDetailInput
+): PriceWords | null {
+  return priceWords(offer, item, input.locale, input.translate);
 }
 
 /**

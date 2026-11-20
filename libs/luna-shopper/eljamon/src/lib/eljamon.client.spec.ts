@@ -88,6 +88,61 @@ function storefront(url: string): { status?: number; body: string } {
   return { status: 404, body: '' };
 }
 
+const HOGAR: ElJamonCategory = {
+  code: '11',
+  slug: 'hogar',
+  name: 'HOGAR',
+  path: '/categorias/hogar/11',
+};
+
+/** Article codes `from` to `to`, as strings. */
+const codes = (from: number, to: number): string[] =>
+  Array.from({ length: to - from + 1 }, (_, index) => String(from + index));
+
+/**
+ * A listing page in the shape the parser reads: the printed count, the
+ * filters input and one row per code. Built rather than captured, because
+ * what it proves is the order of codes across pages, which no single
+ * capture holds still.
+ */
+function listingPage(rowCodes: readonly string[], printed: number): string {
+  const filters = JSON.stringify({
+    categoryCode: HOGAR.code,
+    page: 1,
+    pageSize: 20,
+  }).replace(/"/g, '&quot;');
+  const rows = rowCodes
+    .map(
+      (code) =>
+        `<div id="p_articulo_${code}" class="articulo">` +
+        `<p class="nombre"><a href="/detalle/-/Producto/p/${code}">` +
+        `Producto ${code}, 1 kg</a></p>` +
+        '<p class="precio"><span>1,00 €</span></p></div>'
+    )
+    .join('');
+  return (
+    `<span>${printed} Artículos</span>` +
+    `<input type="hidden" name="filters" value="${filters}">${rows}`
+  );
+}
+
+/** A storefront whose HOGAR category answers `rowsOf(page)` for each page. */
+function hogar(
+  rowsOf: (page: string | null) => readonly string[],
+  printed: number
+): (url: string) => { status?: number; body: string } {
+  return (url) => {
+    const { pathname, searchParams } = new URL(url);
+    if (pathname !== HOGAR.path) {
+      return storefront(url);
+    }
+    const page = searchParams.get(
+      '_ProductosFoodPortlet_WAR_comerzziaportletsfood_pagina'
+    );
+    return { body: listingPage(rowsOf(page), printed) };
+  };
+}
+
 const client = (fetchImpl: typeof fetch): ElJamonClient =>
   new ElJamonClient({
     userAgent: 'test',
@@ -387,6 +442,54 @@ describe('ElJamonClient', () => {
     await expect(
       client(site.fetchImpl).getProduct('/detalle/-/Producto/x/1')
     ).rejects.toBeInstanceOf(ElJamonHttpError);
+  });
+
+  it('reads every row of page 3 and later when page 3 repeats one code of page 2', async () => {
+    // 80 printed, four pages. The order shifted between the requests for
+    // pages 2 and 3, so the last product of page 2 is printed again at the
+    // head of page 3 (plan 0253, section 1).
+    const pages: Record<string, string[]> = {
+      '2': codes(21, 40),
+      '3': ['40', ...codes(41, 59)],
+      '4': codes(60, 79),
+    };
+    const site = fakeSite(
+      hogar((page) => (page === null ? codes(1, 20) : (pages[page] ?? [])), 80)
+    );
+    const rows = [];
+    for await (const row of client(site.fetchImpl).walkCategory(HOGAR)) {
+      rows.push(row.code);
+    }
+
+    expect(rows).toHaveLength(79);
+    expect(new Set(rows).size).toBe(79);
+    expect(rows).toEqual(codes(1, 79));
+    expect(site.sent.some((request) => request.url.includes('pagina=4'))).toBe(
+      true
+    );
+    // The printed count is the upper bound: four pages, and no fifth asked.
+    expect(site.sent.some((request) => request.url.includes('pagina=5'))).toBe(
+      false
+    );
+  });
+
+  it('still ends a category whose server answers its last page for every page above it', async () => {
+    // 100 printed, so five pages by the count, and the server holds two.
+    const site = fakeSite(
+      hogar((page) => (page === null ? codes(1, 20) : codes(21, 40)), 100)
+    );
+    const rows = [];
+    for await (const row of client(site.fetchImpl).walkCategory(HOGAR)) {
+      rows.push(row.code);
+    }
+
+    expect(rows).toEqual(codes(1, 40));
+    expect(site.sent.some((request) => request.url.includes('pagina=3'))).toBe(
+      true
+    );
+    expect(site.sent.some((request) => request.url.includes('pagina=4'))).toBe(
+      false
+    );
   });
 
   it('reads the store locator in one POST, with no session', async () => {

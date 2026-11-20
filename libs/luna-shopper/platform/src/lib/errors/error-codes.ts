@@ -164,6 +164,34 @@ export const ERROR_CODES = {
    */
   LINE_ADD_NEEDS_CHOICE: 'line_add_needs_choice',
   /**
+   * A delta, a settle or a demand named a unit that is not the line's (plan
+   * 0246, section 3.2).
+   *
+   * Its own code rather than a plain {@link CONFLICT}, because the client's
+   * reaction is particular: read the line again, as it does for
+   * {@link STALE_QUANTITY}, since the line it was going to receive over
+   * realtime already counts in the other unit. Nothing was written.
+   */
+  LINE_UNIT_MISMATCH: 'line_unit_mismatch',
+  /**
+   * A rename would merge two lines that count in different units (plan 0246,
+   * section 3.3 and M5).
+   *
+   * Refused rather than summed: converting grams to pieces needs a product,
+   * and a merge has none to prefer. The client keeps the two lines and says
+   * they count in different units.
+   */
+  LINE_UNIT_DIFFERS: 'line_unit_differs',
+  /**
+   * The unit named is not one the line's products can serve (plan 0246,
+   * section 4.2 and M3).
+   *
+   * `details.offered` lists the units `lineUnitsOf` answers for the line, so
+   * the client can draw the choice it does allow. A free text line is never
+   * refused: it counts in any of the three units (the owner, 2026-11-17).
+   */
+  LINE_UNIT_NOT_OFFERED: 'line_unit_not_offered',
+  /**
    * The brand label has no letters and no digits, so it makes no key (plan
    * 0115, section 5.3).
    *
@@ -363,6 +391,21 @@ export const ERROR_CODES = {
    */
   ITEM_KILOGRAM_HAS_SIZE: 'item_kilogram_has_size',
   /**
+   * A product write would store an approximate weight beside a size, or a
+   * weight that is not above zero (plan 0244, section 3.2). A product has a
+   * size or a weight, never both. The weight, the size and the unit travel in
+   * `details`.
+   */
+  ITEM_APPROX_WEIGHT_BESIDE_SIZE: 'item_approx_weight_beside_size',
+  /**
+   * A product write would store a step off the list, or a step on a product
+   * that is not sold by the kilo (plan 0261, section 2.2 and S3). An
+   * edit that makes a stepped product a pack or a piece sends a null step
+   * with it. The step, the allowed steps, the unit, the size and the weight
+   * travel in `details`.
+   */
+  ITEM_QUANTITY_STEP_NOT_ALLOWED: 'item_quantity_step_not_allowed',
+  /**
    * The product was merged into another one (plan 0239). A merge names it
    * as the product to merge or as the survivor, or a delete names it. A
    * merged row is the record of the merge and is never merged again or
@@ -377,8 +420,9 @@ export const ERROR_CODES = {
    */
   ITEM_MERGE_TWO_ARTICLES_ONE_CHAIN: 'item_merge_two_articles_one_chain',
   /**
-   * The two products of a merge differ in `unitSize` or `defaultUnit` (plan
-   * 0239, section 1.1). A different format is a different product by the
+   * The two products of a merge differ in `unitSize`, `defaultUnit` or
+   * `approxWeight` (plan 0239, section 1.1, and plan 0244, section 3.5). A
+   * different format is a different product by the
    * curation rules. The same request with `allowFormatDifference` merges
    * them. Both formats travel in `details`.
    */
@@ -585,6 +629,14 @@ export const ERROR_CODES = {
    * `period`, `limit` and `resetsAt`.
    */
   ASSISTANT_ALLOWANCE_REACHED: 'assistant_allowance_reached',
+  /**
+   * A shopper asked for a fresh price of one product, and nothing can fetch it
+   * (harvester plan 0216, section 7.1): refreshes are off on this cluster, the
+   * harvester never priced the product at that scope, the chain is off or
+   * cannot fetch one product alone, or the chain keeps refusing. Nothing was
+   * fetched. `details.reason` names which, and the client decides the words.
+   */
+  PRICE_NOT_REFRESHABLE: 'price_not_refreshable',
   INTERNAL: 'internal',
 } as const;
 
@@ -665,6 +717,15 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // it is lines the list already holds, which only the person can choose
   // between (plan 0228).
   [ERROR_CODES.LINE_ADD_NEEDS_CHOICE]: HttpStatus.CONFLICT,
+  // 409 for both, as `stale_quantity` is: the request is well formed, and what
+  // refuses it is the unit the line already counts in (plan 0246).
+  [ERROR_CODES.LINE_UNIT_MISMATCH]: HttpStatus.CONFLICT,
+  [ERROR_CODES.LINE_UNIT_DIFFERS]: HttpStatus.CONFLICT,
+  // 422 rather than 409 or 400. The body is valid against every schema, and
+  // no state of the line will ever accept it: the unit is one its products
+  // cannot be counted in, which is a semantic refusal of the value (plan 0246,
+  // section 4.2).
+  [ERROR_CODES.LINE_UNIT_NOT_OFFERED]: HttpStatus.UNPROCESSABLE_ENTITY,
   // 400, because what is wrong is a value in the body: a label of punctuation
   // makes no key, so there is nothing to register (plan 0115, section 5.3).
   [ERROR_CODES.BRAND_LABEL_EMPTY]: HttpStatus.BAD_REQUEST,
@@ -723,6 +784,10 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // does not store (plan 0237, section 3.3).
   [ERROR_CODES.ITEM_UNIT_NOT_BASE]: HttpStatus.BAD_REQUEST,
   [ERROR_CODES.ITEM_KILOGRAM_HAS_SIZE]: HttpStatus.BAD_REQUEST,
+  // 400 as well: the weight and the size are values of one body (plan 0244).
+  [ERROR_CODES.ITEM_APPROX_WEIGHT_BESIDE_SIZE]: HttpStatus.BAD_REQUEST,
+  // 400 too: the step and the size fields are values of one body (plan 0261).
+  [ERROR_CODES.ITEM_QUANTITY_STEP_NOT_ALLOWED]: HttpStatus.BAD_REQUEST,
   // All four 409: the request is well formed and the caller may make it, and
   // what refuses it is the state of the products (plan 0239).
   [ERROR_CODES.ITEM_MERGED]: HttpStatus.CONFLICT,
@@ -784,5 +849,9 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // 429 beside `rate_limited` and apart from it by code: both say "not now",
   // and only that one says how many seconds (plan 0234, section 8.1).
   [ERROR_CODES.ASSISTANT_ALLOWANCE_REACHED]: HttpStatus.TOO_MANY_REQUESTS,
+  // 409: the request is well formed, and what refuses it is the state of the
+  // chain or of the product (plan 0216, section 7.1). A cooldown is a 429
+  // `rate_limited` instead, with the wait.
+  [ERROR_CODES.PRICE_NOT_REFRESHABLE]: HttpStatus.CONFLICT,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };

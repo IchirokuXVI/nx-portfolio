@@ -1,5 +1,6 @@
 import { localizedTextValue } from './localized-text';
 import { defineResource, type ResourceDescriptor } from './resource-descriptor';
+import type { FieldDescriptor } from './resource-field';
 import {
   EMPTY_VALUE_KEY,
   FALSE_VALUE_KEY,
@@ -510,5 +511,77 @@ describe('a value read as a keyed word', () => {
       key: 'scopes.custom',
       args: { priority: 250 },
     });
+  });
+});
+
+/**
+ * A number with a unit, and an empty number with words of its own (admin
+ * plan 0070, section 3): the step of a product reads "250 g", and no step
+ * reads "Default: 25 g".
+ */
+describe('a number field with a unit or an empty text', () => {
+  type Stepped = {
+    id: string;
+    step: number | null;
+    unit: string;
+  };
+
+  const grams = {
+    word: 'g',
+    format: (value: number, locale: string) =>
+      `${new Intl.NumberFormat(locale).format(value)} g`,
+  };
+
+  const step: FieldDescriptor<Stepped> = {
+    kind: 'number',
+    name: 'step',
+    label: 'l',
+    unit: (held) => (held.unit === 'g' ? grams : null),
+    emptyText: (held) =>
+      held.unit === 'g'
+        ? { kind: 'key', key: 'steps.default', args: { size: 25 } }
+        : null,
+  };
+  const plain: FieldDescriptor<Stepped> = {
+    kind: 'number',
+    name: 'step',
+    label: 'l',
+  };
+
+  const cell = (
+    field: FieldDescriptor<Stepped>,
+    value: number | null,
+    unit = 'g'
+  ) => toCell(field, { id: 'x', step: value, unit }, options);
+
+  it('reads a value through the unit of its row', () => {
+    expect(cell(step, 1250)).toEqual({ text: '1,250 g' });
+  });
+
+  it('reads a bare number for a row with no unit, and without the hook', () => {
+    expect(cell(step, 1250, 'none')).toEqual({ text: '1,250' });
+    expect(cell(plain, 1250)).toEqual({ text: '1,250' });
+  });
+
+  it('says an empty value in the words of the field, marked empty', () => {
+    expect(cell(step, null)).toEqual({
+      text: '',
+      key: 'steps.default',
+      args: { size: 25 },
+      empty: true,
+    });
+  });
+
+  it('says an empty value as today without the words', () => {
+    expect(cell(step, null, 'none')).toEqual(cell(plain, null));
+    expect(cell(plain, null)).toEqual({ text: '', key: EMPTY_VALUE_KEY });
+  });
+
+  it('marks a plain text of the field empty too', () => {
+    const said: FieldDescriptor<Stepped> = {
+      ...plain,
+      emptyText: () => ({ kind: 'text', text: 'Default' }),
+    };
+    expect(cell(said, null)).toEqual({ text: 'Default', empty: true });
   });
 });

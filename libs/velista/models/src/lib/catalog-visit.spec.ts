@@ -249,6 +249,21 @@ describe('the floor of the stepper', () => {
       3
     );
   });
+
+  it('is the one step a weight line the visit made starts at (velista 0185)', () => {
+    expect(visitFloor(entry({ quantity: 25 }), 'GRAM')).toBe(25);
+    expect(visitFloor(entry({ quantity: 25 }), 'MILLILITER')).toBe(25);
+    expect(
+      visitFloor(entry({ before: 500, created: false, quantity: 1500 }), 'GRAM')
+    ).toBe(501);
+  });
+
+  it('is one step of the product for a stepped line the visit made (velista 0186, ruling 43)', () => {
+    expect(visitFloor(entry({ quantity: 100 }), 'GRAM', 100)).toBe(100);
+    expect(visitFloor(entry({ quantity: 1000 }), 'GRAM', 1000)).toBe(1000);
+    expect(visitFloor(entry({ quantity: 25 }), 'GRAM', null)).toBe(25);
+    expect(visitFloor(entry(), 'UNIT', 100)).toBe(1);
+  });
 });
 
 describe('taking a product back', () => {

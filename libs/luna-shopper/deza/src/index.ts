@@ -30,8 +30,15 @@ export {
   parseRows,
 } from './lib/rows';
 export { leafSections, parseSectionTree } from './lib/sections';
-export { DEZA_SIZE_UNITS, packCountIn, sizeOf, splitSize } from './lib/size';
-export type { SplitDescription } from './lib/size';
+export {
+  DEZA_SIZE_UNITS,
+  approxWeightOf,
+  measuresIn,
+  packCountIn,
+  sizeOf,
+  splitSize,
+} from './lib/size';
+export type { DezaMeasures, SplitDescription } from './lib/size';
 export type {
   DezaClientOptions,
   DezaPage,
@@ -39,4 +46,21 @@ export type {
   DezaQuery,
   DezaSection,
   DezaShop,
+} from './lib/types';
+// A probe per chain checks the storefront shape (plan 0219).
+export { probeDeza } from './lib/probe';
+export type { DezaProbeOptions } from './lib/probe';
+// The chain's own shop list (plan 0222).
+export { DEZA_SHOPS_PATH, DezaShopPageRefusedError } from './lib/deza.client';
+export {
+  DEZA_SHOP_LINK_TEXT,
+  parseShopDirectory,
+  parseShopPage,
+  readShopCode,
+} from './lib/shops';
+export type {
+  DezaCodeOutcome,
+  DezaDirectory,
+  DezaDirectoryEntry,
+  DezaShopPage,
 } from './lib/types';

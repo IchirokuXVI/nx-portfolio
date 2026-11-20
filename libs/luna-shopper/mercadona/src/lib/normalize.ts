@@ -82,7 +82,8 @@ function toListProduct(
     thumbnail: readString(raw, 'thumbnail'),
     published: readBoolean(raw, 'published') ?? true,
     soldByWeight,
-    unitSize: soldByWeight ? null : readUnitSize(price),
+    approxWeight: readApproxWeight(price),
+    unitSize: isApproximatePiece(price) ? null : readUnitSize(price),
     unit: mapSizeFormat(sizeFormat),
     sizeFormat,
     packCount: readPackCount(price),
@@ -133,11 +134,15 @@ export function normalizeProduct(
     },
     brand: readString(raw, 'brand'),
     soldByWeight,
-    unitSize: soldByWeight ? null : readUnitSize(price),
+    approxWeight: readApproxWeight(price),
+    unitSize: isApproximatePiece(price) ? null : readUnitSize(price),
     unit: mapSizeFormat(sizeFormat),
     packCount: readPackCount(price),
     categorySlug: resolveCategory(path),
     categoryPath: path.map((node) => node.name),
+    detailCategoryPaths: readProductCategoryPaths(raw).map((branch) =>
+      branch.map((node) => node.name)
+    ),
     price: readPrice(price, soldByWeight),
     unitPrice: readNumber(price, 'bulk_price'),
     unitPriceLabel: readUnitPriceLabel(price),
@@ -173,12 +178,55 @@ export function normalizeProduct(
  *
  * The size format must be `kg` as well, because the price written for such a
  * product is the price of a kilo, and `bulk_price` is one only then.
+ *
+ * **The chain must also compare it per kilo (plan 0244, section 5.1).** The
+ * label that is true of `bulk_price` ({@link readUnitPriceLabel}) must be
+ * `kg`. A piece the chain compares per piece answers `ud` there, and its
+ * `bulk_price` is the price of the piece and not of a kilo. Proved by
+ * `product-approximate-weight-per-piece.json`, product 60226, a salad tub of
+ * about 0.58 kg priced 6.50 the piece: `approx_size: true`, `size_format:
+ * "kg"`, `reference_format: "ud"`, and `unit_price`, `bulk_price` and
+ * `reference_price` all 6.50. Such a piece is priced as one, and its weight
+ * is still read ({@link readApproxWeight}).
  */
 function readSoldByWeight(price: Json): boolean {
+  return (
+    isApproximatePiece(price) &&
+    mapSizeFormat(readUnitPriceLabel(price)) === UnitOfMeasure.KILOGRAM
+  );
+}
+
+/**
+ * Whether the chain states a weight that is not the same on every piece:
+ * `approx_size` on a product sized in `kg` (plans 0181 and 0244). Such a
+ * product has no size, whether it is sold by the kilo or priced as one.
+ */
+function isApproximatePiece(price: Json): boolean {
   return (
     readBoolean(price, 'approx_size') === true &&
     mapSizeFormat(readString(price, 'size_format')) === UnitOfMeasure.KILOGRAM
   );
+}
+
+/**
+ * The approximate weight of one piece, in grams (plan 0244, section 5.1), or
+ * null when the chain states none.
+ *
+ * It is `unit_size` in grams, rounded to four decimals, exactly when the
+ * product is an approximate piece ({@link isApproximatePiece}). Both kinds
+ * carry it: a piece sold by the kilo, whose piece price every read derives
+ * from it, and a piece priced as one, where it is information. A fixed pack
+ * answers null, because its size is the size.
+ */
+function readApproxWeight(price: Json): number | null {
+  if (!isApproximatePiece(price)) {
+    return null;
+  }
+  const kilos = readNumber(price, 'unit_size');
+  if (kilos === null || kilos <= 0) {
+    return null;
+  }
+  return Math.round(kilos * 1000 * 10_000) / 10_000;
 }
 
 /**
@@ -200,8 +248,9 @@ function readPrice(price: Json, soldByWeight: boolean): number | null {
  * The size the chain states, or null when the number it sent is not one (plan
  * 0183).
  *
- * A product sold by weight never reaches this: its size is null, because the
- * weight the payload states is an estimate (plan 0181).
+ * An approximate piece never reaches this: its size is null, because the
+ * weight the payload states is an estimate (plan 0181). That weight is kept
+ * apart, as {@link readApproxWeight} (plan 0244).
  *
  * `unit_size` is the size as it stands for every product but two kinds.
  *
@@ -414,15 +463,37 @@ function agree(a: number, b: number, step: number): boolean {
 /**
  * How many units the pack holds (plan 0162, section 1).
  *
- * **A pack has a count.** When `is_pack` is true the count is `pack_size`, or
- * `total_units` when `pack_size` is not set. When both are set and differ the
- * source contradicts itself and the answer is null, because a count is read
- * and never chosen.
+ * **A pack has a count.** When `is_pack` is true it is read in five cases, in
+ * this order (plan 0248, section 1):
  *
- * Proved by `product-capsules-per-unit.json` (`is_pack: true`, `pack_size: 20`,
- * `total_units: 20`, so the two agree) and by `product-detail-es.json`
- * (`is_pack: false`). The other two cases are that capsule fixture with one
- * field changed in the spec, because no captured product shows them.
+ * 0. Only one of `pack_size` and `total_units` is set: the count is that one.
+ *    No captured product shows either shape, so the spec changes one field of
+ *    the capsule fixture.
+ * 1. The two are equal: the count is that number. Proved by
+ *    `product-capsules-per-unit.json` (`pack_size: 20`, `total_units: 20`).
+ * 2. **`pack_size` is the content of one unit.** `total_units` is a whole
+ *    number above 1 and `pack_size × total_units` is `unit_size` within the
+ *    four decimals the payload prints: the count is `total_units`. On packs of
+ *    drinks and desserts the chain uses `pack_size` this way. Proved by
+ *    `product-pack-of-bottles.json`, product 28113, four bottles of Coca-Cola
+ *    (`pack_size: 0.5`, `total_units: 4`, `unit_size: 2`, `size_format: "l"`),
+ *    and by `product-pack-size-is-content.json`, product 21698, six cans of
+ *    an energy drink (`0.25`, `6`, `1.5`), both captured on 2026-11-08.
+ * 3. **The comparison price proves the content when `unit_size` does not.**
+ *    `total_units` is a whole number above 1 and the comparison price is the
+ *    pack price over `pack_size × total_units` ({@link comparedOver}): the
+ *    count is `total_units`. Proved by `product-pack-contradicts-size.json`,
+ *    product 18382, two desserts, captured on 2026-11-08: `pack_size: 0.08`,
+ *    `total_units: 2`, `unit_size: 1.6` in `kg`, `unit_price: "1.70"` and
+ *    `reference_price: "10.625"`, which is 1.70 over 0.16 and not over 1.6.
+ *    Only the count is read. The size stays what `unit_size` says, and a size
+ *    that its own comparison price disproves is plan 0249's.
+ * 4. Anything else is null: the source contradicts itself in a way no case
+ *    above names, and a count is read and never chosen.
+ *
+ * `product-detail-es.json` and `product-single-bottle.json` (product 27342,
+ * the single two litre bottle the pack of four was proposed as) answer
+ * `is_pack: false`.
  *
  * **So has a box priced as one piece that the chain compares per piece inside
  * (plan 0177).** `is_pack` is false on such a product, and the count is
@@ -451,16 +522,41 @@ function readPackCount(price: Json): number | null {
   const packSize = readNumber(price, 'pack_size');
   const totalUnits = readNumber(price, 'total_units');
   if (readBoolean(price, 'is_pack') === true) {
-    if (packSize !== null && totalUnits !== null && packSize !== totalUnits) {
-      return null;
-    }
-    return packCountOf(packSize ?? totalUnits);
+    return readPackOfUnits(price, packSize, totalUnits);
   }
   const comparedPerPiece =
     readString(price, 'reference_format')?.trim().toLowerCase() === 'ud';
   const sizeUnit = mapSizeFormat(readString(price, 'size_format'));
   const sizedByContent = sizeUnit !== null && sizeUnit !== UnitOfMeasure.UNIT;
   return comparedPerPiece && sizedByContent ? packCountOf(totalUnits) : null;
+}
+
+/** `unit_size` carries four decimals (plan 0248, section 1, case 2). */
+const UNIT_SIZE_STEP = 0.0001;
+
+/** The five cases of {@link readPackCount} for `is_pack: true`, in order. */
+function readPackOfUnits(
+  price: Json,
+  packSize: number | null,
+  totalUnits: number | null
+): number | null {
+  if (packSize === null || totalUnits === null) {
+    return packCountOf(packSize ?? totalUnits);
+  }
+  if (packSize === totalUnits) {
+    return packCountOf(packSize);
+  }
+  if (!Number.isInteger(totalUnits) || totalUnits <= 1) {
+    return null;
+  }
+  const content = packSize * totalUnits;
+  const unitSize = readNumber(price, 'unit_size');
+  if (unitSize !== null && agree(content, unitSize, UNIT_SIZE_STEP)) {
+    return packCountOf(totalUnits);
+  }
+  return content > 0 && comparedOver(price, content)
+    ? packCountOf(totalUnits)
+    : null;
 }
 
 /**
@@ -479,6 +575,47 @@ function readProductCategoryPath(raw: Json): CategoryPathNode[] {
     cursor = readArray(cursor, 'categories')[0];
   }
   return path;
+}
+
+/**
+ * Every branch of the category chain a detail payload carries, each root
+ * first and deepest last, in the order the payload states them (plan 0268,
+ * section 3). A product filed under two roots, or under two children of one
+ * root, has two branches.
+ *
+ * {@link readProductCategoryPath} follows the first child at every level, so
+ * its answer is the first branch here. It stays as it is, because the
+ * category of a product is read from that one path.
+ *
+ * A node with no name is passed over and its children are still read, as
+ * {@link readProductCategoryPath} does. A branch with no named node is left
+ * out.
+ */
+export function readProductCategoryPaths(raw: Json): CategoryPathNode[][] {
+  const branches: CategoryPathNode[][] = [];
+  const walk = (node: Json, above: CategoryPathNode[]): void => {
+    if (!isRecord(node)) {
+      return;
+    }
+    const name = readString(node, 'name');
+    const path = name
+      ? [...above, { id: readNumber(node, 'id') ?? undefined, name }]
+      : above;
+    const children = readArray(node, 'categories').filter(isRecord);
+    if (children.length === 0) {
+      if (path.length > 0) {
+        branches.push(path);
+      }
+      return;
+    }
+    for (const child of children) {
+      walk(child, path);
+    }
+  };
+  for (const root of readArray(raw, 'categories')) {
+    walk(root, []);
+  }
+  return branches;
 }
 
 /**
@@ -501,11 +638,13 @@ export function unavailableProduct(
     name: {},
     brand: null,
     soldByWeight: false,
+    approxWeight: null,
     unitSize: null,
     unit: null,
     packCount: null,
     categorySlug: null,
     categoryPath: [],
+    detailCategoryPaths: [],
     price: null,
     unitPrice: null,
     unitPriceLabel: null,

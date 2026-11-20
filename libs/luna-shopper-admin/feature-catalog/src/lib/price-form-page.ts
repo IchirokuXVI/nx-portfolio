@@ -436,6 +436,8 @@ export class PriceFormPage implements LeaveAware {
   private readonly _item = signal<{
     readonly unitSize: number | null;
     readonly defaultUnit: string;
+    /** The grams of one piece, for a product with no size (admin plan 0068). */
+    readonly approxWeight: number | null;
   } | null>(null);
   private _itemGeneration = 0;
 
@@ -460,7 +462,12 @@ export class PriceFormPage implements LeaveAware {
     }
     const price = parseMoney(String(this.store.draft()['price'] ?? ''), 2);
     return price.ok && price.value !== ''
-      ? proposeUnitPrice(Number(price.value), item.unitSize, item.defaultUnit)
+      ? proposeUnitPrice(
+          Number(price.value),
+          item.unitSize,
+          item.defaultUnit,
+          item.approxWeight
+        )
       : null;
   });
 
@@ -712,6 +719,8 @@ export class PriceFormPage implements LeaveAware {
         this._item.set({
           unitSize: typeof item.unitSize === 'number' ? item.unitSize : null,
           defaultUnit: String(item.defaultUnit ?? ''),
+          approxWeight:
+            typeof item.approxWeight === 'number' ? item.approxWeight : null,
         });
       }
     } catch {

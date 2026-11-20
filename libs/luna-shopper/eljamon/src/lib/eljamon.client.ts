@@ -151,9 +151,14 @@ export class ElJamonClient {
    * changed (section 5.1). The same URL as a bare GET answers the home page's
    * carousel instead, which is why the filters are never left out.
    *
-   * **A page whose rows repeat a code already seen in this category ends it**,
-   * as a guard against a page number the server clamps. So does a page with no
-   * rows.
+   * **A page whose rows were all seen already in this category ends it**, as
+   * a guard against a page number the server clamps: such a server answers the
+   * last page again for every number above it. So does a page with no rows.
+   * **A page with only some seen rows yields the new ones and goes on** (plan
+   * 0253): the chain's order can shift between two requests, so one product
+   * can be printed on page N and again on page N + 1, and that one row used to
+   * end the category and drop every page after it. The page count of the
+   * printed total stays the upper bound either way.
    *
    * **A page after the first that fails, retries included, can be skipped.**
    * Page N + 1 is asked for with the filters of the last page read and only
@@ -205,13 +210,11 @@ export class ElJamonClient {
       }
       previousFailed = false;
       onPage?.(page, index);
-      if (
-        page.rows.length === 0 ||
-        page.rows.some((row) => seen.has(row.code))
-      ) {
+      const unseen = page.rows.filter((row) => !seen.has(row.code));
+      if (unseen.length === 0) {
         return;
       }
-      for (const row of page.rows) {
+      for (const row of unseen) {
         seen.add(row.code);
         yield row;
       }

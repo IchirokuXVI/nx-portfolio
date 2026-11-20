@@ -4,6 +4,7 @@ import type {
   SettlementOutcome,
   ZoneRole,
 } from './enums';
+import type { LineUnit } from './line-unit';
 
 /**
  * Request bodies, declared explicitly rather than derived from a model.
@@ -116,6 +117,11 @@ export interface AddLineRequest {
   readonly content: string;
   readonly quantity?: number;
   /**
+   * What {@link quantity} counts (velista `0182`, backend `0246` section 3.2).
+   * Absent is `UNIT`, which is what a free text add means.
+   */
+  readonly unit?: LineUnit;
+  /**
    * The catalog products this line stands for (backend plan 0048, section 1.1).
    *
    * A **set**, where this was a single optional `itemId` that nothing ever sent,
@@ -150,11 +156,16 @@ export interface UpdateLineRequest {
   readonly named?: false;
   readonly quantity?: number;
   /**
+   * What {@link quantity} counts, sent with it on every absolute write (velista
+   * `0182`). A unit change must name the quantity it starts from.
+   */
+  readonly unit?: LineUnit;
+  /**
    * Replace the whole product set. An empty array clears it back to free text.
    *
-   * A whole set rather than an add or a remove, for the same reason the reorder
-   * request takes the whole order: two people editing a line's products would
-   * otherwise each send a delta against a set neither of them still has.
+   * A whole set rather than an add or a remove, because two people editing a
+   * line's products would otherwise each send a delta against a set neither of
+   * them still has.
    */
   readonly itemIds?: readonly string[];
   /**
@@ -182,18 +193,22 @@ export interface UpdateLineRequest {
 /**
  * Move a line's quantity by a **signed delta** (backend plan 0040, section 3).
  *
- * Not an absolute number, and that is the whole design of the reel (velista plan
- * 0043, section 4.1). Absolute writes from a moving control race each other and
- * the loser silently wins; a delta is applied atomically under the row's lock and
- * cannot. One per settled adjustment, sent when the overlay closes rather than
- * during the drag, so it is one request however many times the thumb went back
- * for more inside that window.
+ * Not an absolute number, and that is the whole design of the stepper's write
+ * (velista plan 0043, section 4.1). Absolute writes from a moving control race each
+ * other and the loser silently wins; a delta is applied atomically under the row's
+ * lock and cannot. One per settled adjustment, sent after the presses stop (velista
+ * `0188`), so it is one request however many presses or repeats came before it.
  *
  * Never zero. The server refuses it, and a gesture that ended where it started is
  * not an adjustment to send.
  */
 export interface AddLineQuantityRequest {
   readonly delta: number;
+  /**
+   * The unit the delta was made in, which is the line's (velista `0182`).
+   * Required: a delta in another unit is refused with `line_unit_mismatch`.
+   */
+  readonly unit: LineUnit;
 }
 
 /**
@@ -214,6 +229,11 @@ export interface SettleLineRequest {
    * though it satisfies no demand.
    */
   readonly quantity?: number;
+  /**
+   * The unit {@link quantity} is in, the line's (velista `0182`). Required by the
+   * server, and refused with `line_unit_mismatch` when it is not the line's.
+   */
+  readonly unit: LineUnit;
   /**
    * Which of the line's products was bought, on a line carrying more than one.
    *
@@ -252,10 +272,6 @@ export type SettleLineOptions = Pick<
  */
 export interface SetLineApprovalRequest {
   readonly approvalStatus: LineApprovalStatus;
-}
-
-export interface ReorderLinesRequest {
-  readonly orderedLineIds: readonly string[];
 }
 
 export interface AddCommentRequest {

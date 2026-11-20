@@ -1,4 +1,4 @@
-import { inject } from '@angular/core';
+import { inject, provideEnvironmentInitializer } from '@angular/core';
 import { type Route } from '@angular/router';
 import {
   localeGuard,
@@ -33,6 +33,7 @@ import {
   guestOnlyGuard,
 } from './auth-guards';
 import { catalogPickLeaveGuard } from './catalog-pick-guards';
+import { leavePageWhenSessionRefused } from './session-refused';
 import { setupGuard } from './setup-guard';
 import {
   shopMapRecordGuard,
@@ -534,7 +535,7 @@ function memberActionRoutes(): Route[] {
  *
  * **Changing a line's quantity is deliberately not among them and never will be.** It
  * is the gesture the screen is built around, it happens under a thumb, and a sheet
- * would put a navigation and a dismissal around a number somebody is dragging. What
+ * would put a navigation and a dismissal around a number somebody is stepping. What
  * used to be said in this place about ticking off is the same rule about a different
  * gesture: the primary act on this page is never a route.
  *
@@ -685,6 +686,11 @@ export const AppShellRoutes: Route[] = [
     // way, since both enter through `app-providers.ts`. Only the injector changed, and
     // it moved in the direction that has more above it rather than less.
     canActivate: [localeGuard],
+    // A session the server refuses in the middle of a page leaves that page at once,
+    // through the page's own `authenticatedGuard`, instead of on the next tap. Here
+    // because this route's injector exists for as long as any page of the app does,
+    // and `feature-shell` is the library that owns the guard.
+    providers: [provideEnvironmentInitializer(leavePageWhenSessionRefused)],
     // The locale is the `:locale` child's param, so a history move from `/en` to
     // `/es` changes nothing on this route and the default would not re-run the guard
     // (rokutranslator plan 0006). This re-runs it when the locale segment changes and
@@ -1399,7 +1405,18 @@ export const AppShellRoutes: Route[] = [
               import('@portfolio/velista/feature-catalog').then(
                 (m) => m.ProductPage
               ),
-            children: [...addListSheetRoutes()],
+            children: [
+              ...addListSheetRoutes(),
+              sheet({
+                // Why Similar products and a list's cheapest mark can differ
+                // (velista `0187`, U6).
+                path: CATALOG_PATHS.orderInfoSheet,
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-catalog').then(
+                    (m) => m.OrderInfoSheet
+                  ),
+              }),
+            ],
           },
           {
             /**

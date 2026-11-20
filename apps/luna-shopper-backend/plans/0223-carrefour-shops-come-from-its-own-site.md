@@ -1,3 +1,5 @@
+> **PR:** [#927](https://github.com/IchirokuXVI/nx-portfolio/pull/927)
+
 # 0223: carrefour shops come from its own site
 
 > Carrefour shops reach the catalog today only through OpenStreetMap. Plan `0090` section 2
@@ -580,16 +582,16 @@ Chosen in this plan, and open to the owner's correction:
 - **A failed drive read does not fail the run.** A refusal does.
 - **The hours are tags.** They carry no label to parse against.
 
-**Owner** (ask, do not choose):
+**Owner** (answered 2026-11-06):
 
-1. **Are Carrefour Express shops part of the Carrefour chain in the catalog?** If yes, the row
-   lists `EXPRESS` and `EXPRESS_CEPSA` and their 1,219 Spanish records reach the queue under the
-   Carrefour chain. If they are a chain of their own, a second `Supermarket` and a store run per
-   chain are needed, and this plan does not build that.
-2. **Is the postal code queue to ask Carrefour of every due code?** Turning
-   `listsItsOwnStores` on does that, at one browser launch per code per cooldown period. The
-   alternative is a second capability that frees the spawn and keeps the queue out.
-3. **Does the owner want per sale point prices measured?** This plan finds that the walk reads
-   the El Pinar hypermarket's online prices and names the 179 shops that have a sale point. A
-   plan that compares two sale points would decide whether Carrefour needs a scope per sale
-   point.
+1. **Carrefour and Carrefour Express are shown as one chain** (decided 2026-11-06). Several
+   adapters under that one chain stay possible. This plan's build is unchanged: the default
+   formats stay `HIPERMERCADO` and `MARKET`, and `EXPRESS` and `EXPRESS_CEPSA` are reached
+   only by listing them on the row. Bringing the Express shops under the chain by default, and
+   what velista shows for them, is a follow up plan.
+2. **`listsItsOwnStores` is on for `carrefour-web`.** The queue asks Carrefour of every due
+   code.
+3. **Per sale point prices are to be measured** (decided 2026-11-06), because each shop may
+   price differently. Today every Carrefour price is the El Pinar hypermarket's (sale point
+   `005290`). The measurement is a follow up plan, and this plan's `carrefour:salePoint` tag is
+   what it starts from.

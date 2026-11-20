@@ -529,6 +529,7 @@ describeIntegration(
         rowKey: row.id,
         lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity,
         from,
       });
@@ -706,6 +707,7 @@ describeIntegration(
         rowKey: milk.id,
         lineId: milk.id,
         quantity: 5,
+        unit: 'UNIT',
         from: 3,
       });
       const all = await envelopes(3);
@@ -729,6 +731,7 @@ describeIntegration(
         userId: b.userId,
         lineId: milk.id,
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 1,
       });
       const all = await envelopes(3);
@@ -809,6 +812,7 @@ describeIntegration(
         rowKey: milk.id,
         lineId: milk.id,
         quantity: 0,
+        unit: 'UNIT',
         from: 3,
       });
       const all = await envelopes(3);
@@ -868,11 +872,7 @@ describeIntegration(
       const { listId, a, b } = await world();
       const milk = await line(listId, a.userId);
       const eggs = await line(listId, a.userId, 1, 'Eggs');
-      const guestId = await participant(
-        a.basket,
-        ParticipantKind.GUEST,
-        null
-      );
+      const guestId = await participant(a.basket, ParticipantKind.GUEST, null);
 
       // Luis changes one line and adds another, on the list page. Both are
       // changes that the people of Ana's basket have not seen.

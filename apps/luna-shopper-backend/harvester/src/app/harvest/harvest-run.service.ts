@@ -45,6 +45,7 @@ import type {
   SupermarketSource,
 } from '../entities';
 import { CatalogClient } from './catalog-client.service';
+import { DezaKeyGuard } from './deza-key-guard';
 import { readHarvestDocument } from './harvest-document.reader';
 import { HarvestRunPresetStore } from './harvest-run-preset.store';
 import {
@@ -61,6 +62,7 @@ import { ESTIMATE_SAMPLES, estimateRun } from './run-estimate';
 import { RunExecutor } from './run-executor.service';
 import { SourceEntryService } from './source-entry.service';
 import { SupermarketSourceService } from './supermarket-source.service';
+import { walkConfigFingerprint } from './walk-fingerprint';
 
 interface RunCursor {
   value: string;
@@ -99,6 +101,23 @@ export interface ScheduledStart {
   /** The run that started, or null. */
   runId: string | null;
 }
+
+/**
+ * What a gate on a scheduled start is told (plan 0247, section 2): the chain's
+ * source row and the mode of the preset, after every check of the moment.
+ */
+export interface ScheduledStartCheck {
+  source: SupermarketSource | null;
+  mode: HarvestRunMode;
+}
+
+/**
+ * A last check before a scheduled run is inserted (plan 0247, section 2). It
+ * answers null to let the run start, or the outcome of the slot to stop it.
+ */
+export type ScheduledStartGate = (
+  check: ScheduledStartCheck
+) => Promise<ScheduledStart | null>;
 
 /** One run, preset or schedule an estimate is asked for (plan 0206, section 8). */
 export interface EstimateKey {
@@ -178,6 +197,30 @@ function refused(note: string): ScheduledStart {
   return { outcome: HarvestScheduleOutcome.REFUSED, note, runId: null };
 }
 
+/**
+ * What the source row answers for a scheduled start, in the order of
+ * `startScheduled`: a row that is off, then a source that keeps failing. Null
+ * when the row lets the start go on.
+ */
+function sourceStandsInTheWay(
+  source: SupermarketSource | null
+): ScheduledStart | null {
+  if (source && !source.enabled) {
+    return refused(SOURCE_DISABLED);
+  }
+  if (source && source.consecutiveFailures >= SOURCE_FAILING_AFTER) {
+    return {
+      outcome: HarvestScheduleOutcome.SKIPPED_FAILING,
+      note:
+        `The source has failed ${source.consecutiveFailures} runs in a row. ` +
+        'The first run a person starts that completes lets the schedule ' +
+        'fire again.',
+      runId: null,
+    };
+  }
+  return null;
+}
+
 /** The ids that are set, each once. */
 function distinct(ids: readonly (string | null | undefined)[]): string[] {
   return [...new Set(ids.filter((id): id is string => Boolean(id)))];
@@ -214,7 +257,8 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     private readonly catalog: CatalogClient,
     private readonly admin: PlatformAdminService,
     private readonly config: ConfigService,
-    private readonly presets: HarvestRunPresetStore
+    private readonly presets: HarvestRunPresetStore,
+    private readonly dezaKeys: DezaKeyGuard
   ) {}
 
   private settings(): HarvesterConfig {
@@ -322,9 +366,18 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
    * that `blockedBy` uses too: the source row off or missing, then the source
    * failing, then the preset refused, then a run in the way. An error it does
    * not expect is thrown, and the worker writes it as `REFUSED`.
+   *
+   * **`gate` runs after every one of those checks and before the run is
+   * inserted** (plan 0247, section 2), so a chain that is off, failing or
+   * busy never reaches it. With a gate the run in the way is read before
+   * the gate rather than learned from the insert, because the gate may run a
+   * probe, and a probe must never run beside a run of its chain. The insert's
+   * conflict stays the backstop. A caller that passes no gate gets exactly
+   * what it got before.
    */
   async startScheduled(
-    schedule: Pick<HarvestSchedule, 'id' | 'presetId'>
+    schedule: Pick<HarvestSchedule, 'id' | 'presetId'>,
+    gate?: ScheduledStartGate
   ): Promise<ScheduledStart> {
     this.requireHarvesting();
     let preset: HarvestRunPreset;
@@ -342,19 +395,10 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
       ...preset.input,
       supermarketId: preset.supermarketId,
     };
-    const source = await this.sources.findBySupermarket(preset.supermarketId);
-    if (source && !source.enabled) {
-      return refused(SOURCE_DISABLED);
-    }
-    if (source && source.consecutiveFailures >= SOURCE_FAILING_AFTER) {
-      return {
-        outcome: HarvestScheduleOutcome.SKIPPED_FAILING,
-        note:
-          `The source has failed ${source.consecutiveFailures} runs in a row. ` +
-          'The first run a person starts that completes lets the schedule ' +
-          'fire again.',
-        runId: null,
-      };
+    let source = await this.sources.findBySupermarket(preset.supermarketId);
+    const sourceAnswer = sourceStandsInTheWay(source);
+    if (sourceAnswer) {
+      return sourceAnswer;
     }
 
     let validated: ValidatedRunRequest;
@@ -369,6 +413,36 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
         );
       }
       throw error;
+    }
+
+    if (gate) {
+      const inTheWay = await this.activeRunNote(
+        request.mode,
+        preset.supermarketId
+      );
+      if (inTheWay) {
+        return {
+          outcome: HarvestScheduleOutcome.SKIPPED_BUSY,
+          note: inTheWay,
+          runId: null,
+        };
+      }
+      const gated = await gate({ source, mode: request.mode });
+      if (gated) {
+        return gated;
+      }
+      // The gate may have taken minutes, and a person may have turned the
+      // row off or a run may have failed it meanwhile. The row is read again
+      // and asked what it was asked before the gate.
+      const before = source;
+      source = await this.sources.findBySupermarket(preset.supermarketId);
+      if (before && !source) {
+        return refused(SOURCE_DISABLED);
+      }
+      const afterGate = sourceStandsInTheWay(source);
+      if (afterGate) {
+        return afterGate;
+      }
     }
 
     try {
@@ -416,6 +490,19 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     supermarketId: string,
     fallback: string
   ): Promise<string> {
+    return (await this.activeRunNote(mode, supermarketId)) ?? fallback;
+  }
+
+  /**
+   * The run that would be in the way of a scheduled start, named, or null
+   * when none is in flight. The same two reads as the partial unique indexes
+   * of `harvest_runs`: a run of the chain, and for a store discovery any
+   * store discovery.
+   */
+  private async activeRunNote(
+    mode: HarvestRunMode,
+    supermarketId: string
+  ): Promise<string | null> {
     const ofChain = await this.store.findActiveBySupermarket(supermarketId);
     if (ofChain) {
       return `A run of this chain is in progress: ${ofChain.id}.`;
@@ -430,7 +517,7 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
         );
       }
     }
-    return fallback;
+    return null;
   }
 
   /**
@@ -463,12 +550,20 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
       throw new ValidationException(SOURCE_DISABLED);
     }
 
+    // What the walk runs under outside its request (owner decisions 130b and
+    // 127b), taken from the row the run names and only from it: a file import
+    // and an OpenStreetMap store discovery name none and record neither.
+    const walkSource = needsSource ? source : null;
     try {
       const run = await this.store.create({
         mode: req.mode,
         trigger: origin.trigger,
         supermarketId,
-        sourceId: needsSource ? (source?.id ?? null) : null,
+        sourceId: walkSource?.id ?? null,
+        configFingerprint: walkSource
+          ? walkConfigFingerprint(walkSource)
+          : null,
+        adapterKey: walkSource?.adapterKey ?? null,
         priceScopeId,
         requestedByUserId: origin.userId,
         correlationId: getRequestContext()?.correlationId ?? null,
@@ -797,6 +892,13 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
         'That supermarket has no configured source. Create one with ' +
           'supermarketSource.upsert before starting a run.'
       );
+    }
+    // No DEZA walk while a stored row waits for the key the deployed split
+    // builds (plan 0272, section 5.1). A preset saved in that gap is refused
+    // too, by the same sentence, and a scheduled slot is recorded REFUSED.
+    const dezaRefusal = await this.dezaKeys.refusal(source, req.mode);
+    if (dezaRefusal) {
+      throw new ValidationException(dezaRefusal);
     }
     return validated;
   }

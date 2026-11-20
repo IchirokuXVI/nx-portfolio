@@ -4,6 +4,8 @@ import { PostalCodeDiscoveryStatus } from '@portfolio/luna-shopper/contracts';
 import { NotFoundException } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
 import { PostalCodeDiscoveryRequest } from '../entities';
+import type { HarvestAlertDraft } from './alerts/harvest-alert.rules';
+import { insertAlert } from './alerts/harvest-alert.store';
 
 /** How long a code waits between attempts, doubling, capped (plan 0063, 4). */
 const BACKOFF_BASE_SECONDS = 120;
@@ -151,7 +153,13 @@ export class PostalCodeDiscoveryStore {
     row: PostalCodeDiscoveryRequest,
     reason: string,
     maxAttempts: number,
-    runId: string | null
+    runId: string | null,
+    /**
+     * The alert to the owner for the attempt that gives up (plan 0218, the
+     * owner's answer 4). Written in the same transaction as the `FAILED` row,
+     * and only then: an attempt that leaves the row `QUEUED` writes none.
+     */
+    alert?: HarvestAlertDraft
   ): Promise<void> {
     const exhausted = row.attempts >= maxAttempts;
     if (exhausted) {
@@ -160,17 +168,22 @@ export class PostalCodeDiscoveryStore {
           `${row.attempts} time(s) and is being left FAILED: ${reason}`
       );
     }
-    await this.requests.update(
-      { id: row.id },
-      {
-        status: exhausted
-          ? PostalCodeDiscoveryStatus.FAILED
-          : PostalCodeDiscoveryStatus.QUEUED,
-        nextAttemptAt: exhausted ? null : backoffFrom(row.attempts),
-        error: reason,
-        runId: runId ?? row.runId,
-      }
-    );
+    const write = {
+      status: exhausted
+        ? PostalCodeDiscoveryStatus.FAILED
+        : PostalCodeDiscoveryStatus.QUEUED,
+      nextAttemptAt: exhausted ? null : backoffFrom(row.attempts),
+      error: reason,
+      runId: runId ?? row.runId,
+    };
+    if (!exhausted || !alert) {
+      await this.requests.update({ id: row.id }, write);
+      return;
+    }
+    await this.requests.manager.transaction(async (manager) => {
+      await manager.update(PostalCodeDiscoveryRequest, { id: row.id }, write);
+      await insertAlert(manager, alert);
+    });
   }
 
   /**

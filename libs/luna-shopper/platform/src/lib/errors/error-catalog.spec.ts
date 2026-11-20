@@ -1,4 +1,7 @@
-import { resolveErrorMessage } from './error-catalog';
+import {
+  LINE_UNIT_DIFFERS_ADD_VARIANT,
+  resolveErrorMessage,
+} from './error-catalog';
 import { ERROR_CODES } from './error-codes';
 
 describe('resolveErrorMessage', () => {
@@ -61,5 +64,32 @@ describe('the allowance sentences (plan 0234, section 8.1)', () => {
         variant: 'nonsense',
       })
     ).toBe('The assistant is not available for now. It will be back later.');
+  });
+});
+
+describe('the two sentences of line_unit_differs (plan 0260)', () => {
+  it('gives an add its own sentence, naming the line', () => {
+    expect(
+      resolveErrorMessage(ERROR_CODES.LINE_UNIT_DIFFERS, 'en', {
+        content: 'Leche',
+        variant: LINE_UNIT_DIFFERS_ADD_VARIANT,
+      })
+    ).toBe(
+      '"Leche" is already on this list in another unit. Change the amount on that line.'
+    );
+    expect(
+      resolveErrorMessage(ERROR_CODES.LINE_UNIT_DIFFERS, 'es', {
+        content: 'Leche',
+        variant: LINE_UNIT_DIFFERS_ADD_VARIANT,
+      })
+    ).toBe(
+      '"Leche" ya está en esta lista en otra unidad. Cambia la cantidad en esa línea.'
+    );
+  });
+
+  it('keeps the merge sentence when no variant is named', () => {
+    expect(resolveErrorMessage(ERROR_CODES.LINE_UNIT_DIFFERS, 'en')).toBe(
+      'These two lines count in different units, so they cannot be merged.'
+    );
   });
 });

@@ -20,8 +20,8 @@
   white-space: nowrap;
 }
 
-// The name, then the amount beside its label: the reel is small, and a label on its own
-// line above it would spend height the keyboard needs (section 7).
+// The name, then the amount beside its label: the stepper is narrow, and a label on its
+// own line above it would spend height the keyboard needs (section 7).
 .amount {
   display: flex;
   align-items: center;
@@ -34,8 +34,16 @@
   }
 }
 
+// The unit chip above the stepper (velista 0183), both held to the end of the row.
+.amount-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--app-space-3);
+}
+
 // The amount in `content` scope: present, readable, and plainly not a control. It sits
-// where the reel's pill would, at the pill's size, so the sheet keeps its shape.
+// where the stepper would, in the quantity tokens' box, so the sheet keeps its shape.
 .shown {
   display: flex;
   align-items: center;
@@ -262,7 +270,7 @@
   color: var(--app-status-info-fg);
 }
 
-// The same pill the reel rests in, and deliberately **not** the reel: this sheet is
+// A plain pill, and deliberately **not** a stepper: this sheet is
 // where you report what happened, and a second control for the same number two taps
 // deeper would be two ways to say different things about one line.
 .quantity {

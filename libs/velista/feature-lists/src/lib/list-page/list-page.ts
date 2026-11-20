@@ -31,6 +31,7 @@ import {
   ItemNames,
   LineStore,
   LIST_SERVICE,
+  ListRowsStore,
   type ListServiceI,
   ListStore,
   type ListViewSnapshot,
@@ -44,9 +45,11 @@ import {
   ProductPickStore,
   REALTIME_CLIENT,
   type RealtimeClientI,
+  replayInUnit,
   SessionStore,
   ShoppingProfileStore,
   toAddChoice,
+  toAddUnitRefusal,
   TripStore,
   ZoneStore,
 } from '@portfolio/velista/data-access';
@@ -56,21 +59,24 @@ import {
   type AddChoiceRow,
   addChoiceRows,
   type AddLineOptions,
+  addUnitRefusalKey,
   APP_BASE_PATH,
   type CatalogSuggestion,
   DUE_LINE_ADDS_ON_STEP,
   type Line,
+  LINE_UNITS,
   LINE_VOICE_MAX_SECONDS,
   lineName,
   type LineName,
   type LineRowVm,
+  lineStepOf,
   type ListPageState,
   type ListViewerVm,
   NO_CATEGORY,
   type PresenceUser,
   productSuggestions,
+  type QuantityStep,
   type RecordedAudio,
-  reorderWithinSlots,
   SUGGEST_DEBOUNCE_MS,
   SUGGEST_MIN_CHARS,
   tripKey,
@@ -82,19 +88,22 @@ import {
   AudioRecorder,
   BrowserFacade,
   ColumnScroll,
+  formatAmount,
   formatMoney,
+  formatQuantityChange,
   lineQueryOf,
   listIdOf,
   ListSearchNavigation,
-  NavChrome,
   NOTIFICATION_TONE,
   PageNavigation,
   PageReturn,
   productPagePath,
   productPickPath,
   productsPickPath,
+  quantityRuns,
   RECORDING_LIMITS,
   type RecordingLimits,
+  rowInView,
   searchOpenOf,
   sheetSegments,
   StorageKeys,
@@ -105,7 +114,9 @@ import {
   AddChoice,
   AnchoredPopover,
   type AnchoredPopoverClose,
+  type AnchoredPopoverSide,
   CloseIcon,
+  DragReleasesField,
   DueLineRow,
   ErrorState,
   FilterIcon,
@@ -119,16 +130,17 @@ import {
   PageHeader,
   PageHeaderAction,
   productBrandSizeText,
+  productSizeText,
   RowSkeleton,
   SpinnerIcon,
   type SuggestionChoice,
   type SuggestionHolding,
   type SuggestionHoldingChange,
   SuggestionList,
-  ToBuyHeading,
   TOOK_DURATION_MS,
   TripGroup,
 } from '@portfolio/velista/ui';
+import { LineSheetEvents } from '../line-detail-sheet/line-sheet-events';
 import {
   correlationIdOf,
   listErrorEffect,
@@ -139,6 +151,33 @@ import { selectDueLines } from '../select-due-lines';
 import { type ListStateCatalog, selectListState } from '../select-list-state';
 import { selectTripGroups } from '../select-trip-groups';
 import { voiceFailureCopy } from '../voice-error-copy';
+import {
+  focusAfterLeaving,
+  focusDropped,
+  focusDueRow,
+  focusLeavingTarget,
+  type LeavingRowFocus,
+} from './leaving-row-focus';
+
+/**
+ * A flag set as the context it is called in starts going away. Hooks run in the
+ * order they were registered, so a caller registers it before any hook that must
+ * read it.
+ */
+function destroyingFlag(): { readonly destroying: boolean } {
+  const flag = { destroying: false };
+  inject(DestroyRef).onDestroy(() => {
+    flag.destroying = true;
+  });
+  return flag;
+}
+
+/**
+ * How long the polite region stays empty before a sentence it already holds is said
+ * again. Long enough for a screen reader to see the region change, short enough to
+ * read as the answer to the press.
+ */
+const REPEAT_SAY_GAP_MS = 150;
 
 /** What the list page hands the catalog that chooses a product, to know its answer. */
 const LIST_ROW_PICK = 'list-row';
@@ -202,13 +241,6 @@ function listReturnKey(listId: string): string {
  * has to be drawn with the approval the server is about to give it, from the same two
  * facts the server uses, or the person who typed the line watches an approve button
  * appear on it and vanish (plan 0030, section 5).
- *
- * ## Reorder is a mode, and it is page state
- *
- * The one place this plan does not follow rule E1, and the exception is principled: E1
- * is about screens drawn **over** a page that must not lose the page underneath. A mode
- * does not cover the page, it changes what the page's rows do, and there is nothing to
- * restore on the way back except a flag.
  */
 @Component({
   selector: 'lib-list-page',
@@ -216,6 +248,7 @@ function listReturnKey(listId: string): string {
     RokuTranslatorPipe,
     RouterOutlet,
     CloseIcon,
+    DragReleasesField,
     DueLineRow,
     ErrorState,
     FilterIcon,
@@ -231,7 +264,6 @@ function listReturnKey(listId: string): string {
     RowSkeleton,
     SpinnerIcon,
     SuggestionList,
-    ToBuyHeading,
     TourAnchor,
     TripGroup,
   ],
@@ -288,6 +320,13 @@ export class ListPage {
 
   /** The products on the lines, for their categories, names and prices (section 3). */
   private readonly _itemNames = inject(ItemNames);
+
+  /**
+   * How the rows are drawn, the row of today or the compact row, as this device
+   * chose in the account page (velista `0191`). Every line list of the page reads it,
+   * the search results included (decision G).
+   */
+  protected readonly listRows = inject(ListRowsStore);
 
   /** Bumped when the app or the socket comes back, which starts a new visit. */
   private readonly _priceVisit = signal(0);
@@ -412,8 +451,6 @@ export class ListPage {
   /** The column's scroll, read as it moves and put back on a return. */
   private readonly _scroll = new ColumnScroll(this._back?.scrollTop ?? null);
 
-  readonly reordering = signal(false);
-
   /** The page's own failure, as a key. Distinct from a per row failure. */
   private readonly _errorKey = signal<string | null>(null);
   private readonly _correlationId = signal<string | null>(null);
@@ -433,8 +470,12 @@ export class ListPage {
    */
   private readonly _listsChecked = signal(false);
 
-  /** What the live region is currently saying. Cleared after it has been read. */
-  readonly announcement = signal('');
+  /**
+   * What the page's polite region is currently saying. Written only through
+   * `_announce` and the repeat gap of `_say`.
+   */
+  private readonly _announcement = signal('');
+  readonly announcement = this._announcement.asReadonly();
 
   /**
    * Whether a typed add or a recording is out, which holds the composer (velista
@@ -499,14 +540,13 @@ export class ListPage {
   private readonly _column = viewChild<ElementRef<HTMLElement>>('column');
 
   /**
-   * Bumped once per line this reader adds, and read by the render effect that follows
-   * the end of the list.
+   * The line an add of this reader's own just made, until the page has brought its
+   * row into view (velista `0189`, decision H), or null.
    *
-   * A counter and not a boolean, because two adds in a row are the ordinary case here:
-   * somebody stands in the kitchen and enters six things, and a flag that is already
-   * true does not change, so the effect would run for the first item and never again.
+   * An id and not a counter: the row is found by it. Two adds in a row set two ids,
+   * and each one changes the signal, so the effect that reads it runs for each.
    */
-  private readonly _added = signal(0);
+  private readonly _addedLine = signal<string | null>(null);
 
   /**
    * The line a chat reply linked to, if the URL carried one (plan 0032, section 8).
@@ -536,7 +576,8 @@ export class ListPage {
       line,
       (itemId) => this._itemNames.nameOf(itemId)?.name ?? null,
       this._locale(),
-      this._itemNames.pricesOf
+      this._itemNames.pricesOf,
+      this._itemNames.sizingOf
     );
   }
 
@@ -558,7 +599,16 @@ export class ListPage {
       pricesOf: this._itemNames.pricesOf,
       locale,
       brandSizeOf: (item) => productBrandSizeText(item, locale, translate),
+      sizeOf: (item) =>
+        productSizeText(
+          item.size,
+          item.unit,
+          locale,
+          translate,
+          item.approxWeight
+        ),
       formatMoney: (amount, currency) => formatMoney(amount, currency, locale),
+      translate,
     };
   });
 
@@ -576,7 +626,6 @@ export class ListPage {
       zoneName: zone?.name ?? null,
       lines: lines.lines,
       linesState: lines.state,
-      linesComplete: lines.complete,
       writes: lines.writes,
       commentCounts: lines.commentCounts,
       // Who is out buying what: read off the lines and moved by `line.claimChanged`
@@ -591,7 +640,6 @@ export class ListPage {
       // empty set, which draws a read-only page for the frame before it does.
       caller: { permissions: list?.myPermissions ?? [] },
       nameOf: (userId) => this._names.nameOf(zoneId, userId),
-      reordering: this.reordering(),
       // Both from `PresenceStore`, and both answerable at last: this page announces
       // itself with `viewList` now, so the server's viewer set for this list has
       // somebody in it (plan 0022, sections 2.1 and 3.4).
@@ -850,7 +898,12 @@ export class ListPage {
       tripsReady:
         this._trips.listId() === this.listId() &&
         this._trips.state() === 'loaded',
-      reordering: this.reordering(),
+      // Until the first heads read about this list has answered, no line at zero is
+      // drawn in To buy: it would flash there and leave once the trips arrive
+      // (velista `0192`, owner ruling of 2026-11-16). A failed read keeps the fallback.
+      tripsLoading:
+        this._trips.listId() !== this.listId() ||
+        (this._trips.state() !== 'loaded' && this._trips.state() !== 'failed'),
       // Only an answer about this list: the store may still hold the list somebody
       // came from for the frame before it opens this one.
       dueLineIds:
@@ -861,8 +914,8 @@ export class ListPage {
   });
 
   /**
-   * The due rows under To buy (velista `0089`, section 2), or null when the section is
-   * not drawn: during a search, in reorder mode, for a reader, and when nothing is due.
+   * The due rows among the lines to buy (velista `0089`, section 2), or null when the
+   * section is not drawn: during a search, for a reader, and when nothing is due.
    */
   readonly dueSection = computed(() => {
     const shown = this.groups();
@@ -871,7 +924,6 @@ export class ListPage {
       shown === null ||
       shown.kind !== 'groups' ||
       page === null ||
-      this.reordering() ||
       !page.abilities.canDecide
     ) {
       return null;
@@ -912,7 +964,7 @@ export class ListPage {
     return shown.kind === 'flat' ? shown.lines : shown.toBuy;
   });
 
-  /** The trip folds, as `lib-trip-group` draws them. None while searching or reordering. */
+  /** The trip folds, as `lib-trip-group` draws them. None while searching. */
   readonly tripGroups = computed(() => {
     const shown = this.groups();
     if (shown === null || shown.kind === 'flat') {
@@ -955,59 +1007,11 @@ export class ListPage {
     );
   });
 
-  /**
-   * Whether To buy offers the reorder action (velista `0088`, section 7).
-   *
-   * The complete list, `WRITE`, and more than one line To buy would draw in reorder
-   * mode. `MANAGE` too, because the action sat behind the header's menu until it moved
-   * here and who may reach it did not change.
-   */
-  readonly canReorder = computed(() => {
-    const page = this.loaded();
-    if (page === null || !page.canReorder || !page.abilities.canManage) {
-      return false;
-    }
-    return this._reorderable().length > 1;
-  });
-
-  /** The ids To buy draws in reorder mode, in list order. */
-  private readonly _reorderable = computed(() => {
-    const page = this.loaded();
-    if (page === null) {
-      return [];
-    }
-    const lines = this._lineById();
-    return page.lines
-      .filter((row) => {
-        const line = lines.get(row.id);
-        return (
-          line !== undefined && line.quantity > 0 && !this._heldByLive(line)
-        );
-      })
-      .map((row) => row.id);
-  });
-
-  /** A claimed line whose live trip's rows have arrived is drawn by that trip. */
-  private _heldByLive(line: Line): boolean {
-    if (!line.claimed) {
-      return false;
-    }
-    const rows = this._trips.rows();
-    return this._trips
-      .live()
-      .some((trip) =>
-        (rows.get(tripKey(trip)) ?? []).some((row) => row.lineId === line.id)
-      );
-  }
-
   /** The query folded once, for the rows' `<mark>`. */
   readonly highlight = this._view.folded;
 
   /** How many settings are on, for the filter button's badge (section 2). */
   readonly activeCount = this._view.activeCount;
-
-  /** Whether the reorder action is held with a sentence (section 7). */
-  readonly reorderHeld = this._view.holdsReorder;
 
   /**
    * The heading's words: "No category" as a key, or a category's own name from its
@@ -1026,7 +1030,6 @@ export class ListPage {
   // --- One field finds and adds (velista 0117) -------------------------------
 
   private readonly _search = inject(ListSearchNavigation);
-  private readonly _chrome = inject(NavChrome);
   private readonly _composer = viewChild(LineComposer);
 
   /**
@@ -1070,42 +1073,31 @@ export class ListPage {
   /** The id of the results region, which the field names in `aria-controls`. */
   readonly resultsId = 'list-results';
 
-  /** Whether the composer's field has focus. */
-  private readonly _fieldFocused = signal(false);
-
-  /** The composer's field gained or lost focus. */
-  onFieldFocused(focused: boolean): void {
-    this._fieldFocused.set(focused);
-  }
-
   /**
-   * The bar gives the page its room while the field has focus or holds words (rule
-   * F3), so the results reach from the header to the composer.
+   * The first touch or pen drag of the column takes the focus off the field, so a
+   * phone puts its keyboard away (velista `0189`, section 4). The words, the results
+   * and `?search=1` stay, and a field without focus is left alone.
    */
-  private readonly _hideChrome = effect(() => {
-    const composing = this._fieldFocused() || this.typing();
-    untracked(() => this._chrome.setComposing(composing));
-  });
-
-  /** The results heading, which the page scrolls to when the results first show. */
-  private readonly _resultsHeading =
-    viewChild<ElementRef<HTMLElement>>('resultsHeading');
+  releaseField(): void {
+    this._composer()?.releaseFocus();
+  }
 
   /** Whether the results were already on screen at the last render. */
   private _resultsDrawn = false;
 
   /**
-   * When the results first appear, the column scrolls so their heading sits under
-   * the header. The list's progress block goes above the fold while typing and comes
-   * back with the list.
+   * When the results first appear, the column goes to its top (velista `0189`,
+   * decision G), so they start under the field however far down the list somebody
+   * was. The head block is pinned outside the column, so nothing above the results
+   * is lost by it, as on the basket.
    *
    * Not on a return to the page: the results were already on screen when somebody
    * left, and the place they were reading in is what {@link _scroll} puts back.
    */
   private readonly _scrollToResults = afterRenderEffect(() => {
-    const heading = this._resultsHeading()?.nativeElement;
+    const shown = this.typing();
     const column = this._column()?.nativeElement;
-    if (heading === undefined || column === undefined) {
+    if (!shown || column === undefined) {
       if (!this._scroll.returning) {
         this._resultsDrawn = false;
       }
@@ -1116,11 +1108,7 @@ export class ListPage {
       return;
     }
     this._resultsDrawn = true;
-    const top =
-      column.scrollTop +
-      heading.getBoundingClientRect().top -
-      column.getBoundingClientRect().top;
-    column.scrollTo?.({ top, behavior: 'auto' });
+    column.scrollTo?.({ top: 0, behavior: 'auto' });
   });
 
   /** Whether an open of the search entry was asked for and has not landed yet. */
@@ -1223,10 +1211,12 @@ export class ListPage {
     this._translator.loaded();
     const lines = this._lineById();
     return this._dropped().map((entry) => {
-      const replay = entry.replay;
       // Off the entry, not the replay, so an unsure entry is named as the row names
       // the line too.
       const line = lines.get(entry.lineId);
+      // No resend once the line counts in another unit (velista `0182`): the
+      // sentence then says the change may not have been saved.
+      const replay = replayInUnit(entry.replay, line?.unit);
       const name =
         line === undefined ? entry.args['name'] : this._lineName(line);
       return {
@@ -1235,7 +1225,7 @@ export class ListPage {
           `${entry.key}.${replay === null ? 'unsure' : 'lost'}`,
           undefined,
           locale,
-          { ...entry.args, name }
+          { ...entry.args, name, delta: droppedDelta(entry.args, locale) }
         ),
         canResend: replay !== null,
       };
@@ -1248,9 +1238,13 @@ export class ListPage {
     );
   }
 
-  /** "Send it again": the same delta, through the same path as a turn of the reel. */
+  /** "Send it again": the same delta, through the same path as a step. */
   async resendDropped(id: string): Promise<void> {
-    const replay = this._dropped().find((entry) => entry.id === id)?.replay;
+    const entry = this._dropped().find((dropped) => dropped.id === id);
+    const replay = replayInUnit(
+      entry?.replay ?? null,
+      entry === undefined ? undefined : this._lineById().get(entry.lineId)?.unit
+    );
     this.dismissDropped(id);
     if (replay !== null && replay !== undefined) {
       await this.changeQuantity({ lineId: replay.lineId, delta: replay.delta });
@@ -1573,23 +1567,34 @@ export class ListPage {
       );
     });
 
-    // The list follows the line this reader just added. `afterRenderEffect` because the
-    // row has to be in the DOM before the scroller can be measured, and because it runs
-    // in the browser and never on the server (plan 0001, D2).
+    // The column brings the line this reader just added into view, when it is not
+    // (velista `0189`, decision H). `afterRenderEffect` because the row has to be in the
+    // DOM before it can be measured, and because it runs in the browser and never on
+    // the server (plan 0001, D2). Nearest, so it moves the column the least, and only
+    // the column: the field is pinned outside it.
     //
     // Only after an add of the reader's own. Somebody else's line arriving over the
     // socket leaves the scroll alone: moving the page under a thumb that is reaching for
     // a row is how the wrong thing gets ticked off in an aisle.
     afterRenderEffect(() => {
-      // Read, so this runs again for the next thing entered in the same run.
-      const added = this._added();
+      const lineId = this._addedLine();
       const column = this._column()?.nativeElement;
 
-      if (added === 0 || column === undefined) {
+      if (lineId === null || column === undefined) {
         return;
       }
 
-      this._scrollToNewest(column);
+      untracked(() => {
+        const row = Array.from(
+          column.querySelectorAll<HTMLElement>('[data-line-id]')
+        ).find((candidate) => candidate.dataset['lineId'] === lineId);
+        if (row !== undefined && !rowInView(row, column)) {
+          // Instant. The row is already drawn, and an animation here is a delay
+          // before somebody can type the next item.
+          row.scrollIntoView?.({ block: 'nearest', behavior: 'auto' });
+        }
+        this._addedLine.set(null);
+      });
     });
 
     // A line a chat reply linked to (plan 0032, section 8). It scrolls that row into
@@ -1627,9 +1632,8 @@ export class ListPage {
         }
 
         this._handledLine.set(wanted);
-        // Centred rather than at the top, because the sticky composer covers the
-        // bottom of the column and a row revealed against the top edge of a list this
-        // long is a row somebody then has to look for anyway.
+        // Centred rather than at the top, because a row revealed against an edge of a
+        // list this long is a row somebody then has to look for anyway.
         // Optional call: `scrollIntoView` is absent in jsdom and in a server render,
         // and the mark is worth setting either way. Nothing here is load bearing
         // enough to fail a navigation over.
@@ -1642,9 +1646,14 @@ export class ListPage {
       });
     });
 
+    // What the line's sheet over this page did (velista 0192, owner ruling).
+    const stopHearingSheet = inject(LineSheetEvents).listen({
+      lowered: (lineId) => this._sheetLowered(lineId),
+      closed: (lineId) => this._sheetClosed(lineId),
+    });
+
     inject(DestroyRef).onDestroy(() => {
-      // The bar comes back with whatever screen is next (velista `0117`).
-      this._chrome.setComposing(false);
+      stopHearingSheet();
       // What a return to this list comes back to, taken before the stores let go.
       this._returns.keep<ListPageReturn>(listReturnKey(this.listId()), {
         view: this._view.snapshot(),
@@ -1657,7 +1666,8 @@ export class ListPage {
       // given back here, as the basket page gives back `BasketViewStore`.
       this._view.leave();
       this._trips.leave();
-      this.announcement.set('');
+      // Also drops a repeated sentence still waiting for its gap.
+      this._announce('');
       if (this._markTimer !== null) {
         clearTimeout(this._markTimer);
       }
@@ -1670,38 +1680,10 @@ export class ListPage {
   private _markTimer: ReturnType<typeof setTimeout> | null = null;
 
   /**
-   * Put the end of the list on screen.
-   *
-   * The column is the one scroll container on this screen in both run modes, because
-   * the app is a frame that never scrolls (velista 0106), so it is the column that is
-   * asked to move.
-   *
-   * Scrolling to the very end rather than bringing the row into view: the composer is
-   * the next item after the column, so at the end of the scroll the newest line is
-   * directly above the field.
-   */
-  private _scrollToNewest(column: HTMLElement): void {
-    column.scrollTo?.({
-      top: column.scrollHeight,
-      // Instant. The row appeared on the same frame and it is one row away, so an
-      // animation here is a delay before somebody can type the next item, and this
-      // field is built for entering six things in a row.
-      behavior: 'auto',
-    });
-  }
-
-  /**
    * Back to wherever this list was opened from, which on the dashboard's own rows is
    * the dashboard and not this list's group.
    */
   async back(): Promise<void> {
-    if (this.reordering()) {
-      // Android's back ends the mode rather than leaving the page, which is what makes
-      // the mode safe to enter: nothing is lost by getting out of it (rule L4).
-      this.endReorder();
-      return;
-    }
-
     await this._pages.back(
       appPath(this._locale(), this._basePath, 'zones', this.zoneId())
     );
@@ -1719,25 +1701,304 @@ export class ListPage {
    * from `0008`, so Android's back button dismisses it (`0012`, section 4.2).
    */
   openLine(lineId: string): void {
-    if (this.reordering()) {
-      return;
-    }
-
+    // The line's open run is written first, so the sheet reads the amount the row
+    // drew and a Save inside the quiet beat cannot send the old one (velista 0188).
+    this.quantityRuns.flush(lineId);
+    // Read while the row is still drawn: a save to 0 from the sheet hides it, and
+    // focus then goes where it goes for any row that left (velista 0192).
+    const column = this._column()?.nativeElement;
+    this._sheetLine = {
+      lineId,
+      inToBuy: this._inToBuy(lineId),
+      focus: column === undefined ? null : focusAfterLeaving(column, lineId),
+      left: false,
+      due: false,
+    };
     void this._openSheet(['lines', lineId, 'detail']);
   }
 
   /**
-   * One settled adjustment of a line's quantity, as a signed delta.
-   *
-   * **The primary gesture of the page** (velista plan 0043, section 4). The reel has
-   * already snapped, already waited out its idle beat, and already collapsed however
-   * many drags happened inside that window into one number, so this is called once per
-   * adjustment rather than once per step.
+   * The line whose sheet this page opened, until that sheet has closed and focus has
+   * been decided: whether its row was in To buy, where focus goes if the row leaves,
+   * and whether a save from the sheet took the row away (velista `0192`, owner ruling
+   * of 2026-11-16).
+   */
+  private _sheetLine: {
+    readonly lineId: string;
+    readonly inToBuy: boolean;
+    readonly focus: LeavingRowFocus | null;
+    left: boolean;
+    due: boolean;
+  } | null = null;
+
+  /**
+   * A save from the line's sheet was accepted and lowered the line to 0. When that took
+   * its row out of To buy it is said once, as for a row's own stepper; a line now drawn
+   * as a due row is still on screen and says nothing.
+   */
+  private _sheetLowered(lineId: string): void {
+    const opened = this._sheetLine;
+    if (
+      this._teardown.destroying ||
+      opened === null ||
+      opened.lineId !== lineId ||
+      !opened.inToBuy ||
+      opened.left ||
+      this._inToBuy(lineId)
+    ) {
+      return;
+    }
+    const line = this._lineById().get(lineId);
+    if (line === undefined) {
+      return;
+    }
+    opened.left = true;
+    opened.due = this._dueRowDrawn(lineId);
+    const say = this._prepareHidden(line, opened.due);
+    if (say === null) {
+      return;
+    }
+    afterNextRender(
+      () => {
+        if (!this._teardown.destroying) {
+          say();
+        }
+      },
+      { injector: this._injector }
+    );
+  }
+
+  /**
+   * The line's sheet went away. Focus handed back to a row that is gone falls to the
+   * page, so it is moved as for a row that left. Another sheet still open over the
+   * list (the comments, pushed over this one) keeps the decision for later.
+   */
+  private _sheetClosed(lineId: string): void {
+    const opened = this._sheetLine;
+    if (opened === null || opened.lineId !== lineId) {
+      return;
+    }
+    afterNextRender(
+      () => {
+        if (this._teardown.destroying || this._route.firstChild) {
+          return;
+        }
+        if (this._sheetLine === opened) {
+          this._sheetLine = null;
+        }
+        const column = this._column()?.nativeElement;
+        if (
+          !opened.left ||
+          opened.focus === null ||
+          column === undefined ||
+          !focusDropped(column)
+        ) {
+          return;
+        }
+        if (opened.due && focusDueRow(column, lineId, opened.focus)) {
+          return;
+        }
+        focusLeavingTarget(column, opened.focus);
+      },
+      { injector: this._injector }
+    );
+  }
+
+  /**
+   * Set as the page starts going away. Registered here, before `quantityRuns`,
+   * because hooks run in the order they were registered and that one writes the open
+   * runs: the write still goes out, and nothing after it may say, focus or schedule
+   * anything on a view Angular has marked destroyed (`NG0911`), which would also
+   * skip the rest of the page's own teardown.
+   */
+  private readonly _teardown = destroyingFlag();
+
+  /**
+   * The steps of each line, gathered into one run and written after the quiet beat
+   * (velista `0188`, section 4). The rows and the catalog's held lines draw the run's
+   * amount while it is open (decision H); the store, the sections and the sort keep
+   * the stored amount until the run is written. A page that goes away writes its open
+   * runs.
+   */
+  readonly quantityRuns = quantityRuns<string>((lineId, run) =>
+    this._writeRun(lineId, run.to - run.from)
+  );
+
+  /**
+   * One run of a row's stepper, written. A run that takes a line To buy draws to 0
+   * hides its row (velista `0192`): the store patches the amount before the request
+   * goes out, so the row is still drawn when this reads where focus is and is gone
+   * when it reads again. A row the search draws stays at 0 and leaves nothing.
+   */
+  private _writeRun(lineId: string, delta: number): void {
+    if (this._teardown.destroying) {
+      // A number the person watched move is written, and that is all.
+      void this.changeQuantity({ lineId, delta });
+      return;
+    }
+
+    const column = this._column()?.nativeElement;
+    const drawn = this._inToBuy(lineId);
+    const focus =
+      drawn && column !== undefined ? focusAfterLeaving(column, lineId) : null;
+    const line = this._lineById().get(lineId);
+
+    const writing = this.changeQuantity({ lineId, delta });
+
+    if (!drawn || line === undefined) {
+      return;
+    }
+    if (!this._inToBuy(lineId)) {
+      this._afterLeaving(line, focus, column);
+      return;
+    }
+    // A step during the line's unit correction waits for it before the store
+    // patches the amount, so the row is still drawn here. Decided again once the
+    // write has settled.
+    if (line.quantity + delta <= 0) {
+      void writing.then(() => {
+        if (!this._teardown.destroying && !this._inToBuy(lineId)) {
+          this._afterLeaving(line, focus, column);
+        }
+      });
+    }
+  }
+
+  /** Whether the list at rest draws the line in To buy, outside its due rows. */
+  private _inToBuy(lineId: string): boolean {
+    const shown = this.groups();
+    return (
+      shown !== null &&
+      shown.kind === 'groups' &&
+      shown.toBuy.some((row) => row.id === lineId)
+    );
+  }
+
+  /**
+   * The row this reader lowered left To buy. Hidden at 0, it is said in the page's
+   * polite region, and focus that was in it moves to the next row. Drawn now as a due
+   * row, the line is still on screen, so nothing is said and focus moves to the due
+   * row's same control. A due row past the few the section draws is not on screen, so
+   * it is said and focus moves to the next row as for a hidden line. The stepper's own
+   * settled amount is never drawn, because its row is gone in the same render.
+   */
+  private _afterLeaving(
+    line: Line,
+    focus: LeavingRowFocus | null,
+    column: HTMLElement | undefined
+  ): void {
+    const due = this._dueRowDrawn(line.id);
+    const say = this._prepareHidden(line, due);
+    afterNextRender(
+      () => {
+        if (this._teardown.destroying) {
+          return;
+        }
+        say?.();
+        if (focus === null || column === undefined || !focusDropped(column)) {
+          return;
+        }
+        if (due && focusDueRow(column, line.id, focus)) {
+          return;
+        }
+        focusLeavingTarget(column, focus);
+      },
+      { injector: this._injector }
+    );
+  }
+
+  /**
+   * The hidden at zero sentence for a line, readied in the render that takes its row
+   * away, and the call that says it after that render. Null for a line now drawn as a
+   * due row, which says nothing. The same sentence a second time is no change to the
+   * polite region, so it is emptied first and filled again a moment later, in its own
+   * task.
+   */
+  private _prepareHidden(line: Line, due: boolean): (() => void) | null {
+    if (due) {
+      return null;
+    }
+    const sentence = this._translator.t(
+      'list.line.hiddenAtZero',
+      undefined,
+      undefined,
+      { name: this._lineName(line) }
+    );
+    const repeat = this.announcement() === sentence;
+    if (repeat) {
+      this._announce('');
+    }
+    return () => this._say(sentence, repeat);
+  }
+
+  /** A repeated sentence waiting for its gap, which any newer message drops. */
+  private _sayTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * The one writer of the page's polite region. A repeated sentence still waiting for
+   * its gap is dropped first, so it can never replace a newer message.
+   */
+  private _announce(text: string): void {
+    this._cancelSay();
+    this._announcement.set(text);
+  }
+
+  private _cancelSay(): void {
+    if (this._sayTimer !== null) {
+      clearTimeout(this._sayTimer);
+      this._sayTimer = null;
+    }
+  }
+
+  /**
+   * Say a sentence in the page's polite region, after a gap when it repeats: the region
+   * is emptied now and filled again a moment later, because the same text a second
+   * time is no change a screen reader hears.
+   */
+  private _say(
+    sentence: string,
+    repeat = this.announcement() === sentence
+  ): void {
+    if (!repeat) {
+      this._announce(sentence);
+      return;
+    }
+    this._announce('');
+    this._sayTimer = setTimeout(() => {
+      this._sayTimer = null;
+      this._announcement.set(sentence);
+    }, REPEAT_SAY_GAP_MS);
+  }
+
+  /**
+   * Whether the list at rest draws the line as a due row: one of the few the section
+   * shows, and not one behind "Show more suggestions".
+   */
+  private _dueRowDrawn(lineId: string): boolean {
+    return (
+      this.dueSection()?.rows.some((row) => row.lineId === lineId) ?? false
+    );
+  }
+
+  /** Every step of a row's stepper, a press or a repeat of a hold (velista `0188`). */
+  stepQuantity(event: { lineId: string; step: QuantityStep }): void {
+    const page = this.loaded();
+    if (page !== null && !page.abilities.canDecide) {
+      return;
+    }
+    this.quantityRuns.step(event.lineId, event.step);
+  }
+
+  /**
+   * One settled adjustment of a line's quantity, as a signed delta: one run of a
+   * stepper, or a dropped write sent again.
    *
    * The guard is silent and is belt on top of braces: `LineRowVm.adjustable` follows
-   * `canDecide`, so a caller who may not change the number has a reel that does not
-   * move, and the sentence explaining that is on screen from the moment the page draws
-   * rather than appearing after a refusal (section 3.2).
+   * `canDecide`, so a caller who may not change the number has a stepper with no
+   * buttons, and the sentence explaining that is on screen from the moment the page
+   * draws rather than appearing after a refusal (section 3.2). Nothing is announced
+   * here: the stepper says the amount once its presses stop (velista `0188`, decision
+   * E), and a second sentence would say it twice.
    */
   async changeQuantity(event: {
     lineId: string;
@@ -1754,33 +2015,10 @@ export class ListPage {
       reportDropped: true,
     });
     this._afterWrite(outcome, event.lineId, 'lines.write');
-
-    if (outcome === 'succeeded') {
-      // Announced **once**, as the settled result, and not per step of the drag
-      // (section 7). The reel's own `aria-valuenow` is what a keyboard user hears as
-      // they go; this is for the pointer path, where nothing else says out loud that
-      // the number moved.
-      const line = this._lines
-        .linesIn(this.listId())
-        .find((candidate) => candidate.id === event.lineId);
-      if (line !== undefined) {
-        this.announcement.set(
-          this._translator.t(
-            'list.line.quantityChanged',
-            undefined,
-            undefined,
-            {
-              name: this._lineName(line),
-              quantity: line.quantity,
-            }
-          )
-        );
-      }
-    }
   }
 
   /**
-   * Everything the row's decision buttons and grip emit.
+   * Everything the row's decision buttons emit.
    *
    * Edit, comments and delete are not here since velista plan 0083: the row has no menu,
    * and the detail sheet a tap opens is where each of them starts.
@@ -1808,12 +2046,6 @@ export class ListPage {
           'lines.decide'
         );
         return;
-      case 'moveUp':
-        await this._move(event.lineId, -1);
-        return;
-      case 'moveDown':
-        await this._move(event.lineId, 1);
-        return;
     }
   }
 
@@ -1828,10 +2060,10 @@ export class ListPage {
    * the defect plan 0030 section 5 exists to remove.
    */
   async add(entry: LineComposerSubmit): Promise<void> {
-    // Typed words say the page can ask which line (backend `0228`). A card says
-    // nothing new: its products already decide where it lands.
-    const typed = (entry.itemIds ?? []).length === 0;
-    await this._send(entry, typed ? { askIfAmbiguous: true } : undefined);
+    // Every add from the composer can be asked about, typed words and a chosen card
+    // alike: two or more lines it meets are a question, never a guess (the owner's
+    // ruling of 2026-11-16, backend `0260` rule 4).
+    await this._send(entry, { askIfAmbiguous: true });
   }
 
   /**
@@ -1848,6 +2080,10 @@ export class ListPage {
     options: AddLineOptions | undefined,
     listId: string = this.listId()
   ): Promise<void> {
+    // A sentence of the last add goes with the next send, whatever this one answers
+    // (velista `0185`, section 4): a send that is not drawn calls `sent()` only on its
+    // answer, and a failure never does.
+    this.composerNotice.set(null);
     const current = this.loaded();
     const drawn = this._lines.drawsBeforeAnswer(
       listId,
@@ -1859,11 +2095,6 @@ export class ListPage {
 
     if (drawn) {
       this._composer()?.sent();
-      // Before the call, not after it. `addLine` puts the optimistic row on screen
-      // synchronously and only then goes to the network, so both land in one change
-      // detection pass and the list follows the new row on the frame it appears
-      // rather than a round trip later.
-      this._added.update((count) => count + 1);
     }
 
     const outcome = await this._lines.addLine(
@@ -1880,7 +2111,9 @@ export class ListPage {
       entry.itemIds,
       // A chosen card is not named (velista `0144`, section 3).
       entry.named,
-      options
+      options,
+      // A product sold by the kilo is asked for by weight (velista `0182`).
+      entry.unit
     );
 
     this._typedBusy.set(false);
@@ -1891,12 +2124,24 @@ export class ListPage {
         outcome.error instanceof GatewayError &&
         outcome.error.code === 'not_found'
       ) {
-        // The chosen line went while the question was open (backend `0228`, section
-        // 3). The list is still there, so the same add asks again, once: the
-        // question redraws with the lines left, the one line left is raised, or a
-        // line is made. A list that went too answers `not_found` again, and that
-        // one is said as the list being gone.
-        await this._send(entry, { askIfAmbiguous: true }, listId);
+        // The chosen line went while the question was open, or is no longer one the
+        // add meets (backend `0260`, rule 6). The question is already shut; the
+        // words stay, and the add's own failure is drawn under the field where a
+        // refused add says why, so a press of the plus asks again with the lines as
+        // they are now. That region is a polite live one, so it is said once.
+        if (listId !== this.listId()) {
+          return;
+        }
+        // An add that names its line draws no row and leaves the field alone. Typed
+        // words cleared meanwhile come back; a card's name never goes into the
+        // field, because it is not what was typed.
+        if (
+          (entry.itemIds ?? []).length === 0 &&
+          (this._composer()?.content().trim() ?? '') === ''
+        ) {
+          this._composer()?.restore(entry.content);
+        }
+        this._setNotice(this._translator.t('list.error.failed'));
         return;
       }
       const choice = toAddChoice(outcome.error);
@@ -1916,6 +2161,39 @@ export class ListPage {
         this._openChoice(listId, entry, entry.anchor, choice);
         return;
       }
+      const refusal =
+        (entry.itemIds ?? []).length > 0
+          ? toAddUnitRefusal(outcome.error, entry.content)
+          : null;
+      if (refusal !== null) {
+        if (listId !== this.listId()) {
+          // The page went to another list while the add was out, and the
+          // sentence is about the list it left.
+          return;
+        }
+        // The list counts this product in another unit (velista `0185`, section 4):
+        // nothing was made, the row drawn for it is gone, and the words and focus
+        // come back so the person can go to that line. The sentence says why.
+        if (drawn && (this._composer()?.content().trim() ?? '') === '') {
+          this._composer()?.restore(entry.content);
+        }
+        this._setNotice(
+          this._translator.t(
+            addUnitRefusalKey(refusal, 'list'),
+            undefined,
+            this._locale(),
+            { name: refusal.name }
+          )
+        );
+        // The line the sentence names is marked and brought into view, as an add
+        // already on the list does (owner ruling 45 of 2026-11-16). A line the page
+        // does not draw (a filter, a section shut, a line hidden at 0): the sentence
+        // alone.
+        if (refusal.lineId !== null) {
+          this._markTook([refusal.lineId]);
+        }
+        return;
+      }
       if (drawn) {
         this._query.set('');
       }
@@ -1931,27 +2209,65 @@ export class ListPage {
     }
     this._query.set('');
 
+    if (outcome.outcome === 'alreadyOnList') {
+      // The list already asks for it, so nothing was added (velista `0185`, A1):
+      // every line it met is shown, the first brought into view, and marked. A met
+      // line the page does not draw (a filter, a section shut, a page not loaded) is
+      // said on the composer instead; the page changes no filter by itself. Either
+      // way it is said once: the list's live region speaks for a drawn row, the
+      // notice's own region for one that is not.
+      const met = outcome.alreadyOnList;
+      // Named after a line the list draws: an answer to an add nobody could be asked
+      // about can name lines kept at 0 too (backend `0260`, rule 5), which are not
+      // drawn and are passed over by the mark.
+      const named = met.find((line) => line.quantity > 0) ?? met[0];
+      const sentence = this._translator.t(
+        'list.add.alreadyOn',
+        undefined,
+        this._locale(),
+        { name: this._lineName(named ?? outcome.line) }
+      );
+      this._markTook(
+        met.map((line) => line.id),
+        (shown) => {
+          if (listId !== this.listId()) {
+            return;
+          }
+          if (shown) {
+            // A second identical add says it again (`_say` leaves a gap).
+            this._say(sentence);
+          } else {
+            this._setNotice(sentence);
+          }
+        }
+      );
+      return;
+    }
+
     if (outcome.merged) {
       // The units went to a line already on the list, which stays where it is: the
       // page shows it and marks its quantity (target 4).
-      this._markTook(outcome.line.id);
-      this.announcement.set(
+      this._markTook([outcome.line.id]);
+      this._announce(
         this._translator.t('list.addChoice.merged', undefined, this._locale(), {
           name: this._lineName(outcome.line),
-          quantity: new Intl.NumberFormat(this._locale()).format(
-            outcome.line.quantity
+          // In the line's unit: "1,25 kg", not "1250" (velista `0182`).
+          quantity: formatAmount(
+            outcome.line.quantity,
+            outcome.line.unit,
+            this._locale()
           ),
         })
       );
       return;
     }
 
-    if (!drawn) {
-      // A new line after all, drawn now, at the end, which the list follows.
-      this._added.update((count) => count + 1);
-    }
+    // A new line, drawn where the list puts it. The page brings its row into view
+    // once the answer names it, a round trip after a drawn add showed the row, and
+    // that moves only the column (velista `0189`, decision H).
+    this._addedLine.set(outcome.line.id);
     // The name the new row draws, which for a card is the product's.
-    this.announcement.set(this._lineName(outcome.line));
+    this._announce(this._lineName(outcome.line));
   }
 
   /**
@@ -1969,6 +2285,24 @@ export class ListPage {
 
   /** The id of the question's title, for the dialog around it. */
   readonly choiceTitleId = 'list-add-choice-title';
+
+  /**
+   * Which side of its anchor the question opens on (velista `0189`). Below the
+   * composer's plus, which sits at the top of the page, where above it would cover the
+   * head block; above a card's add button in the results, as before.
+   */
+  readonly choiceSide = computed<AnchoredPopoverSide>(() => {
+    const anchor = this.addChoice()?.anchor;
+    return anchor?.closest('.composer-dock') ? 'below' : 'above';
+  });
+
+  /**
+   * Whether the question offers "A new line": for typed words alone (the owner's
+   * ruling of 2026-11-16). A chosen product never makes a second line of itself.
+   */
+  readonly choiceOffersNewLine = computed(
+    () => (this.addChoice()?.entry.itemIds ?? []).length === 0
+  );
 
   /** The name the question's title says, as the first line stores it. */
   readonly choiceName = computed(() => {
@@ -1990,7 +2324,7 @@ export class ListPage {
     }
     const facts = this._catalogFacts();
     const lines = this._lines.linesIn(asked.listId);
-    return addChoiceRows(asked.choice, asked.entry.quantity, {
+    return addChoiceRows(asked.choice, {
       itemOf: (itemId) => this._itemNames.nameOf(itemId),
       favoriteOf: (lineId) =>
         lines.find((line) => line.id === lineId)?.favoriteItemId ?? null,
@@ -2012,7 +2346,9 @@ export class ListPage {
   /** "A new line" was chosen: the same add, as a line of its own. */
   chooseNewLine(): void {
     const asked = this.addChoice();
-    if (asked === null) {
+    if (asked === null || (asked.entry.itemIds ?? []).length > 0) {
+      // Offered for typed words alone; the gateway refuses `newLine` beside
+      // products.
       return;
     }
     this.addChoice.set(null);
@@ -2047,38 +2383,70 @@ export class ListPage {
   }
 
   /**
-   * The line an add just raised, whose quantity carries the amber edge for
-   * {@link TOOK_DURATION_MS} (velista `0170`, target 4).
+   * The lines an add just raised or met, whose quantity carries the amber edge for
+   * {@link TOOK_DURATION_MS} (velista `0170`, target 4; velista `0185`, decision E).
    */
-  readonly tookLine = signal<string | null>(null);
+  readonly tookLines = signal<ReadonlySet<string>>(new Set());
 
   private _tookTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /** Mark a raised row, after the list has scrolled it into view if it was not. */
-  private _markTook(lineId: string): void {
+  /**
+   * One sentence under the composer's row, or null (velista `0185`): a line an add
+   * met that the page does not draw, or why a product could not be added. It goes
+   * on the next words, the next send and its cross. The voice strip sits in the
+   * same place, so the two are never drawn together: whichever came last stays.
+   */
+  readonly composerNotice = signal<string | null>(null);
+
+  /** The cross of the composer's sentence. */
+  dismissNotice(): void {
+    this.composerNotice.set(null);
+  }
+
+  private _setNotice(text: string): void {
+    this.voiceStrip.set(null);
+    this.composerNotice.set(text);
+  }
+
+  /**
+   * Mark the rows an add raised or met, after the list has scrolled the first of
+   * them into view if it was not. `found` runs after the next render, with whether
+   * any of them is drawn.
+   */
+  private _markTook(
+    lineIds: readonly string[],
+    found?: (shown: boolean) => void
+  ): void {
     if (this._tookTimer !== null) {
       clearTimeout(this._tookTimer);
     }
-    this.tookLine.set(lineId);
+    this.tookLines.set(new Set(lineIds));
     this._tookTimer = setTimeout(() => {
       this._tookTimer = null;
-      this.tookLine.set(null);
+      this.tookLines.set(new Set());
     }, TOOK_DURATION_MS);
 
     afterNextRender(
       () => {
         const column = this._column()?.nativeElement;
-        const row = Array.from(
+        const rows = Array.from(
           column?.querySelectorAll<HTMLElement>('[data-line-id]') ?? []
-        ).find((candidate) => candidate.dataset['lineId'] === lineId);
+        );
+        const row = lineIds
+          .map((lineId) =>
+            rows.find((candidate) => candidate.dataset['lineId'] === lineId)
+          )
+          .find((found) => found !== undefined);
         if (column === undefined || row === undefined) {
+          found?.(false);
           return;
         }
         if (!rowInView(row, column)) {
-          // Centred, for the reason a linked row is: the pinned composer covers the
-          // foot of the column. Instant, because the edge is the news, not the trip.
+          // Centred, for the reason a linked row is. Instant, because the edge is the
+          // news, not the trip.
           row.scrollIntoView?.({ block: 'center', behavior: 'auto' });
         }
+        found?.(true);
       },
       { injector: this._injector }
     );
@@ -2115,6 +2483,8 @@ export class ListPage {
     this._tone.play();
 
     this._voiceBusy.set(true);
+    // The strip takes the place under the field (velista `0185`).
+    this.composerNotice.set(null);
     // Said at once, and replaced by the reply or the failure exactly as nothing used
     // to be (velista `0079`, section 5). A turn takes seconds, and a strip that is
     // empty for all of them reads as a recording that went nowhere.
@@ -2167,6 +2537,7 @@ export class ListPage {
 
   /** The microphone did not start. Two sentences, because they read differently. */
   onRecordingFailed(): void {
+    this.composerNotice.set(null);
     this.voiceStrip.set({
       heard: '',
       reply: '',
@@ -2213,26 +2584,39 @@ export class ListPage {
    * A product is held by a line whose products name it. A group is held by a line
    * that follows it, because choosing a group again would make a second line for
    * the same kind of thing. The stepper moves only for somebody who may decide
-   * quantities here, the rule the rows' own reel follows.
+   * quantities here, the rule the rows' own stepper follows.
    */
   readonly holdingsOf = computed(() => {
     const lines = this._lines.linesIn(this.listId());
     const editable = this.loaded()?.abilities.canDecide ?? false;
-    return (suggestion: CatalogSuggestion): readonly SuggestionHolding[] =>
-      lines
+    const names = this._itemNames;
+    return (suggestion: CatalogSuggestion): readonly SuggestionHolding[] => {
+      // The page's records, and the card's own product (velista `0186`, decision
+      // E), so a held line steps as its row on the list steps it.
+      const shown = suggestion.kind === 'item' ? suggestion.item : null;
+      const productOf = (itemId: string) =>
+        names.nameOf(itemId) ?? (shown?.id === itemId ? shown : null);
+      return lines
         .filter((line) =>
           suggestion.kind === 'group'
             ? line.productGroupId === suggestion.group.id
             : line.itemIds.includes(suggestion.item.id)
         )
-        .map((line) => ({
-          key: line.id,
-          lineId: line.id,
-          text: line.content,
-          listName: null,
-          quantity: line.quantity,
-          editable,
-        }));
+        .map((line) => {
+          const step = lineStepOf(line, productOf);
+          return {
+            key: line.id,
+            lineId: line.id,
+            text: line.content,
+            listName: null,
+            // The open run's amount, so a card and the row agree (velista `0188`).
+            quantity: this.quantityRuns.shown(line.id, line.quantity),
+            unit: line.unit,
+            ...(step === null ? {} : { step }),
+            editable,
+          };
+        });
+    };
   });
 
   /**
@@ -2246,14 +2630,14 @@ export class ListPage {
   });
 
   /**
-   * A card's stepper moved a line that already holds the product. The same write as
-   * the row's own reel, so the same guard, the same failure copy and the same
-   * sentence afterwards.
+   * A card's stepper moved a line that already holds the product. The same run as
+   * the row's own stepper, so one write per run, the same guard and the same failure
+   * copy (velista `0188`, section 5.1).
    */
-  async changeHolding(change: SuggestionHoldingChange): Promise<void> {
-    await this.changeQuantity({
+  changeHolding(change: SuggestionHoldingChange): void {
+    this.stepQuantity({
       lineId: change.holding.lineId,
-      delta: change.to - change.from,
+      step: { from: change.from, to: change.to, repeat: change.repeat },
     });
   }
 
@@ -2265,6 +2649,8 @@ export class ListPage {
 
   onComposerQuery(query: string): void {
     this._query.set(query);
+    // The sentence about the last add goes with the next words (velista `0185`).
+    this.composerNotice.set(null);
     // New words are a new add: the open question was about the old ones.
     const asked = this.addChoice();
     if (asked !== null && query.trim() !== asked.entry.content) {
@@ -2359,22 +2745,6 @@ export class ListPage {
     this._lines.dismissNote(lineId);
   }
 
-  startReorder(): void {
-    // The header holds the action and says why, so this is belt on top of braces:
-    // a drag over a searched, sorted or narrowed screen would rewrite positions
-    // nobody can see (velista 0082, section 7).
-    if (this.reorderHeld()) {
-      return;
-    }
-    this.reordering.set(true);
-    this.announcement.set(this._translator.t('list.reorder.started'));
-  }
-
-  endReorder(): void {
-    this.reordering.set(false);
-    this.announcement.set(this._translator.t('list.reorder.ended'));
-  }
-
   openSettings(): void {
     void this._openSheet(['settings']);
   }
@@ -2393,11 +2763,11 @@ export class ListPage {
   /**
    * A due line taken (velista `0089`, sections 2 and 6).
    *
-   * The reel's own write, from zero to the chosen amount, so the line is raised exactly
-   * as a drag would raise it. The write is optimistic, so the line is above zero before
-   * this awaits anything and the row leaves the section at once. A failed write puts the
+   * The stepper's own write, from zero to the chosen amount, so the line is raised
+   * exactly as a step would raise it. The write is optimistic, so the line is above
+   * zero before this awaits anything and the row leaves the section at once. A failed write puts the
    * quantity back, which brings the row back, and says why through the polite region:
-   * the line's own row, where a reel write reports, is not drawn while it is at zero.
+   * the line's own row, where a stepper write reports, is not drawn while it is at zero.
    *
    * Focus moves to the next due row's button, or to the line just added when none is
    * left, and the polite region says the line was added.
@@ -2432,7 +2802,7 @@ export class ListPage {
       return;
     }
 
-    this.announcement.set(
+    this._announce(
       this._translator.t('list.due.added', undefined, undefined, {
         name: this._lineName(line),
       })
@@ -2462,7 +2832,7 @@ export class ListPage {
    */
   async loadOlderTrips(): Promise<void> {
     const outcome = await this._trips.loadMore();
-    this.announcement.set(
+    this._announce(
       outcome.state === 'failed'
         ? this._translator.t('list.trips.olderFailed')
         : this._translator.t('list.trips.arrived', undefined, undefined, {
@@ -2539,76 +2909,6 @@ export class ListPage {
   }
 
   /**
-   * One step of a keyboard reorder, and the sentence that announces it.
-   *
-   * The grip's equivalent, and not optional: a control that only answered a pointer
-   * would put the manual order out of reach of anybody without a working one. Each step
-   * is a whole reorder, which is what the endpoint takes, and it is cheap because the
-   * client already holds every line.
-   */
-  private async _move(lineId: string, by: number): Promise<void> {
-    await this._reorder(lineId, (from) => from + by);
-  }
-
-  /**
-   * A drag on the grip that ended somewhere else.
-   *
-   * The finished index and not each row it passed over, because `line.reorder` takes
-   * the whole order: a drag across four rows is one request rather than four, and the
-   * orders it passed through on the way were never anything anybody asked for.
-   */
-  async moveTo(move: { lineId: string; to: number }): Promise<void> {
-    await this._reorder(move.lineId, () => move.to);
-  }
-
-  /**
-   * Both ways of moving a line, which differ only in how the destination is worked out.
-   *
-   * Sharing this is the point: the keyboard path and the drag path have to produce the
-   * same request and the same sentence, and a second copy of the splice is a second
-   * place for the announcement to go stale.
-   */
-  private async _reorder(
-    lineId: string,
-    destination: (from: number) => number
-  ): Promise<void> {
-    const current = this.loaded();
-    if (current === null) {
-      return;
-    }
-
-    // To buy is what moves (velista 0088, section 7). The lines it shows take the slots
-    // they held among all the list's lines, and every other line keeps its own, so the
-    // whole order is still sent and nothing hidden from the person moves.
-    const all = current.lines.map((line) => line.id);
-    const ids = this._reorderable();
-    const from = ids.indexOf(lineId);
-    if (from < 0) {
-      return;
-    }
-
-    const to = destination(from);
-    const next = reorderWithinSlots(all, ids, lineId, to);
-    if (next === null) {
-      return;
-    }
-
-    const outcome = await this._lines.reorder(this.listId(), next);
-    if (outcome === 'failed') {
-      // Silent, and the list has already reread itself. Somebody deleted a line mid
-      // drag, and the person who dragged has done nothing wrong (section 5.7).
-      return;
-    }
-
-    this.announcement.set(
-      this._translator.t('list.line.movedTo', undefined, undefined, {
-        position: to + 1,
-        total: ids.length,
-      })
-    );
-  }
-
-  /**
    * What a per row write outcome does to the page.
    *
    * `overwritten` and `failed` are drawn on the row itself and need nothing here: the
@@ -2645,7 +2945,7 @@ export class ListPage {
       return;
     }
 
-    this.announcement.set(this._translator.t(key));
+    this._announce(this._translator.t(key));
   }
 
   /** Applies the structural half of a failure. True when it handled the failure. */
@@ -2653,9 +2953,6 @@ export class ListPage {
     switch (listErrorEffect(error, operation)) {
       case 'gone':
         this._gone.set(true);
-        return true;
-      case 'reread':
-        void this._lines.refresh(this.listId());
         return true;
       default:
         return false;
@@ -2689,19 +2986,6 @@ export class ListPage {
 const MARK_DURATION_MS = 4000;
 
 /**
- * Whether a row is wholly inside the scrolling column, less the pinned composer at
- * its foot. Reads geometry, so it says yes where there is none to read (jsdom), and
- * nothing scrolls there.
- */
-function rowInView(row: HTMLElement, column: HTMLElement): boolean {
-  const box = row.getBoundingClientRect();
-  const frame = column.getBoundingClientRect();
-  const dock = column.querySelector<HTMLElement>('.composer-dock');
-  const foot = dock === null ? frame.bottom : dock.getBoundingClientRect().top;
-  return box.top >= frame.top && box.bottom <= foot;
-}
-
-/**
  * The words above a list shown one category at a time: this app's own for "No
  * category", and the catalog's name for every other (velista `0118`). A union rather
  * than a string, for the reason the basket's section heading gives: nothing may have
@@ -2710,3 +2994,20 @@ function rowInView(row: HTMLElement, column: HTMLElement): boolean {
 type ListCategoryHeading =
   | { readonly kind: 'key'; readonly key: string }
   | { readonly kind: 'text'; readonly text: string };
+
+/**
+ * The change a dropped note names, in the line's unit: "+250 g", not "+250"
+ * (velista `0182`). An entry written before the unit rode along, or with one this
+ * build cannot read, keeps the bare number it was written with.
+ */
+function droppedDelta(
+  args: Readonly<Record<string, string>>,
+  locale: string
+): string {
+  const written = args['delta'] ?? '';
+  const unit = LINE_UNITS.find((one) => one === args['unit']);
+  const delta = Number(written);
+  return unit === undefined || !Number.isInteger(delta) || delta === 0
+    ? written
+    : formatQuantityChange(delta, unit, locale);
+}

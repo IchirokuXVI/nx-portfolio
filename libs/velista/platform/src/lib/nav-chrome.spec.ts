@@ -112,22 +112,17 @@ describe('NavChrome', () => {
   });
 
   /**
-   * Velista `0117`, rule F3: while a list's field has focus or holds words, the bar
-   * is neither drawn nor given room, so the results of what is typed take its place.
+   * Velista `0189`, section 5: a list's page draws the bar and keeps its room whatever
+   * its field is doing, because the service has no state for typing any more.
    */
-  it('neither draws nor reserves the bar while somebody types into a list', async () => {
+  it('draws and reserves the bar on a list, with no state for typing', async () => {
     const chrome = await goTo('/zones/z1/lists/l1');
     chrome.setUsable(true);
 
-    chrome.setComposing(true);
-
-    expect(chrome.visible()).toBe(false);
-    expect(chrome.reserved()).toBe(false);
-
-    chrome.setComposing(false);
-
     expect(chrome.visible()).toBe(true);
     expect(chrome.reserved()).toBe(true);
+    expect('setComposing' in chrome).toBe(false);
+    expect('composing' in chrome).toBe(false);
   });
 
   it('reserves nothing on a screen the bar is not drawn on at all', async () => {

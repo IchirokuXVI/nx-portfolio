@@ -52,6 +52,15 @@ export interface LidlListRow {
   siteCategory: string;
   /** The need world path, root first, as the index printed it. */
   categoryPath: string[];
+  /**
+   * `wonCategoryBreadcrumbs` of the row's `meta` (plan 0268): every path of
+   * the online shop tree the chain files the row under, each root first, in
+   * the chain's own names. Null when the row states no such list, or a list
+   * that is not empty and of which no path can be read. That is not the same
+   * as an empty one: an empty list says the chain files it nowhere in that
+   * tree.
+   */
+  categoryBreadcrumbs: string[][] | null;
   /** `canonicalPath`, e.g. `/p/uva-blanca/p11029954`. Relative to the base URL. */
   path: string | null;
   /** The printed size, verbatim: `500 g`, `6x200ml`, `Aprox. 950g`, `Paquete`. */
@@ -124,8 +133,39 @@ export interface LidlProduct {
    * null when the table names no node of it. A slug and never an id.
    */
   categorySlug: string | null;
+  /**
+   * Every category path the chain files the product under (plan 0268): the
+   * need world path {@link categoryPath} first, when there is one, then each
+   * path of `wonCategoryBreadcrumbs`, without repeats. Names verbatim. A page
+   * list read in full that yields at least one path is used alone. A page that
+   * leaves the list out, states it empty, or states one of which no path can
+   * be read falls back to the index row's list (owner decision 101b). A page
+   * list read only in part gives its readable paths and then the row's paths
+   * (owner decision 115b).
+   */
+  categoryPaths: string[][];
+  /**
+   * Whether the page itself stated both fields the paths come from: its need
+   * world path and a `wonCategoryBreadcrumbs` list that is not empty, every
+   * breadcrumb of which could be read. Only then are {@link categoryPaths}
+   * every place the chain files the product under that a read can reach. A
+   * path taken from the index row, a list the page left out, an empty list,
+   * or a list with a part the code could not read, proves nothing about a
+   * path stored before (owner decision 95b for the empty list).
+   */
+  categoryPathsStated: boolean;
+  /** Null beside an {@link approxWeight}: a weight that varies is no size. */
   unitSize: number | null;
+  /** Null beside an {@link approxWeight}, as {@link unitSize} is. */
   unit: UnitOfMeasure | null;
+  /**
+   * The approximate weight of one piece in grams (plan 0244, section 5.2):
+   * the number of a printed `Aprox. 350 g`. LIDL prints one price for such a
+   * tray and no price per kilo, so the row is a piece priced as one and never
+   * sold by weight. Null for a size it promises, for a printed range and for
+   * anything that is not a weight.
+   */
+  approxWeight: number | null;
   /** The printed size, verbatim, so nothing is lost when the parse gives up. */
   sizeFormat: string | null;
   /** The `N` of a printed `NxQ` (plan 0162), or null for a size that multiplies nothing. */
@@ -187,7 +227,10 @@ export interface LidlClientOptions {
   storesUrl?: string;
   /** Defaults to {@link LIDL_PUBLIC_STORES_API_KEY}. A 401 means it rotated. */
   storesApiKey?: string;
-  /** How many index rows one request asks for. The endpoint caps it at 1,000. */
+  /**
+   * How many index rows one request asks for. The endpoint serves fewer, 60
+   * on 2026-11-08, and the walk steps by what it served (plan 0256).
+   */
   pageSize?: number;
   /**
    * Awaited before **every** request. This is where the harvester passes its per

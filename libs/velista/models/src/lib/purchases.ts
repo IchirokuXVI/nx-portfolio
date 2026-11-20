@@ -8,6 +8,8 @@
  * shopping lists page draws them.
  */
 
+import type { LineUnit } from './line-unit';
+
 /**
  * `BASKET` or `SESSION`, upper case on the wire.
  *
@@ -30,6 +32,11 @@ export interface PurchaseSpend {
   readonly currency: string;
   /** Bought lines with no recorded price. The amount above says nothing about them. */
   readonly unpricedCount: number;
+  /**
+   * Whether the amount is an estimate (velista `0182`, backend `0246` M7): a
+   * purchase weighed or measured, or a kilo piece, priced it.
+   */
+  readonly estimated: boolean;
 }
 
 /** One entry of the history: a finished basket, or a session. */
@@ -42,6 +49,12 @@ export interface PurchaseEntry {
   readonly startedAt: Date;
   /** How many purchases the entry holds: the lines it bought something of. */
   readonly purchaseCount: number;
+  /**
+   * What the entry bought, per unit (velista `0182`, backend `0246` section
+   * 3.5): `{ UNIT: 2, GRAM: 750 }`. A unit with nothing bought is absent, and
+   * no screen adds two units together.
+   */
+  readonly bought: Readonly<Partial<Record<LineUnit, number>>>;
   /**
    * Null when no purchase of the entry had a price, and also when the server could
    * not add its prices up (two currencies). Either way there is no amount to print.
@@ -60,8 +73,16 @@ export interface PurchaseEntryRow {
   /** Null when the reader can no longer read the list it was on (backend `0142`). */
   readonly content: string | null;
   readonly itemId: string | null;
+  /** What was bought, in {@link unit}. */
   readonly quantity: number;
-  /** What **one unit** cost, or null when nothing recorded it. */
+  /** What {@link quantity} counts (velista `0182`). */
+  readonly unit: LineUnit;
+  /** Whether what the row cost is an estimate (backend `0246` M7). */
+  readonly estimated: boolean;
+  /**
+   * What **one** of {@link unit} cost, or null when nothing recorded it: one piece
+   * or pack, or one kilo or one litre for a weight or a volume.
+   */
   readonly unitPriceCents: number | null;
   /** Null exactly when {@link unitPriceCents} is. */
   readonly currency: string | null;

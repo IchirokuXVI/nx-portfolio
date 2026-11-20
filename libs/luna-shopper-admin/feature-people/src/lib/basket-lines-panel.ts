@@ -22,6 +22,7 @@ import {
   basketSettlements,
   type BasketSettlementView,
 } from './basket-settlements';
+import { lineAmountText } from './line-amount-text';
 import { instant } from './people-format';
 import type { BasketRow } from './people-seed';
 import { PEOPLE_STYLES } from './people-styles';
@@ -61,7 +62,15 @@ export interface SettlementLine {
   readonly id: string;
   readonly outcome: BasketSettlementView['outcome'];
   readonly quantity: number;
-  /** What was paid, as money, or empty for a settlement with no price. */
+  /**
+   * How much was bought, drawn in its unit: "×2" for pieces, "750 g" for a
+   * weight (backend plan 0246, section 6).
+   */
+  readonly amount: string;
+  /**
+   * What was paid for one of the unit, as money, or empty for a settlement
+   * with no price: a piece, or a kilo or litre of a weight or volume.
+   */
   readonly paid: string;
   /** The shop it was settled at, or empty. Its name and never its id. */
   readonly shop: string;
@@ -116,12 +125,17 @@ export interface SettlementLine {
                   <span class="row-line">
                     {{
                       'people.baskets.bought'
-                        | rokuT: { bought: line.bought, asked: line.asked }
+                        | rokuT
+                          : {
+                              bought: amount(line.bought, line.unit),
+                              asked: amount(line.asked, line.unit),
+                            }
                     }}
                   </span>
                 </span>
                 <span class="num">{{
-                  'people.baskets.left' | rokuT: { count: line.left }
+                  'people.baskets.left'
+                    | rokuT: { count: amount(line.left, line.unit) }
                 }}</span>
               </div>
 
@@ -138,7 +152,7 @@ export interface SettlementLine {
                               settlement.outcome | rokuT
                           }}
                         </span>
-                        <span class="num">×{{ settlement.quantity }}</span>
+                        <span class="num">{{ settlement.amount }}</span>
                         @if (settlement.paid !== '') {
                           <span class="paid num">{{ settlement.paid }}</span>
                         } @else {
@@ -321,6 +335,14 @@ export class BasketLinesPanel {
     });
   }
 
+  /**
+   * A row's number in the row's unit (backend plan 0246, section 6): the
+   * number itself for pieces, "750 g" for a weight.
+   */
+  amount(quantity: number, unit: unknown): string {
+    return lineAmountText(quantity, unit, this._translator.locale());
+  }
+
   /** One row's settlements, formatted for the screen. */
   settlementsOf(rowKey: string): readonly SettlementLine[] {
     const names = this._names();
@@ -334,6 +356,10 @@ export class BasketLinesPanel {
         id: settlement.id,
         outcome: settlement.outcome,
         quantity: settlement.quantity,
+        amount:
+          settlement.unit === 'UNIT'
+            ? `×${settlement.quantity}`
+            : lineAmountText(settlement.quantity, settlement.unit, locale),
         paid: formatCurrencyAmount(
           settlement.paid,
           settlement.currency,

@@ -17,6 +17,9 @@ import {
   catalogName,
   LINE_PRICED_PRODUCTS_MAX,
   lineSupermarketRows,
+  priceWordsText,
+  soldAsOf,
+  type ProductOffer,
 } from '@portfolio/velista/models';
 import { formatMoney, SheetNavigation } from '@portfolio/velista/platform';
 import {
@@ -168,11 +171,7 @@ export class LineSupermarketSheet {
           price:
             row.lowest !== null && row.lowest.price !== null
               ? this._translator.t('list.supermarket.from', undefined, locale, {
-                  price: formatMoney(
-                    row.lowest.price,
-                    row.lowest.currency,
-                    locale
-                  ),
+                  price: this._fromPrice(row.lowest, row.lowest.price, locale),
                 })
               : null,
           selected: row.selected,
@@ -180,6 +179,26 @@ export class LineSupermarketSheet {
       }),
     ];
   });
+
+  /**
+   * The lowest price of a supermarket as words. The lowest is compared by
+   * `price`, which is a price per kilo for a kilo piece, so a kilo piece says
+   * "/ kg" after it (velista `0179`): a set piece price names one, as the offer
+   * alone can tell.
+   */
+  private _fromPrice(
+    lowest: ProductOffer,
+    price: number,
+    locale: string
+  ): string {
+    const amount = formatMoney(price, lowest.currency, locale);
+    return soldAsOf(lowest, null) === 'KILO_PIECE'
+      ? priceWordsText({
+          amount,
+          per: this._translator.t('catalog.per.KILOGRAM', undefined, locale),
+        })
+      : amount;
+  }
 
   constructor() {
     // The prices of the products the cards did not read yet, and the context.

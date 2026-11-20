@@ -79,12 +79,13 @@ export interface ReadableListRow {
  */
 export const LINES_HOLDING_ITEM_SQL = `
   SELECT held."id", held."listId", held."content", held."quantity",
-         held."approvalStatus"
+         held."unit", held."approvalStatus"
   FROM (
     SELECT ll.id AS "id",
            ll."listId" AS "listId",
            ll."content" AS "content",
            ll.quantity AS "quantity",
+           ll."unit"::text AS "unit",
            ll."approvalStatus" AS "approvalStatus",
            row_number() OVER (
              PARTITION BY ll."listId"
@@ -107,5 +108,7 @@ export interface LineHoldingItemRow {
   listId: string;
   content: string;
   quantity: number;
+  /** The line's `LineUnit`, read as text. */
+  unit: string;
   approvalStatus: string;
 }

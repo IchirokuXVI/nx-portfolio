@@ -737,6 +737,41 @@ describe('BasketStore', () => {
       await pending;
       expect(store.busyRows().has(first.rowKey)).toBe(false);
     });
+
+    it('keeps the row busy until the last of two writes on it is back', async () => {
+      // Two lines of one row can each send a demand from the settle sheet
+      // (velista `0190`), and both are counted on the row's key.
+      const releases: (() => void)[] = [];
+      const memory = new BasketMemory();
+      const { store } = build({
+        getBasket: () => memory.getBasket(),
+        settle: (id, rowKey, body) =>
+          new Promise((resolve) => {
+            releases.push(() => resolve(memory.settle(id, rowKey, body)));
+          }),
+      });
+      await store.open('basket-saturday');
+
+      const first = store.rows()[0];
+      const one = store.settle(first.rowKey, {
+        outcome: 'BOUGHT',
+        quantity: 1,
+        from: first.left,
+      });
+      const two = store.settle(first.rowKey, {
+        outcome: 'BOUGHT',
+        quantity: 1,
+        from: first.left,
+      });
+
+      releases[0]();
+      await one;
+      expect(store.busyRows().has(first.rowKey)).toBe(true);
+
+      releases[1]();
+      await two;
+      expect(store.busyRows().has(first.rowKey)).toBe(false);
+    });
   });
 
   describe('the share link', () => {
@@ -1663,7 +1698,7 @@ describe('BasketStore: moving a row’s reel', () => {
     expect(sent).toEqual([
       {
         target: { rowKey: milk.rowKey, lineIds: ['zl-1', 'zl-2'] },
-        body: { outcome: 'BOUGHT', quantity: 2, from: milk.left },
+        body: { outcome: 'BOUGHT', quantity: 2, from: milk.left, unit: 'UNIT' },
       },
     ]);
   });
@@ -1769,6 +1804,61 @@ describe('BasketStore: moving a row’s reel', () => {
     // And the failure is still there to be named, rather than cleared by the read
     // that followed it.
     expect((store.error() as GatewayError).code).toBe('stale_quantity');
+  });
+
+  /**
+   * Velista `0182`, criterion 7: the line counts in another unit now. Read again as
+   * for a stale quantity, so the server's row replaces the preview, and no error is
+   * kept, because the person did nothing wrong.
+   */
+  it('reads the basket again on a line_unit_mismatch and keeps no error', async () => {
+    let reads = 0;
+    const memory = new BasketMemory();
+    const sent: (string | undefined)[] = [];
+    const { store } = build({
+      getBasket: () => {
+        reads += 1;
+        return memory.getBasket();
+      },
+      settle: (id, rowKey, body) => {
+        sent.push(body.unit);
+        return memory.settle(id, rowKey, { ...body, unit: 'GRAM' });
+      },
+    });
+    await store.open('basket-saturday');
+    const readsAfterOpen = reads;
+    const milk = rowOf(store, 'Milk');
+
+    const result = await store.setLeft(milk.rowKey, 0, milk.left);
+
+    // The store sent the row's own unit; the fake answered as a server whose line
+    // had moved to grams meanwhile.
+    expect(sent).toEqual(['UNIT']);
+    expect(result).toBeNull();
+    expect(reads).toBe(readsAfterOpen + 1);
+    expect(store.error()).toBeNull();
+  });
+
+  it('sends the unit of the entry on a demand (velista 0182)', async () => {
+    const memory = new BasketMemory();
+    const sent: (string | undefined)[] = [];
+    const { store } = build({
+      getBasket: () => memory.getBasket(),
+      setDemand: (id, body) => {
+        sent.push(body.unit);
+        return memory.setDemand(id, body);
+      },
+    });
+    await store.open('basket-saturday');
+    const milk = rowOf(store, 'Milk');
+
+    await store.setDemand({
+      lineId: milk.entries[0].lineId,
+      quantity: milk.entries[0].asked + 1,
+      from: milk.entries[0].left,
+    });
+
+    expect(sent).toEqual(['UNIT']);
   });
 });
 
@@ -2446,7 +2536,7 @@ describe('BasketStore: skip, demand and the add', () => {
     expect(store.state()).toBe('ready');
   });
 
-  it('folds an add that merged in place, rather than drawing a second row', async () => {
+  it('folds an add that met a line in place, rather than drawing a second row', async () => {
     // The add goes through the target list\u2019s own rules, so it can land on a
     // line the list already held (backend `0091`). The answer is then a row
     // already on the screen under a key nobody named.
@@ -2454,10 +2544,10 @@ describe('BasketStore: skip, demand and the add', () => {
     await store.open('basket-saturday');
     const rows = store.rows().length;
 
-    await store.addLine({
+    const result = await store.addLine({
       targetListId: 'list-weekly',
       content: 'milk',
-      quantity: 2,
+      quantity: 1,
       // The products that line holds: the name alone is not a match.
       itemIds: [
         'item-milk-hacendado',
@@ -2467,7 +2557,9 @@ describe('BasketStore: skip, demand and the add', () => {
     });
 
     expect(store.rows()).toHaveLength(rows);
-    expect(rowOf(store, 'Milk').entries[0].left).toBe(4);
+    // Already asked for, so nothing was added (velista 0185, backend 0260).
+    expect(result?.addOutcome).toBe('alreadyOnList');
+    expect(rowOf(store, 'Milk').entries[0].left).toBe(2);
   });
 
   it('says when an add is out, and stops when it lands', async () => {
@@ -3106,6 +3198,7 @@ describe('BasketStore: a buy reaches the other phone at once (velista 0143)', ()
     /** Yoghurt, under a parent the read's products do not use. */
     const YOGHURT: BasketProduct = {
       id: 'item-yoghurt',
+      quantityStep: null,
       name: { en: 'Natural yoghurt, 4', es: 'Yogur natural, 4' },
       brand: 'Hacendado',
       productGroupId: null,
@@ -3117,6 +3210,7 @@ describe('BasketStore: a buy reaches the other phone at once (velista 0143)', ()
       imageUrl: null,
       categories: [memoryCategory('natural-and-skimmed-yogurts')],
       sectionIds: null,
+      approxWeight: null,
     };
 
     async function grouped(overrides: Partial<BasketServiceI> = {}) {

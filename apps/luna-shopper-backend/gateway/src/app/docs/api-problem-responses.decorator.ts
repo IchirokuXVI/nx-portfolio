@@ -78,12 +78,33 @@ export interface ProblemResponseOptions {
    */
   lineMerge?: boolean;
   /**
-   * The route adds a line, so a typed name that two or more lines hold with a
-   * product can answer 409 with a code of its own when the body set
-   * `askIfAmbiguous` (plan 0228). It is told apart from a plain conflict
-   * because the client asks the person which line, from `details.lines`.
+   * The route adds a line, so an add that meets two or more lines, wanted or
+   * at zero, can answer 409 with a code of its own when the body set
+   * `askIfAmbiguous` (plan 0228; the owner, 2026-11-16). It is told apart
+   * from a plain conflict because the client asks the person which line,
+   * from `details.lines`. It is never asked about a unit.
    */
   lineAddChoice?: boolean;
+  /**
+   * The route moves a number in the unit the body names, so a unit that is
+   * not the line's answers 409 `line_unit_mismatch` (plan 0246, section 3.2).
+   * Told apart from a plain conflict because the client reads the line again.
+   */
+  lineUnitMismatch?: boolean;
+  /**
+   * The route renames lines, so a merge of two lines of different units
+   * answers 409 `line_unit_differs` (plan 0246, section 3.3), or it adds a
+   * line, and a product add that meets only lines of another unit answers it
+   * with the line in `details.line`, the add's unit in `details.unit` and the
+   * batch item in `details.index` (plan 0260, section 3).
+   */
+  lineUnitDiffers?: boolean;
+  /**
+   * The route names a unit or the products of a line, so a unit the products
+   * cannot be counted in answers 422 `line_unit_not_offered`, with the units
+   * the line does offer in `details.offered` (plan 0246, section 4.2).
+   */
+  lineUnitNotOffered?: boolean;
   /**
    * The route reads the catalog at one shop (plan 0170): `locationId` beside
    * another selector is a 400 of its own code, and an unknown shop a 404 of
@@ -115,7 +136,8 @@ export interface ProblemResponseOptions {
    * The route writes a product's unit or size (plan 0237, section 3.3), so a
    * unit the catalog does not store answers 400 with one of two codes of its
    * own: `LITER` or `PACK`, and `KILOGRAM` with a size. Each names what the
-   * client should send instead.
+   * client should send instead. Since plan 0244 it also writes the weight of
+   * a piece, so a weight beside a size answers a third code.
    */
   baseUnit?: boolean;
   /**
@@ -272,6 +294,15 @@ export function ApiProblemResponses(
   if (options.lineAddChoice) {
     codes.push(ERROR_CODES.LINE_ADD_NEEDS_CHOICE);
   }
+  if (options.lineUnitMismatch) {
+    codes.push(ERROR_CODES.LINE_UNIT_MISMATCH);
+  }
+  if (options.lineUnitDiffers) {
+    codes.push(ERROR_CODES.LINE_UNIT_DIFFERS);
+  }
+  if (options.lineUnitNotOffered) {
+    codes.push(ERROR_CODES.LINE_UNIT_NOT_OFFERED);
+  }
   if (options.atLocation) {
     codes.push(
       ERROR_CODES.CATALOG_LOCATION_EXCLUSIVE,
@@ -302,7 +333,11 @@ export function ApiProblemResponses(
   if (options.baseUnit) {
     codes.push(
       ERROR_CODES.ITEM_UNIT_NOT_BASE,
-      ERROR_CODES.ITEM_KILOGRAM_HAS_SIZE
+      ERROR_CODES.ITEM_KILOGRAM_HAS_SIZE,
+      // Plan 0244, section 3.2: a weight never beside a size.
+      ERROR_CODES.ITEM_APPROX_WEIGHT_BESIDE_SIZE,
+      // Plan 0261, section 3: a step only on a product by the kilo.
+      ERROR_CODES.ITEM_QUANTITY_STEP_NOT_ALLOWED
     );
   }
   if (options.itemExpectation) {

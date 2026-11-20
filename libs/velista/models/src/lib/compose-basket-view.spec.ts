@@ -194,10 +194,13 @@ function offer(priceScopeId: string, price: number | null): ProductOffer {
     currency: 'EUR',
     unitPrice: null,
     unitPriceLabel: null,
+    comparablePrice: null,
+    comparableBasis: null,
     observedAt: null,
     sourceKind: 'OFFICIAL_WEB',
     stale: false,
     priceScopeId,
+    piecePrice: null,
   };
 }
 

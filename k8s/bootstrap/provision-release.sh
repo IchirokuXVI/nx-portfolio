@@ -191,7 +191,11 @@ OPERATOR_KEYS="LEGAL_APP_NAME LEGAL_CONTROLLER_NAME LEGAL_CONTACT_EMAIL LEGAL_HO
 # The eight operator keys join by the same rule (plan 0231): a deployment that
 # has published nothing boots and answers `published: false`. The one empty
 # that is wrong is checked on its own below, after the loop.
-OPTIONAL_EMPTY_KEYS="GOOGLE_CLIENT_SECRET SMTP_PASS ANTHROPIC_API_KEY $OPERATOR_KEYS"
+#
+# HARVEST_ALERT_EMAIL joins them by the same rule (plan 0218, section 8): with
+# it empty the harvester records each alert as SUPPRESSED and sends nothing,
+# which is how staging runs by default.
+OPTIONAL_EMPTY_KEYS="GOOGLE_CLIENT_SECRET SMTP_PASS ANTHROPIC_API_KEY HARVEST_ALERT_EMAIL $OPERATOR_KEYS"
 
 is_optional_empty() {
   case " $OPTIONAL_EMPTY_KEYS " in
@@ -859,6 +863,22 @@ else
   echo "  not a terminal: leaving GOOGLE_CLIENT_SECRET, SMTP_PASS and ANTHROPIC_API_KEY as they are"
 fi
 
+# Who hears when a harvest run fails (plan 0218, section 8). One setting for
+# the deployment, never one per chain, and a comma separated list is accepted.
+# It is prompted for with --env production ONLY: any other environment keeps
+# the value its cluster holds or writes it empty, so staging is quiet by
+# default and an operator who wants staging mail edits the Secret on purpose.
+# It is a Secret key and not a values field because the values files are in
+# the repository, and an address committed there is an address published.
+HARVEST_ALERT_EMAIL="$(existing "$APP_SECRET" HARVEST_ALERT_EMAIL)"
+if [ "$ENVIRONMENT" = production ] && [ -z "$HARVEST_ALERT_EMAIL" ]; then
+  if [ -t 0 ]; then
+    read -rp "  Harvest alert address, or several separated by commas (blank for none): " HARVEST_ALERT_EMAIL
+  else
+    echo "  not a terminal: HARVEST_ALERT_EMAIL stays empty, so no harvest alert is mailed"
+  fi
+fi
+
 # ---------------------------------------------------------------------------
 # The point of the whole script (plan 0006, section 2, item 3).
 #
@@ -900,7 +920,8 @@ apply_secret "$APP_SECRET" \
   --from-literal=AUTH_JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY"   --from-literal=ADMIN_JWT_PRIVATE_KEY="$ADMIN_JWT_PRIVATE_KEY"   --from-literal=ADMIN_JWT_PUBLIC_KEY="$ADMIN_JWT_PUBLIC_KEY" \
   --from-literal=GOOGLE_CLIENT_SECRET="$GOOGLE_CLIENT_SECRET" \
   --from-literal=SMTP_PASS="$SMTP_PASS" \
-  --from-literal=ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"
+  --from-literal=ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
+  --from-literal=HARVEST_ALERT_EMAIL="$HARVEST_ALERT_EMAIL"
 
 # The operator's legal values (plan 0231). With --operator-file, exactly the
 # file's keys. Without it, every existing value is kept, as for every other key,
@@ -975,6 +996,7 @@ ${APP_SECRET}/HARVESTER_ACTOR_ID: ${HARVESTER_ACTOR_ID}
 ${APP_SECRET}/GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
 ${APP_SECRET}/SMTP_PASS: ${SMTP_PASS}
 ${APP_SECRET}/ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+${APP_SECRET}/HARVEST_ALERT_EMAIL: ${HARVEST_ALERT_EMAIL}
 
 ${APP_SECRET}/AUTH_JWT_PRIVATE_KEY:
 ${JWT_PRIVATE_KEY}

@@ -1,3 +1,5 @@
+import { toLineAmountUnit, type LineAmountUnit } from './line-amount-text';
+
 /**
  * What a basket row was settled as, in this app's own shape (admin plan 0033;
  * backend plan 0160).
@@ -15,7 +17,12 @@ export interface BasketSettlementView {
   readonly id: string;
   readonly outcome: SettlementOutcome;
   readonly quantity: number;
-  /** The amount paid, in the currency's own units, or `null` for no price. */
+  /** What `quantity` counts (backend plan 0246), pieces when absent. */
+  readonly unit: LineAmountUnit;
+  /**
+   * The price of one of {@link unit} in the currency's own units, or `null`
+   * for no price: a piece or pack, or a kilo or litre (backend plan 0246 M7).
+   */
   readonly paid: number | null;
   readonly currency: string | null;
   readonly supermarketLocationId: string | null;
@@ -48,6 +55,7 @@ export function toBasketSettlement(
     id,
     outcome: toSettlementOutcome(row['outcome']),
     quantity: typeof row['quantity'] === 'number' ? row['quantity'] : 0,
+    unit: toLineAmountUnit(row['unit']),
     paid:
       typeof cents === 'number' && Number.isFinite(cents) ? cents / 100 : null,
     currency: stringOrNull(row['pricePaidCurrency']),

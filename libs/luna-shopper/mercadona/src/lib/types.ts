@@ -32,12 +32,22 @@ export interface MercadonaProduct {
   /** Detail only. Empty on the handful of novelty products that carry no brand. */
   brand: string | null;
   /**
-   * `approx_size` on a product sized in `kg` (plan 0181): a piece whose
-   * weight is not the same on every pack. Its {@link unitSize} is null and its
-   * {@link price} is the price of a kilo.
+   * `approx_size` on a product sized in `kg` that the chain compares per kilo
+   * (plans 0181 and 0244): a piece whose weight is not the same on every
+   * pack. Its {@link unitSize} is null and its {@link price} is the price of
+   * a kilo. A piece compared per piece is not sold by weight: it is priced as
+   * one, and only its {@link approxWeight} says it varies.
    */
   soldByWeight: boolean;
-  /** Null for a product sold by weight, whose stated weight is an estimate. */
+  /**
+   * The approximate weight of one piece in grams (plan 0244, section 5.1):
+   * `unit_size` times 1000, rounded to four decimals, when `approx_size` is
+   * true and `size_format` is `kg`. Set for a piece sold by the kilo and for
+   * a piece priced as one alike. Null otherwise, and always null beside a
+   * {@link unitSize}.
+   */
+  approxWeight: number | null;
+  /** Null for an approximate piece, whose stated weight is an estimate. */
   unitSize: number | null;
   /** Null for `size_format: 'm'`, which has no `UnitOfMeasure` value. */
   unit: UnitOfMeasure | null;
@@ -54,6 +64,13 @@ export interface MercadonaProduct {
   categorySlug: string | null;
   /** The path the walk took to reach it, deepest last. Drives the category map. */
   categoryPath: string[];
+  /**
+   * Every branch of the detail payload's own `categories`, each root first
+   * and deepest last (plan 0268, section 3). Read from the payload whatever
+   * path the walk passed, and never read by the category map. Empty for a
+   * product the warehouse does not stock.
+   */
+  detailCategoryPaths: string[][];
   /**
    * `unit_price`: the price of the pack. This is the price. For a product
    * sold by weight it is `bulk_price`, the price of a kilo (plan 0181).
@@ -97,6 +114,12 @@ export interface MercadonaCategory {
 export interface MercadonaListProduct {
   externalId: string;
   displayName: string;
+  /**
+   * The container the chain prints (`Brik`, `Botella`, `Pack-4`), verbatim, or
+   * null (plan 0248, section 2). It is not a count: the count of a pack is
+   * {@link packCount}. Two containers of one product share a name and a size,
+   * and this is what tells them apart.
+   */
   packaging: string | null;
   shareUrl: string | null;
   /** As on {@link MercadonaProduct.thumbnail}: the listing carries the field. */
@@ -104,6 +127,11 @@ export interface MercadonaListProduct {
   published: boolean;
   /** As on {@link MercadonaProduct.soldByWeight}: the listing carries the field. */
   soldByWeight: boolean;
+  /**
+   * As on {@link MercadonaProduct.approxWeight}: the listing carries
+   * `approx_size`, `unit_size` and `reference_format` in the same block.
+   */
+  approxWeight: number | null;
   unitSize: number | null;
   unit: UnitOfMeasure | null;
   sizeFormat: string | null;

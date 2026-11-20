@@ -907,34 +907,58 @@ describeIntegration('zone summary (real Postgres)', () => {
     /**
      * The planner picks a sequential scan on a table this small however good the
      * index is, so asking it what it WOULD do is the only assertion here that
-     * means anything. With `enable_seqscan` off Postgres still falls back to a
-     * sequential scan when no index can serve the query, so seeing the index
-     * named in the plan really does prove its predicate matches, which is the
-     * failure plan 0017 section 11 asks this suite to catch.
+     * means anything. A disabled plan type is not forbidden, only priced out:
+     * Postgres still uses it when nothing else can serve the query. So the
+     * assertions below stay honest. If the index named cannot serve the query,
+     * the plan names something else and the test fails.
+     *
+     * Turning off only `enable_seqscan` was not enough. On a table of a few
+     * rows a bitmap scan of another index that leads with `zoneId` costs about
+     * the same as the index under test, and CI picked it on some runs and not
+     * on others (2026-11-06). Each test therefore turns off every plan type
+     * that competes with the one it expects, so that the index under test is
+     * the only plan with no disabled node, and wins by a margin no statistic can
+     * close. `SET LOCAL` keeps the settings inside the transaction, so nothing
+     * reaches the pool, even when the EXPLAIN throws.
      */
-    async function planFor(sql: string, params: unknown[]): Promise<string> {
+    async function planFor(
+      sql: string,
+      params: unknown[],
+      off: readonly string[] = []
+    ): Promise<string> {
       const runner = dataSource.createQueryRunner();
       await runner.connect();
+      await runner.startTransaction();
       try {
-        await runner.query('SET enable_seqscan = off');
+        for (const setting of ['enable_seqscan', 'enable_bitmapscan', ...off]) {
+          await runner.query(`SET LOCAL ${setting} = off`);
+        }
         const plan = await runner.query(`EXPLAIN ${sql}`, params);
         return plan
           .map((r: Record<string, string>) => Object.values(r)[0])
           .join('\n');
       } finally {
-        await runner.query('SET enable_seqscan = on');
+        await runner.rollbackTransaction();
         await runner.release();
       }
     }
 
     it('backs the first pending requester lookup with the partial index', async () => {
+      // Every other index on the table needs a sort to give this order, and a
+      // sort is turned off. The partial index is thus the only plan with no
+      // disabled node, but only if its `status = 'PENDING'` predicate matches
+      // the query. Otherwise the planner cannot use it at all, and the plan
+      // names another index under a Sort. That is the failure plan 0017
+      // section 11 asks this suite to catch.
       const text = await planFor(
         `SELECT m3.username FROM "zone_memberships" m3
          WHERE m3."zoneId" = $1 AND m3.status = 'PENDING'
          ORDER BY m3."createdAt" ASC, m3.id ASC LIMIT 1`,
-        [ids.zone]
+        [ids.zone],
+        ['enable_sort', 'enable_incremental_sort']
       );
       expect(text).toContain('ix_memberships_zone_pending_created');
+      expect(text).not.toContain('Sort');
     });
 
     it('backs the member and pending counts with their index', async () => {
@@ -956,6 +980,11 @@ describeIntegration('zone summary (real Postgres)', () => {
     });
 
     it('backs the preview ordering with the zone/updatedAt index', async () => {
+      // The sorts stay on here: the index holds `id` ascending, so the
+      // `id DESC` tie break is an Incremental Sort over this index, and turning
+      // sorts off would price every plan out alike. With bitmap scans off the
+      // other plans need a full Sort of the zone's lists, which the presorted
+      // index beats on cost.
       const text = await planFor(
         `SELECT sl.id FROM "shopping_lists" sl WHERE sl."zoneId" = $1
          ORDER BY sl."updatedAt" DESC, sl.id DESC LIMIT 3`,

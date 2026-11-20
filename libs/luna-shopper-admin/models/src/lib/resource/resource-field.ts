@@ -145,6 +145,59 @@ interface FieldBase<T extends ResourceRow> {
    * A method for the reason {@link read} is one.
    */
   check?(row: T): FieldCheck | null;
+  /**
+   * Whether the field is drawn at all, or absent for the field is drawn
+   * always (admin plan 0068).
+   *
+   * Read from the row as the form holds it, the row with the draft over it,
+   * while the page is a form, and from the row while it reads. A product sold
+   * by the kilo has no size, so its size field is not offered.
+   *
+   * A field that is not shown holds its empty value in the draft, so a value
+   * the operator cannot see is never sent. A field with a message under it is
+   * drawn whatever this says, so a refusal is never hidden.
+   *
+   * A method for the reason {@link read} is one.
+   */
+  shown?(row: Partial<T>): boolean;
+  /**
+   * Another field that this one shuts out (admin plan 0068). While this field
+   * holds a value, the named one is cleared and its control is disabled.
+   *
+   * Two fields may name each other: a product has a size or an approximate
+   * weight, never both, so typing either clears and disables the other.
+   */
+  readonly excludes?: FieldName<T>;
+  /**
+   * A line under the control, and under the value while the page reads, in
+   * the style of {@link help}, or `null` for no line (admin plan 0068).
+   *
+   * `held` is the row {@link shown} reads: the row as the form holds it, or
+   * the row while the page reads. `row` is the row as it was read, the same
+   * row while the page reads, and `null` for a record that does not exist
+   * yet. Unlike `help` the line may change with either: the weight of a
+   * product says who set it, a weight typed over the chain's says a person
+   * holds it from the save on, and the unit says what its prices mean.
+   *
+   * A method for the reason {@link read} is one.
+   */
+  note?(held: Partial<T>, row: T | null): FieldNote | null;
+}
+
+/**
+ * A line under a field, with one optional press (admin plan 0068).
+ *
+ * The press is drawn only while the page is a form, and puts `value` into the
+ * field through the store, as typing would. "Use the chain's weight" is one:
+ * it empties the weight, and an emptied nullable field submits `null`.
+ */
+export interface FieldNote {
+  readonly text: FieldMessage;
+  readonly action?: {
+    /** A translation key. */
+    readonly label: string;
+    readonly value: string | null;
+  };
 }
 
 /** An amber state beside a value. Amber means only this. */
@@ -198,12 +251,58 @@ export type ImageCaption =
       readonly id: string;
     };
 
+/**
+ * What a number is counted in, for a number field whose unit follows the row
+ * (admin plan 0070, section 3): the step of a product is grams for one sold
+ * by the kilo and millilitres for one sold by the litre.
+ */
+export interface NumberUnit {
+  /** The short word a box draws after the number: "g", "ml". */
+  readonly word: string;
+  /**
+   * The value with its unit, as a person reads it: "250 g", "1 kg". The
+   * same value the field holds, so it writes nothing of its own.
+   */
+  format(value: number, locale: string): string;
+}
+
 /** A count or a measure. Not money, which is its own kind for a reason. */
 export interface NumberField<T extends ResourceRow> extends FieldBase<T> {
   readonly kind: 'number';
   readonly min?: number;
   readonly max?: number;
   readonly integer?: boolean;
+  /**
+   * The unit of the value, read from the row as {@link FieldBase.shown}
+   * reads it, or `null` for a bare number (admin plan 0070). A value reads
+   * through its `format`, and a box draws its `word` after it.
+   *
+   * A method for the reason {@link FieldBase.read} is one.
+   */
+  unit?(held: Partial<T>): NumberUnit | null;
+  /**
+   * The values the field may hold, drawn as a select of them in place of a
+   * box, or `null` for the box (admin plan 0070). Each one is labelled
+   * through {@link unit} when there is one. A nullable field starts the list
+   * with an empty option, which submits `null`.
+   *
+   * A value the row holds that is not in the list is drawn as one more
+   * option, so a stale row shows what it holds and is not silently replaced.
+   * The draft holds the chosen value as it holds a typed one, so the checks
+   * and the submit are those of the box.
+   *
+   * A method for the reason {@link FieldBase.read} is one.
+   */
+  choices?(held: Partial<T>): readonly number[] | null;
+  /**
+   * What an empty value is called, in place of "None", or `null` for "None"
+   * (admin plan 0070). Drawn greyed while the page reads, as the label of the
+   * empty option of a select, and as the placeholder of an empty box. A step
+   * left empty is the default step, and says which one.
+   *
+   * A method for the reason {@link FieldBase.read} is one.
+   */
+  emptyText?(held: Partial<T>): FieldMessage | null;
 }
 
 /** A `numeric` column, carried as a string for as long as this app can manage. */

@@ -15,8 +15,9 @@ function card(overrides: Partial<LineProductCardVm> = {}): LineProductCardVm {
     detail: '400 ml · Deliplus',
     imageUrl: null,
     priceKind: 'priced',
-    price: '2,15 €',
-    caption: 'Mercadona · 5,38 € / L',
+    price: { amount: '2,15 €', per: null },
+    chain: 'Mercadona',
+    unit: { amount: '5,38 €', per: '/ L' },
     cheapest: false,
     favorite: false,
     ...overrides,
@@ -67,7 +68,45 @@ describe('LineProductRail', () => {
     expect(text).toContain('Shampoo for normal hair');
     expect(text).toContain('400 ml · Deliplus');
     expect(text).toContain('2,15 €');
-    expect(text).toContain('Mercadona · 5,38 € / L');
+    expect(text).toContain('Mercadona · 5,38 €');
+    expect(
+      root(fixture).querySelector('.caption .per')?.textContent?.trim()
+    ).toBe('/ L');
+  });
+
+  it('draws the unit price alone with no chain, and no separator', async () => {
+    const { fixture } = await render({ cards: [card({ chain: null })] });
+    const caption = root(fixture).querySelector('.caption');
+
+    expect(caption?.textContent).not.toContain('·');
+    expect(caption?.textContent).toContain('5,38 €');
+    expect(caption?.querySelector('.per')?.textContent?.trim()).toBe('/ L');
+  });
+
+  it('draws the chain alone with no unit price, and no separator', async () => {
+    const { fixture } = await render({ cards: [card({ unit: null })] });
+    const caption = root(fixture).querySelector('.caption');
+
+    expect(caption?.textContent?.trim()).toBe('Mercadona');
+    expect(caption?.querySelector('.per')).toBeNull();
+  });
+
+  it('draws no caption with neither', async () => {
+    const { fixture } = await render({
+      cards: [card({ chain: null, unit: null })],
+    });
+
+    expect(root(fixture).querySelector('.caption')).toBeNull();
+  });
+
+  it('draws what a price is per small after its number (velista 0179)', async () => {
+    const { fixture } = await render({
+      cards: [card({ price: { amount: '13,42 €', per: '/ kg' } })],
+    });
+
+    const price = root(fixture).querySelector('.price');
+    expect(price?.firstChild?.textContent).toBe('13,42 €');
+    expect(price?.querySelector('.per')?.textContent).toBe('/ kg');
   });
 
   it('opens the product of the card that was pressed', async () => {
@@ -95,7 +134,9 @@ describe('LineProductRail', () => {
   describe('where the price goes', () => {
     it('says no price in words', async () => {
       const { fixture } = await render({
-        cards: [card({ priceKind: 'noPrice', price: null, caption: null })],
+        cards: [
+          card({ priceKind: 'noPrice', price: null, chain: null, unit: null }),
+        ],
       });
 
       expect(root(fixture).textContent).toContain('list.page.card.noPrice');
@@ -104,7 +145,9 @@ describe('LineProductRail', () => {
 
     it('says the supermarket of the line does not sell it', async () => {
       const { fixture } = await render({
-        cards: [card({ priceKind: 'notSold', price: null, caption: null })],
+        cards: [
+          card({ priceKind: 'notSold', price: null, chain: null, unit: null }),
+        ],
         supermarket: 'Mercadona',
       });
 
@@ -113,7 +156,9 @@ describe('LineProductRail', () => {
 
     it('draws a bone while the price is read, and no words', async () => {
       const { fixture } = await render({
-        cards: [card({ priceKind: 'loading', price: null, caption: null })],
+        cards: [
+          card({ priceKind: 'loading', price: null, chain: null, unit: null }),
+        ],
       });
 
       expect(root(fixture).querySelector('.price.bone')).not.toBeNull();

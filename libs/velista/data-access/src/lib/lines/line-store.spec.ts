@@ -6,6 +6,7 @@ import {
   provideVelistaTesting,
 } from '@portfolio/velista/platform';
 import { TimeoutError } from 'rxjs';
+import { ItemNames } from '../catalog/item-names';
 import { GatewayError, NetworkError } from '../errors';
 import { DroppedWrites, Mutations } from '../mutations';
 import { REALTIME_CLIENT } from '../realtime/realtime-client';
@@ -28,6 +29,7 @@ function line(id: string, overrides: Partial<Line> = {}): Line {
     listId: LIST,
     content: 'Sourdough loaf',
     quantity: 1,
+    unit: 'UNIT',
     itemIds: [],
     productGroupId: null,
     groupItemIds: [],
@@ -89,8 +91,18 @@ function service(seed: readonly Line[]) {
   let absorbNext: string | null = null;
   /** The line the next add answers as raised, `merged: true` (velista `0170`). */
   let raiseNext: Line | null = null;
+  /** The lines the next add answers as already on the list (velista `0185`). */
+  let metNext: readonly Line[] | null = null;
+  /** Whether that answer says `merged`, which a malformed one may not. */
+  let metMerged = true;
   /** What each add said about a name the list holds, in order (backend `0228`). */
   const addOptions: (AddLineOptions | undefined)[] = [];
+  /** The unit every write named, in order, for velista `0182`. */
+  const units: (string | undefined)[] = [];
+  /** What each absolute update asked for, in order. */
+  const updates: Record<string, unknown>[] = [];
+  /** What each delta asked for, in order. */
+  const deltas: { delta: number; unit: string }[] = [];
 
   /** Set while the reads after the first are held open, opened by `releaseFollowUps`. */
   let followUps: Promise<void> | null = null;
@@ -144,10 +156,25 @@ function service(seed: readonly Line[]) {
       options
     ) => {
       addOptions.push(options);
+      const met = metNext;
+      metNext = null;
+      if (met !== null) {
+        return {
+          line: await answer(met[0]),
+          merged: metMerged,
+          outcome: 'alreadyOnList' as const,
+          alreadyOnList: met,
+        };
+      }
       const raised = raiseNext;
       raiseNext = null;
       if (raised !== null) {
-        return { line: await answer(raised), merged: true };
+        return {
+          line: await answer(raised),
+          merged: true,
+          outcome: 'raised' as const,
+          alreadyOnList: [],
+        };
       }
       return {
         line: await answer(
@@ -159,9 +186,13 @@ function service(seed: readonly Line[]) {
           })
         ),
         merged: false,
+        outcome: 'created' as const,
+        alreadyOnList: [],
       };
     },
     updateLine: async (lineId, { confirmMerge: _confirm, ...changes }) => {
+      units.push(changes.unit);
+      updates.push({ ...changes });
       const absorbedLineId = absorbNext;
       absorbNext = null;
       return {
@@ -169,9 +200,13 @@ function service(seed: readonly Line[]) {
         absorbedLineId,
       };
     },
-    addQuantity: async (lineId, delta) =>
-      answer(line(lineId, { quantity: 1 + delta, version: 2 })),
+    addQuantity: async (lineId, delta, unit) => {
+      units.push(unit);
+      deltas.push({ delta, unit });
+      return answer(line(lineId, { quantity: 1 + delta, unit, version: 2 }));
+    },
     settle: async (lineId, outcome, options) => {
+      units.push(options.unit);
       // Awaited, and that matters: `answer` is what `failNext` throws from, and an
       // unawaited rejection here takes the whole jest worker down rather than failing
       // the one spec that staged it.
@@ -205,14 +240,6 @@ function service(seed: readonly Line[]) {
     linesHoldingItem: async () => ({ lists: [], lines: [], hasMore: false }),
     setApproval: async (lineId, approvalStatus) =>
       answer(line(lineId, { approvalStatus, version: 2 })),
-    reorder: async () => {
-      calls.push('reorder');
-      if (failWith !== null) {
-        const error = failWith;
-        failWith = null;
-        throw error;
-      }
-    },
     deleteLine: async (lineId) => {
       calls.push('delete');
       if (failWith !== null) {
@@ -250,7 +277,14 @@ function service(seed: readonly Line[]) {
     raiseNext: (value: Line) => {
       raiseNext = value;
     },
+    metNext: (value: readonly Line[], merged = true) => {
+      metNext = value;
+      metMerged = merged;
+    },
     addOptions,
+    units,
+    updates,
+    deltas,
     /** The rest of a long list stays out until `releaseFollowUps`. */
     holdFollowUps: () => {
       followUps = new Promise<void>((resolve) => {
@@ -565,22 +599,46 @@ describe('LineStore', () => {
           intoLineId: 'milk',
         })
       ).toBe(false);
+      // A product add that names its line draws none either (backend 0260, rule 6),
+      // also for a product no loaded line holds.
+      expect(
+        store.drawsBeforeAnswer(LIST, 'Pan', ['item-bread'], {
+          intoLineId: 'milk',
+        })
+      ).toBe(false);
     });
 
-    it('draws a product add at once whatever its name', async () => {
-      const { store } = await build([milk()]);
+    it('draws no row for a product a loaded line holds, at any amount (velista 0185, decision I)', async () => {
+      const { store } = await build([
+        milk(),
+        line('fruit', {
+          content: 'Fruta',
+          itemIds: ['item-bananas', 'item-apples'],
+          quantity: 0,
+          position: 2,
+        }),
+      ]);
       await store.load(LIST);
 
       expect(store.drawsBeforeAnswer(LIST, 'Leche entera', ['item-milk'])).toBe(
-        true
+        false
       );
+      // Whatever its name, and also among other products.
+      expect(store.drawsBeforeAnswer(LIST, 'Milk', ['item-milk'])).toBe(false);
+      // A line kept at zero is raised where it stands, so no row is drawn for it
+      // either; a product no line holds is new.
+      expect(store.drawsBeforeAnswer(LIST, 'Plátanos', ['item-bananas'])).toBe(
+        false
+      );
+      expect(store.drawsBeforeAnswer(LIST, 'Pan', ['item-bread'])).toBe(true);
     });
 
-    it('leaves no placeholder behind when an optimistic add is answered as a raise', async () => {
-      // A product add draws at once and can still meet a line (backend 0091): the
-      // placeholder goes and the held line takes the units in its place.
+    it('draws no placeholder for a product add onto a line kept at zero, which is raised in place', async () => {
+      // A product add on a line at zero meets that line (backend 0091, 0260), hidden
+      // or not (velista 0192): no row is drawn that would leave again, and the held
+      // line takes the units.
       const { store, lines } = await build([
-        milk(),
+        milk({ quantity: 0 }),
         line('bread', { content: 'Pan', position: 2 }),
       ]);
       await store.load(LIST);
@@ -595,12 +653,124 @@ describe('LineStore', () => {
         ['item-milk'],
         false
       );
-      expect(store.linesIn(LIST)).toHaveLength(3);
+      expect(store.linesIn(LIST)).toHaveLength(2);
       await adding;
 
       expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['milk', 'bread']);
       expect(store.linesIn(LIST)[0].quantity).toBe(3);
       expect(store.writeNoteOf(store.linesIn(LIST)[0].id)).toBeNull();
+    });
+
+    it('adds nothing for a line already asked for, and passes on every line it met (velista 0185)', async () => {
+      const { store, lines } = await build([
+        milk(),
+        line('bread', { content: 'Pan', position: 2 }),
+      ]);
+      await store.load(LIST);
+      const before = store.linesIn(LIST);
+      lines.metNext([milk()]);
+
+      const outcome = await store.addLine(
+        LIST,
+        'Leche entera',
+        undefined,
+        ME,
+        ASKS_FIRST
+      );
+
+      expect(outcome).toEqual(
+        expect.objectContaining({
+          state: 'added',
+          merged: true,
+          outcome: 'alreadyOnList',
+          alreadyOnList: [expect.objectContaining({ id: 'milk' })],
+        })
+      );
+      expect(store.linesIn(LIST)).toEqual(before);
+    });
+
+    it('takes the placeholder of a product add away when the answer is a line already asked for', async () => {
+      // A product a loaded line does not hold draws at once; another device may
+      // have made its line meanwhile.
+      const { store, lines } = await build([milk()]);
+      await store.load(LIST);
+      const elsewhere = line('fresh', {
+        content: 'Huevos',
+        itemIds: ['item-eggs'],
+        quantity: 6,
+        position: 2,
+        version: 4,
+      });
+      lines.metNext([elsewhere]);
+
+      const adding = store.addLine(
+        LIST,
+        'Huevos',
+        1,
+        ME,
+        ASKS_FIRST,
+        ['item-eggs'],
+        false
+      );
+      expect(store.linesIn(LIST)).toHaveLength(2);
+      await adding;
+
+      expect(store.linesIn(LIST).map((l) => [l.id, l.quantity])).toEqual([
+        ['milk', 2],
+        ['fresh', 6],
+      ]);
+    });
+
+    it('settles a met line in place by the outcome, also when the answer says merged false', async () => {
+      // Malformed, but it must not settle as a made line: that draws a second row
+      // with the met line's id. Once drawn at once, once on the answer.
+      for (const drawnFirst of [true, false]) {
+        const { store, lines } = await build([
+          milk(),
+          line('bread', { content: 'Pan', position: 2 }),
+        ]);
+        await store.load(LIST);
+        lines.metNext([milk()], false);
+
+        const outcome = drawnFirst
+          ? await store.addLine(
+              LIST,
+              'Leche',
+              1,
+              ME,
+              ASKS_FIRST,
+              ['item-other'],
+              false
+            )
+          : await store.addLine(
+              LIST,
+              'Leche entera',
+              undefined,
+              ME,
+              ASKS_FIRST
+            );
+
+        expect(outcome).toEqual(
+          expect.objectContaining({
+            state: 'added',
+            merged: true,
+            outcome: 'alreadyOnList',
+          })
+        );
+        expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['milk', 'bread']);
+      }
+    });
+
+    it('draws a typed name it cannot place as one piece', async () => {
+      const { store } = await build([milk()]);
+      await store.load(LIST);
+
+      const adding = store.addLine(LIST, 'Huevos', undefined, ME, ASKS_FIRST);
+
+      expect(store.linesIn(LIST)[1]).toEqual(
+        expect.objectContaining({ quantity: 1, unit: 'UNIT' })
+      );
+      await adding;
     });
 
     it('leaves no ghost when the echo of the raise arrives before the answer', async () => {
@@ -822,8 +992,13 @@ describe('LineStore', () => {
           subject: 'a:quantity',
           lineId: 'a',
           key: 'list.dropped.quantity',
-          args: { name: 'Pan de pueblo', delta: '+1' },
-          replay: { kind: 'line-quantity', lineId: 'a', delta: 1 },
+          args: { name: 'Pan de pueblo', delta: '+1', unit: 'UNIT' },
+          replay: {
+            kind: 'line-quantity',
+            lineId: 'a',
+            delta: 1,
+            unit: 'UNIT',
+          },
         }),
       ]);
     });
@@ -840,7 +1015,7 @@ describe('LineStore', () => {
 
       expect(TestBed.inject(DroppedWrites).take(`list:${LIST}`)).toEqual([
         expect.objectContaining({
-          args: { name: 'Pan de pueblo', delta: '-2' },
+          args: { name: 'Pan de pueblo', delta: '-2', unit: 'UNIT' },
           replay: null,
         }),
       ]);
@@ -870,6 +1045,271 @@ describe('LineStore', () => {
 
       expect(outcome).toBe('overwritten');
       expect(store.writeNoteOf('a')?.outcome).toBe('overwritten');
+    });
+
+    describe('the unit (velista 0182, criterion 7)', () => {
+      it('sends the line’s unit with the delta, and adds base units', async () => {
+        const { store, lines } = await build([
+          line('a', { quantity: 750, unit: 'GRAM' }),
+        ]);
+        await store.load(LIST);
+
+        const writing = store.addQuantity('a', -250);
+
+        expect(store.linesIn(LIST)[0].quantity).toBe(500);
+        await writing;
+        expect(lines.units).toEqual(['GRAM']);
+      });
+
+      it('sends the line’s unit with an absolute quantity, and none with a rename', async () => {
+        const { store, lines } = await build([
+          line('a', { quantity: 750, unit: 'GRAM' }),
+        ]);
+        await store.load(LIST);
+
+        await store.updateLine('a', { quantity: 1000 });
+        await store.updateLine('a', { content: 'Bananas' });
+
+        expect(lines.units).toEqual(['GRAM', undefined]);
+      });
+
+      it('settles in the line’s unit', async () => {
+        const { store, lines } = await build([
+          line('a', { quantity: 750, unit: 'GRAM' }),
+        ]);
+        await store.load(LIST);
+
+        await store.settle('a', 'BOUGHT', { quantity: 250 });
+
+        expect(lines.units).toEqual(['GRAM']);
+      });
+
+      it('recovers a line_unit_mismatch as stale_quantity: reads the line again and shows no error', async () => {
+        const { store, lines } = await build([
+          line('a', { quantity: 2, unit: 'UNIT' }),
+        ]);
+        await store.load(LIST);
+        // Somebody moved the line to grams; the read brings it.
+        lines.setServed([
+          line('a', { quantity: 750, unit: 'GRAM', version: 3 }),
+        ]);
+        lines.failNext(
+          new GatewayError({
+            status: 409,
+            code: 'line_unit_mismatch',
+            correlationId: 'c1',
+            detail: 'This line counts in another unit',
+          })
+        );
+
+        const outcome = await store.addQuantity('a', 1);
+
+        expect(outcome).toBe('overwritten');
+        expect(store.writeNoteOf('a')).toBeNull();
+        expect(store.linesIn(LIST)[0]).toMatchObject({
+          quantity: 750,
+          unit: 'GRAM',
+        });
+        expect(lines.calls.filter((call) => call === 'list')).toHaveLength(2);
+      });
+    });
+
+    /**
+     * The rows backend `0246` M2 left: a one product line for a loose product,
+     * stored in `UNIT`. velista draws it in grams and its first write states the
+     * unit, which corrects the row (section 3.2).
+     */
+    describe('a line the migration left in UNIT (backend 0246 M2)', () => {
+      const LOOSE = { unit: 'KILOGRAM', size: null, approxWeight: null };
+      const PACK = { unit: 'LITER', size: 1, approxWeight: null };
+      const items = (records: Record<string, object>): Provider => ({
+        provide: ItemNames,
+        useValue: { nameOf: (itemId: string) => records[itemId] ?? null },
+      });
+
+      it('reads and steps in grams', async () => {
+        const { store } = await build(
+          [line('a', { quantity: 0, unit: 'UNIT', itemIds: ['bananas'] })],
+          [items({ bananas: LOOSE })]
+        );
+        await store.load(LIST);
+
+        expect(store.linesIn(LIST)[0]).toMatchObject({
+          quantity: 0,
+          unit: 'GRAM',
+        });
+        expect(store.forList(LIST)().lines[0].unit).toBe('GRAM');
+      });
+
+      it('raises from nothing to a kilo with one absolute update that states the unit', async () => {
+        const { store, lines } = await build(
+          [line('a', { quantity: 0, unit: 'UNIT', itemIds: ['bananas'] })],
+          [items({ bananas: LOOSE })]
+        );
+        await store.load(LIST);
+
+        const writing = store.addQuantity('a', 25);
+
+        expect(store.linesIn(LIST)[0].quantity).toBe(1000);
+        expect(await writing).toBe('succeeded');
+        expect(lines.updates).toEqual([{ quantity: 1000, unit: 'GRAM' }]);
+        expect(lines.deltas).toEqual([]);
+      });
+
+      it('takes the delta path again once the server answers the line in GRAM', async () => {
+        const { store, lines } = await build(
+          [line('a', { quantity: 0, unit: 'UNIT', itemIds: ['bananas'] })],
+          [items({ bananas: LOOSE })]
+        );
+        await store.load(LIST);
+        await store.addQuantity('a', 25);
+
+        await store.addQuantity('a', 250);
+
+        expect(lines.updates).toHaveLength(1);
+        expect(lines.deltas).toEqual([{ delta: 250, unit: 'GRAM' }]);
+      });
+
+      it('sends a set from the detail sheet in the product’s unit', async () => {
+        const { store, lines } = await build(
+          [line('a', { quantity: 0, unit: 'UNIT', itemIds: ['bananas'] })],
+          [items({ bananas: LOOSE })]
+        );
+        await store.load(LIST);
+
+        await store.updateLine('a', { quantity: 750 });
+
+        expect(lines.updates).toEqual([{ quantity: 750, unit: 'GRAM' }]);
+      });
+
+      it('leaves a line with several products, and a pack, in their stored unit', async () => {
+        const { store, lines } = await build(
+          [
+            line('a', { quantity: 0, unit: 'UNIT', itemIds: ['bananas', 'b'] }),
+            line('b', { quantity: 1, unit: 'UNIT', itemIds: ['milk'] }),
+          ],
+          [items({ bananas: LOOSE, b: LOOSE, milk: PACK })]
+        );
+        await store.load(LIST);
+
+        expect(store.linesIn(LIST).map((one) => one.unit)).toEqual([
+          'UNIT',
+          'UNIT',
+        ]);
+        await store.addQuantity('a', 1);
+        await store.addQuantity('b', 1);
+
+        expect(lines.updates).toEqual([]);
+        expect(lines.deltas).toEqual([
+          { delta: 1, unit: 'UNIT' },
+          { delta: 1, unit: 'UNIT' },
+        ]);
+      });
+
+      it('keeps GRAM on a line whose product a curator made a pack, and steps 25 g', async () => {
+        // 750 g read as 750 pieces would turn the next plus into 751 pieces.
+        const { store, lines } = await build(
+          [line('a', { quantity: 750, unit: 'GRAM', itemIds: ['bananas'] })],
+          [
+            items({
+              bananas: { unit: 'KILOGRAM', size: 1, approxWeight: null },
+            }),
+          ]
+        );
+        await store.load(LIST);
+
+        expect(store.linesIn(LIST)[0]).toMatchObject({
+          quantity: 750,
+          unit: 'GRAM',
+        });
+        await store.addQuantity('a', 25);
+
+        expect(lines.updates).toEqual([]);
+        expect(lines.deltas).toEqual([{ delta: 25, unit: 'GRAM' }]);
+      });
+
+      it('draws three pieces as stored, and its first plus asks for a kilo', async () => {
+        const { store, lines } = await build(
+          [line('a', { quantity: 3, unit: 'UNIT', itemIds: ['bananas'] })],
+          [items({ bananas: LOOSE })]
+        );
+        await store.load(LIST);
+
+        expect(store.linesIn(LIST)[0]).toMatchObject({
+          quantity: 3,
+          unit: 'UNIT',
+        });
+        await store.addQuantity('a', 1);
+
+        expect(lines.updates).toEqual([{ quantity: 1000, unit: 'GRAM' }]);
+        expect(lines.deltas).toEqual([]);
+      });
+
+      it('asks for a kilo from a turn of several steps, never the summed grams', async () => {
+        const { store, lines } = await build(
+          [line('a', { quantity: 0, unit: 'UNIT', itemIds: ['bananas'] })],
+          [items({ bananas: LOOSE })]
+        );
+        await store.load(LIST);
+
+        await store.addQuantity('a', 75);
+
+        expect(lines.updates).toEqual([{ quantity: 1000, unit: 'GRAM' }]);
+      });
+
+      it('sends nothing for a minus at nothing', async () => {
+        const { store, lines } = await build(
+          [line('a', { quantity: 0, unit: 'UNIT', itemIds: ['bananas'] })],
+          [items({ bananas: LOOSE })]
+        );
+        await store.load(LIST);
+
+        await store.addQuantity('a', -25);
+
+        expect(lines.updates).toEqual([]);
+        expect(lines.deltas).toEqual([]);
+      });
+
+      it('saves a kilo from the detail sheet above nothing, and zero as zero', async () => {
+        const { store, lines } = await build(
+          [
+            line('a', { quantity: 3, unit: 'UNIT', itemIds: ['bananas'] }),
+            line('b', { quantity: 2, unit: 'UNIT', itemIds: ['pears'] }),
+          ],
+          [items({ bananas: LOOSE, pears: LOOSE })]
+        );
+        await store.load(LIST);
+
+        await store.updateLine('a', { quantity: 5 });
+        await store.updateLine('b', { quantity: 0 });
+
+        expect(lines.updates).toEqual([
+          { quantity: 1000, unit: 'GRAM' },
+          { quantity: 0, unit: 'GRAM' },
+        ]);
+      });
+
+      it('holds a second tap until the correction answers', async () => {
+        const { store, lines } = await build(
+          [line('a', { quantity: 3, unit: 'UNIT', itemIds: ['bananas'] })],
+          [items({ bananas: LOOSE })]
+        );
+        await store.load(LIST);
+        lines.holdWrites();
+
+        const first = store.addQuantity('a', 1);
+        const second = store.addQuantity('a', 250);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(lines.updates).toEqual([{ quantity: 1000, unit: 'GRAM' }]);
+        expect(lines.deltas).toEqual([]);
+
+        lines.releaseWrites();
+        expect(await first).toBe('succeeded');
+        expect(await second).toBe('succeeded');
+        expect(lines.deltas).toEqual([{ delta: 250, unit: 'GRAM' }]);
+      });
     });
 
     it('shows the server’s value once the write has landed', async () => {
@@ -1388,37 +1828,6 @@ describe('LineStore', () => {
       await store.refresh(LIST);
 
       expect(store.commentCountOf('a')).toBe(3);
-    });
-  });
-
-  describe('reordering', () => {
-    it('renumbers optimistically and keeps the order on success', async () => {
-      const { store } = await build([
-        line('a', { position: 1 }),
-        line('b', { position: 2 }),
-      ]);
-      await store.load(LIST);
-
-      const outcome = await store.reorder(LIST, ['b', 'a']);
-
-      expect(outcome).toBe('succeeded');
-      expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['b', 'a']);
-    });
-
-    it('puts the old order back and rereads when the server refuses', async () => {
-      // A `validation_failed` means somebody deleted a line mid drag. The person who
-      // dragged has done nothing wrong, so the list rereads and says nothing.
-      const { store, lines } = await build([
-        line('a', { position: 1 }),
-        line('b', { position: 2 }),
-      ]);
-      await store.load(LIST);
-      lines.failNext(new Error('gone'));
-
-      const outcome = await store.reorder(LIST, ['b', 'a']);
-
-      expect(outcome).toBe('failed');
-      expect(lines.calls.filter((call) => call === 'list').length).toBe(2);
     });
   });
 

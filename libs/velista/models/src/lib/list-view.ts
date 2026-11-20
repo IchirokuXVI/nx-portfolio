@@ -4,6 +4,8 @@ import type {
   ListPermission,
   ZoneRole,
 } from './enums';
+import type { LineUnit } from './line-unit';
+import type { PriceWords } from './sold-as';
 
 /**
  * What the list page draws, as plain data (plan 0012).
@@ -147,8 +149,82 @@ export interface LineRowShownProduct {
   readonly favorite: boolean;
   /** How many other products of the line will do, for "+2". */
   readonly others: number;
-  /** The price of one, formatted, or null for "No price". */
-  readonly price: string | null;
+  /**
+   * The price of one as two words (velista `0179`): the piece price of a kilo
+   * piece, a price per kilo with its "/ kg", or the price. Null for "No price",
+   * also for a kilo piece with no piece price.
+   */
+  readonly price: PriceWords | null;
+  /**
+   * The product's brand, trimmed, or null when it has none (velista `0191`). The
+   * compact row draws it beside the label; {@link brandSize} stays for the row of
+   * today.
+   */
+  readonly brand: string | null;
+  /**
+   * How big the product is, as `productSizeText` words ("1000 ml", "12 uds",
+   * "~2,5 kg"), or null for a loose product and for a count of one (velista
+   * `0191`, section 2.1).
+   */
+  readonly size: string | null;
+  /**
+   * What the line's whole amount costs with this product, as the list's total
+   * counts it (`lineAmount`), for every kind of product (velista `0191`, the owner's
+   * decision of 2026-11-12): two packs at 0,99 € are "1,98 €", 750 g at 2,50 € / kg
+   * is about "1,88 €". `estimated` is the rule's own flag. Null at zero and when a
+   * figure the amount needs is missing.
+   */
+  readonly total: {
+    readonly amount: string;
+    readonly estimated: boolean;
+  } | null;
+}
+
+/**
+ * How the rows of a zone list are drawn (velista `0191`): the row of today, or the
+ * compact row with its three lines of facts. Chosen on the device, in the account
+ * page.
+ */
+export type ListRowLayout = 'default' | 'compact';
+
+export const DEFAULT_LIST_ROW_LAYOUT: ListRowLayout = 'default';
+
+/** The facts column of a compact row (velista `0191`, section 2.2). */
+export interface LineRowFacts {
+  /** Line 1 of the facts column, or null for an empty line. */
+  readonly size: string | null;
+  /**
+   * Line 2: the price of one of what the line counts, as words: a pack's price, a
+   * kilo piece's piece price, or the price of a kilo or a litre with its "/ kg" or
+   * "/ L". Null with no price, and line 3 then says so.
+   */
+  readonly unitPrice: PriceWords | null;
+  /** Line 3: what the line's amount costs, or null for an empty line. */
+  readonly total: {
+    readonly amount: string;
+    readonly estimated: boolean;
+  } | null;
+  /** Line 3 reads "No price": the product has no price to count at any amount. */
+  readonly noPrice: boolean;
+}
+
+/**
+ * The three facts a compact row draws for its product, decided once so the template
+ * only draws (velista `0191`, section 2.2, as the owner's decision of 2026-11-12
+ * reads it).
+ *
+ * Line 2 is the unit price, the price the row of today shows. Line 3 is the total
+ * the builder counted. With no unit price line 2 is empty and line 3 says "No
+ * price", at any amount; with a unit price and no total (zero, or a figure the
+ * amount needs is missing) line 3 is empty and keeps its height.
+ */
+export function lineRowFacts(product: LineRowShownProduct): LineRowFacts {
+  return {
+    size: product.size,
+    unitPrice: product.price,
+    total: product.price === null ? null : product.total,
+    noPrice: product.price === null,
+  };
 }
 
 /** One line, ready to draw. */
@@ -186,7 +262,7 @@ export interface LineRowVm {
    */
   readonly detail?: string | null;
   /**
-   * How many are wanted, which is the row's state and the reel's value.
+   * How many are wanted, which is the row's state and the stepper's value.
    *
    * Drawn on **every** row now, zero included, where `0012` drew it only above
    * one. It stopped being an annotation on a line and became the thing the line
@@ -194,6 +270,17 @@ export interface LineRowVm {
    * learns to reach for.
    */
   readonly quantity: number;
+  /**
+   * What {@link quantity} counts, which the stepper steps and draws by (velista
+   * `0182`).
+   */
+  readonly unit: LineUnit;
+  /**
+   * The step its stepper presses by, `lineStepOf` of the line (velista `0186`), or
+   * null for the unit's default. Optional, so a row built without a catalog steps
+   * by the default.
+   */
+  readonly step?: number | null;
   readonly approvalStatus: LineApprovalStatus;
   /**
    * Whether this line is settled: at zero with a purchase on record.
@@ -260,9 +347,9 @@ export interface LineRowVm {
    * True for anybody holding `READ`, which is everybody who can see the row at
    * all, and that is the change (section 5.1). The tap used to **be** the tick, so
    * it followed `DECIDE` and a reader's rows sat there not answering; it opens
-   * what the app knows about the thing now, and knowing is not a permission. False
-   * only in reorder mode, where every row is a thing being dragged rather than a
-   * thing being read.
+   * what the app knows about the thing now, and knowing is not a permission. The
+   * page sets it true for every row; the reorder mode that set it false is gone
+   * (velista `0189`).
    */
   readonly interactive: boolean;
   /**
@@ -270,7 +357,7 @@ export interface LineRowVm {
    *
    * `DECIDE`, and separate from {@link interactive} for the first time, because
    * the tap and the drag stopped being one gesture. A `READ` caller gets a row
-   * that opens and a reel that does not move, which is honest in both directions;
+   * that opens and a stepper with no buttons, which is honest in both directions;
    * a `WRITE` only caller gets the same, and the page says once who does the
    * buying rather than letting each row refuse in turn.
    */
@@ -324,7 +411,7 @@ export interface LineRowVm {
  * beside a fact is a second answer that will eventually disagree with the first.
  */
 export interface ListAbilitiesVm {
-  /** Add a line, edit or delete an unapproved one, reorder. `WRITE`. */
+  /** Add a line, edit or delete an unapproved one. `WRITE`. */
   readonly canWrite: boolean;
   /** Approve, reject, change an approved quantity. `DECIDE`. */
   readonly canDecide: boolean;
@@ -402,6 +489,12 @@ export interface ListHeaderVm {
    */
   readonly cost?: string | null;
   /**
+   * Whether {@link cost} is an estimate (velista `0182`, section 3): a weight, a
+   * volume or a kilo piece added to it. The header draws "≈" before an estimate
+   * and no mark before an exact sum.
+   */
+  readonly costEstimated?: boolean;
+  /**
    * Who else has this list open right now, named and without the reader.
    *
    * It can only be filled because this page announces itself with `viewList`; while it
@@ -436,11 +529,6 @@ export type ListPageState =
       readonly abilities: ListAbilitiesVm;
       /** Nothing on the list yet. The composer is focused, per section 3.1. */
       readonly empty: boolean;
-      /**
-       * Whether dragging is available (rule L4). False while `nextCursor` is non null,
-       * because `line.reorder` renumbers only the lines it names.
-       */
-      readonly canReorder: boolean;
       /**
        * Whether this list approves new lines by itself (backend plan 0037, section 3).
        *

@@ -8,6 +8,7 @@ import {
   type ProductOffer,
   type ShoppingListSummary,
 } from '@portfolio/velista/models';
+import { formatMoney } from '@portfolio/velista/platform';
 import {
   actionsFor,
   editScopeFor,
@@ -90,13 +91,11 @@ function select(overrides: Partial<ListStateInput> = {}): ListPageState {
     zoneName: 'Flat 3B',
     lines: [line()],
     linesState: 'loaded',
-    linesComplete: true,
     writes: new Map(),
     commentCounts: new Map(),
     claims: new Map(),
     caller: { permissions: ADMIN },
     nameOf: () => null,
-    reordering: false,
     viewers: [],
     editorOf: () => null,
     live: true,
@@ -149,14 +148,6 @@ describe('selectListState', () => {
       const without = loaded(select()).lines[0];
 
       expect(withEditor).toEqual({ ...without, editor: 'Ana' });
-    });
-
-    // The sheet cannot be opened from a row in reorder mode, so an indicator there
-    // would be about a screen the reader cannot get to.
-    it('names nobody while the list is being put in order', () => {
-      const state = select({ reordering: true, editorOf: () => 'Ana' });
-
-      expect(loaded(state).lines[0]?.editor).toBeNull();
     });
   });
 
@@ -271,12 +262,18 @@ describe('selectListState', () => {
         unitPrice,
         currency: 'EUR',
         unitPriceLabel: null,
+        comparablePrice: null,
+        comparableBasis: null,
         observedAt: null,
         sourceKind: 'CATALOG',
         stale: false,
         priceScopeId: 'scope-1',
+        piecePrice: null,
       } as unknown as ProductOffer;
     }
+
+    /** A price as the row draws it: the reader's money, with its own spaces. */
+    const money = (amount: number): string => formatMoney(amount, 'EUR', 'es');
 
     function item(
       id: string,
@@ -310,6 +307,30 @@ describe('selectListState', () => {
         'battery',
         item('battery', 'Pilas alcalinas AA', null, { chainPrices: [] }),
       ],
+      // A kilo piece (velista 0179): priced per kilo, 20,94 € a piece.
+      [
+        'cheese',
+        item('cheese', 'Queso curado', 13.42, {
+          size: null,
+          unit: 'KILOGRAM',
+          approxWeight: 1560,
+          chainPrices: [
+            {
+              chain: MERCADONA,
+              offer: { ...offer(13.42), piecePrice: 20.94 },
+            },
+          ],
+        }),
+      ],
+      // Sold by the kilo, with no weight: loose apples.
+      [
+        'apples',
+        item('apples', 'Manzana golden', 2.49, {
+          size: null,
+          unit: 'KILOGRAM',
+          approxWeight: null,
+        }),
+      ],
     ]);
 
     function catalog(
@@ -337,7 +358,15 @@ describe('selectListState', () => {
         },
         locale: 'es',
         brandSizeOf: (known) => `${known.brand} · 1 L`,
+        // What `productSizeText` answers for these records (velista 0191).
+        sizeOf: (known) =>
+          typeof known.approxWeight === 'number'
+            ? '~1,56 kg'
+            : known.size === null
+              ? null
+              : '1 L',
         formatMoney: (amount) => `${amount.toFixed(2).replace('.', ',')} €`,
+        translate: (key) => key,
         ...overrides,
       };
     }
@@ -359,6 +388,31 @@ describe('selectListState', () => {
       ).lines[0];
     }
 
+    it("gives a weight line its product's step, and the default without a record (velista 0186)", () => {
+      const stepped = catalog({
+        itemOf: (itemId) => {
+          const known = ITEMS.get(itemId) ?? null;
+          return known === null ? null : { ...known, quantityStep: 100 };
+        },
+      });
+
+      expect(
+        rowOf(
+          { content: 'Manzana', itemIds: ['apples'], unit: 'GRAM' },
+          { catalog: stepped }
+        ).step
+      ).toBe(100);
+      expect(
+        rowOf({ content: 'Manzana', itemIds: ['apples'], unit: 'GRAM' }).step
+      ).toBeNull();
+      expect(
+        rowOf(
+          { content: 'Manzana', itemIds: ['apples'], unit: 'GRAM' },
+          { catalog: catalog({ itemOf: () => null }) }
+        ).step
+      ).toBeNull();
+    });
+
     it('draws a name and one product', () => {
       const row = rowOf({ content: 'Leche', itemIds: ['milk'] });
 
@@ -371,7 +425,215 @@ describe('selectListState', () => {
         imageUrl: null,
         favorite: false,
         others: 0,
-        price: '0,92 €',
+        price: { amount: money(0.92), per: null },
+        brand: 'Hacendado',
+        size: '1 L',
+        // Formatted by the catalog the spec hands in, which spaces with a plain space.
+        total: { amount: '0,92 €', estimated: false },
+      });
+    });
+
+    describe("the compact row's facts (velista 0191)", () => {
+      it('gives a pack of two its brand, its size, its pack price and the total of two, exact', () => {
+        const row = rowOf({ content: 'Leche', itemIds: ['milk'], quantity: 2 });
+
+        expect(row.product).toEqual(
+          expect.objectContaining({
+            brand: 'Hacendado',
+            size: '1 L',
+            price: { amount: money(0.92), per: null },
+            total: { amount: '1,84 €', estimated: false },
+          })
+        );
+      });
+
+      it('totals 750 g of a loose product, as an estimate', () => {
+        const row = rowOf({
+          content: 'Manzanas',
+          itemIds: ['apples'],
+          quantity: 750,
+          unit: 'GRAM',
+        });
+
+        expect(row.product).toEqual(
+          expect.objectContaining({
+            size: null,
+            price: { amount: money(2.49), per: 'catalog.per.KILOGRAM' },
+            // Formatted by the catalog the spec hands in, which spaces with a plain space.
+            total: { amount: '1,87 €', estimated: true },
+          })
+        );
+      });
+
+      it('totals nothing at zero, for a loose product and a pack alike', () => {
+        const loose = rowOf({
+          content: 'Manzanas',
+          itemIds: ['apples'],
+          quantity: 0,
+          unit: 'GRAM',
+        });
+        const pack = rowOf({
+          content: 'Leche',
+          itemIds: ['milk'],
+          quantity: 0,
+        });
+
+        expect(loose.product).toEqual(expect.objectContaining({ total: null }));
+        expect(pack.product).toEqual(expect.objectContaining({ total: null }));
+      });
+
+      it('gives three kilo pieces their weight, the piece price and three times it, as an estimate', () => {
+        const row = rowOf({
+          content: 'Queso',
+          itemIds: ['cheese'],
+          quantity: 3,
+          unit: 'UNIT',
+        });
+
+        expect(row.product).toEqual(
+          expect.objectContaining({
+            size: '~1,56 kg',
+            price: { amount: money(20.94), per: null },
+            total: { amount: '62,82 €', estimated: true },
+          })
+        );
+      });
+
+      it('counts the total the list header counts', () => {
+        const state = loaded(
+          select({
+            lines: [
+              line({ id: 'a', itemIds: ['milk'], quantity: 2 }),
+              line({
+                id: 'b',
+                itemIds: ['apples'],
+                quantity: 750,
+                unit: 'GRAM',
+                position: 2,
+              }),
+            ],
+            catalog: catalog(),
+          })
+        );
+
+        // 1,84 € and 1,87 €, so the header's 3,71 € is the sum of the rows.
+        expect(
+          state.lines.map((row) =>
+            row.product?.kind === 'shown' ? row.product.total?.amount : null
+          )
+        ).toEqual(['1,84 €', '1,87 €']);
+        expect(state.header.cost).toBe('3,71 €');
+      });
+
+      it('reads an empty brand as none', () => {
+        const row = rowOf(
+          { content: 'Leche', itemIds: ['milk'] },
+          {
+            catalog: catalog({
+              itemOf: (itemId) =>
+                itemId === 'milk'
+                  ? ({ ...ITEMS.get('milk'), brand: '  ' } as CatalogItem)
+                  : null,
+            }),
+          }
+        );
+
+        expect(row.product).toEqual(expect.objectContaining({ brand: null }));
+      });
+
+      it('has no brand or size for a product the catalog has not named, and totals it by its offer', () => {
+        const unnamed = { catalog: catalog({ itemOf: () => null }) };
+        const weighed = rowOf(
+          {
+            content: 'Manzanas',
+            itemIds: ['apples'],
+            quantity: 750,
+            unit: 'GRAM',
+          },
+          unnamed
+        );
+        const counted = rowOf(
+          { content: 'Leche', itemIds: ['milk'], quantity: 2 },
+          unnamed
+        );
+
+        expect(weighed.product).toEqual(
+          expect.objectContaining({
+            name: null,
+            brand: null,
+            size: null,
+            // Read as a pack by its offer, which cannot serve a weight.
+            total: null,
+          })
+        );
+        expect(counted.product).toEqual(
+          expect.objectContaining({
+            total: { amount: '1,84 €', estimated: false },
+          })
+        );
+      });
+    });
+
+    describe('a product sold by the kilo (velista 0179)', () => {
+      it('draws the piece price of a kilo piece, and says it in the row', () => {
+        const row = rowOf({ content: 'Queso', itemIds: ['cheese'] });
+
+        expect(row.product).toEqual(
+          expect.objectContaining({
+            itemId: 'cheese',
+            price: { amount: money(20.94), per: null },
+          })
+        );
+      });
+
+      it('draws a kilo piece with no piece price as no price', () => {
+        const row = rowOf(
+          { content: 'Queso', itemIds: ['cheese'] },
+          {
+            catalog: catalog({
+              pricesOf: () => [
+                {
+                  supermarketId: MERCADONA.id,
+                  chain: MERCADONA.name,
+                  logoUrl: null,
+                  kind: 'priced' as const,
+                  offer: offer(13.42),
+                  cheapest: false,
+                },
+              ],
+            }),
+          }
+        );
+
+        expect(row.product).toEqual(
+          expect.objectContaining({ itemId: 'cheese', price: null })
+        );
+      });
+
+      it('draws the price of a loose product with what it is per', () => {
+        const row = rowOf({ content: 'Manzanas', itemIds: ['apples'] });
+
+        expect(row.product).toEqual(
+          expect.objectContaining({
+            itemId: 'apples',
+            price: { amount: money(2.49), per: 'catalog.per.KILOGRAM' },
+          })
+        );
+      });
+
+      it('draws the piece price of a kilo piece the catalog has not named', () => {
+        const row = rowOf(
+          { content: 'Queso', itemIds: ['cheese'] },
+          { catalog: catalog({ itemOf: () => null }) }
+        );
+
+        expect(row.product).toEqual(
+          expect.objectContaining({
+            itemId: 'cheese',
+            name: null,
+            price: { amount: money(20.94), per: null },
+          })
+        );
       });
     });
 
@@ -382,7 +644,11 @@ describe('selectListState', () => {
       });
 
       expect(row.product).toEqual(
-        expect.objectContaining({ itemId: 'milk', others: 2, price: '0,92 €' })
+        expect.objectContaining({
+          itemId: 'milk',
+          others: 2,
+          price: { amount: money(0.92), per: null },
+        })
       );
     });
 
@@ -398,7 +664,7 @@ describe('selectListState', () => {
           itemId: 'oat',
           favorite: true,
           others: 1,
-          price: '2,15 €',
+          price: { amount: money(2.15), per: null },
         })
       );
     });
@@ -546,6 +812,20 @@ describe('selectListState', () => {
 
         // 6 x 0,92 + 1 x 2,15.
         expect(loaded(state).header.cost).toBe('7,67 €');
+      });
+
+      it('adds the piece price of a kilo piece (velista 0179)', () => {
+        const lines = [line({ itemIds: ['cheese'], quantity: 2 })];
+
+        // 2 x 20,94, and never 2 x 13,42.
+        expect(loaded(select({ catalog: catalog(), lines })).header.cost).toBe(
+          '41,88 €'
+        );
+        // Also while the catalog has not named it: the piece price says what it is.
+        expect(
+          loaded(select({ catalog: catalog({ itemOf: () => null }), lines }))
+            .header.cost
+        ).toBe('41,88 €');
       });
 
       it('draws nothing with no priced line, and nothing without a catalog', () => {
@@ -1031,54 +1311,6 @@ describe('selectListState', () => {
 
     it('reports no write state at all for an untouched row', () => {
       expect(loaded(select()).lines[0].write).toBe('none');
-    });
-  });
-
-  describe('reordering, and rule L4', () => {
-    const two = [
-      line({ id: 'a', position: 1 }),
-      line({ id: 'b', position: 2 }),
-    ];
-
-    it('is available once every page has arrived', () => {
-      expect(loaded(select({ lines: two })).canReorder).toBe(true);
-    });
-
-    it('is unavailable while a page is still outstanding', () => {
-      // `line.reorder` renumbers exactly the lines it names, so reordering a half read
-      // list leaves two lines on the same position.
-      const state = select({ lines: two, linesComplete: false });
-
-      expect(loaded(state).canReorder).toBe(false);
-    });
-
-    it('is unavailable to a reader', () => {
-      const state = select({ lines: two, caller: { permissions: READ_ONLY } });
-
-      expect(loaded(state).canReorder).toBe(false);
-    });
-
-    it('follows WRITE, not the tick', () => {
-      // Reordering rewrites what the list asks for rather than what the shop had, so it
-      // stayed with `canWrite` when ticking moved to `canDecide` (section 4).
-      expect(
-        loaded(select({ lines: two, caller: { permissions: DECIDER } }))
-          .canReorder
-      ).toBe(false);
-      expect(
-        loaded(select({ lines: two, caller: { permissions: WRITER } }))
-          .canReorder
-      ).toBe(true);
-    });
-
-    it('is pointless on a single line and is not offered', () => {
-      expect(loaded(select()).canReorder).toBe(false);
-    });
-
-    it('turns opening off while the mode is on', () => {
-      const state = select({ lines: two, reordering: true });
-
-      expect(loaded(state).lines[0]).toMatchObject({ interactive: false });
     });
   });
 

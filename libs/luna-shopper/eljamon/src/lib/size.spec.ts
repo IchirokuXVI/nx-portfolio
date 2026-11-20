@@ -28,11 +28,13 @@ describe('splitSize', () => {
     // Centilitres are written as millilitres (plan 0177): six cans of 33 cl.
     ['cerveza rubia, pk 6x33cl', 'cerveza rubia', 'pk 6x33cl', 1980, 6, false],
     ['yogur natural, pk 3', 'yogur natural', 'pk 3', null, 3, false],
+    // The size of one unit is in the name, and the size is the pack's (plan
+    // 0250, section 2.4). This read no size before.
     [
       'burger vacuno alta proteínas 130g, pk-2',
-      'burger vacuno alta proteínas 130g',
-      'pk-2',
-      null,
+      'burger vacuno alta proteínas',
+      '130g pk-2',
+      260,
       2,
       false,
     ],
@@ -65,13 +67,125 @@ describe('splitSize', () => {
       ['queso curado, 500g aprox.', '500g aprox.', 500, 'GRAM'],
       ['crema fresca de calabaza, 330ml', '330ml', 330, 'MILLILITER'],
       ['café en cápsulas, 16ud', '16ud', 16, 'UNIT'],
-      ['detergente líquido, 40 lavados', '40 lavados', 40, 'UNIT'],
+      ['calcetines deportivos, 3 pares', '3 pares', 3, 'UNIT'],
+      ['manzanilla, 20 bolsitas', '20 bolsitas', 20, 'UNIT'],
+      ['queso en porciones, 8 porciones', '8 porciones', 8, 'UNIT'],
+      ['yogur natural, 2X125g', '2X125g', 250, 'GRAM'],
     ])('%s', (printed, sizeFormat, unitSize, sizeUnit) => {
       // The printed text is the key, and it is exactly what the chain wrote.
       expect(splitSize(printed)).toMatchObject({
         sizeFormat,
         unitSize,
         sizeUnit,
+      });
+    });
+
+    describe('count words, a wash and a capital X (plan 0270)', () => {
+      it('reads 2x3 pares as six pairs in a pack of two', () => {
+        expect(splitSize('calcetines, 2x3 pares')).toMatchObject({
+          sizeFormat: '2x3 pares',
+          unitSize: 6,
+          sizeUnit: 'UNIT',
+          packCount: 2,
+        });
+      });
+
+      it.each([
+        ['detergente líquido, 40 lavados', '40 lavados'],
+        ['detergente líquido, 2x40 lavados', '2x40 lavados'],
+      ])(
+        '%p keeps the wash and states no size and no pack',
+        (printed, sizeFormat) => {
+          expect(splitSize(printed)).toEqual({
+            name: 'detergente líquido',
+            sizeFormat,
+            unitSize: null,
+            sizeUnit: null,
+            packCount: null,
+            soldByWeight: false,
+          });
+        }
+      );
+
+      it('reads the pack count of a capital X', () => {
+        expect(splitSize('yogur natural, 2X125g').packCount).toBe(2);
+      });
+
+      describe('hostile sizes', () => {
+        const NOTHING = {
+          unitSize: null,
+          sizeUnit: null,
+          packCount: null,
+          soldByWeight: false,
+        };
+
+        it.each(['XL', '2XL', 'MAX', 'X2', '2X60 w'])(
+          'keeps %p after the comma and states no size and no pack',
+          (sizeFormat) => {
+            expect(splitSize(`camiseta térmica, ${sizeFormat}`)).toEqual({
+              name: 'camiseta térmica',
+              sizeFormat,
+              ...NOTHING,
+            });
+          }
+        );
+
+        it.each(['55X60 cm', '1.2X1.8 m'])(
+          'keeps the length %p and states no size and no pack',
+          (sizeFormat) => {
+            expect(splitSize(`mantel, ${sizeFormat}`)).toEqual({
+              name: 'mantel',
+              sizeFormat,
+              ...NOTHING,
+            });
+          }
+        );
+
+        it.each([
+          ['calcetines 3 pares, 40g', 'calcetines 3 pares', '40g', 40],
+          ['té verde 10 bolsitas, 1,5g', 'té verde 10 bolsitas', '1,5g', 1.5],
+        ])(
+          'reads only the size after the comma of %p',
+          (printed, name, sizeFormat, unitSize) => {
+            expect(splitSize(printed)).toEqual({
+              name,
+              sizeFormat,
+              unitSize,
+              sizeUnit: 'GRAM',
+              packCount: null,
+              soldByWeight: false,
+            });
+          }
+        );
+
+        it.each([
+          ['queso fundido, 1 PORCIÓN', '1 PORCIÓN', 1],
+          ['calcetines, 3 Pares.', '3 Pares.', 3],
+        ])(
+          'reads the count word of %p in capitals or with a stop',
+          (printed, sizeFormat, unitSize) => {
+            expect(splitSize(printed)).toMatchObject({
+              sizeFormat,
+              unitSize,
+              sizeUnit: 'UNIT',
+              packCount: null,
+            });
+          }
+        );
+
+        it.each([
+          ['detergente, lavado a mano', 'detergente', 'lavado a mano'],
+          ['par de calcetines', 'par de calcetines', null],
+        ])(
+          'reads no size in %p, where lavado or par has no number',
+          (printed, name, sizeFormat) => {
+            expect(splitSize(printed)).toEqual({
+              name,
+              sizeFormat,
+              ...NOTHING,
+            });
+          }
+        );
       });
     });
 
@@ -121,6 +235,96 @@ describe('splitSize', () => {
         });
       }
     });
+  });
+
+  describe('a count field takes the size of one unit from the name (plan 0250, section 2.4)', () => {
+    it('reads the paté as two tins of 75 g', () => {
+      expect(splitSize('paté clásico 75g, pk-2')).toEqual({
+        name: 'paté clásico',
+        sizeFormat: '75g pk-2',
+        unitSize: 150,
+        sizeUnit: 'GRAM',
+        packCount: 2,
+        soldByWeight: false,
+      });
+    });
+
+    it('reads the popcorn as three bags of 100 g', () => {
+      expect(splitSize('palomitas mantequilla 100g, pk-3')).toEqual({
+        name: 'palomitas mantequilla',
+        sizeFormat: '100g pk-3',
+        unitSize: 300,
+        sizeUnit: 'GRAM',
+        packCount: 3,
+        soldByWeight: false,
+      });
+    });
+
+    it.each([
+      [
+        'natillas de chocolate 125 g, pk 4',
+        'natillas de chocolate',
+        '125 g pk 4',
+        500,
+        'GRAM',
+      ],
+      [
+        'zumo de naranja 200ml, pk-3',
+        'zumo de naranja',
+        '200ml pk-3',
+        600,
+        'MILLILITER',
+      ],
+      [
+        'cerveza rubia 33cl, pk 6',
+        'cerveza rubia',
+        '33cl pk 6',
+        1980,
+        'MILLILITER',
+      ],
+      ['agua mineral 1,5l, pk-6', 'agua mineral', '1,5l pk-6', 9, 'LITER'],
+    ])('%s', (printed, name, sizeFormat, unitSize, sizeUnit) => {
+      expect(splitSize(printed)).toMatchObject({
+        name,
+        sizeFormat,
+        unitSize,
+        sizeUnit,
+      });
+    });
+
+    it.each([
+      // No size in the name: today's answer.
+      ['yogur natural, pk 3', 'yogur natural', 'pk 3', 3],
+      // The name states its count already, so which count the field's is
+      // cannot be read.
+      [
+        'bacon en tiras family 2x100g, pk-2',
+        'bacon en tiras family 2x100g',
+        'pk-2',
+        2,
+      ],
+      [
+        'bacon en tiras family 2 x 100g, pk-2',
+        'bacon en tiras family 2 x 100g',
+        'pk-2',
+        2,
+      ],
+      // A count is not a weight or a volume.
+      ['tiritas infantiles 10ud, pk-2', 'tiritas infantiles 10ud', 'pk-2', 2],
+      // A count of 1 is no pack, so nothing multiplies.
+      ['paté clásico 75g, pk-1', 'paté clásico 75g', 'pk-1', null],
+    ])(
+      '%s keeps the count and states no size',
+      (printed, name, sizeFormat, packCount) => {
+        expect(splitSize(printed)).toMatchObject({
+          name,
+          sizeFormat,
+          unitSize: null,
+          sizeUnit: null,
+          packCount,
+        });
+      }
+    );
   });
 
   it('splits at the last comma, leaving earlier ones in the name', () => {

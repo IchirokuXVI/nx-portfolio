@@ -54,20 +54,40 @@ const EGGS: readonly CatalogItem[] = [
   item('item-eggs-single', 'Huevo de codorniz', 'Quail egg', null, 1, 'UNIT', 'group-eggs', 'eggs'),
 ];
 
+/**
+ * Two loose products by the kilo that a curator gave a step (velista `0186`,
+ * section 1): the rice moves by 100 g, the coffee by 5 g below a kilo and 10 g from
+ * one. Every other product here keeps the default, 25 g, 25 ml or one.
+ */
+const LOOSE: readonly CatalogItem[] = [
+  item('item-rice-loose', 'Arroz redondo a granel', 'Loose round rice', null, null, 'KILOGRAM', 'group-rice', 'rice', 100),
+  item('item-coffee-loose', 'Café en grano a granel', 'Loose coffee beans', null, null, 'KILOGRAM', 'group-coffee', 'ground-coffee', 5),
+];
+
 const GROUPS: readonly ProductGroup[] = [
   group('group-milk', 'Leche', 'Milk'),
   group('group-bread', 'Pan', 'Bread'),
   group('group-oil', 'Aceite de oliva', 'Olive oil'),
   group('group-eggs', 'Huevos', 'Eggs'),
+  group('group-rice', 'Arroz', 'Rice'),
+  group('group-coffee', 'Café', 'Coffee'),
 ];
 
-const ITEMS: readonly CatalogItem[] = [...MILK, ...BREAD, ...OIL, ...EGGS];
+const ITEMS: readonly CatalogItem[] = [
+  ...MILK,
+  ...BREAD,
+  ...OIL,
+  ...EGGS,
+  ...LOOSE,
+];
 
 const MEMBERS: Readonly<Record<string, readonly string[]>> = {
   'group-milk': MILK.map((row) => row.id),
   'group-bread': BREAD.map((row) => row.id),
   'group-oil': OIL.map((row) => row.id),
   'group-eggs': EGGS.map((row) => row.id),
+  'group-rice': ['item-rice-loose'],
+  'group-coffee': ['item-coffee-loose'],
 };
 
 @Injectable()
@@ -185,13 +205,15 @@ function item(
   size: number | null,
   unit: UnitOfMeasure,
   productGroupId: string,
-  categorySlug: string
+  categorySlug: string,
+  quantityStep: number | null = null
 ): CatalogItem {
   // No offer, on every row. There is one catalog here and no scopes to price it
   // against, so a number would be invented rather than modelled, and unpriced is
   // the state both clusters are permanently in anyway (velista `0063`, section 3).
   return {
     id,
+    quantityStep,
     name: { es, en },
     brand,
     size,
@@ -203,6 +225,7 @@ function item(
     imageUrl: null,
     packCount: null,
     unitBasis: null,
+    approxWeight: null,
   };
 }
 

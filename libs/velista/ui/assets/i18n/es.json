@@ -131,6 +131,21 @@
       "notAvailable": "No había la última vez",
       "claimed": "Alguien lo está comprando",
       "claimedBy": "{{name}} lo está comprando"
+    },
+    "unit": {
+      "label": "Contar por",
+      "UNIT": "unidades",
+      "GRAM": "peso",
+      "MILLILITER": "volumen",
+      "cannot": {
+        "UNIT": "no se vende por unidades",
+        "GRAM": "no se vende a peso",
+        "MILLILITER": "no se vende por volumen"
+      },
+      "pieces": "{{count}} × {{size}}",
+      "cost": "{{amount}} · {{price}}",
+      "costAbout": "{{amount}} · ≈ {{price}}",
+      "notOffered": "Ninguno de sus productos se vende así, así que la línea sigue contando igual."
     }
   },
   "connection": {
@@ -437,7 +452,7 @@
     "countMore": "Más de {{count}} productos",
     "row": {
       "noPrice": "sin precio",
-      "priceAt": "{{price}} en {{chain}}"
+      "priceAt": "{{- price}} en {{- chain}}"
     },
     "add": {
       "label": "Añadir {{name}} a {{list}}",
@@ -446,7 +461,9 @@
     "held": {
       "title": "En {{list}}",
       "titleMany": "En tus listas",
-      "stepper": "Cuántos de {{line}} en {{list}}"
+      "alreadyOn": "Ya está en {{list}}.",
+      "openLine": "Ver en la lista",
+      "atZero": "Esto está en {{list}} a 0. Súbelo abajo con sus propios botones."
     },
     "adding": {
       "to": "Se añade a",
@@ -470,7 +487,6 @@
       "note": "Cambia la cantidad, o quita uno con el menos.",
       "none": "No se ha añadido nada en esta visita.",
       "pending": "Pendiente de aprobar",
-      "stepper": "Cantidad de {{name}}",
       "takeAll_one": "Quitarlo",
       "takeAll_other": "Quitar los {{count}}",
       "open": "Abrir {{list}}"
@@ -478,12 +494,11 @@
     "sheet": {
       "close": "Cerrar"
     },
-    "unit": {
-      "KILOGRAM": "{{price}} / kg",
-      "LITER": "{{price}} / L",
-      "UNIT": "{{price}} / unidad",
-      "DOZEN": "{{price}} / docena",
-      "WASH": "{{price}} / lavado"
+    "per": {
+      "KILOGRAM": "/ kg",
+      "LITER": "/ L",
+      "UNIT": "/ unidad",
+      "DOZEN": "/ docena"
     },
     "empty": {
       "title": "No hay nada que coincida con \"{{query}}\"",
@@ -558,7 +573,6 @@
     "inLists": {
       "title": "En tus listas",
       "last": "La última",
-      "stepper": "Cuántos en {{list}}",
       "other": "Ya está en esta lista, con este producto",
       "otherPending": "Ya está en esta lista, pendiente de aprobar",
       "readOnly": "Puedes ver esta lista. No puedes añadir nada.",
@@ -567,7 +581,14 @@
     },
     "similar": {
       "title": "Productos similares",
-      "failed": "No se han podido cargar los productos similares."
+      "failed": "No se han podido cargar los productos similares.",
+      "aboutLabel": "Cómo se ordenan",
+      "about": {
+        "title": "Cómo se ordenan",
+        "order": "Los productos similares se ordenan por precio por kilo o litro, para comparar bien un paquete grande con uno pequeño.",
+        "line": "En una lista, el producto marcado como el más barato es el que menos cuesta para la cantidad que pides. Para 300 g, un paquete pequeño puede costar menos que uno grande que sale más barato por kilo.",
+        "close": "Cerrar"
+      }
     },
     "categories": {
       "title": "Categorías",
@@ -727,15 +748,29 @@
       "copyReference": "Copiar referencia"
     }
   },
+  "amount": {
+    "group": "Cantidad de {{name}}",
+    "less": "Quitar {{step}} de {{name}}",
+    "more": "Añadir {{step}} a {{name}}",
+    "settled": "{{name}}, {{amount}}",
+    "inList": "{{name}} en {{list}}",
+    "turned": {
+      "grams": "Ahora en gramos",
+      "milliliters": "Ahora en mililitros"
+    },
+    "refused": {
+      "most": "Como máximo, {{- amount}}",
+      "wholeGrams": "Los gramos no llevan decimales",
+      "wholeMilliliters": "Los mililitros no llevan decimales",
+      "decimals": "Como máximo, tres decimales"
+    }
+  },
   "list": {
     "header": {
       "title": "Lista",
       "inGroup": "en {{name}}",
-      "pending": "{{pending}} de {{total}} pendientes",
-      "done": "Nada pendiente",
       "notLive": "No se está actualizando ahora",
-      "back": "Volver al grupo",
-      "cost": "Unos {{cost}} por las líneas que tienen precio"
+      "back": "Volver al grupo"
     },
     "presence": {
       "one": "{{name}} está en la lista",
@@ -754,9 +789,6 @@
       "resultsNone": "Nada en tu lista dice “{{query}}”",
       "resultsCatalog": "Del catálogo",
       "action": "Añadir",
-      "quantity": "Cuántos",
-      "more": "Uno más",
-      "fewer": "Uno menos",
       "startListening": "Di lo que necesitas",
       "stopListening": "Dejar de escuchar",
       "clear": "Borrar lo escrito",
@@ -803,12 +835,16 @@
       "groupAdds_one": "Añade su único producto",
       "groupAdds_other": "Añade sus {{count}} productos",
       "size": {
-        "UNIT": "{{size}} uds",
-        "GRAM": "{{size}} g",
-        "KILOGRAM": "{{size}} kg",
-        "MILLILITER": "{{size}} ml",
-        "LITER": "{{size}} L",
-        "PACK": "{{size}} packs"
+        "UNIT": "{{size}} uds",
+        "GRAM": "{{size}} g",
+        "KILOGRAM": "{{size}} kg",
+        "MILLILITER": "{{size}} ml",
+        "LITER": "{{size}} L",
+        "PACK": "{{size}} packs"
+      },
+      "weight": {
+        "KILOGRAM": "~{{size}} kg",
+        "GRAM": "~{{size}} g"
       },
       "asWritten": "Añadir “{{text}}” tal cual",
       "card": {
@@ -828,15 +864,19 @@
         "groupMore_other": "y {{count}} más",
         "noMatch": "Ningún producto coincide con «{{- query}}»",
         "noMatchFreeText": "Puedes añadirlo tal cual",
-        "alsoCalled": "También: {{- synonym}}",
-        "alreadyQuantity": "Cuántos de {{line}}"
-      }
+        "alsoCalled": "También: {{- synonym}}"
+      },
+      "alreadyOn": "{{name}} ya está en la lista.",
+      "dismissNotice": "Cerrar"
     },
     "addChoice": {
       "title": "{{name}} ya está en tu lista",
       "newLine": "Una línea nueva",
       "row": "Añadir {{added}} a {{name}}, {{product}}: de {{from}} a {{to}}",
       "rowNoProduct": "Añadir {{added}} a {{name}}: de {{from}} a {{to}}",
+      "onList": "Ya está en la lista. Elígela para verla.",
+      "rowOnList": "{{name}}, {{product}}: ya está en la lista con {{amount}}. Elígela para verla en la lista",
+      "rowOnListNoProduct": "{{name}}: ya está en la lista con {{amount}}. Elígela para verla en la lista",
       "merged": "{{name}}, {{quantity}}"
     },
     "empty": {
@@ -859,20 +899,7 @@
       "overwritten": "{{name}} cambió esto mientras lo editabas",
       "overwrittenBySomeone": "Otra persona cambió esto mientras lo editabas",
       "failed": "No se ha guardado. Toca para reintentar",
-      "movedTo": "Movido a la posición {{position}} de {{total}}",
-      "quantityFor": "Cuántos de {{name}}",
-      "quantityChanged": "{{name}}, ahora {{quantity}}"
-    },
-    "reorder": {
-      "enter": "Ponerlas en orden",
-      "title": "Ponerlas en orden",
-      "body": "Arrastra por el asa. Mientras estés aquí no se puede marcar nada",
-      "done": "Hecho",
-      "started": "Poniéndolas en orden. No se puede marcar nada",
-      "ended": "Has terminado de ponerlas en orden",
-      "moveUp": "Subir {{name}}",
-      "moveDown": "Bajar {{name}}",
-      "unavailable": "Para reordenar, usa el orden de la lista, todas las líneas y ninguna búsqueda."
+      "hiddenAtZero": "{{name}} está a 0 y se oculta. Busca la línea para recuperarla."
     },
     "view": {
       "order": {
@@ -983,7 +1010,14 @@
       "tooFast": "Ve un poco más despacio e inténtalo de nuevo",
       "failed": "No ha funcionado. Inténtalo de nuevo en un momento",
       "mergeNeedsApproval": "Ese nombre es de una línea aprobada, y esta línea aún no lo está.",
-      "mergeTooManyProducts": "Juntas tienen más de {{max}} productos."
+      "mergeTooManyProducts": "Juntas tienen más de {{max}} productos.",
+      "unitDiffers": "Estas dos líneas se cuentan en unidades distintas, así que siguen separadas.",
+      "addUnitDiffers": {
+        "UNIT": "Esta lista ya cuenta {{name}} por unidades. Cambia la cantidad en esa línea.",
+        "GRAM": "Esta lista ya cuenta {{name}} por peso. Cambia la cantidad en esa línea.",
+        "MILLILITER": "Esta lista ya cuenta {{name}} por volumen. Cambia la cantidad en esa línea.",
+        "unknown": "Esta lista ya tiene {{name}} en otra unidad. Cambia la cantidad en esa línea."
+      }
     },
     "detail": {
       "title": "Sobre esta línea",
@@ -1094,7 +1128,7 @@
       "sellsIt": "Lo vende",
       "sellsNot": "No lo vende",
       "notNear": "No está cerca de ti",
-      "from": "desde {{price}}",
+      "from": "desde {{- price}}",
       "other": "Otro supermercado",
       "loading": "Buscando los supermercados que tienes cerca",
       "noContext": "No se han podido cargar los supermercados que tienes cerca.",
@@ -1125,7 +1159,9 @@
       "each": "{{count}} a {{price}} cada uno",
       "older": "Ver más antiguas",
       "empty": "Todavía no se ha comprado nada.",
-      "loading": "Cargando el historial de compras"
+      "loading": "Cargando el historial de compras",
+      "about": "Unos {{price}}",
+      "atPer": "{{amount}} a {{price}} {{- per}}"
     },
     "confirmDelete": {
       "title": "¿Borrar “{{name}}”?",
@@ -1144,7 +1180,6 @@
       "keepEditing": "Seguir editando"
     },
     "trips": {
-      "toBuy": "Por comprar",
       "labelNamed": "{{name}} · {{date}}",
       "bought": "{{bought}} de {{total}} comprados",
       "lines": "{{count}} líneas",
@@ -1172,7 +1207,6 @@
       "staple": "En {{with}} de tus últimas {{seen}} listas",
       "add": "Añadir {{count}}",
       "addLabel": "Añadir {{count}} de {{name}} a la lista",
-      "quantityLabel": "Cuántos de {{name}}",
       "more": "Ver más sugerencias",
       "added": "{{name}} añadido a la lista"
     },
@@ -1186,7 +1220,8 @@
       "more_other": "y {{count}} más que también valen",
       "pickFor": "Para {{name}}",
       "failed": "Los productos de esta lista no se cargaron.",
-      "retry": "Reintentar"
+      "retry": "Reintentar",
+      "about": "unos {{price}}"
     },
     "dropped": {
       "quantity": {
@@ -1293,6 +1328,10 @@
     },
     "tour": {
       "again": "Enséñamela otra vez"
+    },
+    "listRows": {
+      "label": "Filas compactas",
+      "hint": "Las listas muestran el tamaño, el precio y el total en cada fila. Solo en este dispositivo."
     }
   },
   "install": {
@@ -1618,18 +1657,10 @@
       "open": "Registrar {{name}}",
       "wanted": "×{{count}}",
       "busy": "Guardando",
-      "takenBack_one": "1 devuelto",
-      "takenBack_other": "{{count}} devueltos",
       "removed": "Ya no está en la lista",
       "boughtFromAnotherList": "Comprado desde otra lista de la compra",
       "boughtFromTheList": "Comprado desde la lista",
       "alreadyBought": "Ya está comprado"
-    },
-    "outstanding": {
-      "label": "{{name}}, aún por conseguir",
-      "bought_one": "{{count}} comprado",
-      "bought_other": "{{count}} comprados",
-      "listLabel": "{{list}}, {{name}}, por conseguir"
     },
     "touched": {
       "got": "{{name}} lo consiguió",
@@ -1745,7 +1776,7 @@
       "close": "Cerrar"
     },
     "price": {
-      "cheaperAt": "{{price}} en {{chain}}"
+      "cheaperAt": "{{- price}} en {{- chain}}"
     },
     "group": {
       "noCategory": "Sin categoría",
@@ -1925,7 +1956,13 @@
       "belowSettled_one": "Ya se ha comprado uno para esta lista",
       "belowSettled_other": "Ya se han comprado {{count}} para esta lista",
       "basketFinished": "Quien hizo la lista ha terminado la compra. Ya no se puede cambiar",
-      "reference": "ref {{correlationId}}"
+      "reference": "ref {{correlationId}}",
+      "addUnitDiffers": {
+        "UNIT": "{{list}} ya cuenta {{name}} por unidades. Cambia la cantidad en esa línea.",
+        "GRAM": "{{list}} ya cuenta {{name}} por peso. Cambia la cantidad en esa línea.",
+        "MILLILITER": "{{list}} ya cuenta {{name}} por volumen. Cambia la cantidad en esa línea.",
+        "unknown": "{{list}} ya tiene {{name}} en otra unidad. Cambia la cantidad en esa línea."
+      }
     },
     "status": {
       "got": "Marcar {{name}} como conseguido",
@@ -1939,7 +1976,7 @@
     },
     "entries": {
       "otherList": "Otra lista",
-      "asks": "pide {{count}}"
+      "asks": "pide {{amount}}"
     },
     "row": {
       "boughtOf": "{{bought}} de {{asked}}",
@@ -1969,7 +2006,8 @@
       "sheetTitle": "¿Para qué lista es?",
       "listCaption": "{{zone}} · {{count}} por comprar",
       "resultsOnLists": "En tus listas",
-      "resultsNone": "Nada en tus listas dice “{{query}}”"
+      "resultsNone": "Nada en tus listas dice “{{query}}”",
+      "alreadyOn": "{{name}} ya está en {{list}}."
     },
     "addChoice": {
       "title": "{{name}} ya está en esta lista",
@@ -1985,12 +2023,11 @@
       "changedLabel": "{{name}}, ha cambiado"
     },
     "total": {
-      "amount": "~{{amount}}",
+      "amount": "≈{{amount}}",
       "open": "Total estimado, unos {{amount}}. Ver de dónde sale.",
-      "barLabel": "Unos {{bought}} comprados de unos {{total}}",
-      "boughtEnd": "{{amount}} comprado",
-      "leftEnd": "{{amount}} por comprar",
+      "openExact": "Total: {{amount}}. Ver de dónde sale.",
       "title": "Total estimado",
+      "titleExact": "Total",
       "bought": "Comprado",
       "left": "Por comprar",
       "total": "Total",
@@ -2009,7 +2046,8 @@
         "shop": "Con una tienda elegida, solo cuentan los precios de esa tienda.",
         "unpriced": "Aún no tenemos precio para estos productos. Las tiendas cambian lo que publican, así que puede aparecer más adelante.",
         "otherShop": "Elige otra tienda en el filtro para ver sus precios."
-      }
+      },
+      "amountExact": "{{amount}}"
     },
     "changes": {
       "banner_one": "{{count}} cambio en tus listas",
@@ -2052,9 +2090,12 @@
       "unavailable": "No disponible en esta tienda",
       "instead": "En lugar de {{name}}, que no está disponible en esta tienda"
     },
+    "amount": {
+      "label": "Cantidad de {{name}}: {{amount}}",
+      "listLabel": "{{list}}, cantidad de {{name}}: {{amount}}"
+    },
     "change": {
-      "one": "Cambiar",
-      "oneLabel": "Cambiar el producto de {{name}}",
+      "oneLabel": "Cambiar el producto en {{name}}",
       "all": "Cambiar en todas las listas",
       "openLabel": "Hay otro más barato que {{name}}. Cambiar el producto",
       "cheaper": "otro más barato",
@@ -2085,10 +2126,10 @@
       "toGet_other": "Faltan {{count}}",
       "got_one": "Hoy se ha cogido {{count}}.",
       "got_other": "Hoy se han cogido {{count}}.",
-      "gotAt_one": "Hoy se ha cogido {{count}} a {{price}}.",
-      "gotAt_other": "Hoy se han cogido {{count}} a {{price}}.",
-      "gotAtShop_one": "Hoy se ha cogido {{count}} a {{price}}, en {{shop}}.",
-      "gotAtShop_other": "Hoy se han cogido {{count}} a {{price}}, en {{shop}}.",
+      "gotAt_one": "Hoy se ha cogido {{count}} a {{- price}}.",
+      "gotAt_other": "Hoy se han cogido {{count}} a {{- price}}.",
+      "gotAtShop_one": "Hoy se ha cogido {{count}} a {{- price}}, en {{- shop}}.",
+      "gotAtShop_other": "Hoy se han cogido {{count}} a {{- price}}, en {{- shop}}.",
       "askedOn_one": "Lo pide 1 lista",
       "askedOn_other": "Lo piden {{count}} listas",
       "addElsewhere": "Añadirlo a otra lista",
@@ -2098,7 +2139,14 @@
       "gotAll_one": "Ya lo tengo",
       "gotAll_other": "Ya tengo los {{count}}",
       "gotOther_one": "Ya tengo el que falta",
-      "gotOther_other": "Ya tengo los {{count}} que faltan"
+      "gotOther_other": "Ya tengo los {{count}} que faltan",
+      "toGetAmount": "Por coger: {{amount}}",
+      "about": "≈ {{price}}",
+      "gotAmount": "Cogido hoy: {{amount}}.",
+      "gotAtAmount": "Cogido hoy: {{amount}} a {{- price}}.",
+      "gotAtShopAmount": "Cogido hoy: {{amount}} a {{- price}}, en {{- shop}}.",
+      "gotAllAmount": "Ya lo tengo todo ({{amount}})",
+      "gotOtherAmount": "Ya tengo lo que falta ({{amount}})"
     }
   },
   "getList": {

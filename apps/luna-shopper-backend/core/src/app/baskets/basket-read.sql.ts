@@ -162,6 +162,7 @@ export function coveredLinesSql(narrow: CoveredLineNarrowing): string {
     ll."listId" AS "listId",
     ll.content AS "content",
     ll.quantity AS "quantity",
+    ll."unit"::text AS "unit",
     ll.version AS "version",
     ll."itemSetHash" AS "itemSetHash",
     ll."favoriteItemId" AS "favoriteItemId",
@@ -250,6 +251,8 @@ export const FROZEN_LINES_SQL = `
     r."listId" AS "listId",
     ll.content AS "content",
     GREATEST(r."asked" - b."bought", 0)::int AS "quantity",
+    -- What "asked" counts, frozen beside it (plan 0246, section 3.4).
+    r."unit"::text AS "unit",
     ll.version AS "version",
     ll."itemSetHash" AS "itemSetHash",
     ll."favoriteItemId" AS "favoriteItemId",
@@ -257,6 +260,8 @@ export const FROZEN_LINES_SQL = `
     ll."createdAt" AS "createdAt"
   FROM "basket_trip_rows" r
   JOIN "list_lines" ll ON ll.id = r."lineId"
+  -- Within one line, and in the unit of the trip row (plan 0246, section
+  -- 3.5): a buy in another unit is never subtracted from what it asked.
   LEFT JOIN LATERAL (
     SELECT COALESCE(
              SUM(s."quantity") FILTER (WHERE s."outcome" = 'BOUGHT'), 0
@@ -264,6 +269,7 @@ export const FROZEN_LINES_SQL = `
     FROM "line_settlements" s
     WHERE s."basketId" = r."basketId"
       AND s."lineId" = r."lineId"
+      AND s."unit" = r."unit"
       AND s."revertedAt" IS NULL
   ) b ON TRUE
   WHERE r."basketId" = ANY($1::uuid[])
@@ -281,6 +287,8 @@ export interface CoveredLineRow {
   listId: string;
   content: string;
   quantity: number;
+  /** What `quantity` counts (plan 0246, section 3.4). */
+  unit: string;
   /** `list_lines.version`, which orders two patches of one line (plan 0204). */
   version: number;
   itemSetHash: string | null;
@@ -339,6 +347,7 @@ export const BASKET_SETTLEMENTS_SQL = `
     s."lineId" AS "lineId",
     s."outcome"::text AS "outcome",
     s.quantity AS "quantity",
+    s."unit"::text AS "unit",
     s."settledAt" AS "settledAt",
     s."settledByParticipantId" AS "settledByParticipantId",
     s."itemId" AS "itemId",
@@ -370,6 +379,7 @@ export const BASKETS_SETTLEMENTS_SQL = `
     s."lineId" AS "lineId",
     s."outcome"::text AS "outcome",
     s.quantity AS "quantity",
+    s."unit"::text AS "unit",
     s."settledAt" AS "settledAt",
     s."settledByParticipantId" AS "settledByParticipantId",
     s."itemId" AS "itemId",
@@ -392,6 +402,8 @@ export interface BasketSettlementRow {
   lineId: string;
   outcome: string;
   quantity: number;
+  /** What `quantity` counts (plan 0246, section 3.5). */
+  unit: string;
   settledAt: Date;
   settledByParticipantId: string | null;
   /**
@@ -435,6 +447,9 @@ export const BASKET_ELSEWHERE_SQL = `
             ORDER BY s."settledAt" DESC, s.id DESC
           ))[1] AS "throughBasket"
   FROM "line_settlements" s
+  -- Within one line, and in the line's unit (plan 0246, section 3.5): a buy
+  -- made before the line changed its unit is not a count of what it asks.
+  JOIN "list_lines" sl ON sl.id = s."lineId" AND sl."unit" = s."unit"
   WHERE s."lineId" = ANY($2::uuid[])
     AND ${boughtElsewhere('s', '$1', '$3')}
   GROUP BY s."lineId"

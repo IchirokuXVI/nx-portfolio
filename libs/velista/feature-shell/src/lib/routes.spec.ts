@@ -1512,7 +1512,10 @@ describe('the sheets and their exit animation', () => {
     // upgrade.
     //
     // The language sheet added one, over the account page.
-    expect(sheets).toHaveLength(72);
+    //
+    // `0187` added one over a product's page: why Similar products and a line's
+    // cheapest mark can name different products.
+    expect(sheets).toHaveLength(73);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {
@@ -1752,17 +1755,23 @@ describe('the bottom bar', () => {
 
   /**
    * The heading of Similar products opens the same sheet of lists, over the
-   * product's page. Nothing else covers that page.
+   * product's page, and its info button the sheet that says how they are sorted
+   * (velista `0187`). Nothing else covers that page.
    */
-  it('declares the sheet of lists over a product page too', () => {
+  it('declares the sheet of lists and the sheet about the order over a product page', () => {
     const page = pages.find(
       (route) => route.path === 'catalog/products/:itemId'
     );
 
+    expect(CATALOG_PATHS.orderInfoSheet).toBe('about-order');
     expect(page?.children?.map((route) => route.path)).toEqual([
       `${SHEET_SEGMENT}/${CATALOG_PATHS.addListSheet}`,
+      `${SHEET_SEGMENT}/${CATALOG_PATHS.orderInfoSheet}`,
     ]);
-    expect(page?.children?.[0]?.canDeactivate).toHaveLength(1);
+    for (const child of page?.children ?? []) {
+      expect(child.loadComponent).toBeDefined();
+      expect(child.canDeactivate).toEqual([sheetFallGuard]);
+    }
   });
 
   /**

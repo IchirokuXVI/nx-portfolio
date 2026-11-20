@@ -1,0 +1,20 @@
+@use '../add-sheet';
+
+.title {
+  @include add-sheet.title;
+
+  margin-block-end: var(--app-space-4);
+}
+
+// One thought for each paragraph, at the size of body text, as the line page's
+// info sheet draws them: this sheet is read, not scanned.
+.say {
+  margin: 0 0 var(--app-space-4);
+  font-size: var(--app-text-base);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-primary);
+}
+
+.close {
+  @include add-sheet.close;
+}

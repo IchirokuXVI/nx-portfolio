@@ -14,6 +14,36 @@ const UNIT_WORDS: Readonly<Record<string, string>> = {
   LITER: 'L',
 };
 
+/*
+ * The words a size is written with when it is not a number of units (admin
+ * plan 0068). Constants and not translation keys, as the unit words above
+ * are: the back office ships English only.
+ */
+
+/** Before the weight of one piece: "~1.56 kg". The tilde says "about" in one
+ * character, which is what a cell beside a name has room for. */
+const APPROX_MARK = '~';
+/** A product sold by the kilo whose pieces state no weight. */
+const BY_THE_KILO = 'by the kilo';
+
+/** The weight of one piece, in grams, as it reads: `1.56 kg`, `395 g`. */
+export function formatGrams(grams: number, locale: string): string {
+  return grams >= 1000
+    ? `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(grams / 1000)} kg`
+    : `${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(grams)} g`;
+}
+
+/**
+ * An amount in millilitres, as it reads: `1 L`, `250 ml`. The twin of
+ * {@link formatGrams}, for the step of a product sold by the litre (admin
+ * plan 0070).
+ */
+export function formatMillilitres(millilitres: number, locale: string): string {
+  return millilitres >= 1000
+    ? `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(millilitres / 1000)} L`
+    : `${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(millilitres)} ml`;
+}
+
 /**
  * A price as money: `0,98 €` in Spanish, `€0.98` in English.
  *
@@ -86,8 +116,13 @@ export function formatUnitPrice(
 /**
  * The size of a product: `1 L`, `450 g`, `6 x 1 L` for a pack of six.
  *
- * `''` when the product has no size. A unit with no short word (a unit, a
- * pack) is left out, since "6" beside a product name already reads as a count.
+ * A product with no size may state the weight of one piece instead (backend
+ * plan 0244), whatever its unit: `~1.56 kg` for a cheese sold by the
+ * kilo, `~580 g` for a melon priced as one. A product sold by the kilo
+ * with neither reads `by the kilo`. Anything else with no size is `''`.
+ *
+ * A unit with no short word (a unit, a pack) is left out, since "6" beside a
+ * product name already reads as a count.
  *
  * **The size of a pack is the size of the whole pack.** Six cartons of a
  * litre carry `unitSize` 6 and `packCount` 6, which is what tells them from a
@@ -98,12 +133,17 @@ export function formatSize(
     readonly unitSize?: number | null;
     readonly defaultUnit?: string | null;
     readonly packCount?: number | null;
+    readonly approxWeight?: number | null;
   },
   locale: string
 ): string {
   const size = product.unitSize;
   if (size === null || size === undefined || !Number.isFinite(size)) {
-    return '';
+    const weight = product.approxWeight;
+    if (typeof weight === 'number' && Number.isFinite(weight) && weight > 0) {
+      return `${APPROX_MARK}${formatGrams(weight, locale)}`;
+    }
+    return product.defaultUnit === 'KILOGRAM' ? BY_THE_KILO : '';
   }
   const pack = product.packCount;
   const packed = typeof pack === 'number' && pack > 1;
@@ -114,6 +154,64 @@ export function formatSize(
   const one = word === '' ? number : `${number} ${word}`;
 
   return packed ? `${pack} x ${one}` : one;
+}
+
+/**
+ * The two sizes of a doubted source row as the sentence beside its size
+ * writes them (admin plan 0072): `125 g` and `500 g`, both for the whole pack
+ * and both in the row's own unit, so the number a person reads is the number
+ * they would type back as the size.
+ *
+ * Six significant digits rather than a fixed number of decimals, because a
+ * litre row that a price per millilitre disproves implies `0.0012 L`, and
+ * three decimals would print a size it does not imply.
+ *
+ * A row sized in units has no short word, so `units` words its count: the
+ * caller passes the translator's plural, which is handed the count as a number
+ * to choose the form by and the figure in the locale's format to print
+ * (`30 units`, `1 unit`, `1.5 units`).
+ *
+ * `label` is the price label as the chain printed it, with a leading `€/`
+ * left off, since the sentence already says "price per", lower cased and with
+ * one trailing full stop dropped, as the harvester keys its label table
+ * (backend plan 0249, `labelKey`): `KILO` reads `kilo` and `100 ML.` reads
+ * `100 ml`. The word stays the chain's. `''` for none, which picks the
+ * sentence that names no label.
+ */
+export function formatSizeDoubt(
+  doubt: {
+    readonly stated: number;
+    readonly implied: number;
+    readonly unit: string;
+    readonly label: string | null;
+  },
+  locale: string,
+  units: (count: number, figure: string) => string
+): {
+  readonly stated: string;
+  readonly implied: string;
+  readonly label: string;
+} {
+  const number = new Intl.NumberFormat(locale, {
+    maximumSignificantDigits: 6,
+  });
+  const word = UNIT_WORDS[doubt.unit] ?? '';
+  const size = (value: number): string =>
+    doubt.unit === 'UNIT'
+      ? units(value, number.format(value))
+      : word === ''
+        ? number.format(value)
+        : `${number.format(value)} ${word}`;
+  return {
+    stated: size(doubt.stated),
+    implied: size(doubt.implied),
+    label: (doubt.label ?? '')
+      .replace(/^\s*(€|eur)\s*\/\s*/i, '')
+      .trim()
+      .toLowerCase()
+      .replace(/\.$/, '')
+      .trim(),
+  };
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;

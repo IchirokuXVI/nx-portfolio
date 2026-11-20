@@ -2,6 +2,7 @@ import { UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
 import categoriesTree from './__fixtures__/categories-tree.json';
 import categoryExpanded from './__fixtures__/category-expanded.json';
 import cheeseListing from './__fixtures__/category-listing-cheese.json';
+import approximateWeightPerPiece from './__fixtures__/product-approximate-weight-per-piece.json';
 import approximateWeight from './__fixtures__/product-approximate-weight.json';
 import boxOfCapsules from './__fixtures__/product-box-of-capsules.json';
 import capsules from './__fixtures__/product-capsules-per-unit.json';
@@ -11,17 +12,22 @@ import eggs from './__fixtures__/product-eggs-per-dozen.json';
 import fixedPackInStoreBarcode from './__fixtures__/product-fixed-pack-in-store-barcode.json';
 import inconsistent from './__fixtures__/product-inconsistent-bulk-price.json';
 import noEan from './__fixtures__/product-no-ean.json';
+import packContradictsSize from './__fixtures__/product-pack-contradicts-size.json';
+import packOfBottles from './__fixtures__/product-pack-of-bottles.json';
 import packOfPads from './__fixtures__/product-pack-of-pads.json';
 import packOfWipes from './__fixtures__/product-pack-of-wipes.json';
+import packSizeIsContent from './__fixtures__/product-pack-size-is-content.json';
 import per100g from './__fixtures__/product-reference-format-100g.json';
 import referenceFormat from './__fixtures__/product-reference-format-100ml.json';
 import rollOfServices from './__fixtures__/product-roll-of-services.json';
+import singleBottle from './__fixtures__/product-single-bottle.json';
 import singleRazor from './__fixtures__/product-single-razor.json';
 import sizeFormatM from './__fixtures__/product-size-format-m.json';
 import {
   normalizeCategories,
   normalizeCategoryProducts,
   normalizeProduct,
+  readProductCategoryPaths,
   unavailableProduct,
 } from './normalize';
 import { isImportableSizeFormat, mapSizeFormat } from './units';
@@ -39,11 +45,15 @@ describe('normalizeProduct', () => {
       name: { es: 'Aceite de oliva 0,4º Hacendado' },
       brand: 'Hacendado',
       soldByWeight: false,
+      approxWeight: null,
       unitSize: 1,
       unit: UnitOfMeasure.LITER,
       packCount: null,
       categorySlug: 'oils',
       categoryPath: ['Aceite, especias y salsas', 'Aceite, vinagre y sal'],
+      detailCategoryPaths: [
+        ['Aceite, especias y salsas', 'Aceite, vinagre y sal'],
+      ],
       price: 8.75,
       unitPrice: 8.75,
       unitPriceLabel: 'L',
@@ -307,6 +317,132 @@ describe('normalizeProduct', () => {
       ).toBe(20);
     });
 
+    it('reads pack_size when is_pack is true and total_units is not set', () => {
+      expect(
+        normalizeProduct(capsulesWith({ total_units: null })).packCount
+      ).toBe(20);
+    });
+
+    describe('pack_size as the content of one unit (plan 0248, section 1)', () => {
+      it('is what the captured products say they are', () => {
+        // The fields the cases read, pinned, so a recapture that moves one of
+        // them fails here rather than quietly changing what a case means.
+        expect(packOfBottles).toMatchObject({
+          id: '28113',
+          packaging: 'Pack-4',
+        });
+        expect(packOfBottles.price_instructions).toMatchObject({
+          is_pack: true,
+          pack_size: 0.5,
+          total_units: 4,
+          unit_size: 2,
+          size_format: 'l',
+        });
+        expect(packSizeIsContent).toMatchObject({
+          id: '21698',
+          packaging: null,
+        });
+        expect(packSizeIsContent.price_instructions).toMatchObject({
+          is_pack: true,
+          pack_size: 0.25,
+          total_units: 6,
+          unit_size: 1.5,
+          size_format: 'l',
+        });
+        expect(packContradictsSize).toMatchObject({ id: '18382' });
+        expect(packContradictsSize.price_instructions).toMatchObject({
+          is_pack: true,
+          pack_size: 0.08,
+          total_units: 2,
+          unit_size: 1.6,
+          size_format: 'kg',
+          unit_price: '1.70',
+          reference_price: '10.625',
+        });
+        expect(singleBottle).toMatchObject({
+          id: '27342',
+          packaging: 'Botella',
+        });
+        expect(singleBottle.price_instructions).toMatchObject({
+          is_pack: false,
+          unit_size: 2,
+          size_format: 'l',
+        });
+      });
+
+      it('reads total_units when pack_size times it is the size (case 2)', () => {
+        const bottles = normalizeProduct(packOfBottles);
+        expect(bottles.packCount).toBe(4);
+        // The size stays the whole pack (plan 0162).
+        expect(bottles.unitSize).toBe(2);
+        expect(bottles.unit).toBe(UnitOfMeasure.LITER);
+
+        const cans = normalizeProduct(packSizeIsContent);
+        expect(cans.packCount).toBe(6);
+        expect(cans.unitSize).toBe(1.5);
+      });
+
+      it('reads total_units when the comparison price proves the content (case 3)', () => {
+        const dessert = normalizeProduct(packContradictsSize);
+        expect(dessert.packCount).toBe(2);
+        // Only the count is read: the size is what unit_size says.
+        expect(dessert.unitSize).toBe(1.6);
+        expect(dessert.unit).toBe(UnitOfMeasure.KILOGRAM);
+      });
+
+      it('changes no price field', () => {
+        expect(normalizeProduct(packOfBottles)).toMatchObject({
+          price: 6,
+          unitPrice: 3,
+        });
+        expect(normalizeProduct(packContradictsSize)).toMatchObject({
+          price: 1.7,
+          unitPrice: 10.63,
+        });
+      });
+
+      it('states no count for the single bottle the pack was proposed as', () => {
+        expect(normalizeProduct(singleBottle).packCount).toBeNull();
+        expect(normalizeProduct(singleBottle).unitSize).toBe(2);
+      });
+
+      it('states no count when neither the size nor the comparison price agrees (case 4)', () => {
+        const contradicted = {
+          ...packContradictsSize,
+          price_instructions: {
+            ...packContradictsSize.price_instructions,
+            reference_price: '1.063',
+            bulk_price: '1.06',
+          },
+        };
+        expect(normalizeProduct(contradicted).packCount).toBeNull();
+      });
+
+      it('states no count when total_units is not a whole number above 1', () => {
+        for (const totalUnits of [1, 2.5]) {
+          const pack = {
+            ...packOfBottles,
+            price_instructions: {
+              ...packOfBottles.price_instructions,
+              pack_size: 2 / totalUnits,
+              total_units: totalUnits,
+            },
+          };
+          expect(normalizeProduct(pack).packCount).toBeNull();
+        }
+      });
+
+      it('reads the same count and the packaging from a category listing', () => {
+        const [bottles, single] = normalizeCategoryProducts({
+          ...categoryExpanded,
+          products: [packOfBottles, singleBottle],
+          categories: [],
+        });
+        expect(bottles).toMatchObject({ packCount: 4, packaging: 'Pack-4' });
+        expect(single).toMatchObject({ packCount: null, packaging: 'Botella' });
+      });
+    });
+
     it('states no count when pack_size and total_units disagree', () => {
       expect(
         normalizeProduct(capsulesWith({ total_units: 24 })).packCount
@@ -455,6 +591,58 @@ describe('the category tree', () => {
       id: 4,
       name: 'Charcutería y quesos',
     });
+  });
+});
+
+describe('every branch of a detail (plan 0268)', () => {
+  const names = (paths: { name: string }[][]) =>
+    paths.map((path) => path.map((node) => node.name));
+
+  it('reads both roots of the pack of wipes', () => {
+    expect(names(readProductCategoryPaths(packOfWipes))).toEqual([
+      ['Cuidado facial y corporal', 'Cuidado corporal', 'Toallitas'],
+      ['Limpieza y hogar', 'Papel higiénico y celulosa', 'Papel higiénico'],
+    ]);
+    expect(readProductCategoryPaths(packOfWipes)[0][0]).toEqual({
+      id: 20,
+      name: 'Cuidado facial y corporal',
+    });
+  });
+
+  it('reads both children under one root of the Russian salad', () => {
+    expect(names(readProductCategoryPaths(approximateWeightPerPiece))).toEqual([
+      ['Pizzas y platos preparados', 'Listo para Comer', 'Platos fríos'],
+      ['Pizzas y platos preparados', 'Platos preparados fríos', 'Ensaladilla'],
+    ]);
+  });
+
+  it('carries every branch on the product and leaves the path of the first alone', () => {
+    const product = normalizeProduct(packOfWipes, { observedAt: OBSERVED_AT });
+    expect(product.categoryPath).toEqual([
+      'Cuidado facial y corporal',
+      'Cuidado corporal',
+      'Toallitas',
+    ]);
+    expect(product.detailCategoryPaths).toEqual([
+      ['Cuidado facial y corporal', 'Cuidado corporal', 'Toallitas'],
+      ['Limpieza y hogar', 'Papel higiénico y celulosa', 'Papel higiénico'],
+    ]);
+  });
+
+  it('reads the detail branches whatever path the walk passed', () => {
+    const product = normalizeProduct(packOfWipes, {
+      observedAt: OBSERVED_AT,
+      categoryPath: [{ id: 1, name: 'A walk path' }],
+    });
+    expect(product.categoryPath).toEqual(['A walk path']);
+    expect(product.detailCategoryPaths).toHaveLength(2);
+  });
+
+  it('reads no branch from a payload with no categories', () => {
+    expect(readProductCategoryPaths({ id: '1' })).toEqual([]);
+    expect(unavailableProduct('1', OBSERVED_AT).detailCategoryPaths).toEqual(
+      []
+    );
   });
 });
 
@@ -789,6 +977,146 @@ describe('a product sold by weight (plan 0181)', () => {
   it('is not sold by weight when the payload does not say', () => {
     // Every fixture authored before the field was known carries none.
     expect(normalizeProduct(oliveOil).soldByWeight).toBe(false);
+  });
+});
+
+describe('the approximate weight of a piece (plan 0244, section 5.1)', () => {
+  it('is what the captured piece priced as one says it is', () => {
+    expect(approximateWeightPerPiece.id).toBe('60226');
+    expect(approximateWeightPerPiece.price_instructions).toMatchObject({
+      approx_size: true,
+      unit_size: 0.58,
+      size_format: 'kg',
+      unit_price: '6.50',
+      bulk_price: '6.50',
+      reference_price: '6.500',
+      reference_format: 'ud',
+    });
+  });
+
+  it('weighs a piece sold by the kilo and keeps its price per kilo', () => {
+    expect(normalizeProduct(approximateWeight)).toMatchObject({
+      externalId: '50946',
+      approxWeight: 1540,
+      soldByWeight: true,
+      unitSize: null,
+      price: 9.41,
+      unitPrice: 9.41,
+      unitPriceLabel: 'kg',
+    });
+  });
+
+  it('weighs a piece the chain compares per piece and keeps its piece price', () => {
+    expect(normalizeProduct(approximateWeightPerPiece)).toMatchObject({
+      externalId: '60226',
+      approxWeight: 580,
+      soldByWeight: false,
+      unitSize: null,
+      unit: UnitOfMeasure.KILOGRAM,
+      // `unit_price`, the piece. `bulk_price` stays the figure beside it.
+      price: 6.5,
+      unitPrice: 6.5,
+      unitPriceLabel: 'ud',
+      packCount: null,
+    });
+  });
+
+  it('states no weight for a fixed pack, in-store barcode or not', () => {
+    expect(normalizeProduct(fixedPackInStoreBarcode)).toMatchObject({
+      approxWeight: null,
+      unitSize: 0.05,
+    });
+    expect(normalizeProduct(oliveOil).approxWeight).toBeNull();
+  });
+
+  it('states no weight when the approximate size is not in kilos', () => {
+    const product = normalizeProduct({
+      ...approximateWeight,
+      price_instructions: {
+        ...approximateWeight.price_instructions,
+        size_format: 'ud',
+      },
+    });
+    expect(product.approxWeight).toBeNull();
+  });
+
+  it('rounds the grams to four decimals', () => {
+    const product = normalizeProduct({
+      ...approximateWeightPerPiece,
+      price_instructions: {
+        ...approximateWeightPerPiece.price_instructions,
+        unit_size: 0.123456789,
+      },
+    });
+    expect(product.approxWeight).toBe(123.4568);
+  });
+
+  it('states no weight for an approximate piece with no unit_size', () => {
+    const product = normalizeProduct({
+      ...approximateWeight,
+      price_instructions: {
+        ...approximateWeight.price_instructions,
+        unit_size: null,
+      },
+    });
+    expect(product).toMatchObject({ approxWeight: null, unitSize: null });
+  });
+
+  it('says nothing of a weight on an unavailable product', () => {
+    expect(unavailableProduct('60226', OBSERVED_AT).approxWeight).toBeNull();
+  });
+
+  describe('in a category listing', () => {
+    const listed = (id: string) =>
+      normalizeCategoryProducts(cheeseListing).find(
+        (product) => product.externalId === id
+      );
+
+    it('weighs each piece the captured listing calls approximate', () => {
+      expect(listed('50946')).toMatchObject({
+        approxWeight: 1540,
+        soldByWeight: true,
+        unitSize: null,
+      });
+      expect(listed('50943')).toMatchObject({
+        approxWeight: 420,
+        soldByWeight: true,
+        unitSize: null,
+      });
+      expect(listed('23561')).toMatchObject({
+        approxWeight: null,
+        unitSize: 0.35,
+      });
+    });
+
+    it('carries reference_format, so the listing decides the kind alone', () => {
+      // Every row of the captured listing prints the comparison format.
+      const raw = cheeseListing.categories.flatMap(
+        (category) => category.products
+      );
+      for (const product of raw) {
+        expect(product.price_instructions.reference_format).toBeTruthy();
+      }
+      const [perKilo, perPiece] = normalizeCategoryProducts({
+        id: 0,
+        name: '',
+        products: [approximateWeight, approximateWeightPerPiece],
+      });
+      expect(perKilo).toMatchObject({
+        approxWeight: 1540,
+        soldByWeight: true,
+        price: 9.41,
+        unitSize: null,
+      });
+      expect(perPiece).toMatchObject({
+        approxWeight: 580,
+        soldByWeight: false,
+        price: 6.5,
+        unitPrice: 6.5,
+        unitPriceLabel: 'ud',
+        unitSize: null,
+      });
+    });
   });
 });
 

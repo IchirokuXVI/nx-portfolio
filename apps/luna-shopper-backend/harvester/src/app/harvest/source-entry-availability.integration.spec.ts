@@ -12,6 +12,7 @@ import {
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { DataSource, type Repository } from 'typeorm';
 import {
+  DiscoveredPlace,
   HARVESTER_ENTITIES,
   HarvestRun,
   SourceCatalogEntry,
@@ -22,6 +23,7 @@ import {
 } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
 import { DezaCatalogRunner } from './deza-catalog.runner';
+import { DezaKeyGuard } from './deza-key-guard';
 import {
   startFakeListing,
   type FakeListing,
@@ -262,7 +264,8 @@ describeIntegration(
         shops,
         catalog,
         admin,
-        availability
+        availability,
+        dataSource.getRepository(DiscoveredPlace)
       );
       decisions = new SourceEntryService(
         entries,
@@ -358,9 +361,12 @@ describeIntegration(
         }
       );
 
-      const runner = new DezaCatalogRunner({
-        getOrThrow: () => ({ userAgent: 'test' }),
-      } as unknown as ConfigService);
+      const runner = new DezaCatalogRunner(
+        {
+          getOrThrow: () => ({ userAgent: 'test' }),
+        } as unknown as ConfigService,
+        new DezaKeyGuard(entries)
+      );
       await runner.run(context, sink, { supermarketId: CHAIN }, {
         adapterKey: 'deza-web',
         workers: 1,

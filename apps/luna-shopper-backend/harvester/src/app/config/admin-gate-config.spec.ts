@@ -16,6 +16,8 @@ describe('harvester admin gate configuration', () => {
       'postgres://luna_harvester:pw@luna-shopper-backend-harvester-db:5432/luna_harvester',
     AUTH_JWT_PUBLIC_KEY: '-----BEGIN PUBLIC KEY-----\nx\n-----END-----',
     ADMIN_JWT_PUBLIC_KEY: '-----BEGIN PUBLIC KEY-----\ny\n-----END-----',
+    // Required since plan 0216: the refresh cooldowns are counted in Redis.
+    REDIS_URL: 'redis://luna-shopper-backend-redis:6379',
   };
 
   describe('the operator public key', () => {
@@ -54,6 +56,25 @@ describe('harvester admin gate configuration', () => {
     it('leaves the actor id alone, which names this service to catalog', () => {
       const keys = Object.keys(harvesterValidationSchema.describe().keys ?? {});
       expect(keys).toContain('HARVESTER_ACTOR_ID');
+    });
+  });
+
+  describe('the price refresh (plan 0216, section 9)', () => {
+    it('requires Redis, where the cooldowns are counted', () => {
+      const { REDIS_URL: _url, ...withoutRedis } = required;
+      expect(
+        harvesterValidationSchema.validate(withoutRedis).error
+      ).toBeDefined();
+    });
+
+    it('is off by default, with the section 5 numbers', () => {
+      const { value } = harvesterValidationSchema.validate(required);
+      expect(value).toMatchObject({
+        HARVEST_REFRESH_ENABLED: false,
+        HARVEST_REFRESH_CHAIN_SECONDS: 30,
+        HARVEST_REFRESH_PRODUCT_MINUTES: 30,
+        HARVEST_REFRESH_BLOCKED_MINUTES: 30,
+      });
     });
   });
 });

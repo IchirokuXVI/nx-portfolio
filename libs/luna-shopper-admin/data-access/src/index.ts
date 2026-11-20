@@ -82,6 +82,9 @@ export {
   notFoundError,
   toGatewayError,
 } from './lib/gateway-error';
+export { ADMIN_NAME_SEED, AdminNames } from './lib/harvest/admin-names';
+export { EarlierRunTotals } from './lib/harvest/earlier-run-totals';
+export { earlierRunTotalsFollowSession } from './lib/harvest/earlier-run-totals-follow-session';
 export {
   type ApplyEntryDecisionsInput,
   type EntryDecisionOperation,
@@ -91,6 +94,8 @@ export {
 export { HarvestApi } from './lib/harvest/harvest-api';
 export { HarvestMemory } from './lib/harvest/harvest-memory';
 export {
+  CARREFOUR_ACEITE_ENTRY,
+  CARREFOUR_YOGUR_ENTRY,
   DEZA_CATALOG_PRESET,
   DEZA_NIGHTLY_SCHEDULE,
   HARVEST_RUN_SEED,

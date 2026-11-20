@@ -6,10 +6,13 @@ import {
   effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
+  AdminNames,
+  EarlierRunTotals,
   HARVEST_SERVICE,
   RunWatches,
 } from '@portfolio/luna-shopper-admin/data-access';
@@ -20,23 +23,32 @@ import {
 import {
   exportFileName,
   failureBlockReason,
+  harvestEntryAddress,
   harvestReviewPath,
   isFileImportRun,
   PRICE_WRITING_MODES,
   queuedByRun,
   REVIEW_CHAIN_PARAM,
+  runProgress,
   runWarningRows,
+  type HarvestAddress,
 } from '@portfolio/luna-shopper-admin/models';
 import {
   ConfirmDialog,
   HarvestNotice,
   PageHeader,
   RunProgressView,
+  Viewport,
 } from '@portfolio/luna-shopper-admin/ui';
 import { formatInstant } from './format-instant';
 import { HarvestShell } from './harvest-shell';
 import { RunPricesTab } from './run-prices-tab';
-import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
+import {
+  COPY_TARGETS_SHOWN,
+  readRunReport,
+  reportHasContent,
+  type RunReportUnslottedLeaf,
+} from './run-report';
 
 /**
  * One run, watched (plan 0006, section 2).
@@ -68,6 +80,8 @@ import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
     RunProgressView,
     RunPricesTab,
   ],
+  // The names of the admins, read once for this page (admin plan 0074).
+  providers: [AdminNames],
   template: `
     <!-- Drawn in every state, so that the way back and the tabs do not appear
          only once the run has loaded. Until then the title is the screen this
@@ -81,14 +95,18 @@ import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
       "
       backLink=".."
     >
-      @if (watch.run(); as run) {
+      <!-- On a phone the chips are the first line of the overview and not in
+           the header (admin plan 0074, choice C1): the header cuts a chip to
+           an ellipsis on every page, and two chips beside a long title read
+           "COMPLE..." and "REVER...". -->
+      @if (headerChips() ? watch.run() : null; as run) {
         <p [class]="run.status" class="status" pageChip>
           {{ 'harvest.status.' + run.status | rokuT }}
         </p>
       }
       <!-- Beside the status and never instead of it: a revert takes back what
            the run wrote and does not change how the run ended. -->
-      @if (watch.run()?.revertedAt) {
+      @if (headerChips() && watch.run()?.revertedAt) {
         <p class="reverted" pageChip>
           {{ 'harvest.run.reverted.chip' | rokuT }}
         </p>
@@ -97,7 +115,7 @@ import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
            the way to that schedule. -->
       <!-- One block for each, because a chip is projected into the header
            only as the one element of its block. -->
-      @if (scheduled()?.link; as link) {
+      @if (headerChips() ? scheduled()?.link : null; as link) {
         <a
           [attr.title]="'harvest.schedules.runs.openSchedule' | rokuT"
           [routerLink]="link"
@@ -107,7 +125,9 @@ import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
           >{{ 'harvest.schedules.runs.scheduled' | rokuT }}</a
         >
       }
-      @if (scheduled() !== null && scheduled()?.link === null) {
+      @if (
+        headerChips() && scheduled() !== null && scheduled()?.link === null
+      ) {
         <p class="scheduled" pageChip data-scheduled>
           {{ 'harvest.schedules.runs.scheduled' | rokuT }}
         </p>
@@ -149,7 +169,37 @@ import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
       @if (tab() === 'prices') {
         <lib-run-prices-tab [runId]="run.id" role="tabpanel" />
       } @else {
-        <lib-run-progress [progress]="watch.progress()!" [run]="run" />
+        <!-- The same chips as the header's, as a line of the page that may
+             wrap, so each reads in full on a phone. -->
+        @if (!headerChips()) {
+          <div class="run-chips" data-run-chips>
+            <p [class]="run.status" class="status">
+              {{ 'harvest.status.' + run.status | rokuT }}
+            </p>
+            @if (run.revertedAt) {
+              <p class="reverted">
+                {{ 'harvest.run.reverted.chip' | rokuT }}
+              </p>
+            }
+            @if (scheduled(); as schedule) {
+              @if (schedule.link; as link) {
+                <a
+                  [attr.title]="'harvest.schedules.runs.openSchedule' | rokuT"
+                  [routerLink]="link"
+                  class="scheduled"
+                  data-scheduled
+                  >{{ 'harvest.schedules.runs.scheduled' | rokuT }}</a
+                >
+              } @else {
+                <p class="scheduled" data-scheduled>
+                  {{ 'harvest.schedules.runs.scheduled' | rokuT }}
+                </p>
+              }
+            }
+          </div>
+        }
+
+        <lib-run-progress [progress]="progress()!" [run]="run" />
 
         @if (watch.paused()) {
           <p class="note">{{ 'harvest.run.paused' | rokuT }}</p>
@@ -173,10 +223,14 @@ import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
 
         <dl class="facts">
           @for (fact of facts(); track fact.key) {
-            @if (fact.value !== '') {
-              <div>
+            @if (fact.value !== '' || fact.valueKey !== '') {
+              <div [attr.data-fact]="fact.key">
                 <dt>{{ 'harvest.run.fact.' + fact.key | rokuT }}</dt>
-                <dd>{{ fact.value }}</dd>
+                <dd [attr.title]="fact.title === '' ? null : fact.title">
+                  {{
+                    fact.valueKey === '' ? fact.value : (fact.valueKey | rokuT)
+                  }}
+                </dd>
               </div>
             }
           }
@@ -226,54 +280,341 @@ import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
             </dl>
 
             @if (report().copies.length > 0) {
-              <table class="copies">
-                <caption>
-                  {{
-                    'harvest.run.report.copies.caption' | rokuT
-                  }}
-                </caption>
-                <thead>
-                  <tr>
-                    <th scope="col">
-                      {{ 'harvest.run.report.copies.from' | rokuT }}
-                    </th>
-                    <th scope="col">
-                      {{ 'harvest.run.report.copies.to' | rokuT }}
-                    </th>
-                    <th class="number" scope="col">
-                      {{ 'harvest.run.report.copies.prices' | rokuT }}
-                    </th>
-                    <th class="number" scope="col">
-                      {{ 'harvest.run.report.copies.availability' | rokuT }}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (copy of report().copies; track copy.from) {
+              <div class="scroll">
+                <table class="copies" data-copies>
+                  <caption>
+                    {{
+                      'harvest.run.report.copies.caption' | rokuT
+                    }}
+                  </caption>
+                  <thead>
                     <tr>
-                      <th scope="row">{{ scopeName(copy.from) }}</th>
-                      <td>
-                        {{ targetNames(copy.from, copy.to) }}
-                        @if (hiddenTargets(copy.from, copy.to) > 0) {
-                          <button
-                            (click)="expandCopy(copy.from)"
-                            class="more"
-                            type="button"
-                          >
-                            {{
-                              'harvest.run.report.copies.more'
-                                | rokuT
-                                  : { count: hiddenTargets(copy.from, copy.to) }
-                            }}
-                          </button>
-                        }
-                      </td>
-                      <td class="number">{{ copy.pricesCopied }}</td>
-                      <td class="number">{{ copy.availabilityCopied }}</td>
+                      <th scope="col">
+                        {{ 'harvest.run.report.copies.from' | rokuT }}
+                      </th>
+                      <th scope="col">
+                        {{ 'harvest.run.report.copies.to' | rokuT }}
+                      </th>
+                      <th class="number" scope="col">
+                        {{ 'harvest.run.report.copies.prices' | rokuT }}
+                      </th>
+                      <th class="number" scope="col">
+                        {{ 'harvest.run.report.copies.availability' | rokuT }}
+                      </th>
                     </tr>
+                  </thead>
+                  <tbody>
+                    @for (copy of report().copies; track copy.from) {
+                      <tr>
+                        <th scope="row">{{ scopeName(copy.from) }}</th>
+                        <td>
+                          {{ targetNames(copy.from, copy.to) }}
+                          @if (hiddenTargets(copy.from, copy.to) > 0) {
+                            <button
+                              (click)="expandCopy(copy.from)"
+                              class="more"
+                              type="button"
+                            >
+                              {{
+                                'harvest.run.report.copies.more'
+                                  | rokuT
+                                    : {
+                                        count: hiddenTargets(
+                                          copy.from,
+                                          copy.to
+                                        ),
+                                      }
+                              }}
+                            </button>
+                          }
+                        </td>
+                        <td class="number">{{ copy.pricesCopied }}</td>
+                        <td class="number">{{ copy.availabilityCopied }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+
+            <!-- What a walk did not read, by the runner that says so (admin
+                 plan 0071): each part only where the report holds it. -->
+            @if (report().unreadable.length > 0) {
+              <div class="part" data-unreadable>
+                <h3>{{ 'harvest.run.report.unreadable' | rokuT }}</h3>
+                <ul class="addresses">
+                  @for (address of report().unreadable; track address) {
+                    <li>{{ address }}</li>
                   }
-                </tbody>
-              </table>
+                </ul>
+              </div>
+            }
+
+            @if (report().askedAgain.length > 0) {
+              <div class="part" data-asked-again>
+                <h3>{{ 'harvest.run.report.askedAgain' | rokuT }}</h3>
+                <ul>
+                  @for (entry of report().askedAgain; track entry.id) {
+                    <li [class.lost]="!entry.read">
+                      {{ entry.name }}
+                      <span class="outcome">{{
+                        (entry.read
+                          ? 'harvest.run.report.askedAgainRead'
+                          : 'harvest.run.report.askedAgainLost'
+                        ) | rokuT
+                      }}</span>
+                    </li>
+                  }
+                </ul>
+              </div>
+            }
+
+            @if (report().blockedAfter !== '') {
+              <p class="stopped" data-blocked-after>
+                <strong>{{ 'harvest.run.report.blockedAfter' | rokuT }}</strong>
+                <span class="message">{{ report().blockedAfter }}</span>
+              </p>
+            }
+
+            @if (report().sections.length > 0) {
+              <div class="scroll">
+                <table class="copies" data-sections>
+                  <caption>
+                    {{
+                      'harvest.run.report.sections.caption' | rokuT
+                    }}
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">
+                        {{ 'harvest.run.report.sections.name' | rokuT }}
+                      </th>
+                      <th class="number" scope="col">
+                        {{ 'harvest.run.report.sections.products' | rokuT }}
+                      </th>
+                      <th class="number" scope="col">
+                        {{ 'harvest.run.report.sections.queries' | rokuT }}
+                      </th>
+                      <th scope="col">
+                        {{ 'harvest.run.report.sections.stoppedBy' | rokuT }}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (section of report().sections; track section.code) {
+                      <tr>
+                        <th scope="row">
+                          {{ section.name }}
+                          @if (
+                            section.stoppedBy === 'GROWTH' &&
+                            section.openQueries.length > 0
+                          ) {
+                            <span class="open">
+                              {{
+                                'harvest.run.report.sections.openQueries'
+                                  | rokuT
+                              }}:
+                              {{ section.openQueries.join(', ') }}
+                            </span>
+                          }
+                        </th>
+                        <td class="number">{{ section.products }}</td>
+                        <!-- A section that threw states no count. A dash
+                             stands for it, never a 0 the run did not say. -->
+                        <td class="number" data-queries>
+                          @if (section.queries === null) {
+                            <span aria-hidden="true">–</span>
+                            <span class="sr-only">{{
+                              'harvest.run.report.sections.queriesNotStated'
+                                | rokuT
+                            }}</span>
+                          } @else {
+                            {{ section.queries }}
+                          }
+                        </td>
+                        <td>
+                          @if (section.failed) {
+                            {{ 'harvest.run.report.stoppedBy.FAILED' | rokuT }}
+                          } @else if (section.stoppedBy; as stop) {
+                            {{ 'harvest.run.report.stoppedBy.' + stop | rokuT }}
+                          }
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+
+            @if (report().categories.length > 0) {
+              <div class="scroll">
+                <table class="copies" data-categories>
+                  <caption>
+                    {{
+                      'harvest.run.report.categories.caption' | rokuT
+                    }}
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">
+                        {{ 'harvest.run.report.categories.name' | rokuT }}
+                      </th>
+                      <th class="number" scope="col">
+                        {{ 'harvest.run.report.categories.printed' | rokuT }}
+                      </th>
+                      <th class="number" scope="col">
+                        {{ 'harvest.run.report.categories.read' | rokuT }}
+                      </th>
+                      <th class="number" scope="col">
+                        {{ 'harvest.run.report.categories.repeated' | rokuT }}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (
+                      category of report().categories;
+                      track category.code
+                    ) {
+                      <tr>
+                        <th scope="row">{{ category.name }}</th>
+                        <td class="number">{{ category.printedCount }}</td>
+                        <td class="number">{{ category.rowsRead }}</td>
+                        <td class="number">{{ category.rowsRepeated }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+
+            @if (report().detailStage; as stage) {
+              <p data-detail-stage>
+                {{
+                  'harvest.run.report.detail'
+                    | rokuT
+                      : {
+                          pages: stage.pages,
+                          failed: stage.failed,
+                          timeouts: stage.timeouts,
+                        }
+                }}
+              </p>
+            }
+
+            <!-- The DIA products whose every leaf has no category of ours
+                 (backend plan 0268, section 5): one line a leaf, and the
+                 products it names. A list, so it wraps on a phone. -->
+            @if (report().unslottedOnly; as unslotted) {
+              <div class="part" data-unslotted-only>
+                <h3>
+                  {{ 'harvest.run.report.unslottedOnly.heading' | rokuT }}
+                </h3>
+                <p>
+                  {{
+                    'harvest.run.report.unslottedOnly.count'
+                      | rokuT: { count: unslotted.products }
+                  }}
+                </p>
+                @if (unslotted.leaves.length > 0) {
+                  <ul>
+                    @for (leaf of unslotted.leaves; track leaf.id) {
+                      <li data-unslotted-leaf>
+                        {{
+                          'harvest.run.report.unslottedOnly.leaf'
+                            | rokuT
+                              : {
+                                  root: leaf.rootName,
+                                  name: leaf.name,
+                                  count: leaf.products,
+                                }
+                        }}
+                        @if (leaf.examples.length > 0) {
+                          <span class="examples" data-unslotted-examples>
+                            {{
+                              'harvest.run.report.unslottedOnly.examples'
+                                | rokuT: { names: exampleNames(leaf) }
+                            }}
+                          </span>
+                        }
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
+            }
+
+            <!-- A pack count is a guess from a ratio (backend plan 0249), and
+                 the sentence says so in its own words. -->
+            @if (report().sizes; as sizes) {
+              <div class="part" data-sizes>
+                <p>
+                  {{
+                    'harvest.run.report.sizesDisproved'
+                      | rokuT: { count: sizes.disproved }
+                  }}
+                </p>
+                @if (sizes.probablePackCounts > 0) {
+                  <p class="note">
+                    {{
+                      'harvest.run.report.probablePackCounts'
+                        | rokuT: { count: sizes.probablePackCounts }
+                    }}
+                  </p>
+                }
+                @if (sizes.examples.length > 0) {
+                  <div class="scroll">
+                    <table class="copies" data-size-examples>
+                      <thead>
+                        <tr>
+                          <th scope="col">
+                            {{ 'harvest.run.report.sizes.name' | rokuT }}
+                          </th>
+                          <th class="number" scope="col">
+                            {{ 'harvest.run.report.sizes.stated' | rokuT }}
+                          </th>
+                          <th class="number" scope="col">
+                            {{ 'harvest.run.report.sizes.implied' | rokuT }}
+                          </th>
+                          <th scope="col">
+                            {{ 'harvest.run.report.sizes.unit' | rokuT }}
+                          </th>
+                          <th scope="col">
+                            {{ 'harvest.run.report.sizes.label' | rokuT }}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (example of sizes.examples; track $index) {
+                          <tr>
+                            <!-- The entry's address, when the example names
+                                 one (admin plan 0073). -->
+                            <th scope="row">
+                              @if (entryLink(example.entryId); as link) {
+                                <a
+                                  [queryParams]="link.queryParams"
+                                  [routerLink]="link.commands"
+                                  data-size-entry
+                                  >{{ example.name }}</a
+                                >
+                              } @else {
+                                {{ example.name }}
+                              }
+                            </th>
+                            <td class="number">{{ amount(example.stated) }}</td>
+                            <td class="number">
+                              {{ amount(example.implied) }}
+                            </td>
+                            <td>
+                              {{ 'harvest.unit.' + example.unit | rokuT }}
+                            </td>
+                            <td class="nowrap">{{ example.label }}</td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                }
+              </div>
             }
           </section>
         }
@@ -431,6 +772,15 @@ import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
       text-transform: uppercase;
     }
 
+    /* On a phone the chip sits on the page, whose ground is the surface it
+       takes in the header, so a state with no wash of its own takes the grey
+       of a run that ended, as in the list of runs. Before the washes below,
+       which win at the same weight. */
+    .run-chips .status {
+      background: var(--admin-neutral-wash);
+      color: var(--admin-neutral-on-wash);
+    }
+
     .status.RUNNING,
     .status.PENDING {
       background: var(--admin-accent-wash);
@@ -490,6 +840,15 @@ import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
     .count {
       font-variant-numeric: tabular-nums;
       color: var(--admin-ink-muted);
+    }
+
+    .sr-only {
+      position: absolute;
+      overflow: hidden;
+      clip-path: inset(50%);
+      inline-size: 1px;
+      block-size: 1px;
+      white-space: nowrap;
     }
 
     .warnings {
@@ -592,6 +951,114 @@ import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
       cursor: pointer;
     }
 
+    /* A table scrolls inside its own box on a phone, so the page itself never
+       scrolls sideways (admin plan 0071). The box shows a shadow on each side
+       that has more to show (admin plan 0074, section 3), with no script: the
+       two covers are painted in the page colour and scroll with the table,
+       the two shadows stay at the edges of the box. A cover sits on its
+       shadow while that edge of the table is in view, so a table that fits,
+       as every one does at 1360 px, draws no shadow at all.
+
+       The shadow fades from the control outline, the one grey of plan 0041
+       dark enough to read on the page at a glance; the panel border was too
+       light to notice. It fades to nothing over 1.25rem, a soft edge. */
+    .scroll {
+      inline-size: 100%;
+      overflow-x: auto;
+      background:
+        linear-gradient(to right, var(--admin-surface) 50%, transparent) left /
+          2.5rem 100% no-repeat local,
+        linear-gradient(to left, var(--admin-surface) 50%, transparent) right /
+          2.5rem 100% no-repeat local,
+        linear-gradient(to right, var(--admin-border-strong), transparent)
+          left / 1.25rem 100% no-repeat scroll,
+        linear-gradient(to left, var(--admin-border-strong), transparent)
+          right / 1.25rem 100% no-repeat scroll;
+    }
+
+    /* A header and a number never wrap. A body cell wraps between words only,
+       so no word is ever cut in half: the table grows and the box scrolls. */
+    .copies thead th,
+    .copies .number {
+      white-space: nowrap;
+    }
+
+    .copies th,
+    .copies td {
+      overflow-wrap: normal;
+      word-break: normal;
+    }
+
+    /* The name of a row keeps room for two or three words a line, so the
+       table scrolls before a name is stacked one word a line. */
+    .copies tbody th {
+      min-inline-size: 9rem;
+    }
+
+    /* A price per unit reads as one value, like a number. */
+    .copies .nowrap {
+      white-space: nowrap;
+    }
+
+    /* The chips of the header, as the first line of the overview on a phone
+       (admin plan 0074, section 1). A line of the page, so it may wrap. */
+    .run-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-2);
+      align-items: center;
+    }
+
+    .part {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-1);
+    }
+
+    .part h3 {
+      font-size: 0.8125rem;
+      font-weight: 400;
+      color: var(--admin-ink-muted);
+    }
+
+    .part ul {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-1);
+      padding-inline-start: var(--admin-space-4);
+    }
+
+    .addresses {
+      font-family: ui-monospace, 'SFMono-Regular', 'Consolas', monospace;
+      font-size: 0.8125rem;
+      overflow-wrap: anywhere;
+    }
+
+    .outcome,
+    .open,
+    .examples,
+    .stopped .message {
+      color: var(--admin-ink-muted);
+    }
+
+    .lost .outcome {
+      color: var(--admin-danger-on-wash);
+    }
+
+    .stopped {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-1) var(--admin-space-3);
+      align-items: baseline;
+    }
+
+    .open,
+    .examples {
+      display: block;
+      font-size: 0.8125rem;
+      font-weight: 400;
+    }
+
     .code {
       padding: 0 var(--admin-space-2);
       border-radius: var(--admin-radius);
@@ -644,12 +1111,20 @@ import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RunPage {
+  private readonly _viewport = inject(Viewport);
   private readonly _route = inject(ActivatedRoute);
   private readonly _service = inject(HARVEST_SERVICE);
   private readonly _references = inject(ResourceReferences);
   private readonly _registry = inject(ResourceRegistry);
+  private readonly _admins = inject(AdminNames);
 
   readonly shell = inject(HarvestShell);
+
+  /**
+   * Whether the chips sit in the header: on a wide screen. On a phone they are
+   * the first line of the overview (admin plan 0074, section 1).
+   */
+  readonly headerChips = computed(() => !this._viewport.compact());
 
   /**
    * Which view of the run is drawn: the counters and the report, or the price
@@ -658,9 +1133,21 @@ export class RunPage {
    */
   readonly tab = signal<'overview' | 'prices'>('overview');
 
-  readonly watch = inject(RunWatches).for(
-    this._route.snapshot.paramMap.get('id') ?? ''
-  );
+  private readonly _runId = this._route.snapshot.paramMap.get('id') ?? '';
+
+  readonly watch = inject(RunWatches).for(this._runId);
+
+  private readonly _earlier = inject(EarlierRunTotals);
+
+  /**
+   * How far the run is, with an approximate total from the last completed run
+   * of its chain and mode while it does not know its own (decision 86 of the
+   * harvester round). A known total and a completed run keep their own.
+   */
+  readonly progress = computed(() => {
+    const run = this.watch.run();
+    return run === null ? null : runProgress(run, this._earlier.of(run));
+  });
 
   /**
    * Whether a schedule started this run, and where that schedule is. `null`
@@ -724,15 +1211,20 @@ export class RunPage {
   /** The copies, detail counts and settings a walk reported (plan 0029). */
   readonly report = computed(() => readRunReport(this.watch.run()?.report));
 
-  readonly hasReport = computed(() => {
-    const report = this.report();
-    return (
-      report.writes !== '' ||
-      report.detailFetch !== '' ||
-      report.details !== null ||
-      report.copies.length > 0
-    );
-  });
+  readonly hasReport = computed(() => reportHasContent(this.report()));
+
+  /** A size in base units, to one decimal at most: `333.3`, `1000`. */
+  amount(value: number): string {
+    return String(Math.round(value * 10) / 10);
+  }
+
+  /**
+   * The products a DIA leaf names, as the chain names them. Joined with
+   * commas and no "and": five examples are a sample, not the whole leaf.
+   */
+  exampleNames(leaf: RunReportUnslottedLeaf): string {
+    return leaf.examples.map((example) => example.name).join(', ');
+  }
 
   /** The scopes named in the copies table, by id, once the lookup answered. */
   private readonly _scopeNames = signal<ReadonlyMap<string, string>>(new Map());
@@ -796,29 +1288,81 @@ export class RunPage {
         };
   });
 
-  readonly facts = computed(() => {
+  /**
+   * Where a size example's entry is: the products queue narrowed to it, on
+   * this run's chain (admin plan 0073).
+   *
+   * `null` for an example that names no entry, `''` from the report mapper,
+   * and for a run with no chain, so the name is drawn as text and not as a
+   * link with a hole in its query string.
+   */
+  entryLink(entryId: string): HarvestAddress | null {
+    const chain = this.watch.run()?.supermarketId ?? null;
+    return entryId === '' || chain === null
+      ? null
+      : harvestEntryAddress(entryId, chain);
+  }
+
+  readonly facts = computed<readonly RunFact[]>(() => {
     const run = this.watch.run();
     if (run === null) {
       return [];
     }
 
     return [
-      { key: 'requested', value: formatInstant(run.requestedAt) },
-      { key: 'started', value: formatInstant(run.startedAt) },
-      { key: 'finished', value: formatInstant(run.finishedAt) },
-      { key: 'heartbeat', value: formatInstant(run.heartbeatAt) },
+      fact('requested', formatInstant(run.requestedAt)),
+      fact('started', formatInstant(run.startedAt)),
+      fact('finished', formatInstant(run.finishedAt)),
+      fact('heartbeat', formatInstant(run.heartbeatAt)),
       // What the revert actually did, from the operation's own answer rather
       // than from the estimate the confirmation offered (backend plan 0082).
-      { key: 'reverted', value: formatInstant(run.revertedAt) },
-      {
-        key: 'revertedPrices',
-        value:
-          run.revertedPriceCount === null ? '' : String(run.revertedPriceCount),
-      },
-      { key: 'revertedBy', value: run.revertedByUserId ?? '' },
-      { key: 'correlationId', value: run.correlationId ?? '' },
+      fact('reverted', formatInstant(run.revertedAt)),
+      fact(
+        'revertedPrices',
+        run.revertedPriceCount === null ? '' : String(run.revertedPriceCount)
+      ),
+      this._revertedBy(run.revertedByUserId ?? null),
+      fact('correlationId', run.correlationId ?? ''),
     ];
   });
+
+  /**
+   * Who reverted the run, by name (admin plan 0074, section 2).
+   *
+   * Nothing while the list of admins is read, so a uuid never shows for a
+   * moment first. Then the name, the words for an admin the list does not
+   * hold, or the words for a list that could not be read: a failed read says
+   * nothing about the admin, so it never claims one is gone. The id stays in
+   * the hover, for whoever needs it.
+   */
+  private _revertedBy(adminId: string | null): RunFact {
+    if (adminId === null || adminId === '') {
+      return fact('revertedBy', '');
+    }
+
+    const state = this._admins.state();
+    if (state === 'idle' || state === 'loading') {
+      return fact('revertedBy', '');
+    }
+    if (state === 'failed') {
+      return {
+        key: 'revertedBy',
+        value: '',
+        valueKey: REVERTED_BY_UNREAD,
+        title: adminId,
+      };
+    }
+
+    const name = this._admins.nameOf(adminId);
+    return name === null
+      ? {
+          key: 'revertedBy',
+          value: '',
+          valueKey: REVERTED_BY_UNKNOWN,
+          title: adminId,
+        }
+      : { key: 'revertedBy', value: name, valueKey: '', title: adminId };
+  }
 
   /** Whether the confirmation is up. Nothing is deleted until it is answered. */
   readonly confirming = signal(false);
@@ -954,11 +1498,51 @@ export class RunPage {
       }
     });
 
+    // The admins are read only for a run that was reverted, and once: the
+    // reader ignores a second call.
+    effect(() => {
+      if ((this.watch.run()?.revertedByUserId ?? '') !== '') {
+        untracked(() => void this._admins.load());
+      }
+    });
+
+    // The earlier run, once for a run that does not know its total. Read again
+    // each time this page opens (owner decision 113b), so a reference run
+    // reverted since is not still quoted here; the header and the Runs tab
+    // share what this read holds. The poll gives a new run object every read,
+    // and the lookup asks once per id until the page opens again.
+    this._earlier.reread(this._runId);
+    effect(() => {
+      const run = this.watch.run();
+      untracked(() => void this._earlier.resolve(run));
+    });
+
     // On the component, never on a route provider. A route's injector is not
     // destroyed when the screen leaves, so teardown declared there never runs
     // and the poll would carry on against a screen nobody is looking at.
     inject(DestroyRef).onDestroy(() => this.watch.stop());
   }
+}
+
+/** The words for an admin the list of admins does not hold. */
+const REVERTED_BY_UNKNOWN = 'harvest.run.revertedByUnknown';
+
+/** The words for a list of admins that could not be read. */
+const REVERTED_BY_UNREAD = 'harvest.run.revertedByUnread';
+
+/**
+ * One fact of the run: a value as text, or a key to translate, and what its
+ * hover says. Empty strings stand for none.
+ */
+interface RunFact {
+  readonly key: string;
+  readonly value: string;
+  readonly valueKey: string;
+  readonly title: string;
+}
+
+function fact(key: string, value: string): RunFact {
+  return { key, value, valueKey: '', title: '' };
 }
 
 /**

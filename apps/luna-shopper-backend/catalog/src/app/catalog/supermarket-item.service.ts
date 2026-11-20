@@ -39,7 +39,7 @@ import {
   CatalogAuditService,
   type AuditedWrite,
 } from './catalog-audit.service';
-import { toSupermarketItemView } from './catalog.mappers';
+import { toSupermarketItemView, type PiecePriceBasis } from './catalog.mappers';
 import { lessSpecificScopesOf } from './effective-price.service';
 import {
   dryRunnable,
@@ -550,7 +550,8 @@ export class SupermarketItemService {
     if (!row) {
       throw new NotFoundException('No price for that item in that scope');
     }
-    return toSupermarketItemView(row);
+    const bases = await this.piecePriceBasesOf([row.itemId]);
+    return toSupermarketItemView(row, bases.get(row.itemId) ?? null);
   }
 
   async listByItem(
@@ -669,14 +670,37 @@ export class SupermarketItemService {
         ? []
         : await this.items.find({ where: { id: In(itemIds) } });
     const names = new Map(named.map((item) => [item.id, item.name]));
+    // The same read carries the piece price's basis (plan 0244), so the admin
+    // row costs no second query for it.
+    const products = new Map(named.map((item) => [item.id, item]));
 
     return {
       items: list.map((row) => ({
-        ...toSupermarketItemView(row),
+        ...toSupermarketItemView(row, products.get(row.itemId) ?? null),
         itemName: names.get(row.itemId) ?? null,
       })),
       nextCursor,
     };
+  }
+
+  /**
+   * The unit and weight of each product a page prices, for its piece price
+   * (plan 0244, section 3.3): one read over the distinct ids, never one per
+   * row, and none for an empty page. A product that is gone is absent, and
+   * its rows answer a null piece price.
+   */
+  private async piecePriceBasesOf(
+    itemIds: readonly string[]
+  ): Promise<Map<string, PiecePriceBasis>> {
+    const ids = [...new Set(itemIds)];
+    if (ids.length === 0) {
+      return new Map();
+    }
+    const rows = await this.items.find({
+      select: { id: true, defaultUnit: true, approxWeight: true },
+      where: { id: In(ids) },
+    });
+    return new Map(rows.map((item) => [item.id, item]));
   }
 
   private async page(
@@ -712,7 +736,13 @@ export class SupermarketItemService {
         ? encodeCursor({ value: last.createdAt.toISOString(), id: last.id })
         : null;
 
-    return { items: list.map(toSupermarketItemView), nextCursor };
+    const bases = await this.piecePriceBasesOf(list.map((row) => row.itemId));
+    return {
+      items: list.map((row) =>
+        toSupermarketItemView(row, bases.get(row.itemId) ?? null)
+      ),
+      nextCursor,
+    };
   }
 
   private async requireScope(priceScopeId: string): Promise<void> {

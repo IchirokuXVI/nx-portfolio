@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import type { PriceWords } from '@portfolio/velista/models';
 import { ChainLogo, type ChainLogoView } from '../shops/chain-logo';
 
 /** One chain's row, every string already chosen in the reader's language. */
@@ -12,10 +13,13 @@ export interface PriceTableRow {
    * `notSold` has no row at any of the person's shops.
    */
   readonly kind: 'priced' | 'unpriced' | 'notSold';
-  /** The price, formatted, or null. */
-  readonly price: string | null;
-  /** The price per kilo or litre under it, or null when the source gave none. */
-  readonly unitPrice: string | null;
+  /** The price as two words, the number and what it is per, or null. */
+  readonly price: PriceWords | null;
+  /**
+   * The price per kilo or litre under it, or null when the source gave none or
+   * it says nothing the price does not.
+   */
+  readonly unitPrice: PriceWords | null;
   /** True on the one cheapest row. */
   readonly cheapest: boolean;
   /** The server judged the price old. Drawn muted, with no badge. */
@@ -52,9 +56,21 @@ export interface PriceTableRow {
           @switch (row.kind) {
             @case ('priced') {
               <span [class.is-stale]="row.stale" class="price">
-                <span class="amount">{{ row.price }}</span>
+                @if (row.price; as price) {
+                  <span class="amount"
+                    ><span>{{ price.amount }}</span>
+                    @if (price.per; as per) {
+                      <span class="per">{{ per }}</span>
+                    }
+                  </span>
+                }
                 @if (row.unitPrice; as unit) {
-                  <span class="unit">{{ unit }}</span>
+                  <span class="unit"
+                    ><span>{{ unit.amount }}</span>
+                    @if (unit.per; as per) {
+                      <span class="per">{{ per }}</span>
+                    }
+                  </span>
                 }
               </span>
             }

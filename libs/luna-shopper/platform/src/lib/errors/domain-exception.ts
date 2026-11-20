@@ -196,6 +196,23 @@ export class AllowanceReachedException extends DomainException {
   override readonly exposesDetails = true;
 }
 
+/** The `details` key a {@link PriceNotRefreshableException} names its reason under. */
+export const PRICE_REFRESH_REASON_DETAIL = 'reason';
+
+/**
+ * Nothing can fetch a fresh price of this product at this scope (harvester
+ * plan 0216, section 7.1, steps 1 to 5). Renders as 409.
+ *
+ * It publishes its details, which are exactly `reason`, one value of
+ * `PriceRefreshRefusal`, because the client draws a sentence for each and has
+ * nothing else to tell them apart by. A cooldown is not this exception: it is
+ * a {@link RateLimitedException} with the wait.
+ */
+export class PriceNotRefreshableException extends DomainException {
+  readonly code = ERROR_CODES.PRICE_NOT_REFRESHABLE;
+  override readonly exposesDetails = true;
+}
+
 /**
  * The account has failed too many times in a row and is refusing attempts (plan
  * 0071, section 7).
@@ -261,6 +278,39 @@ export class LineMergeRequiredException extends DomainException {
  */
 export class LineAddNeedsChoiceException extends DomainException {
   readonly code = ERROR_CODES.LINE_ADD_NEEDS_CHOICE;
+  override readonly exposesDetails = true;
+}
+
+/**
+ * A delta, a settle or a demand named a unit that is not the line's (plan
+ * 0246, section 3.2). Nothing was written.
+ */
+export class LineUnitMismatchException extends DomainException {
+  readonly code = ERROR_CODES.LINE_UNIT_MISMATCH;
+}
+
+/**
+ * A rename would merge two lines of different units (plan 0246, section 3.3),
+ * or a product add met only lines of another unit (plan 0260, section 3).
+ * Nothing was written and the lines stay.
+ *
+ * It publishes its details: on an add, `details.line` names the line met
+ * (`lineId`, `content`, `unit`, `quantity`), `details.unit` what the add
+ * counted in and `details.index` the batch item or null. A merge throws it
+ * with no details, and the envelope then carries none.
+ */
+export class LineUnitDiffersException extends DomainException {
+  readonly code = ERROR_CODES.LINE_UNIT_DIFFERS;
+  override readonly exposesDetails = true;
+}
+
+/**
+ * The unit is not one the line's products can serve (plan 0246, section 4.2).
+ * It publishes its details: `details.offered` lists the units the line does
+ * offer, which the client needs to draw the choice.
+ */
+export class LineUnitNotOfferedException extends DomainException {
+  readonly code = ERROR_CODES.LINE_UNIT_NOT_OFFERED;
   override readonly exposesDetails = true;
 }
 
@@ -578,6 +628,39 @@ export class ItemUnitNotBaseException extends DomainException {
  */
 export class ItemKilogramHasSizeException extends DomainException {
   readonly code = ERROR_CODES.ITEM_KILOGRAM_HAS_SIZE;
+  override readonly exposesDetails = true;
+}
+
+/** The `details` key of the weight a refused write would store (plan 0244). */
+export const ITEM_APPROX_WEIGHT_DETAIL = 'approxWeight';
+
+/**
+ * A product write would store an approximate weight beside a size, or a
+ * weight that is not above zero (plan 0244, section 3.2). The details are
+ * public: the weight under {@link ITEM_APPROX_WEIGHT_DETAIL}, the size under
+ * {@link ITEM_UNIT_SIZE_DETAIL}, the unit under `defaultUnit`, with `itemId`
+ * or `index` as for {@link ItemUnitNotBaseException}.
+ */
+export class ItemApproxWeightBesideSizeException extends DomainException {
+  readonly code = ERROR_CODES.ITEM_APPROX_WEIGHT_BESIDE_SIZE;
+  override readonly exposesDetails = true;
+}
+
+/** The `details` keys of a refused step (plan 0261, section 2.2). */
+export const ITEM_QUANTITY_STEP_DETAIL = 'quantityStep';
+export const ITEM_QUANTITY_STEPS_ALLOWED_DETAIL = 'allowed';
+
+/**
+ * A product write would store a step off the list, or a step on a product
+ * that is not sold by the kilo (plan 0261, section 2.2 and S3). The
+ * details are public: the step under {@link ITEM_QUANTITY_STEP_DETAIL}, the
+ * allowed steps under {@link ITEM_QUANTITY_STEPS_ALLOWED_DETAIL}, the unit
+ * under `defaultUnit`, the size under {@link ITEM_UNIT_SIZE_DETAIL} and the
+ * weight under {@link ITEM_APPROX_WEIGHT_DETAIL}, with `itemId` or `index` as
+ * for {@link ItemUnitNotBaseException}.
+ */
+export class ItemQuantityStepNotAllowedException extends DomainException {
+  readonly code = ERROR_CODES.ITEM_QUANTITY_STEP_NOT_ALLOWED;
   override readonly exposesDetails = true;
 }
 

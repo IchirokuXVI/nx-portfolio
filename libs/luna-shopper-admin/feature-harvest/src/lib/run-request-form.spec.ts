@@ -26,8 +26,8 @@ import { RunRequestForm } from './run-request-form';
  * the field appears exactly where it is required.
  */
 
-const MERCADONA = '11111111-1111-4111-8111-111111111111';
-const DEZA = '33333333-3333-4333-8333-333333333333';
+const MERCADONA = 'sm_mercadona';
+const DEZA = 'sm_deza';
 const NATIONAL = 'scope-national';
 const CORDOBA = 'scope-4661';
 const CORUNA = 'scope-4804';
@@ -498,10 +498,10 @@ describe('the run form, the price scope a walk writes to', () => {
    * (admin plan 0025, section 2).
    */
   it('asks where to look for shops, unless the chain names its own', async () => {
-    // Mercadona names its own shops since backend plan 0106, so the chain that
-    // still needs a centre here is the one whose site publishes an assortment
-    // and no store list.
-    const { fixture } = await render({ [DEZA]: 'deza-web' });
+    // Mercadona names its own shops since backend plan 0106, and DEZA since
+    // backend plan 0222, so the chain that still needs a centre here is one
+    // whose row is `manual` and publishes no store list.
+    const { fixture } = await render({ [DEZA]: 'manual' });
     await chain(fixture, DEZA);
     const page = fixture.componentInstance;
 
@@ -524,7 +524,7 @@ describe('the run form, the price scope a walk writes to', () => {
    */
   it('offers the postal code filter only where the chain names its shops', async () => {
     const { fixture, spawned } = await render({
-      [DEZA]: 'deza-web',
+      [DEZA]: 'manual',
     });
     await chain(fixture, MERCADONA);
     const page = fixture.componentInstance;

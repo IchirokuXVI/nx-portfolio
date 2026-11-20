@@ -4,12 +4,15 @@ import type {
 } from '@portfolio/luna-shopper/source-guard';
 import { DEZA_CEILING_PAGES, parseProductPage } from './rows';
 import { parseSectionTree } from './sections';
+import { parseShopDirectory, parseShopPage } from './shops';
 import type {
   DezaClientOptions,
+  DezaDirectory,
   DezaPage,
   DezaProductRow,
   DezaQuery,
   DezaSection,
+  DezaShopPage,
 } from './types';
 
 /**
@@ -25,12 +28,21 @@ import type {
  * on that cookie selected. Two workers sharing a jar would move each other's
  * section between pages, which is why each in flight query gets its own client
  * and the only thing shared between workers is the token bucket passed as
- * `acquire` (section 2).
+ * `acquire` (section 2). The shop pages need no session, so one client reads
+ * the whole shop list of a store discovery (plan 0222).
+ *
+ * A shop page must be on this client's origin under `/centros/`, read
+ * literally. So with a `baseUrl` that is not the DEZA origin (a local
+ * recording), the absolute links of the directory are refused as `OFF_SITE`,
+ * and a relative href is refused too.
  */
 export const DEZA_BASE_URL = 'https://www.dezacalidad.es';
 
 /** Where the listing lives. `robots.txt` allows it; only `/wp-admin/` is out. */
 export const DEZA_PRODUCTS_PATH = '/productos/';
+
+/** Where the shop list and the shop pages live (plan 0222). `robots.txt` allows it. */
+export const DEZA_SHOPS_PATH = '/centros/';
 
 /** Thrown when the source answers something a retry cannot fix. */
 export class DezaHttpError extends Error {
@@ -40,6 +52,21 @@ export class DezaHttpError extends Error {
   ) {
     super(`DEZA answered ${status} for ${url}`);
     this.name = 'DezaHttpError';
+  }
+}
+
+/**
+ * Thrown, before any request, for a shop page URL that is not on this client's
+ * origin or not under {@link DEZA_SHOPS_PATH} (plan 0222, section 3). The
+ * directory that names the URL is third party markup, so a link it names is
+ * never followed off the site.
+ */
+export class DezaShopPageRefusedError extends Error {
+  constructor(readonly url: string) {
+    super(
+      `A DEZA shop page has to be under ${DEZA_SHOPS_PATH} on this site, not ${url}`
+    );
+    this.name = 'DezaShopPageRefusedError';
   }
 }
 
@@ -98,6 +125,7 @@ export class DezaClient {
   /** This client's own session. See the class doc for why it is not shared. */
   private readonly cookies = new Map<string, string>();
   private lastRequestAt = 0;
+  private sent = 0;
 
   constructor(private readonly options: DezaClientOptions) {
     this.baseUrl = (options.baseUrl ?? DEZA_BASE_URL).replace(/\/+$/, '');
@@ -108,6 +136,32 @@ export class DezaClient {
     this.minIntervalMs = options.minIntervalMs ?? 0;
     this.acquire = options.acquire;
     this.guard = options.guard;
+  }
+
+  /** Every request this client sent, retries included. What a run reports. */
+  get requests(): number {
+    return this.sent;
+  }
+
+  /** `/centros/`, parsed (plan 0222, section 2.1). One request. */
+  async fetchShopDirectory(): Promise<DezaDirectory> {
+    return parseShopDirectory(
+      await this.get(`${this.baseUrl}${DEZA_SHOPS_PATH}`),
+      DEZA_SHOPS_PATH
+    );
+  }
+
+  /**
+   * One shop page, parsed (plan 0222, section 2.2). One request.
+   *
+   * Refuses a URL off this client's origin or outside {@link DEZA_SHOPS_PATH}
+   * with a {@link DezaShopPageRefusedError}, and sends nothing for it.
+   */
+  async fetchShopPage(url: string): Promise<DezaShopPage> {
+    if (!this.isShopPage(url)) {
+      throw new DezaShopPageRefusedError(url);
+    }
+    return parseShopPage(await this.get(url));
   }
 
   /**
@@ -204,6 +258,23 @@ export class DezaClient {
     return `${this.baseUrl}${DEZA_PRODUCTS_PATH}`;
   }
 
+  /** On this client's origin, and a page below `/centros/` rather than it. */
+  private isShopPage(url: string): boolean {
+    let target: URL;
+    let own: URL;
+    try {
+      target = new URL(url);
+      own = new URL(this.baseUrl);
+    } catch {
+      return false;
+    }
+    return (
+      target.origin === own.origin &&
+      target.pathname.startsWith(DEZA_SHOPS_PATH) &&
+      target.pathname.length > DEZA_SHOPS_PATH.length
+    );
+  }
+
   private get(url: string): Promise<string> {
     return this.request(url, undefined);
   }
@@ -243,6 +314,7 @@ export class DezaClient {
       }
 
       let response: Response;
+      this.sent += 1;
       try {
         response = await this.fetchImpl(url, {
           method: body ? 'POST' : 'GET',

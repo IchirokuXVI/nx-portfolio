@@ -193,6 +193,30 @@ describeIntegration('LIDL catalog run (real Postgres)', () => {
     // same window must not double every price row it already wrote.
     expect(await prices.count({ where: { entryId: rows[0].id } })).toBe(3);
   });
+
+  it('stores every path the page states, and a later read of the page replaces them (plan 0268)', async () => {
+    const QUESO = [
+      'Mundos de necesidad',
+      'Comida y cerca de la comida',
+      'Quesos, productos lácteos y huevos',
+      'Queso',
+    ];
+    const SHOP = ['Alimentación', 'Quesos'];
+
+    await run();
+
+    const [first] = await entries.find({ where: { supermarketId: CHAIN } });
+    expect(first.categoryPaths).toEqual([QUESO, SHOP]);
+    // `categoryPath` is what it was, and the first of the paths.
+    expect(first.categoryPath).toEqual(QUESO);
+
+    // A path an earlier week stored that this page no longer names.
+    await entries.update({ id: first.id }, { categoryPaths: [['Especial']] });
+    await run();
+
+    const [again] = await entries.find({ where: { supermarketId: CHAIN } });
+    expect(again.categoryPaths).toEqual([QUESO, SHOP]);
+  });
 });
 
 /** A scope id derived from the region, so the assertions can name one. */
@@ -265,6 +289,13 @@ const PRODUCT_PAGE = (() => {
             },
             price: { packaging: { text: '500 g' } },
             storeFacts: { retail: true, online: false },
+            // The online shop tree (plan 0268), as the chain prints it.
+            wonCategoryBreadcrumbs: [
+              [
+                { id: '10', name: 'Alimentación', hiddenCategory: false },
+                { id: '11', name: 'Quesos', hiddenCategory: false },
+              ],
+            ],
             regionsV2: {
               '1': { regionName: 'A Coruña', regionPriceId: 'mainland' },
               '2': { regionName: 'Pontevedra', regionPriceId: 'mainland' },

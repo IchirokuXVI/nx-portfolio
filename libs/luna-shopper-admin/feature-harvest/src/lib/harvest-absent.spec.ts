@@ -78,6 +78,7 @@ function silent(): HarvestServiceI {
     upsertSource: refuse,
     setSourceEnabled: refuse,
     deleteSource: refuse,
+    listProbes: refuse,
   };
 }
 

@@ -99,6 +99,7 @@ function product(
 ): BasketProduct {
   return {
     id,
+    quantityStep: null,
     name: { en, es },
     brand,
     size: null,
@@ -115,6 +116,7 @@ function product(
         name: { en: 'Not yet categorised', es: 'Sin categoría' },
       },
     ],
+    approxWeight: null,
   };
 }
 
@@ -1698,10 +1700,13 @@ describe('BasketViewStore: the estimated total', () => {
         currency: 'EUR',
         unitPrice: null,
         unitPriceLabel: null,
+        comparablePrice: null,
+        comparableBasis: null,
         observedAt: null,
         sourceKind: 'OFFICIAL_WEB',
         stale: false,
         priceScopeId: 'scope-dia',
+        piecePrice: null,
       },
       atShop:
         atShop === null
@@ -1738,6 +1743,7 @@ describe('BasketViewStore: the estimated total', () => {
       leftCents: 345,
       totalCents: 345,
       currency: 'EUR',
+      estimated: false,
     });
   });
 
@@ -1865,6 +1871,7 @@ describe('BasketViewStore: the estimated total', () => {
       leftCents: 0,
       totalCents: 0,
       currency: null,
+      estimated: false,
     });
     expect(
       harnessed.view.settleShop(

@@ -8,6 +8,7 @@ import {
 import {
   MercadonaClient,
   photoAddressRead,
+  type CategoryPathNode,
   type MercadonaListProduct,
   type MercadonaProduct,
 } from '@portfolio/luna-shopper/mercadona';
@@ -21,7 +22,7 @@ import type {
 } from './catalog-runner';
 import { photoOf } from './photo-address';
 import type { RunContext } from './run-context';
-import type { RunReport } from './run-report';
+import type { CategoryPathsMode, RunReport } from './run-report';
 
 /**
  * `CATALOG_DISCOVERY` against the `mercadona-api` adapter (plan 0038, section
@@ -135,6 +136,12 @@ export class MercadonaCatalogRunner implements CatalogRunner {
     const assortments = new Map<string, Map<string, MercadonaListProduct>>();
     /** Every product any warehouse listed, with where to fetch its detail. */
     const union = new Map<string, Detailable>();
+    /**
+     * Every path any warehouse listed each product under (plan 0268), the
+     * warehouses in the order of the run's scopes and each one's paths in walk
+     * order, so the first is the path the detail phase passes on.
+     */
+    const walkPaths = new Map<string, string[][]>();
 
     for (const walk of walks) {
       if (context.signal.aborted) {
@@ -153,6 +160,7 @@ export class MercadonaCatalogRunner implements CatalogRunner {
         }
       }
       assortments.set(warehouse, listed);
+      keepWalkPaths(walkPaths, walk.client.walkedCategoryPaths, listed.keys());
       for (const [externalId, product] of listed) {
         // The first warehouse that listed it is the one its detail is fetched
         // from, and that is what makes the detail phase safe to share: a
@@ -207,6 +215,10 @@ export class MercadonaCatalogRunner implements CatalogRunner {
     const observedAt = new Date();
     let observed = 0;
     let detailRequests = 0;
+    /** The products this run reported, which are the ones its paths are for. */
+    const reported = new Set<string>();
+    /** The detail's branches of a product the walk gave no path (plan 0268). */
+    const detailPaths = new Map<string, string[][]>();
 
     // A known product is reported from the listing: its id and one price per
     // warehouse that listed it, and no identity field, so the stored name, brand
@@ -218,11 +230,19 @@ export class MercadonaCatalogRunner implements CatalogRunner {
     // carries `approx_size`, so no request is needed for it.
     for (const product of skipped) {
       observed += 1;
+      reported.add(product.externalId);
       report.product({
         externalId: product.externalId,
         detailFetched: false,
         observedAt,
         soldByWeight: product.listing.soldByWeight,
+        // The weight of one piece (plan 0244, section 5.1), read from the
+        // listing of the first warehouse that listed the product, in the
+        // order of the run's price scopes: the walks run in that order, and
+        // the union keeps the first listing it meets. A tray weighs a little
+        // differently in each warehouse, so the first one of that order is the
+        // answer, and a reader of the scopes can predict it.
+        approxWeight: product.listing.approxWeight,
         // The listing prints the photo address too (plan 0198), so a known
         // product keeps it current with no request.
         imageUrl: photoOf(
@@ -269,6 +289,10 @@ export class MercadonaCatalogRunner implements CatalogRunner {
         }
 
         observed += 1;
+        reported.add(product.externalId);
+        if (!walkPaths.has(product.externalId)) {
+          detailPaths.set(product.externalId, detail.detailCategoryPaths);
+        }
         report.product({
           externalId: detail.externalId,
           // What the chain printed, which for this one is always Spanish. The
@@ -280,17 +304,27 @@ export class MercadonaCatalogRunner implements CatalogRunner {
           // The detail's. Null for a product sold by approximate weight (plan
           // 0181): `unit_size` is then the typical weight of the tray, which
           // differs between warehouses while the euros per kilo does not (plan
-          // 0108, section 5.1), so it is an estimate and not a size.
+          // 0108, section 5.1), so it is an estimate and not a size. The
+          // weight is kept on the product as `approxWeight` (plan 0244), and
+          // every read derives the piece price from it.
           unitSize: detail.unitSize,
           // The detail's own `size_format` as a catalog unit (plan 0177), read
           // from the same payload as the number so the two cannot disagree.
           // Null for `m`, which the catalog has no unit for.
           sizeUnit:
             detail.unitSize === null ? null : sourceSizeUnitOf(detail.unit),
-          // `approx_size` on a product sized in `kg` (plan 0181). The row
-          // then has no size, and every price below is the price of a kilo.
+          // `approx_size` on a product sized and compared in `kg` (plans 0181
+          // and 0244). The row then has no size, and every price below is the
+          // price of a kilo.
           soldByWeight: detail.soldByWeight,
+          // The weight of one piece in grams, from the detail (plan 0244,
+          // section 5.1). Set for a piece sold by the kilo and for one priced
+          // as one piece, null for a fixed pack.
+          approxWeight: detail.approxWeight,
           sizeFormat: product.listing.sizeFormat,
+          // The container the listing prints, verbatim (plan 0248). The
+          // listing and the detail are the same product's payload.
+          packaging: product.listing.packaging,
           // Read from the detail's own `price_instructions` (plan 0162).
           packCount: detail.packCount,
           categoryPath: detail.categoryPath,
@@ -322,6 +356,30 @@ export class MercadonaCatalogRunner implements CatalogRunner {
         await context.report({ failed: 1 });
       },
     });
+
+    // --- Every path of each product, after the walk (plan 0268) -------------
+    //
+    // Once a product, for each product the run reported, after the detail
+    // phase so a product the walk gave no path can take its detail's branches.
+    // `categoryPath` above is untouched: it is still the first warehouse's
+    // first path, which is the first path here.
+    const mode = walkPathsMode(walks, context.signal);
+    for (const product of products) {
+      if (!reported.has(product.externalId)) {
+        continue;
+      }
+      const walked = walkPaths.get(product.externalId);
+      if (walked) {
+        report.categoryPaths(product.externalId, walked, mode);
+        continue;
+      }
+      const branches = detailPaths.get(product.externalId) ?? [];
+      if (branches.length > 0) {
+        // The detail names the shelves of the product, and no walk met it on
+        // any of them, so nothing here disproved a stored path.
+        report.categoryPaths(product.externalId, branches, 'ADD');
+      }
+    }
 
     // --- Phase 3: what each warehouse listed ---------------------------------
     //
@@ -436,6 +494,8 @@ interface Detailable {
  * such a row `listing.price` is already `bulk_price`: the price and the unit
  * price are the same number, and the estimated piece price is not written at
  * all. It used to be, which put 14.49 on a cheese that costs 9.41 a kilo.
+ * The weight is kept on the product as `approxWeight` (plan 0244), and every
+ * read derives the piece price from it.
  */
 function pricesOf(
   externalId: string,
@@ -462,6 +522,62 @@ function pricesOf(
     });
   }
   return prices;
+}
+
+/**
+ * Add one warehouse's paths of the products it listed to the run's (plan
+ * 0268), as names, each after the paths an earlier warehouse gave. A path that
+ * repeats one the product has is kept once, and a product with no named node
+ * on any path gets no entry, so it can take its detail's branches.
+ */
+function keepWalkPaths(
+  into: Map<string, string[][]>,
+  walked: ReadonlyMap<string, readonly (readonly CategoryPathNode[])[]>,
+  listed: Iterable<string>
+): void {
+  for (const externalId of listed) {
+    for (const nodes of walked.get(externalId) ?? []) {
+      const path = nodes.map((node) => node.name).filter((name) => name !== '');
+      if (path.length === 0) {
+        continue;
+      }
+      const paths = into.get(externalId);
+      if (!paths) {
+        into.set(externalId, [path]);
+      } else if (!paths.some((other) => sameNames(other, path))) {
+        paths.push(path);
+      }
+    }
+  }
+}
+
+function sameNames(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((name, i) => name === b[i]);
+}
+
+/**
+ * Whether the walk's paths of a product are every shelf it sits on (plan 0268,
+ * section 3).
+ *
+ * `REPLACE` only when every warehouse of the run walked its whole tree: the
+ * tree answered and no category of it answered 404. A walk like that read
+ * every listing the chain has, so a stored path it did not meet is gone.
+ * A category that answered 404 may be the one that held a stored path, so a
+ * walk that met one has disproved nothing and says `ADD`. One such walk turns
+ * the whole run to `ADD`, because a warehouse's tree is fetched on its own
+ * and nothing says another warehouse's tree held the category that failed.
+ * An aborted run says `ADD`, and the sink would make it so anyway.
+ */
+function walkPathsMode(
+  walks: readonly { client: MercadonaClient }[],
+  signal: AbortSignal
+): CategoryPathsMode {
+  if (signal.aborted) {
+    return 'ADD';
+  }
+  return walks.every((walk) => walk.client.missingCategories.length === 0)
+    ? 'REPLACE'
+    : 'ADD';
 }
 
 function sum(numbers: readonly number[]): number {

@@ -67,7 +67,9 @@ function main(): void {
     ' * one here was renamed, and DIA reuses an id with a new meaning. A walked',
     ' * leaf that is absent from here and from the table is new, and an operator',
     ' * has to map it. A leaf here and not in the table is unmapped on purpose:',
-    ' * its products all sit in leaves that are mapped.',
+    ' * its products also sit in leaves that are mapped, or the leaf mixes kinds',
+    ' * of product and the curator decides the category (plan 0254, D3). A',
+    ' * product whose leaves are all unmapped resolves to `uncategorised`.',
     ' */',
     'export const DIA_CATEGORY_NAMES: Readonly<Record<string, string>> = {',
     ...[...names.entries()]

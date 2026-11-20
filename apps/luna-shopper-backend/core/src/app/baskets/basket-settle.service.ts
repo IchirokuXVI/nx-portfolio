@@ -27,6 +27,7 @@ import {
   LineChangeRecorder,
 } from '../lists/changes/line-change.recorder';
 import { toLineItemSet, type LineItemSet } from '../lists/line-item-set';
+import { assertLineUnit, requireLineUnit } from '../lists/line-unit-rules';
 import { toLineSettlementView, toLineView } from '../lists/list.mappers';
 import { itemSnapshotColumn, paidColumns } from '../lists/settlement-paid';
 import { leftOf, lockEntries, type BasketRow } from './basket-row-resolver';
@@ -89,6 +90,8 @@ export class BasketSettleService {
 
     // The lines the request names, and no others (plan 0201, section 4). A
     // settle never rebuilds a row from a key.
+    // Required (plan 0246, section 3.5), before anything is read.
+    requireLineUnit(req.unit);
     const row = await opened.row(req.rowKey, req.lineIds);
     const itemId = resolvePick(row, req.itemId);
     const units = this.resolveUnits(req, row);
@@ -115,6 +118,12 @@ export class BasketSettleService {
       const now = new Date();
 
       const locked = await lockEntries(manager, row);
+      // Every named line counts in the unit the request says, the row's (plan
+      // 0246 M6), as the lock read them: a row is one unit, and `from` and
+      // the units bought mean nothing summed across two.
+      for (const line of locked.values()) {
+        assertLineUnit(line, req.unit);
+      }
       // The `from` bargain, checked against **this** read and never against the
       // one before the transaction opened: a gesture whose meaning depends on
       // where it started must be refused rather than reinterpreted when the
@@ -181,7 +190,8 @@ export class BasketSettleService {
             zoneLine.id,
             before,
             zoneLine.quantity,
-            actor
+            actor,
+            zoneLine.unit
           );
           if (wrote) {
             recorded.add(zoneLine.id);
@@ -198,6 +208,8 @@ export class BasketSettleService {
             itemId,
             outcome: req.outcome,
             quantity: req.outcome === SettlementOutcome.BOUGHT ? allocated : 0,
+            // What `quantity` counts, the line's (plan 0246, section 3.5).
+            unit: zoneLine.unit ?? 'UNIT',
             // The participant, always, including for the owner
             // (`ck_line_settlements_actor`).
             settledByUserId: null,

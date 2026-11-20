@@ -1,6 +1,7 @@
 import {
   BasketKind,
   BasketStatus,
+  isLineUnit,
   isOpenBasket,
   PURCHASE_SESSION_GAP_MS,
   type SettlementOutcome,
@@ -182,6 +183,7 @@ export function toEntries(
       id: row.id,
       outcome: row.outcome as SettlementOutcome,
       quantity: row.quantity,
+      unit: isLineUnit(row.unit) ? row.unit : 'UNIT',
       // `pg` hands a `timestamptz` back as a `Date`, but a driver that hands
       // back a string would otherwise reach `toISOString` and throw.
       settledAt:
@@ -220,6 +222,9 @@ export function toEntries(
       listId: line.listId,
       content: line.content,
       quantity: line.quantity,
+      // What the quantity counts (plan 0246, section 3.4). A row read by a
+      // statement written before the column reads as pieces.
+      unit: isLineUnit(line.unit) ? line.unit : 'UNIT',
       version: line.version,
       itemSetHash: line.itemSetHash,
       favoriteItemId: line.favoriteItemId ?? null,

@@ -30,6 +30,7 @@ describe('paidColumns: the shop and its chain (plan 0163)', () => {
       supermarketId: CHAIN,
       pricePaidCents: 129,
       pricePaidCurrency: 'EUR',
+      estimated: false,
     });
   });
 
@@ -87,7 +88,55 @@ describe('paidColumns: the shop and its chain (plan 0163)', () => {
       supermarketId: null,
       pricePaidCents: null,
       pricePaidCurrency: null,
+      // No price, so nothing to estimate (plan 0246 M7).
+      estimated: false,
     });
+  });
+});
+
+describe('paidColumns: the estimate flag (plan 0246 M7)', () => {
+  const paid = {
+    priceScopeId: SCOPE,
+    supermarketLocationId: null,
+    pricePaidCents: 995,
+    pricePaidCurrency: 'EUR',
+  };
+
+  it('keeps the flag beside a price', () => {
+    expect(
+      paidColumns({ ...paid, estimated: true }, SettlementOutcome.BOUGHT)
+    ).toMatchObject({ pricePaidCents: 995, estimated: true });
+  });
+
+  it('reads an absent flag as exact', () => {
+    expect(paidColumns(paid, SettlementOutcome.BOUGHT).estimated).toBe(false);
+  });
+
+  it('drops the flag with the price on NOT_AVAILABLE, and when no price was known', () => {
+    expect(
+      paidColumns({ ...paid, estimated: true }, SettlementOutcome.NOT_AVAILABLE)
+        .estimated
+    ).toBe(false);
+    expect(
+      paidColumns(
+        {
+          ...paid,
+          pricePaidCents: null,
+          pricePaidCurrency: null,
+          estimated: true,
+        },
+        SettlementOutcome.BOUGHT
+      ).estimated
+    ).toBe(false);
+  });
+
+  it('refuses a flag that is not a boolean', () => {
+    expect(() =>
+      paidColumns(
+        { ...paid, estimated: 'yes' as never },
+        SettlementOutcome.BOUGHT
+      )
+    ).toThrow(ValidationException);
   });
 });
 
@@ -98,9 +147,10 @@ describe('itemSnapshotColumn: what a product was called (plan 0202)', () => {
     unitSize: 1,
     packCount: 6,
     defaultUnit: 'LITER' as never,
+    approxWeight: null,
   };
 
-  it('copies the five fields, and nothing else of the product', () => {
+  it('copies the six fields, and nothing else of the product', () => {
     expect(
       itemSnapshotColumn({ ...snapshot, sku: 'smuggled' } as never)
     ).toEqual(snapshot);
@@ -117,6 +167,22 @@ describe('itemSnapshotColumn: what a product was called (plan 0202)', () => {
     expect(itemSnapshotColumn(bare)).toEqual(bare);
   });
 
+  it('keeps the weight of a piece (plan 0244, section 4)', () => {
+    const piece = {
+      ...snapshot,
+      unitSize: null,
+      packCount: null,
+      defaultUnit: 'KILOGRAM' as never,
+      approxWeight: 1560,
+    };
+    expect(itemSnapshotColumn(piece)).toEqual(piece);
+  });
+
+  it('stores a null weight when a gateway older than plan 0244 sent none', () => {
+    const { approxWeight: _none, ...older } = snapshot;
+    expect(itemSnapshotColumn(older)?.approxWeight).toBeNull();
+  });
+
   it('answers null when the gateway sent none', () => {
     expect(itemSnapshotColumn(undefined)).toBeNull();
     expect(itemSnapshotColumn(null)).toBeNull();
@@ -130,6 +196,7 @@ describe('itemSnapshotColumn: what a product was called (plan 0202)', () => {
     ['a size that is text', { ...snapshot, unitSize: '1' }],
     ['a pack count that is not whole', { ...snapshot, packCount: 1.5 }],
     ['no unit', { ...snapshot, defaultUnit: undefined }],
+    ['a weight that is text', { ...snapshot, approxWeight: '1560' }],
     ['an array', [snapshot]],
   ])('refuses %s', (_what, malformed) => {
     expect(() => itemSnapshotColumn(malformed as never)).toThrow(

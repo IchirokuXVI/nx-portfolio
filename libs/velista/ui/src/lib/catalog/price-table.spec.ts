@@ -16,8 +16,8 @@ function priced(
     chain,
     logo: { logoUrl: null, name: chain, store: false },
     kind: 'priced',
-    price: '€1.09',
-    unitPrice: '€1.09 / L',
+    price: { amount: '€1.09', per: null },
+    unitPrice: { amount: '€1.09', per: '/ L' },
     cheapest: false,
     stale: false,
     ...overrides,
@@ -25,7 +25,10 @@ function priced(
 }
 
 const CHEAPEST = priced('s1', 'Carrefour', { cheapest: true });
-const DEARER = priced('s2', 'Mercadona', { price: '€1.25', unitPrice: null });
+const DEARER = priced('s2', 'Mercadona', {
+  price: { amount: '€1.25', per: null },
+  unitPrice: null,
+});
 const UNPRICED = priced('s3', 'Lidl', {
   kind: 'unpriced',
   price: null,
@@ -112,8 +115,22 @@ describe('PriceTable', () => {
 
     const price = rowsOf(fixture)[0]?.querySelector('.price');
     expect(price?.querySelector('.amount')?.textContent).toBe('€1.09');
-    expect(price?.querySelector('.unit')?.textContent).toBe('€1.09 / L');
+    expect(price?.querySelector('.unit')?.textContent).toBe('€1.09/ L');
+    expect(price?.querySelector('.unit .per')?.textContent).toBe('/ L');
     expect(rowsOf(fixture)[0]?.querySelector('.absent')).toBeNull();
+  });
+
+  it('draws what a price is per after its number, apart from it (velista 0179)', async () => {
+    const fixture = await render([
+      priced('s1', 'Carrefour', {
+        price: { amount: '13,42 €', per: '/ kg' },
+        unitPrice: null,
+      }),
+    ]);
+
+    const amount = rowsOf(fixture)[0]?.querySelector('.price .amount');
+    expect(amount?.firstChild?.textContent).toBe('13,42 €');
+    expect(amount?.querySelector('.per')?.textContent).toBe('/ kg');
   });
 
   it('draws the price alone when the source gave no price per unit', async () => {

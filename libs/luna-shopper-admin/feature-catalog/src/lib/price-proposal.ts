@@ -33,10 +33,20 @@ const BASES: Readonly<Record<string, { divisor: number; label: string }>> = {
   PACK: { divisor: 1, label: '1 ud' },
 };
 
+/** The label of a price per kilogram, as {@link BASES} writes it. */
+const KILO_LABEL = '1 kg';
+
 /**
  * The price divided by the size in the product's base unit, or `null` when
  * that cannot be worked out: no price, no size, or a unit this build does not
  * know.
+ *
+ * Two products are not divided by a size (admin plan 0068). The price of a
+ * product sold by the kilo is the price of a kilo, so it is its own unit
+ * price, with a size or without one. A piece priced as one with no size but
+ * an approximate weight in grams is quoted per kilo of that weight: 6.50 for
+ * a melon of 580 g is 11.2069 per kilo. Either way it stays a proposal the
+ * operator may change.
  *
  * Rounded to the four decimals the column holds, and never below two, so it
  * reads as money.
@@ -44,24 +54,49 @@ const BASES: Readonly<Record<string, { divisor: number; label: string }>> = {
 export function proposeUnitPrice(
   price: number,
   unitSize: number | null,
-  unit: string
+  unit: string,
+  approxWeight: number | null = null
 ): UnitPriceProposal | null {
+  if (!Number.isFinite(price) || price <= 0) {
+    return null;
+  }
+
+  if (unit === 'KILOGRAM') {
+    return { unitPrice: toProposal(price), label: KILO_LABEL };
+  }
+
+  const weighed =
+    unit === 'UNIT' &&
+    unitSize === null &&
+    approxWeight !== null &&
+    Number.isFinite(approxWeight) &&
+    approxWeight > 0;
+  if (weighed) {
+    return {
+      unitPrice: toProposal(price / (approxWeight / 1000)),
+      label: KILO_LABEL,
+    };
+  }
+
   const base = BASES[unit];
   if (
     base === undefined ||
     unitSize === null ||
     !Number.isFinite(unitSize) ||
-    unitSize <= 0 ||
-    !Number.isFinite(price) ||
-    price <= 0
+    unitSize <= 0
   ) {
     return null;
   }
 
-  const perBase = price / (unitSize / base.divisor);
-  const fixed = perBase.toFixed(4).replace(/0{1,2}$/, '');
+  return {
+    unitPrice: toProposal(price / (unitSize / base.divisor)),
+    label: base.label,
+  };
+}
 
-  return { unitPrice: fixed, label: base.label };
+/** Four decimals, trimmed to no fewer than two. */
+function toProposal(value: number): string {
+  return value.toFixed(4).replace(/0{1,2}$/, '');
 }
 
 /**

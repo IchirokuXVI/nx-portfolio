@@ -185,6 +185,19 @@ describe('toBasketRow', () => {
     );
   });
 
+  it('reads the unit of a row, and its entries count in it (velista 0182, criterion 1)', () => {
+    const weighed = toBasketRow({ ...ROW, unit: 'GRAM', left: 750 });
+
+    expect(weighed?.unit).toBe('GRAM');
+    expect(weighed?.entries.every((held) => held.unit === 'GRAM')).toBe(true);
+  });
+
+  it('reads a missing or unknown unit as a count', () => {
+    expect(toBasketRow(ROW)?.unit).toBe('UNIT');
+    expect(toBasketRow({ ...ROW, unit: 'KILOGRAM' })?.unit).toBe('UNIT');
+    expect(toBasketRow(ROW)?.entries[0].unit).toBe('UNIT');
+  });
+
   it('reads an unknown state as WANTED, which hides nothing', () => {
     // A row this build cannot classify is still a thing to buy. The other way
     // round would take it off somebody's screen.
@@ -426,6 +439,23 @@ describe('toBasketRowResult', () => {
     ).toBe(2);
   });
 
+  it('reads what a line add did, and nothing on any other write (velista 0185)', () => {
+    expect(
+      toBasketRowResult({ ...RESULT, addOutcome: 'ALREADY_ON_LIST' })
+        ?.addOutcome
+    ).toBe('alreadyOnList');
+    expect(
+      toBasketRowResult({ ...RESULT, addOutcome: 'CREATED' })?.addOutcome
+    ).toBe('created');
+    expect(
+      toBasketRowResult({ ...RESULT, addOutcome: 'RAISED' })?.addOutcome
+    ).toBe('raised');
+    expect(toBasketRowResult(RESULT)).not.toHaveProperty('addOutcome');
+    expect(
+      toBasketRowResult({ ...RESULT, addOutcome: 'SOMETHING_NEW' })
+    ).not.toHaveProperty('addOutcome');
+  });
+
   /** An empty array is an answer: every named line left the basket. */
   it('reads an empty entries array as an answer', () => {
     expect(toBasketRowResult({ entries: [] })?.entries).toEqual([]);
@@ -518,6 +548,46 @@ describe('toBasket: the product’s aisle', () => {
 
     expect(read?.get('i-1')?.categories).toEqual([]);
     expect(read?.get('i-2')?.categories).toEqual([]);
+  });
+});
+
+describe('toBasket: the weight of a piece (velista 0179)', () => {
+  function productOf(product: unknown) {
+    return toBasket({ ...BASKET, products: [product] })?.products.get('i-1');
+  }
+
+  it('reads the approximate weight and the piece price of the best offer', () => {
+    const read = productOf({
+      id: 'i-1',
+      defaultUnit: 'KILOGRAM',
+      unitSize: null,
+      approxWeight: 1560,
+      bestOffer: { price: 13.42, piecePrice: 20.94, priceScopeId: 's-1' },
+    });
+    expect(read?.approxWeight).toBe(1560);
+    expect(read?.offer?.piecePrice).toBe(20.94);
+  });
+
+  it.each([
+    ['a string', '1560'],
+    ['a negative number', -5],
+    ['zero', 0],
+    ['an absent field', undefined],
+  ])('reads %s as no weight', (_, approxWeight) => {
+    expect(productOf({ id: 'i-1', approxWeight })?.approxWeight).toBeNull();
+  });
+
+  it("reads the product's step (velista 0186, backend 0261)", () => {
+    expect(productOf({ id: 'i-1', quantityStep: 100 })?.quantityStep).toBe(100);
+  });
+
+  it.each([
+    ['an absent field', undefined],
+    ['a step off the list', 30],
+    ['a string', '100'],
+    ['zero', 0],
+  ])('reads %s as no step', (_, quantityStep) => {
+    expect(productOf({ id: 'i-1', quantityStep })?.quantityStep).toBeNull();
   });
 });
 

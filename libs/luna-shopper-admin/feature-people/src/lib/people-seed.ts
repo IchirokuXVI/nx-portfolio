@@ -1,3 +1,4 @@
+import { ADMIN_NAME_SEED } from '@portfolio/luna-shopper-admin/data-access';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
 
 /**
@@ -230,6 +231,7 @@ const LIST_ROWS: readonly ListSeedInput[] = [
         id: 'line-milk',
         content: 'Milk, two litres',
         quantity: 2,
+        unit: 'UNIT',
         approvalStatus: 'APPROVED',
         createdByUserId: ROSA,
         createdAt: '2026-08-27T18:00:00.000Z',
@@ -239,6 +241,7 @@ const LIST_ROWS: readonly ListSeedInput[] = [
         id: 'line-bread',
         content: 'Bread',
         quantity: 1,
+        unit: 'UNIT',
         approvalStatus: 'APPROVED',
         createdByUserId: MARC,
         createdAt: '2026-08-27T18:02:00.000Z',
@@ -248,6 +251,7 @@ const LIST_ROWS: readonly ListSeedInput[] = [
         id: 'line-olives',
         content: 'Olives',
         quantity: 1,
+        unit: 'UNIT',
         approvalStatus: 'PENDING',
         createdByUserId: GUEST,
         createdAt: '2026-08-30T20:20:00.000Z',
@@ -271,6 +275,7 @@ const LIST_ROWS: readonly ListSeedInput[] = [
         id: 'line-tomato',
         content: 'Tomato seeds',
         quantity: 3,
+        unit: 'UNIT',
         approvalStatus: 'APPROVED',
         createdByUserId: MARC,
         createdAt: '2026-02-01T12:10:00.000Z',
@@ -302,6 +307,7 @@ export const BASKET_SEED: readonly BasketRow[] = [
         left: 2,
         bought: 0,
         asked: 2,
+        unit: 'UNIT',
         // A shop that had none, said so by a guest, and nothing paid.
         settlements: [
           {
@@ -310,6 +316,7 @@ export const BASKET_SEED: readonly BasketRow[] = [
             itemId: null,
             outcome: 'NOT_AVAILABLE',
             quantity: 2,
+            unit: 'UNIT',
             pricePaidCents: null,
             pricePaidCurrency: null,
             priceScopeId: null,
@@ -327,6 +334,7 @@ export const BASKET_SEED: readonly BasketRow[] = [
         left: 0,
         bought: 1,
         asked: 1,
+        unit: 'UNIT',
         // Bought, with what was paid (admin plan 0033; backend plan 0160).
         // The one before it was taken back, and stays listed as such.
         settlements: [
@@ -336,6 +344,7 @@ export const BASKET_SEED: readonly BasketRow[] = [
             itemId: null,
             outcome: 'BOUGHT',
             quantity: 1,
+            unit: 'UNIT',
             pricePaidCents: 129,
             pricePaidCurrency: 'EUR',
             priceScopeId: 'ps_mercadona_4661',
@@ -351,6 +360,7 @@ export const BASKET_SEED: readonly BasketRow[] = [
             itemId: null,
             outcome: 'BOUGHT',
             quantity: 1,
+            unit: 'UNIT',
             pricePaidCents: null,
             pricePaidCurrency: null,
             priceScopeId: null,
@@ -384,6 +394,7 @@ export const BASKET_SEED: readonly BasketRow[] = [
         left: 0,
         bought: 3,
         asked: 3,
+        unit: 'UNIT',
         settlements: [
           {
             id: 'set-tomato-bought',
@@ -391,6 +402,7 @@ export const BASKET_SEED: readonly BasketRow[] = [
             itemId: null,
             outcome: 'BOUGHT',
             quantity: 3,
+            unit: 'UNIT',
             pricePaidCents: null,
             pricePaidCurrency: null,
             priceScopeId: null,
@@ -449,19 +461,10 @@ export const LIST_LINE_SEED: readonly ListLineRow[] = LIST_SEED.flatMap(
   (list) => list.lines
 );
 
-export const ADMIN_SEED: readonly AdminRow[] = [
-  {
-    adminId: 'admin-ichiroku',
-    username: 'ichiroku',
-    displayName: 'Ichiroku',
-    lastLoginAt: '2026-09-02T07:30:00.000Z',
-    disabledAt: null,
-  },
-  {
-    adminId: 'admin-retired',
-    username: 'retired',
-    displayName: null,
-    lastLoginAt: '2026-04-11T15:00:00.000Z',
-    disabledAt: '2026-05-01T00:00:00.000Z',
-  },
-];
+/**
+ * The admins, read from data access and not typed out again. The run page
+ * names who reverted a run from the same path, and the memory gateway seeds
+ * that path's table from whichever source asks first, so a second copy that
+ * drifted would let the screen opened first decide what the other shows.
+ */
+export const ADMIN_SEED: readonly AdminRow[] = ADMIN_NAME_SEED;

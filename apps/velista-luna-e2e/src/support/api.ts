@@ -157,6 +157,8 @@ export interface LineView {
   listId: string;
   content: string;
   quantity: number;
+  /** What `quantity` counts (backend `0246`, velista `0182`). */
+  unit: 'UNIT' | 'GRAM' | 'MILLILITER';
   itemIds: string[];
   approvalStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
   version: number;
@@ -168,6 +170,8 @@ export interface LineSettlementView {
   itemId: string | null;
   outcome: 'BOUGHT' | 'NOT_AVAILABLE';
   quantity: number;
+  /** What `quantity` counts (backend `0246`). */
+  unit: 'UNIT' | 'GRAM' | 'MILLILITER';
   settledAt: string;
   revertedAt: string | null;
 }
@@ -192,6 +196,31 @@ export async function readLine(
   const line = (await listLines(s, listId)).find((l) => l.id === lineId);
   if (!line) throw new Error(`line ${lineId} is not on list ${listId}`);
   return line;
+}
+
+/**
+ * `POST /v1/lists/:id/lines`: one line of one product, in the unit the product
+ * is sold in (backend `0246`, velista `0182`). Answers the line the add made or
+ * raised.
+ */
+export async function addProductLine(
+  s: Session,
+  listId: string,
+  body: {
+    content: string;
+    itemId: string;
+    quantity: number;
+    unit: 'UNIT' | 'GRAM' | 'MILLILITER';
+  }
+): Promise<LineView> {
+  const answer = await s.post<{ line: LineView }>(`/v1/lists/${listId}/lines`, {
+    content: body.content,
+    itemIds: [body.itemId],
+    named: false,
+    quantity: body.quantity,
+    unit: body.unit,
+  });
+  return answer.line;
 }
 
 /** `PATCH /v1/lines/:id`: the absolute quantity a zone line asks for. */
@@ -370,7 +399,12 @@ export async function buyBasketRow(
   s: Session,
   basketId: string,
   lineIds: readonly string[],
-  body: { quantity: number; from: number }
+  body: {
+    quantity: number;
+    from: number;
+    /** The row's unit, which a settle must state (backend `0246`). */
+    unit?: 'UNIT' | 'GRAM' | 'MILLILITER';
+  }
 ): Promise<void> {
   const rowKey = lineIds[0];
   if (rowKey === undefined) {
@@ -379,6 +413,7 @@ export async function buyBasketRow(
   await s.post(`/v1/baskets/${basketId}/rows/${rowKey}/settle`, {
     outcome: 'BOUGHT',
     lineIds,
+    unit: 'UNIT',
     ...body,
   });
 }
@@ -544,12 +579,15 @@ export async function deleteSection(
 /**
  * `GET /v1/admin/catalog/items?query=`, then `POST /v1/admin/catalog/items` when
  * no product carries this exact English name: one product, created once and kept
- * across runs, since a product nothing names costs nothing.
+ * across runs, since a product nothing names costs nothing. A brand, when given,
+ * is set on the product as it is created.
  */
 export async function ensureItem(
   admin: Session,
   name: { en: string; es: string },
-  categoryIds: string[]
+  categoryIds: string[],
+  defaultUnit: 'UNIT' | 'KILOGRAM' | 'LITER' = 'UNIT',
+  brand: string | null = null
 ): Promise<string> {
   const page = await admin.get<{
     items: { id: string; name: { en?: string } }[];
@@ -559,7 +597,75 @@ export async function ensureItem(
   const made = await admin.post<{ id: string }>('/v1/admin/catalog/items', {
     name,
     categoryIds,
-    defaultUnit: 'UNIT',
+    defaultUnit,
+    ...(brand === null ? {} : { brand }),
   });
   return made.id;
+}
+
+/**
+ * `GET /v1/admin/catalog/product-groups?query=`, then `POST` when no group
+ * carries this slug: one group, created once and kept across runs, as
+ * {@link ensureItem} keeps its products.
+ */
+export async function ensureProductGroup(
+  admin: Session,
+  slug: string,
+  name: { en: string; es: string },
+  referenceUnit: 'UNIT' | 'KILOGRAM' | 'LITER'
+): Promise<string> {
+  const page = await admin.get<{ items: { id: string; slug: string }[] }>(
+    `/v1/admin/catalog/product-groups?query=${encodeURIComponent(name.en)}`
+  );
+  const held = page.items.find((one) => one.slug === slug);
+  if (held) return held.id;
+  const made = await admin.post<{ id: string }>(
+    '/v1/admin/catalog/product-groups',
+    { name, slug, referenceUnit }
+  );
+  return made.id;
+}
+
+/**
+ * `PATCH /v1/admin/catalog/items/:id` with `productGroupId`: the group a
+ * product is compared in (backend `0048`). Absolute, as {@link setQuantityStep}.
+ */
+export async function setProductGroup(
+  admin: Session,
+  itemId: string,
+  productGroupId: string | null
+): Promise<void> {
+  await admin.patch(`/v1/admin/catalog/items/${itemId}`, { productGroupId });
+}
+
+/**
+ * `PATCH /v1/admin/catalog/items/:id` with `quantityStep` (backend `0261`,
+ * section 3): the step a curator gives a product sold by the kilo,
+ * or null for the default. Absolute, so a run after a failed one starts the same.
+ */
+export async function setQuantityStep(
+  admin: Session,
+  itemId: string,
+  quantityStep: number | null
+): Promise<void> {
+  await admin.patch(`/v1/admin/catalog/items/${itemId}`, { quantityStep });
+}
+
+/**
+ * `POST /v1/admin/catalog/item-prices`: an `ADMIN` price of one product at one
+ * scope, observed now. For a product sold by the kilo it is the price of a kilo.
+ */
+export async function setAdminPrice(
+  admin: Session,
+  itemId: string,
+  priceScopeId: string,
+  price: number
+): Promise<void> {
+  await admin.post('/v1/admin/catalog/item-prices', {
+    itemId,
+    priceScopeId,
+    sourceKind: 'ADMIN',
+    price,
+    currency: 'EUR',
+  });
 }

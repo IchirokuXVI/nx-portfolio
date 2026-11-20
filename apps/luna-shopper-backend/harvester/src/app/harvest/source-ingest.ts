@@ -13,19 +13,32 @@ import {
   type SourceSizeUnit,
 } from '@portfolio/luna-shopper/contracts';
 import { describeError } from '@portfolio/luna-shopper/platform';
-import { Repository } from 'typeorm';
+import { In, IsNull, Repository, type FindOptionsWhere } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
 import { SourceCatalogEntry, SourceEntryPrice } from '../entities';
 import { CatalogClient } from './catalog-client.service';
+import { mergeCategoryPaths } from './category-paths';
 import { toItemPriceDetails } from './harvest.mappers';
 import {
   ChainEanIndex,
   FUZZY_CONFIDENCE,
+  isNameKeyed,
   ItemMatchIndex,
   SiblingEntryIndex,
   type MatchResult,
 } from './matching';
 import type { RunContext } from './run-context';
+import type { CategoryPathsMode } from './run-report';
+import {
+  applySizeDoubt,
+  hasSizeDoubt,
+  sizeDoubtExample,
+  sizeDoubtOfFields,
+  sizeDoubtOfPartial,
+  UndoubtedSiblingIndex,
+  type SizeDoubtDecision,
+  type SizeDoubtExample,
+} from './size-doubt';
 import { decideArticles, type Article } from './source-entry-write';
 import {
   applySourceGroup,
@@ -40,6 +53,91 @@ const PRICE_BATCH = 200;
 
 /** How many `source_entry_prices` rows are written in one statement. */
 const PRICE_ROW_CHUNK = 200;
+
+/** How many doubted rows a run names on its report (plan 0249, section 3). */
+export const SIZE_DOUBTS_NAMED = 20;
+
+/** How many rows one read of the decided columns names (plan 0269). */
+const DECISION_READ_CHUNK = 400;
+
+/**
+ * The decided columns of a row: a person's, or the EAN rung's (plan 0086,
+ * section 3.1). **A walk never writes them with a plain write** (plan 0269,
+ * section 3). Its own decisions go through {@link SourceIngest}'s guarded
+ * write, which changes nothing when a person decided since.
+ */
+export const DECIDED_COLUMNS = [
+  'itemId',
+  'candidateEntryId',
+  'status',
+  'matchedBy',
+  'confidence',
+  'decidedAt',
+] as const;
+
+type DecidedColumn = (typeof DECIDED_COLUMNS)[number];
+
+/** The values of the decided columns, as a decision of the walk writes them. */
+type DecidedFields = Pick<SourceCatalogEntry, DecidedColumn>;
+
+/**
+ * A column a walk writes with a plain update. Never a decided one, and never
+ * `timesSeen`, which is written as `"timesSeen" + 1` in the statement.
+ */
+type OwnColumn = Exclude<
+  keyof SourceCatalogEntry,
+  DecidedColumn | 'id' | 'prices' | 'timesSeen' | 'createdAt' | 'updatedAt'
+>;
+
+/** What every observation of a known row moves, beside `timesSeen`. */
+const SEEN_COLUMNS: readonly OwnColumn[] = ['lastSeenAt', 'lastRunId'];
+
+/** What `applySizeDoubt` writes before the row is written (plan 0249). */
+const SIZE_DOUBT_COLUMNS: readonly OwnColumn[] = [
+  'sizeDoubtImplied',
+  'sizeDoubtRatio',
+  'sizeDoubtRunId',
+];
+
+/** What a partial observation writes on its row, in `see`. */
+export const SEE_COLUMNS: readonly OwnColumn[] = [
+  'soldByWeight',
+  'approxWeight',
+  'unitSize',
+  'sizeUnit',
+  'imageUrl',
+  ...SEEN_COLUMNS,
+  ...SIZE_DOUBT_COLUMNS,
+];
+
+/**
+ * The source group as `applySourceGroup` writes it, without `externalId`,
+ * which is the key the row was found by and never changes.
+ */
+const SOURCE_GROUP_COLUMNS: readonly OwnColumn[] = [
+  'sourceKind',
+  'name',
+  'brand',
+  'brandKey',
+  'ean',
+  'unitSize',
+  'sizeUnit',
+  'soldByWeight',
+  'approxWeight',
+  'sizeFormat',
+  'packaging',
+  'packCount',
+  'categoryPath',
+  'url',
+  'imageUrl',
+  'extra',
+];
+
+/** What a full observation writes on its row, in `touch`, by whether it writes the source group. */
+export const TOUCH_COLUMNS: Record<'group' | 'seen', readonly OwnColumn[]> = {
+  group: [...SOURCE_GROUP_COLUMNS, ...SEEN_COLUMNS, ...SIZE_DOUBT_COLUMNS],
+  seen: [...SEEN_COLUMNS, ...SIZE_DOUBT_COLUMNS],
+};
 
 /**
  * One price of one product, for the group of shops that pays it (plan 0103,
@@ -106,7 +204,26 @@ export interface SourceObservation {
    * prints no prices at all, and LIDL, Carrefour and DIA have no field for it.
    */
   soldByWeight?: boolean;
+  /**
+   * The approximate weight of one piece, in grams (plan 0244, section 5.5).
+   *
+   * Independent of {@link soldByWeight}: a cheese sold by the kilo has one,
+   * and so does a tray priced as one piece, which is not sold by weight. The
+   * row holds it only when it holds no size, so a size here clears it.
+   *
+   * Null is a statement that the source prints none, and clears it. Absent is
+   * a source that never reads one (Carrefour, El Jamón, DEZA, a document with
+   * no `approx_weight`), and leaves the stored weight alone.
+   */
+  approxWeight?: number | null;
   sizeFormat: string | null;
+  /**
+   * The container the source prints (`Brik`, `Botella`, `Pack-4`), verbatim
+   * (plan 0248). Null is a statement that it prints none. Absent is a source
+   * that reads no containers at all, every adapter but Mercadona's, and leaves
+   * the stored text alone.
+   */
+  packaging?: string | null;
   /**
    * How many units the pack holds, as the source's own adapter read it (plan
    * 0162). Null is a statement that the product is not a pack. Absent is a
@@ -161,6 +278,16 @@ export interface PartialSourceObservation {
    * together. Absent means the listing does not say, and the row is left alone.
    */
   soldByWeight?: boolean;
+  /**
+   * The approximate weight of one piece in grams, when the listing states it
+   * (plan 0244, section 5.5). It travels with {@link soldByWeight} for the
+   * same reason: the listing has it, and the piece price is read from it.
+   *
+   * Absent leaves the stored weight alone. Null is a statement that the
+   * listing prints none, and clears it. A weight clears the row's size, as
+   * the full read path holds it.
+   */
+  approxWeight?: number | null;
   /**
    * The photo address, when the listing prints one (plan 0198, section 2).
    *
@@ -217,6 +344,39 @@ export interface SourceIngestInput extends SourceIngestSessionInput {
   observations: readonly ReportedObservation[];
 }
 
+/**
+ * What a shopper's refresh hands {@link SourceIngest.writeRefreshedPrices}
+ * (plan 0216): one known row, and what one request read for it.
+ */
+export interface RefreshedPricesInput {
+  /** The row that was fetched. Only an `ACTIVE` one is owed a catalog price. */
+  entry: SourceCatalogEntry;
+  /** The kind a walk of the chain's adapter stamps (`sourceKindOf`). */
+  sourceKind: PriceSourceKind;
+  /**
+   * What the request read, partial on purpose: a refresh writes no identity
+   * field, so its prices and whether the product is sold by weight are all it
+   * carries.
+   */
+  observation: PartialSourceObservation;
+  /** The scope a price's own key names, or null when the chain has none yet. */
+  scopeIdFor: (scopeKey: string) => string | null;
+  /** The copy targets of a scope that the row already has (plan 0118). */
+  copiesOf: (priceScopeId: string) => readonly string[];
+}
+
+/** What a refresh's write did, copies excluded from the counts. */
+export interface RefreshedPricesResult {
+  /** `source_entry_prices` rows written at the scopes the request read. */
+  recorded: number;
+  /** `item_prices` rows catalog inserted. */
+  inserted: number;
+  /** Values catalog already held and only moved the clock on. */
+  confirmed: number;
+  /** The read is sold another way than the row says, so nothing was written. */
+  soldAnotherWay: boolean;
+}
+
 /** Which rung of section 4 answered, and what it answered with. */
 export interface SourceEntryOutcome {
   entry: SourceCatalogEntry;
@@ -224,6 +384,14 @@ export interface SourceEntryOutcome {
   rung: 1 | 2 | 3 | 4 | 5;
   /** The item this observation resolves to, set only when the row is ACTIVE. */
   itemId: string | null;
+}
+
+/** The category paths a run states for one of its rows (plan 0268). */
+export interface CategoryPathsWrite {
+  entryId: string;
+  /** Distinct, each root first, in walk order. */
+  paths: readonly (readonly string[])[];
+  mode: CategoryPathsMode;
 }
 
 export interface SourceIngestCounters {
@@ -270,6 +438,33 @@ export interface SourceIngestCounters {
    * `PRICE_SOLD_ANOTHER_WAY`, that names the row.
    */
   pricesSoldAnotherWay: number;
+  /**
+   * Rows this run proposed by the second key of rung 4, the words of the name
+   * in any order (plan 0221): new rows and waiting rows together. Each is a
+   * `CANDIDATE` with `NAME_WORDS_SIZE`, most often a reworded DEZA name, and
+   * waits for a person.
+   */
+  wordOrderProposals: number;
+  /**
+   * Rows this run queued pointing at the one `REJECTED` row their words meet
+   * (plan 0221, the owner's answer of 2026-11-05): a `CANDIDATE` with
+   * `NAME_WORDS_SIZE`, no product, and the rejected row in
+   * `candidateEntryId`. Kept apart from {@link wordOrderProposals}, which
+   * counts rows proposed as a product.
+   */
+  wordOrderRejectedPointers: number;
+  /**
+   * Observations whose stated size their own price and comparison price
+   * disprove (plan 0249): each row now carries a doubt, keeps its size, and
+   * waits for a person before a product is created from it.
+   */
+  sizesDisproved: number;
+  /**
+   * Of those, the rows whose ratio is close to a whole number from 2 to 48
+   * and that state no pack count: most often a pack stated at the size of
+   * one of its units.
+   */
+  probablePackCounts: number;
 }
 
 /**
@@ -335,6 +530,12 @@ export interface SourceIngestResult {
   /** One per conflict {@link SourceIngestCounters.pricesConflicted} counts. */
   priceConflicts: PriceConflict[];
   images: SourceIngestImages;
+  /**
+   * The first {@link SIZE_DOUBTS_NAMED} rows whose size the run doubted
+   * (plan 0249). {@link SourceIngestCounters.sizesDisproved} is the whole
+   * number.
+   */
+  sizeDoubts: SizeDoubtExample[];
 }
 
 /**
@@ -355,7 +556,7 @@ export interface SourceIngestResult {
  *
  * **A waiting row is asked the EAN rung again every time a run sees it** (plan
  * 0185). A product can be taught the barcode after the row was queued, and the
- * row would otherwise wait for a person for ever. {@link bindWaitingByEan} is
+ * row would otherwise wait for a person for ever. {@link waitingEanBinding} is
  * the whole rule.
  *
  * **Rung 1 is silent.** The leaflet import used to warn per offer for a rejected
@@ -425,7 +626,7 @@ export class SourceIngest {
     input: SourceIngestSessionInput,
     reported: readonly ReportedObservation[],
     byExternalId: Map<string, SourceCatalogEntry>,
-    siblings: SiblingEntryIndex,
+    siblings: UndoubtedSiblingIndex,
     items: ItemMatchIndex,
     eans: ChainEanIndex,
     owedSoFar: OwedMemory = new Map()
@@ -435,6 +636,7 @@ export class SourceIngest {
     const counters = emptyCounters();
     const copies = emptyCopies();
     const priceConflicts: PriceConflict[] = [];
+    const sizeDoubts: SizeDoubtExample[] = [];
     /** The `source_entry_prices` rows this chunk observed, one per price. */
     const observed: ObservedPrice[] = [];
     /** Where each observation's prices landed, by its index, copies included. */
@@ -446,6 +648,16 @@ export class SourceIngest {
      * rather than from what was reported.
      */
     const observations: ReportedObservation[] = [];
+
+    // The decisions of this chunk's rows as the database holds them now, not
+    // as the session read them at open (plan 0269, section 2). A walk is
+    // minutes long, and a person decides rows in the queue meanwhile.
+    await this.refreshDecisions(
+      input.supermarketId,
+      reported,
+      byExternalId,
+      siblings
+    );
 
     // Every EAN this chunk states, counted before the ladder runs (plan 0155).
     // A full observation writes its EAN onto its row verbatim, a null included,
@@ -482,6 +694,9 @@ export class SourceIngest {
       const held = byExternalId.get(observation.externalId);
       let outcome: SourceEntryOutcome;
       let changed = false;
+      // Plan 0249: the stated size against the size the prices imply,
+      // written onto the row before the ladder saves it.
+      let sizeDoubt: SizeDoubtDecision = 'leave';
       if (observation.detailFetched === false) {
         // A partial observation reads no identity field, so it can neither
         // create a row nor change one (plan 0119, section 6).
@@ -493,14 +708,20 @@ export class SourceIngest {
         // Asked before the write, because the write is what makes it false.
         changed =
           soldByWeightChanged(held, observation) ||
+          approxWeightChanged(held, observation) ||
           imageChanged(held, observation);
+        sizeDoubt = sizeDoubtOfPartial(held, observation);
+        if (applySizeDoubt(held, sizeDoubt, context.runId)) {
+          siblings.refresh();
+        }
         outcome = await this.see(
           held,
           observation,
           context.runId,
           seenAt,
           items,
-          eans
+          eans,
+          siblings
         );
       } else {
         const fields = fieldsOf(observation, input.sourceKind);
@@ -511,8 +732,26 @@ export class SourceIngest {
           ? writesSourceGroup(held, fields.sourceKind) &&
             sourceGroupChanged(held, fields)
           : false;
+        sizeDoubt = sizeDoubtOfFields(
+          fields,
+          held,
+          !held || writesSourceGroup(held, fields.sourceKind),
+          observation.prices
+        );
+        if (held && applySizeDoubt(held, sizeDoubt, context.runId)) {
+          siblings.refresh();
+        }
         outcome = held
-          ? await this.touch(held, fields, context.runId, seenAt, items, eans)
+          ? await this.touch(
+              held,
+              fields,
+              context.runId,
+              seenAt,
+              items,
+              eans,
+              siblings,
+              counters
+            )
           : await this.create(
               fields,
               input.supermarketId,
@@ -521,10 +760,13 @@ export class SourceIngest {
               observation,
               items,
               siblings,
-              eans
+              eans,
+              counters,
+              sizeDoubt
             );
       }
       observations.push(observation);
+      this.countSizeDoubt(counters, sizeDoubts, outcome.entry, sizeDoubt);
 
       if (outcome.created) {
         counters.created += 1;
@@ -587,7 +829,8 @@ export class SourceIngest {
       context.runId,
       chunkEans,
       eans,
-      byExternalId
+      byExternalId,
+      siblings
     );
     for (const outcome of outcomes) {
       if (unbound.has(outcome.entry.externalId)) {
@@ -673,7 +916,7 @@ export class SourceIngest {
         priceConflicts.push(...conflicts);
       }
       const written = await this.writePrices(
-        context,
+        context.runId,
         batch.priceScopeId,
         input.sourceKind,
         entries,
@@ -702,7 +945,211 @@ export class SourceIngest {
         `${counters.pricesSoldAnotherWay} observation(s) priced another way ` +
         'than their row is sold and not written.'
     );
-    return { outcomes, counters, copies, priceConflicts, images };
+    return { outcomes, counters, copies, priceConflicts, images, sizeDoubts };
+  }
+
+  /**
+   * The item of each of these rows that is `ACTIVE` now, by row id (plan
+   * 0269, section 5). A row that is not `ACTIVE`, or no longer exists, is
+   * absent. For the drain, which states availability for these items.
+   */
+  async activeItemsOf(
+    entryIds: readonly string[]
+  ): Promise<Map<string, string>> {
+    const active = new Map<string, string>();
+    for (let i = 0; i < entryIds.length; i += DECISION_READ_CHUNK) {
+      const rows = await this.entries.find({
+        select: { id: true, status: true, itemId: true },
+        where: {
+          id: In(entryIds.slice(i, i + DECISION_READ_CHUNK)),
+          status: SourceEntryStatus.ACTIVE,
+        },
+      });
+      for (const row of rows) {
+        if (row.itemId) {
+          active.set(row.id, row.itemId);
+        }
+      }
+    }
+    return active;
+  }
+
+  /**
+   * The category paths of these rows, written at the drain of a run, after
+   * its last chunk (plan 0268, section 2). Answers how many rows changed.
+   *
+   * The stored paths are read again first, one query a chunk of rows, so an
+   * `ADD` keeps what the table holds now and not what a chunk cached. Only a
+   * row whose paths change is written, and only its one column, with an
+   * `update` and never a `save` of a cached row (plan 0269, section 3). A row
+   * that no longer exists writes nothing.
+   *
+   * `onWritten` is called as each update lands, so a caller that counts
+   * through it holds the true count when an update midway rejects.
+   */
+  async writeCategoryPaths(
+    writes: readonly CategoryPathsWrite[],
+    onWritten: () => void = () => undefined
+  ): Promise<number> {
+    let changed = 0;
+    for (let i = 0; i < writes.length; i += DECISION_READ_CHUNK) {
+      const chunk = writes.slice(i, i + DECISION_READ_CHUNK);
+      const rows = await this.entries.find({
+        select: { id: true, categoryPaths: true },
+        where: { id: In(chunk.map((write) => write.entryId)) },
+      });
+      const stored = new Map(rows.map((row) => [row.id, row.categoryPaths]));
+      for (const write of chunk) {
+        if (!stored.has(write.entryId)) {
+          continue;
+        }
+        const before = stored.get(write.entryId);
+        const after = mergeCategoryPaths(before, write.paths, write.mode);
+        // jsonb holds exactly what was written, so the text says it all.
+        if (JSON.stringify(before ?? []) === JSON.stringify(after)) {
+          continue;
+        }
+        await this.entries.update({ id: write.entryId }, {
+          categoryPaths: after,
+        } as QueryDeepPartialEntity<SourceCatalogEntry>);
+        changed += 1;
+        onWritten();
+      }
+    }
+    return changed;
+  }
+
+  /**
+   * Read the decided columns of the chunk's known rows again, one query, and
+   * put them onto the cached rows (plan 0269, section 2).
+   *
+   * A row the read no longer finds was deleted since the session opened. It
+   * leaves the cache, and the ladder treats its product as one the chain does
+   * not hold. A changed decision rebuilds the sibling index, so rung 4 of this
+   * chunk reads it.
+   */
+  private async refreshDecisions(
+    supermarketId: string,
+    reported: readonly ReportedObservation[],
+    byExternalId: Map<string, SourceCatalogEntry>,
+    siblings: UndoubtedSiblingIndex
+  ): Promise<void> {
+    const known = [
+      ...new Set(
+        reported
+          .map((observation) => observation.externalId)
+          .filter((externalId) => byExternalId.has(externalId))
+      ),
+    ];
+    if (known.length === 0) {
+      return;
+    }
+    const fresh = await this.entries.find({
+      select: decisionSelect(),
+      where: { supermarketId, externalId: In(known) },
+    });
+    const freshByExternalId = new Map(
+      fresh.map((row) => [row.externalId, row])
+    );
+    let changed = false;
+    for (const externalId of known) {
+      const row = byExternalId.get(externalId) as SourceCatalogEntry;
+      const now = freshByExternalId.get(externalId);
+      if (!now) {
+        byExternalId.delete(externalId);
+        continue;
+      }
+      changed = assignDecisions(row, now) || changed;
+    }
+    if (changed) {
+      siblings.refresh();
+    }
+  }
+
+  /**
+   * A plain write of a known row: only the columns named, which are the
+   * walk's own, and `timesSeen` one up in the statement (plan 0269, section
+   * 3). A decided column can never be one of them.
+   */
+  private async writeOwn(
+    row: SourceCatalogEntry,
+    columns: readonly OwnColumn[]
+  ): Promise<void> {
+    const values: Record<string, unknown> = {
+      timesSeen: () => '"timesSeen" + 1',
+    };
+    for (const column of columns) {
+      if ((DECIDED_COLUMNS as readonly string[]).includes(column)) {
+        throw new Error(
+          `The column ${column} is a decision, and a walk never writes one ` +
+            'with a plain write.'
+        );
+      }
+      values[column] = row[column];
+    }
+    await this.entries.update(
+      { id: row.id },
+      values as QueryDeepPartialEntity<SourceCatalogEntry>
+    );
+  }
+
+  /**
+   * A decision of the walk, written only while the row is still in the state
+   * the walk decided from (plan 0269, section 3).
+   *
+   * When the guard holds, the fields go onto the cached row too and this
+   * answers true. When it changes no row, a person decided since: the row's
+   * decided columns are read again, the cached row takes them, and this
+   * answers false, so the outcome follows what the database holds.
+   */
+  private async decide(
+    row: SourceCatalogEntry,
+    fields: Partial<DecidedFields>,
+    guard: FindOptionsWhere<SourceCatalogEntry>,
+    siblings: UndoubtedSiblingIndex
+  ): Promise<boolean> {
+    const result = await this.entries.update(
+      { ...guard, id: row.id },
+      fields as QueryDeepPartialEntity<SourceCatalogEntry>
+    );
+    if ((result.affected ?? 0) > 0) {
+      Object.assign(row, fields);
+      return true;
+    }
+    const [now] = await this.entries.find({
+      select: decisionSelect(),
+      where: { id: row.id },
+    });
+    if (now && assignDecisions(row, now)) {
+      siblings.refresh();
+    }
+    this.logger.log(
+      `Row ${row.id} was decided while the walk read it, so the walk's own ` +
+        `decision was not written and the row stays ${row.status}.`
+    );
+    return false;
+  }
+
+  /**
+   * Count a doubt this chunk recorded or kept, and name it while the report
+   * has room (plan 0249, section 3).
+   */
+  private countSizeDoubt(
+    counters: SourceIngestCounters,
+    named: SizeDoubtExample[],
+    row: SourceCatalogEntry,
+    decision: SizeDoubtDecision
+  ): void {
+    if (typeof decision === 'string') {
+      return;
+    }
+    counters.sizesDisproved += 1;
+    if (decision.probablePackCount !== null) {
+      counters.probablePackCounts += 1;
+    }
+    if (named.length < SIZE_DOUBTS_NAMED) {
+      named.push(sizeDoubtExample(row, decision));
+    }
   }
 
   /**
@@ -893,12 +1340,17 @@ export class SourceIngest {
    * row wrote before stays in catalog until it expires.
    *
    * Answers the `externalId`s it unbound.
+   *
+   * **Each unbind is guarded** (plan 0269, section 3): it changes the row only
+   * while it is still `ACTIVE` by the EAN, on the product the walk read. A row
+   * a person decided since keeps that decision, and is read again.
    */
   private async unbindSharedEans(
     runId: string,
     chunkEans: ReadonlySet<string>,
     eans: ChainEanIndex,
-    byExternalId: ReadonlyMap<string, SourceCatalogEntry>
+    byExternalId: ReadonlyMap<string, SourceCatalogEntry>,
+    siblings: UndoubtedSiblingIndex
   ): Promise<Set<string>> {
     const unbound = new Set<string>();
     for (const ean of chunkEans) {
@@ -914,9 +1366,16 @@ export class SourceIngest {
         ) {
           continue;
         }
-        proposeSharedEan(row, row.itemId);
-        await this.entries.save(row);
-        unbound.add(externalId);
+        if (
+          await this.decide(
+            row,
+            sharedEanProposal(row.itemId),
+            boundByEan(row.itemId),
+            siblings
+          )
+        ) {
+          unbound.add(externalId);
+        }
       }
     }
     if (unbound.size > 0) {
@@ -1015,7 +1474,7 @@ export class SourceIngest {
    * learns none here.
    *
    * **A waiting row is still asked the EAN rung, with the EAN it holds** (plan
-   * 0185, {@link bindWaitingByEan}). The read learned nothing, but catalog may
+   * 0185, {@link waitingEanBinding}). The read learned nothing, but catalog may
    * have: a product taught the barcode since the last run holds it now. A
    * known row is read from the listing alone on every run (plan 0119), so
    * without this such a row would never be asked again.
@@ -1034,10 +1493,18 @@ export class SourceIngest {
    *
    * `sizeFormat`, `externalId` and the name are not touched in either case.
    *
+   * **The weight of one piece moves with it** (plan 0244), when the listing
+   * states it. A weight clears the size and its unit, because a row holds a
+   * weight only when it holds no size. An observation that does not carry the
+   * field leaves the stored weight alone, and one that carries null clears it.
+   *
    * **The other is the photo address, when the listing prints one** (plan
    * 0198). It is not an identity field. An observation that does not carry
    * the field leaves the stored address alone, and one that carries null
    * clears it.
+   *
+   * **It writes only its own columns** (plan 0269, section 3), {@link
+   * SEE_COLUMNS}, and the EAN rung's bind is a guarded write of its own.
    */
   private async see(
     row: SourceCatalogEntry,
@@ -1045,12 +1512,20 @@ export class SourceIngest {
     runId: string,
     seenAt: Date,
     items: ItemMatchIndex,
-    eans: ChainEanIndex
+    eans: ChainEanIndex,
+    siblings: UndoubtedSiblingIndex
   ): Promise<SourceEntryOutcome> {
     if (soldByWeightChanged(row, observation)) {
       row.soldByWeight = observation.soldByWeight === true;
     }
-    if (observation.soldByWeight === true) {
+    if (observation.approxWeight !== undefined) {
+      row.approxWeight = observation.approxWeight;
+    }
+    if (
+      observation.soldByWeight === true ||
+      (observation.approxWeight !== undefined &&
+        observation.approxWeight !== null)
+    ) {
       row.unitSize = null;
       row.sizeUnit = null;
     }
@@ -1060,13 +1535,15 @@ export class SourceIngest {
     row.timesSeen += 1;
     row.lastSeenAt = seenAt;
     row.lastRunId = runId;
-    const rung = bindWaitingByEan(row, items, eans, seenAt) ? 2 : 1;
-    const saved = await this.entries.save(row);
+    await this.writeOwn(row, SEE_COLUMNS);
+    const binding = waitingEanBinding(row, items, eans, seenAt);
+    const rung =
+      binding && (await this.decide(row, binding, waiting(), siblings)) ? 2 : 1;
     return {
-      entry: saved,
+      entry: row,
       created: false,
       rung,
-      itemId: activeItemOf(saved),
+      itemId: activeItemOf(row),
     };
   }
 
@@ -1114,7 +1591,7 @@ export class SourceIngest {
    *
    * **The other is a barcode a product learned** (plan 0185). A row that is
    * waiting and learned nothing new is asked the EAN rung again with the EAN
-   * it holds, and only that rung: {@link bindWaitingByEan}.
+   * it holds, and only that rung: {@link waitingEanBinding}.
    *
    * **A walk owns the text of a row** (plan 0190). `writesSourceGroup` in
    * `source-snapshot.ts` is the rule. When it answers no, a leaflet has
@@ -1122,6 +1599,10 @@ export class SourceIngest {
    * and the kind of the row stay, and the row is asked the EAN rung with the
    * EAN it holds, as {@link see} asks it. The prices are written by the
    * caller either way, under the kind of the run.
+   *
+   * **A waiting row with no proposal is asked the second key of rung 4** (plan
+   * 0221, section 3.5), when the EAN rung bound nothing: {@link anyOrderProposal}.
+   * That is what reaches the renames already in the queue.
    */
   private async touch(
     row: SourceCatalogEntry,
@@ -1129,7 +1610,9 @@ export class SourceIngest {
     runId: string,
     seenAt: Date,
     items: ItemMatchIndex,
-    eans: ChainEanIndex
+    eans: ChainEanIndex,
+    siblings: UndoubtedSiblingIndex,
+    counters: SourceIngestCounters
   ): Promise<SourceEntryOutcome> {
     const writes = writesSourceGroup(row, fields.sourceKind);
     const learnedEan = writes && fields.ean !== null && row.ean !== fields.ean;
@@ -1139,6 +1622,9 @@ export class SourceIngest {
     row.timesSeen += 1;
     row.lastSeenAt = seenAt;
     row.lastRunId = runId;
+    // Only the walk's own columns (plan 0269, section 3). Each decision below
+    // is a guarded write of its own.
+    await this.writeOwn(row, writes ? TOUCH_COLUMNS.group : TOUCH_COLUMNS.seen);
 
     let rung: 1 | 2 = 1;
     if (learnedEan && undecided(row)) {
@@ -1147,32 +1633,49 @@ export class SourceIngest {
         name: fields.name,
         brand: fields.brand,
         unitSize: fields.unitSize === null ? null : Number(fields.unitSize),
+        approxWeight:
+          row.approxWeight === null ? null : Number(row.approxWeight),
       });
       // Only the EAN rung promotes. A name match here would be a fuzzy proposal
       // made at the very moment the identifier that makes fuzziness unnecessary
       // arrived. An EAN another row of the chain carries only proposes.
       if (match && match.matchedBy === ItemSourceMatch.EAN) {
-        if (eans.shared(fields.ean)) {
-          proposeSharedEan(row, match.itemId);
-        } else {
-          row.itemId = match.itemId;
-          row.status = SourceEntryStatus.ACTIVE;
-          row.matchedBy = ItemSourceMatch.EAN;
-          row.confidence = match.confidence;
-          row.decidedAt = seenAt;
+        const decision: Partial<DecidedFields> = eans.shared(fields.ean)
+          ? sharedEanProposal(match.itemId)
+          : {
+              itemId: match.itemId,
+              status: SourceEntryStatus.ACTIVE,
+              matchedBy: ItemSourceMatch.EAN,
+              confidence: match.confidence,
+              decidedAt: seenAt,
+            };
+        if (await this.decide(row, decision, waiting(), siblings)) {
+          rung = 2;
         }
+      }
+    } else {
+      const binding = waitingEanBinding(row, items, eans, seenAt);
+      if (binding && (await this.decide(row, binding, waiting(), siblings))) {
         rung = 2;
       }
-    } else if (bindWaitingByEan(row, items, eans, seenAt)) {
-      rung = 2;
+    }
+    // Rung 4's key holds the size, so a doubted row proposes nothing (plan
+    // 0249).
+    if (rung === 1 && !hasSizeDoubt(row)) {
+      const proposal = anyOrderProposal(row, siblings);
+      if (
+        proposal &&
+        (await this.decide(row, proposal.fields, unproposed(), siblings))
+      ) {
+        countAnyOrder(counters, proposal.answer);
+      }
     }
 
-    const saved = await this.entries.save(row);
     return {
-      entry: saved,
+      entry: row,
       created: false,
       rung,
-      itemId: activeItemOf(saved),
+      itemId: activeItemOf(row),
     };
   }
 
@@ -1185,7 +1688,9 @@ export class SourceIngest {
     observation: SourceObservation,
     items: ItemMatchIndex,
     siblings: SiblingEntryIndex,
-    eans: ChainEanIndex
+    eans: ChainEanIndex,
+    counters: SourceIngestCounters,
+    sizeDoubt: SizeDoubtDecision = 'leave'
   ): Promise<SourceEntryOutcome> {
     const draft = this.entries.create({
       supermarketId,
@@ -1201,7 +1706,11 @@ export class SourceIngest {
       matchedBy: null,
       confidence: 0,
       decidedAt: null,
+      sizeDoubtImplied: null,
+      sizeDoubtRatio: null,
+      sizeDoubtRunId: null,
     });
+    applySizeDoubt(draft, sizeDoubt, runId);
     let rung: 1 | 2 | 3 | 4 | 5 = 5;
 
     // Rungs 2 and 3: the catalog's own items. An EAN is trusted immediately,
@@ -1215,9 +1724,12 @@ export class SourceIngest {
       // The row's size and not the observation's: a row sold by weight holds
       // none, whatever the source printed beside it (plan 0181).
       unitSize: fields.unitSize,
+      // The weight of one piece stands in for the size it does not have (plan
+      // 0244, section 5.8), so a piece never proposes one of another weight.
+      approxWeight: fields.approxWeight ?? null,
     });
     if (match && isSharedEan(match, observation.ean, eans)) {
-      proposeSharedEan(draft, match.itemId);
+      Object.assign(draft, sharedEanProposal(match.itemId));
       rung = 2;
     } else if (match) {
       draft.itemId = match.itemId;
@@ -1227,14 +1739,20 @@ export class SourceIngest {
       draft.decidedAt =
         match.status === SourceEntryStatus.ACTIVE ? seenAt : null;
       rung = match.matchedBy === ItemSourceMatch.EAN ? 2 : 3;
-    } else {
+    } else if (!hasSizeDoubt(draft)) {
       // Rung 4: a sibling row of this chain under the same name and size. For a
       // leaflet that is the Mercadona product the walk found, and for a DEZA
       // leaflet the web listing.
       const sibling = siblings.match(
         observation.name,
         observation.sizeFormat,
-        fields.unitSize
+        fields.unitSize,
+        fields.approxWeight ?? null,
+        // The count and the container join the key (plan 0248, D2 and D3).
+        {
+          packCount: fields.packCount ?? null,
+          packaging: fields.packaging ?? null,
+        }
       );
       if (sibling) {
         draft.itemId = sibling.itemId;
@@ -1243,11 +1761,122 @@ export class SourceIngest {
         draft.matchedBy = ItemSourceMatch.NAME_SIZE;
         draft.confidence = FUZZY_CONFIDENCE;
         rung = 4;
+      } else if (isNameKeyed(draft)) {
+        // The second key of rung 4 (plan 0221): the same words in another
+        // order, without "de" and "en", at the same size. Asked only when the
+        // exact key answered nothing, and only for a row keyed on its own
+        // text, which the index holds on the other side too.
+        const reworded = siblings.matchAnyOrder(
+          draft.name,
+          draft.sizeFormat,
+          draft.unitSize,
+          null,
+          draft.approxWeight,
+          draft.packCount ?? null
+        );
+        const rejected = reworded?.itemId
+          ? null
+          : siblings.rejectedAnyOrder(
+              draft.name,
+              draft.sizeFormat,
+              draft.unitSize,
+              null,
+              draft.approxWeight,
+              draft.packCount ?? null
+            );
+        if (reworded?.itemId) {
+          Object.assign(draft, rewordedProposal(reworded.itemId));
+          counters.wordOrderProposals += 1;
+          rung = 4;
+        } else if (rejected !== null) {
+          Object.assign(draft, rejectionPointer(rejected));
+          counters.wordOrderRejectedPointers += 1;
+          rung = 4;
+        }
       }
     }
 
     const saved = await this.entries.save(draft);
     return { entry: saved, created: true, rung, itemId: activeItemOf(saved) };
+  }
+
+  /**
+   * The prices one shopper's refresh read for one known row (plan 0216,
+   * section 2), through the same two writes a walk makes and nothing else.
+   *
+   * **It is a narrow door, not a second ingest.** It loads no index, matches
+   * nothing, and writes no row: the observation is partial, so the stored name,
+   * brand, EAN and size stay what the last walk wrote, and the seen fields stay
+   * where the walk left them. What it writes is what step 3 and step 4 of a
+   * walk write for that observation:
+   *
+   * - a `source_entry_prices` row per price that resolves to a scope, and per
+   *   copy target the row already has, through {@link replaceScopePrices};
+   * - when the row is `ACTIVE`, the batch catalog is owed for each of those
+   *   scopes, built by {@link priceEntryFor} and sent by {@link writePrices}.
+   *
+   * Both carry no run: `runId` is null on the price rows and `sourceRunId` is
+   * null at catalog. The `price_refreshes` row is the record of what wrote it.
+   *
+   * **A price that resolves to no scope is dropped, with no write and no
+   * warning.** A refresh creates no scope, and it has no run to warn on.
+   *
+   * **An observation sold another way than its row writes nothing** (plan
+   * 0181). A walk would rewrite the row's flag first, so that the row and its
+   * price agree. A refresh writes no row, so the only way to keep the two in
+   * agreement is to leave both alone; the next walk settles it.
+   */
+  async writeRefreshedPrices(
+    input: RefreshedPricesInput
+  ): Promise<RefreshedPricesResult> {
+    const { entry, observation } = input;
+    if (soldByWeightChanged(entry, observation)) {
+      return { recorded: 0, inserted: 0, confirmed: 0, soldAnotherWay: true };
+    }
+
+    const placed: PlacedPrice[] = [];
+    for (const price of observation.prices) {
+      const priceScopeId =
+        price.scopeKey === null ? null : input.scopeIdFor(price.scopeKey);
+      if (priceScopeId) {
+        placed.push({ price, priceScopeId, copiedFromScopeId: null });
+      }
+    }
+    placed.push(...copiesFor(placed, input.copiesOf));
+
+    await this.replaceScopePrices(
+      null,
+      input.sourceKind,
+      placed.map((place) => ({ ...place, observation, entry }))
+    );
+    const recorded = placed.filter(
+      (place) => place.copiedFromScopeId === null
+    ).length;
+
+    const itemId = activeItemOf(entry);
+    let inserted = 0;
+    let confirmed = 0;
+    if (itemId) {
+      for (const place of placed) {
+        const written = await this.writePrices(
+          null,
+          place.priceScopeId,
+          input.sourceKind,
+          [priceEntryFor(itemId, observation, entry, place.price)],
+          place.copiedFromScopeId
+        );
+        if (place.copiedFromScopeId === null) {
+          inserted += written.inserted;
+          confirmed += written.confirmed;
+        }
+      }
+    }
+
+    this.logger.log(
+      `Refresh of row ${entry.id}: ${recorded} price(s) recorded, ` +
+        `${placed.length - recorded} copied, ${inserted} written to catalog.`
+    );
+    return { recorded, inserted, confirmed, soldAnotherWay: false };
   }
 
   /**
@@ -1266,7 +1895,7 @@ export class SourceIngest {
    * before the plan that has no kind is left as it is too.
    */
   private async replaceScopePrices(
-    runId: string,
+    runId: string | null,
     sourceKind: PriceSourceKind,
     observed: readonly ObservedPrice[]
   ): Promise<void> {
@@ -1330,7 +1959,7 @@ export class SourceIngest {
    * either side reads it to decide anything (plan 0086, D6).
    */
   private async writePrices(
-    context: RunContext,
+    runId: string | null,
     priceScopeId: string,
     sourceKind: PriceSourceKind,
     entries: readonly ItemPriceBatchEntry[],
@@ -1345,7 +1974,7 @@ export class SourceIngest {
       const result = await this.catalog.addPrices(
         priceScopeId,
         entries.slice(i, i + PRICE_BATCH),
-        context.runId,
+        runId,
         sourceKind,
         copiedFromScopeId
       );
@@ -1408,6 +2037,10 @@ function emptyCounters(): SourceIngestCounters {
     pricesConfirmed: 0,
     pricesConflicted: 0,
     pricesSoldAnotherWay: 0,
+    wordOrderProposals: 0,
+    wordOrderRejectedPointers: 0,
+    sizesDisproved: 0,
+    probablePackCounts: 0,
   };
 }
 
@@ -1478,16 +2111,88 @@ function isSharedEan(
  * undecided, so accepting it is a decision a person makes. The item stays on
  * the row as the proposal, which is the product the queue shows beside it.
  */
-function proposeSharedEan(
-  row: SourceCatalogEntry,
+function sharedEanProposal(itemId: string | null): DecidedFields {
+  return {
+    itemId,
+    candidateEntryId: null,
+    status: SourceEntryStatus.CANDIDATE,
+    matchedBy: ItemSourceMatch.SHARED_EAN,
+    confidence: FUZZY_CONFIDENCE,
+    decidedAt: null,
+  };
+}
+
+/**
+ * The state a bind or a proposal by the EAN rung decides from: a row nobody
+ * decided, as {@link undecided} reads it (plan 0269, section 3).
+ */
+function waiting(): FindOptionsWhere<SourceCatalogEntry> {
+  return {
+    decidedAt: IsNull(),
+    status: In([SourceEntryStatus.UNRESOLVED, SourceEntryStatus.CANDIDATE]),
+  };
+}
+
+/**
+ * The state a proposal by the words in any order decides from: waiting, and
+ * proposing nothing yet (plan 0269, section 3).
+ */
+function unproposed(): FindOptionsWhere<SourceCatalogEntry> {
+  return {
+    decidedAt: IsNull(),
+    status: SourceEntryStatus.UNRESOLVED,
+    itemId: IsNull(),
+    candidateEntryId: IsNull(),
+  };
+}
+
+/**
+ * The state an unbind of a shared EAN decides from: bound by the EAN rung,
+ * to the product the walk read (plan 0269, section 3).
+ */
+function boundByEan(
   itemId: string | null
-): void {
-  row.itemId = itemId;
-  row.candidateEntryId = null;
-  row.status = SourceEntryStatus.CANDIDATE;
-  row.matchedBy = ItemSourceMatch.SHARED_EAN;
-  row.confidence = FUZZY_CONFIDENCE;
-  row.decidedAt = null;
+): FindOptionsWhere<SourceCatalogEntry> {
+  return {
+    status: SourceEntryStatus.ACTIVE,
+    matchedBy: ItemSourceMatch.EAN,
+    itemId: itemId === null ? IsNull() : itemId,
+  };
+}
+
+/** The columns a read of the decisions names: the keys and the six. */
+function decisionSelect() {
+  return {
+    id: true,
+    externalId: true,
+    itemId: true,
+    candidateEntryId: true,
+    status: true,
+    matchedBy: true,
+    confidence: true,
+    decidedAt: true,
+  } as const;
+}
+
+/** Copy the decided columns of `from` onto `row`. Answers whether any moved. */
+function assignDecisions(
+  row: SourceCatalogEntry,
+  from: Pick<SourceCatalogEntry, DecidedColumn>
+): boolean {
+  const changed =
+    row.itemId !== from.itemId ||
+    row.candidateEntryId !== from.candidateEntryId ||
+    row.status !== from.status ||
+    row.matchedBy !== from.matchedBy ||
+    Number(row.confidence) !== Number(from.confidence) ||
+    (row.decidedAt?.getTime() ?? null) !== (from.decidedAt?.getTime() ?? null);
+  row.itemId = from.itemId;
+  row.candidateEntryId = from.candidateEntryId;
+  row.status = from.status;
+  row.matchedBy = from.matchedBy;
+  row.confidence = from.confidence;
+  row.decidedAt = from.decidedAt;
+  return changed;
 }
 
 /**
@@ -1544,6 +2249,21 @@ function soldByWeightChanged(
 }
 
 /**
+ * Whether a partial observation states another weight than the row holds
+ * (plan 0244). Never when the listing does not say.
+ */
+function approxWeightChanged(
+  row: SourceCatalogEntry,
+  observation: PartialSourceObservation
+): boolean {
+  if (observation.approxWeight === undefined) {
+    return false;
+  }
+  const held = row.approxWeight === null ? null : Number(row.approxWeight);
+  return held !== observation.approxWeight;
+}
+
+/**
  * A row nobody has decided, which is the only kind a new EAN may promote.
  *
  * A `REJECTED` row is the owner saying this is not a product he tracks, and an
@@ -1585,28 +2305,131 @@ function undecided(row: SourceCatalogEntry): boolean {
  * The name rungs are not asked. No automated match binds a printed name to a
  * product, and a waiting row already carries what they proposed.
  *
- * Mutates the row and leaves the save to the caller.
+ * Answers the fields of the bind, or null, and writes nothing: the caller
+ * writes them guarded on the row still waiting (plan 0269, section 3).
  */
-function bindWaitingByEan(
+function waitingEanBinding(
   row: SourceCatalogEntry,
   items: ItemMatchIndex,
   eans: ChainEanIndex,
   seenAt: Date
-): boolean {
+): DecidedFields | null {
   if (!undecided(row) || eans.shared(row.ean)) {
-    return false;
+    return null;
   }
   const itemId = items.holderOf(row.ean);
   if (itemId === null) {
-    return false;
+    return null;
   }
-  row.itemId = itemId;
-  row.candidateEntryId = null;
-  row.status = SourceEntryStatus.ACTIVE;
-  row.matchedBy = ItemSourceMatch.EAN;
-  row.confidence = 1;
-  row.decidedAt = seenAt;
-  return true;
+  return {
+    itemId,
+    candidateEntryId: null,
+    status: SourceEntryStatus.ACTIVE,
+    matchedBy: ItemSourceMatch.EAN,
+    confidence: 1,
+    decidedAt: seenAt,
+  };
+}
+
+/**
+ * The second key of rung 4, asked again for a row that is waiting (plan 0221,
+ * section 3.5).
+ *
+ * Only a row nobody has decided, that is `UNRESOLVED`, that proposes nothing
+ * yet, and that is keyed on its own text. A `CANDIDATE` row already proposes
+ * something, and a person may be reading that proposal. The exact key is not
+ * asked again here.
+ *
+ * When the words meet no product but exactly one `REJECTED` row and no
+ * `ACTIVE` one, the row is queued pointing at that rejection
+ * ({@link rejectionPointer}).
+ *
+ * Answers the fields of the proposal and which kind it is, or null, and
+ * writes nothing: the caller writes them guarded on the row still proposing
+ * nothing (plan 0269, section 3).
+ */
+function anyOrderProposal(
+  row: SourceCatalogEntry,
+  siblings: SiblingEntryIndex
+): { fields: DecidedFields; answer: 'product' | 'rejected' } | null {
+  if (
+    !undecided(row) ||
+    row.status !== SourceEntryStatus.UNRESOLVED ||
+    row.itemId !== null ||
+    row.candidateEntryId !== null ||
+    !isNameKeyed(row)
+  ) {
+    return null;
+  }
+  const reworded = siblings.matchAnyOrder(
+    row.name,
+    row.sizeFormat,
+    row.unitSize,
+    row,
+    row.approxWeight,
+    row.packCount ?? null
+  );
+  if (reworded?.itemId) {
+    return { fields: rewordedProposal(reworded.itemId), answer: 'product' };
+  }
+  const rejected = siblings.rejectedAnyOrder(
+    row.name,
+    row.sizeFormat,
+    row.unitSize,
+    row,
+    row.approxWeight,
+    row.packCount ?? null
+  );
+  if (rejected !== null) {
+    return { fields: rejectionPointer(rejected), answer: 'rejected' };
+  }
+  return null;
+}
+
+function countAnyOrder(
+  counters: SourceIngestCounters,
+  answer: 'product' | 'rejected'
+): void {
+  if (answer === 'product') {
+    counters.wordOrderProposals += 1;
+  } else if (answer === 'rejected') {
+    counters.wordOrderRejectedPointers += 1;
+  }
+}
+
+/**
+ * The words of a new name meet one row a person rejected (plan 0221, the
+ * owner's answer to question 3 of 2026-11-05). The run decides nothing: the
+ * row is not rejected by itself. It is queued pointing at the rejection
+ * through `candidateEntryId`, with no product, so the queue shows the person
+ * which rejected row the new name matches. Reject and create work on it as on
+ * any waiting row, and an accept names its product itself.
+ */
+function rejectionPointer(rejectedId: string): DecidedFields {
+  return {
+    itemId: null,
+    candidateEntryId: rejectedId,
+    status: SourceEntryStatus.CANDIDATE,
+    matchedBy: ItemSourceMatch.NAME_WORDS_SIZE,
+    confidence: FUZZY_CONFIDENCE,
+    decidedAt: null,
+  };
+}
+
+/**
+ * A proposal by the second key of rung 4 (plan 0221, section 3.4): a
+ * `CANDIDATE` for the product, never `ACTIVE`. It writes no price and sends no
+ * claim. Only a person's accept binds it.
+ */
+function rewordedProposal(itemId: string): DecidedFields {
+  return {
+    itemId,
+    candidateEntryId: null,
+    status: SourceEntryStatus.CANDIDATE,
+    matchedBy: ItemSourceMatch.NAME_WORDS_SIZE,
+    confidence: FUZZY_CONFIDENCE,
+    decidedAt: null,
+  };
 }
 
 function fieldsOf(
@@ -1633,7 +2456,12 @@ function fieldsOf(
     // number describes nothing, and the column's own doc says it is null then.
     sizeUnit: unitSize === null ? null : observation.sizeUnit,
     soldByWeight,
+    // The weight of one piece (plan 0244), held only beside no size: a size
+    // writes a null weight whatever the observation said. With no size, a
+    // source that never reads a weight leaves the stored one alone.
+    approxWeight: unitSize === null ? observation.approxWeight : null,
     sizeFormat: observation.sizeFormat,
+    packaging: observation.packaging,
     packCount: observation.packCount,
     categoryPath: observation.categoryPath,
     url: observation.url,
@@ -1686,7 +2514,8 @@ function priceEntryFor(
  */
 export class SourceIngestSession {
   private readonly byExternalId: Map<string, SourceCatalogEntry>;
-  private readonly siblings: SiblingEntryIndex;
+  /** Rung 4's index, with the doubted rows left out (plan 0249). */
+  private readonly siblings: UndoubtedSiblingIndex;
   private readonly eans: ChainEanIndex;
   private readonly outcomes: SourceEntryOutcome[] = [];
   /**
@@ -1699,6 +2528,7 @@ export class SourceIngestSession {
   private readonly copies = emptyCopies();
   private readonly priceConflicts: PriceConflict[] = [];
   private readonly images = emptyImages();
+  private readonly sizeDoubts: SizeDoubtExample[] = [];
   private closed = false;
 
   constructor(
@@ -1709,7 +2539,7 @@ export class SourceIngestSession {
     private readonly items: ItemMatchIndex
   ) {
     this.byExternalId = new Map(rows.map((row) => [row.externalId, row]));
-    this.siblings = new SiblingEntryIndex(rows);
+    this.siblings = new UndoubtedSiblingIndex(rows);
     this.eans = new ChainEanIndex(rows);
   }
 
@@ -1752,6 +2582,14 @@ export class SourceIngestSession {
     this.counters.pricesConfirmed += result.counters.pricesConfirmed;
     this.counters.pricesConflicted += result.counters.pricesConflicted;
     this.counters.pricesSoldAnotherWay += result.counters.pricesSoldAnotherWay;
+    this.counters.wordOrderProposals += result.counters.wordOrderProposals;
+    this.counters.wordOrderRejectedPointers +=
+      result.counters.wordOrderRejectedPointers;
+    this.counters.sizesDisproved += result.counters.sizesDisproved;
+    this.counters.probablePackCounts += result.counters.probablePackCounts;
+    this.sizeDoubts.push(
+      ...result.sizeDoubts.slice(0, SIZE_DOUBTS_NAMED - this.sizeDoubts.length)
+    );
     this.priceConflicts.push(...result.priceConflicts);
     this.images.linked += result.images.linked;
     this.images.moved += result.images.moved;
@@ -1772,6 +2610,27 @@ export class SourceIngestSession {
   }
 
   /**
+   * The item of each of these rows that is `ACTIVE` now (plan 0269, section
+   * 5, and D8). Read by the drain, after {@link close}, so it is not refused
+   * there. The availability, the pack counts and the weights all read it.
+   */
+  activeItemsOf(entryIds: readonly string[]): Promise<Map<string, string>> {
+    return this.ingest.activeItemsOf(entryIds);
+  }
+
+  /**
+   * The category paths of the run's rows (plan 0268, section 2). Written by
+   * the drain, after {@link close} and after every other write of the end of
+   * the run, so a failure here costs nothing else.
+   */
+  writeCategoryPaths(
+    writes: readonly CategoryPathsWrite[],
+    onWritten?: () => void
+  ): Promise<number> {
+    return this.ingest.writeCategoryPaths(writes, onWritten);
+  }
+
+  /**
    * Everything this run ingested, in the order it was pushed.
    *
    * There is nothing to flush: a chunk is written when it is pushed, so an
@@ -1780,12 +2639,25 @@ export class SourceIngestSession {
    */
   async close(): Promise<SourceIngestResult> {
     this.closed = true;
+    return this.totals();
+  }
+
+  /**
+   * What the chunks pushed so far wrote, without closing (plan 0269, D9).
+   *
+   * A chunk is added only once it is written, so a chunk that failed counts
+   * nothing here, although it may have written part of its rows before it
+   * failed. Read by the drain of a run whose chain failed, which closes
+   * nothing.
+   */
+  totals(): SourceIngestResult {
     return {
       outcomes: this.outcomes,
       counters: this.counters,
       copies: this.copies,
       priceConflicts: this.priceConflicts,
       images: this.images,
+      sizeDoubts: this.sizeDoubts,
     };
   }
 }

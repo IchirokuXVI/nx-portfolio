@@ -6,8 +6,11 @@ import {
   BASKET_SHARING_LIMITS,
   BasketStatus,
   LINE_QUANTITY_MAX,
+  LINE_UNITS,
   SettlementOutcome,
+  type LineUnit,
 } from '@portfolio/luna-shopper/contracts';
+import { asQueryFlag } from '@portfolio/luna-shopper/platform';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -27,7 +30,13 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { ADD_CHOICE_DOCS, NotBesideNewLine } from '../lists/list.dto';
+import {
+  ADD_CHOICE_DOCS,
+  LINE_UNIT_DOCS,
+  NotBesideNewLine,
+  OnTypedNameOnly,
+  RequiredLineUnit,
+} from '../lists/list.dto';
 
 /**
  * Request bodies for the basket (plan 0136).
@@ -103,15 +112,16 @@ export class SettleBasketRowDto {
   @Max(LINE_QUANTITY_MAX)
   quantity?: number;
 
+  @RequiredLineUnit()
+  unit!: LineUnit;
+
   @ApiProperty({
     minimum: 0,
-    maximum: LINE_QUANTITY_MAX,
     description:
-      'The sum of `left` over the lines in `lineIds`, as you drew them. Refused with `stale_quantity` when somebody else moved it first, which is also what catches a double tap.',
+      'The sum of `left` over the lines in `lineIds`, as you drew them. Refused with `stale_quantity` when somebody else moved it first, which is also what catches a double tap. It has no ceiling: it is what the lines hold, a sum of several lines or a line stored above the ceiling (plan 0262), and not what the settle writes.',
   })
   @IsInt()
   @Min(0)
-  @Max(LINE_QUANTITY_MAX)
   from!: number;
 
   @ApiPropertyOptional({
@@ -186,14 +196,12 @@ export class RevertBasketRowDto {
 
   @ApiPropertyOptional({
     minimum: 0,
-    maximum: LINE_QUANTITY_MAX,
     description:
-      'The sum of `bought` over the lines in `lineIds`, as you drew them. Required for UNITS.',
+      'The sum of `bought` over the lines in `lineIds`, as you drew them. Required for UNITS. It has no ceiling, because it is what the lines hold and not what the revert writes (plan 0262).',
   })
   @IsOptional()
   @IsInt()
   @Min(0)
-  @Max(LINE_QUANTITY_MAX)
   from?: number;
 }
 
@@ -216,10 +224,16 @@ export class SetBasketRowDemandDto {
   @Max(LINE_QUANTITY_MAX)
   quantity!: number;
 
-  @ApiProperty({ minimum: 0, maximum: LINE_QUANTITY_MAX })
+  @RequiredLineUnit()
+  unit!: LineUnit;
+
+  @ApiProperty({
+    minimum: 0,
+    description:
+      'What the line asks for as you drew it. It has no ceiling, because it is what the line holds and not what the demand writes: a line stored above the ceiling is moved down with its own amount here (plan 0262).',
+  })
   @IsInt()
   @Min(0)
-  @Max(LINE_QUANTITY_MAX)
   from!: number;
 }
 
@@ -255,6 +269,14 @@ export class AddBasketLineDto {
   @Min(1)
   @Max(LINE_QUANTITY_MAX)
   quantity?: number;
+
+  @ApiPropertyOptional({
+    enum: LINE_UNITS,
+    description: LINE_UNIT_DOCS.optional,
+  })
+  @IsOptional()
+  @IsIn([...LINE_UNITS])
+  unit?: LineUnit;
 
   @ApiPropertyOptional({
     type: [String],
@@ -301,6 +323,7 @@ export class AddBasketLineDto {
   @Transform(({ obj }: { obj: Record<string, unknown> }) => obj?.['newLine'])
   @IsOptional()
   @IsBoolean()
+  @OnTypedNameOnly()
   newLine?: boolean;
 }
 
@@ -592,10 +615,10 @@ export class ListBasketsQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'Include archived baskets, which the default listing leaves out without deleting them.',
+      'Include archived baskets, which the default listing leaves out without deleting them. Only the texts `true` and `false` are accepted: any other text, a flag with no value or a flag named twice is a 400.',
   })
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(asQueryFlag)
   @IsBoolean()
   includeArchived?: boolean;
 }

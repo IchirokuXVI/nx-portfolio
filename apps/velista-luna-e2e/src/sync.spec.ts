@@ -10,7 +10,7 @@ import {
   resetAliceWorld,
   type Session,
 } from './support/api';
-import { generateBasket, reel, row, signIn } from './support/app';
+import { amountCell, generateBasket, row, signIn } from './support/app';
 
 /** A read of the shopping list: the full read or the rows read (backend `0205`). */
 function readsTheList(request: Request, basketId: string): boolean {
@@ -62,9 +62,9 @@ test.describe('a buy on another phone', () => {
         quantity: 1,
         from: 12,
       });
-      await expect(
-        reel(row(page, 'Eggs'), 'Eggs, still to get')
-      ).toHaveAttribute('aria-valuenow', '11');
+      await expect(amountCell(row(page, 'Eggs'))).toHaveAccessibleName(
+        'Amount of Eggs: 11'
+      );
     });
 
     await test.step('2. the other phone buys the Milk, and the row is bought here at once', async () => {

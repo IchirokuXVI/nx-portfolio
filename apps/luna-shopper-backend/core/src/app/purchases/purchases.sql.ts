@@ -51,23 +51,23 @@ import { READABLE_LIST } from '../zones/zone-summary.sql';
 export const PERSON_PURCHASES_CTE = `
   "mine" AS (
     SELECT s.id, s."lineId", s."listId", s."itemId", s."basketId", s."outcome",
-           s."quantity", s."settledAt", s."pricePaidCents", s."pricePaidCurrency",
-           s."priceScopeId", s."supermarketLocationId"
+           s."quantity", s."unit", s."estimated", s."settledAt", s."pricePaidCents",
+           s."pricePaidCurrency", s."priceScopeId", s."supermarketLocationId"
     FROM "baskets" gl
     JOIN "line_settlements" s ON s."basketId" = gl.id
     WHERE gl."ownerUserId" = $1::uuid
       AND s."revertedAt" IS NULL
     UNION
     SELECT s.id, s."lineId", s."listId", s."itemId", s."basketId", s."outcome",
-           s."quantity", s."settledAt", s."pricePaidCents", s."pricePaidCurrency",
-           s."priceScopeId", s."supermarketLocationId"
+           s."quantity", s."unit", s."estimated", s."settledAt", s."pricePaidCents",
+           s."pricePaidCurrency", s."priceScopeId", s."supermarketLocationId"
     FROM "line_settlements" s
     WHERE s."settledByUserId" = $1::uuid
       AND s."revertedAt" IS NULL
     UNION
     SELECT s.id, s."lineId", s."listId", s."itemId", s."basketId", s."outcome",
-           s."quantity", s."settledAt", s."pricePaidCents", s."pricePaidCurrency",
-           s."priceScopeId", s."supermarketLocationId"
+           s."quantity", s."unit", s."estimated", s."settledAt", s."pricePaidCents",
+           s."pricePaidCurrency", s."priceScopeId", s."supermarketLocationId"
     FROM "basket_participants" p
     JOIN "line_settlements" s ON s."settledByParticipantId" = p.id
     WHERE p."userId" = $1::uuid
@@ -197,9 +197,11 @@ function sessionWindowCtes(gapParam: string, narrowing: string): string {
  *
  * ## The numbers
  *
- * `spentCents` multiplies with a `::bigint` cast before the multiplication,
- * because a sum of cents over a long history passes `int` long before it means
- * anything else is wrong. It is null and never zero when nothing in the entry
+ * `spentCents` multiplies as `numeric`, because a sum of cents over a long
+ * history passes `int` long before it means anything else is wrong, and
+ * because a weighed purchase is the price of a kilo or a litre times the
+ * amount over 1000 (plan 0246 M7), which is a fraction of a cent until the
+ * entry rounds it once, half up. It is null and never zero when nothing in the entry
  * carries a price, and `unpricedCount` says how much of the sum is missing
  * (section 3.3).
  *
@@ -234,23 +236,43 @@ export function purchaseEntriesSql(narrow = true): string {
   )},
   "purchases" AS (
     SELECT 'SESSION'::text AS "kind", x."entryId" AS "entryId", x."lineId",
-           x."outcome", x."quantity", x."settledAt", x."pricePaidCents",
-           x."pricePaidCurrency"
+           x."outcome", x."quantity", x."unit", x."estimated", x."settledAt",
+           x."pricePaidCents", x."pricePaidCurrency"
     FROM "sessioned" x
     UNION ALL
     SELECT 'BASKET'::text, t."ownBasketId", t."lineId",
-           t."outcome", t."quantity", t."settledAt", t."pricePaidCents",
-           t."pricePaidCurrency"
+           t."outcome", t."quantity", t."unit", t."estimated", t."settledAt",
+           t."pricePaidCents", t."pricePaidCurrency"
     FROM "tagged" t
     WHERE t."ownBasketId" IS NOT NULL
   ),
   "entry_lines" AS (
     SELECT p."kind", p."entryId", p."lineId",
-           COALESCE(SUM(p."quantity") FILTER (WHERE p."outcome" = 'BOUGHT'), 0)::int
-             AS "bought",
-           SUM(p."pricePaidCents"::bigint * p."quantity")
+           -- What was bought, per unit (plan 0246, section 3.5). A line can
+           -- have changed its unit between two settles, so even one line's sum
+           -- is split: never a number that adds grams to pieces.
+           COALESCE(SUM(p."quantity")
+             FILTER (WHERE p."outcome" = 'BOUGHT' AND p."unit" = 'UNIT'), 0)::bigint
+             AS "boughtUnit",
+           COALESCE(SUM(p."quantity")
+             FILTER (WHERE p."outcome" = 'BOUGHT' AND p."unit" = 'GRAM'), 0)::bigint
+             AS "boughtGram",
+           COALESCE(SUM(p."quantity")
+             FILTER (WHERE p."outcome" = 'BOUGHT' AND p."unit" = 'MILLILITER'), 0)::bigint
+             AS "boughtMilliliter",
+           -- The price of one of the unit times the amount (plan 0246 M7): a
+           -- piece or pack for UNIT, a kilo or a litre for the other two, so a
+           -- weighed row is over 1000. Numeric and unrounded here, rounded
+           -- once on the entry.
+           SUM(
+             p."pricePaidCents"::numeric * p."quantity"
+               / (CASE WHEN p."unit" = 'UNIT' THEN 1 ELSE 1000 END)
+           )
              FILTER (WHERE p."outcome" = 'BOUGHT' AND p."pricePaidCents" IS NOT NULL)
              AS "spent",
+           COALESCE(BOOL_OR(p."estimated")
+             FILTER (WHERE p."outcome" = 'BOUGHT' AND p."pricePaidCents" IS NOT NULL), false)
+             AS "estimated",
            BOOL_OR(p."outcome" = 'BOUGHT' AND p."pricePaidCents" IS NULL) AS "unpriced",
            -- Plan 0143, section 7: how many currencies the priced rows carry,
            -- and which one when they carry exactly one. An entry whose rows
@@ -271,8 +293,15 @@ export function purchaseEntriesSql(narrow = true): string {
            MIN(e."firstAt") AS "firstAt",
            MAX(e."lastAt") AS "endedAt",
            COUNT(*)::int AS "lineCount",
-           (COUNT(*) FILTER (WHERE e."bought" > 0))::int AS "boughtLineCount",
-           SUM(e."spent")::bigint AS "spentCents",
+           (COUNT(*) FILTER (
+             WHERE e."boughtUnit" + e."boughtGram" + e."boughtMilliliter" > 0
+           ))::int AS "boughtLineCount",
+           SUM(e."boughtUnit")::bigint AS "boughtUnit",
+           SUM(e."boughtGram")::bigint AS "boughtGram",
+           SUM(e."boughtMilliliter")::bigint AS "boughtMilliliter",
+           -- Rounded once, half up, over the whole entry (plan 0246 M7).
+           ROUND(SUM(e."spent"))::bigint AS "spentCents",
+           BOOL_OR(e."estimated") AS "estimated",
            -- Two currencies anywhere below make two here, whether they met on
            -- one line or across two. Counting the lines own currency column
            -- alone would miss the first case, because that column is already a
@@ -297,7 +326,8 @@ export function purchaseEntriesSql(narrow = true): string {
   )
   SELECT d."id", d."kind", d."name", d."open", d."startedAt", d."endedAt",
          d."lineCount", d."boughtLineCount", d."spentCents", d."currencies",
-         d."currency", d."unpricedCount"
+         d."currency", d."unpricedCount", d."boughtUnit", d."boughtGram",
+         d."boughtMilliliter", d."estimated"
   FROM "dated" d
   WHERE $3::uuid IS NULL
      OR (d."startedAt", d."id") < (SELECT b."at", b."id" FROM "boundary" b)
@@ -313,7 +343,7 @@ export const PURCHASE_ENTRIES_SQL = purchaseEntriesSql();
  * The rows of one entry, folded and located. `readerParam` is the reader and
  * `cursorParam` the boundary row's id or null; both reads below select this.
  *
- * ## One row per `(lineId, itemId, pricePaidCents, pricePaidCurrency)`
+ * ## One row per `(lineId, itemId, unit, pricePaidCents, pricePaidCurrency)`
  *
  * Three partial settles of one milk at one price are one row of three. The same
  * milk at two prices, which is two shops in one session, is two rows, because a
@@ -354,7 +384,7 @@ export const PURCHASE_ENTRIES_SQL = purchaseEntriesSql();
 function foldedRows(readerParam: string, cursorParam: string): string {
   return `
   "folded" AS (
-    SELECT e."lineId", e."itemId", e."pricePaidCents", e."pricePaidCurrency",
+    SELECT e."lineId", e."itemId", e."unit", e."pricePaidCents", e."pricePaidCurrency",
            (ARRAY_AGG(e.id ORDER BY e."settledAt", e.id))[1] AS "id",
            -- What the product was called (plan 0202, section 4). The group is
            -- one product, so the newest copy that exists answers for it.
@@ -364,6 +394,8 @@ function foldedRows(readerParam: string, cursorParam: string): string {
            COALESCE(SUM(e."quantity") FILTER (WHERE e."outcome" = 'BOUGHT'), 0)::int
              AS "quantity",
            BOOL_OR(e."outcome" = 'BOUGHT') AS "anyBought",
+           -- An estimate when any settlement folded in is one (plan 0246 M7).
+           BOOL_OR(e."estimated") AS "estimated",
            -- Served only when every row of the group names it and they all
            -- name the same one (plan 0143, section 6). Both halves matter: two
            -- shops charging the same fold into one row, and naming either
@@ -384,7 +416,9 @@ function foldedRows(readerParam: string, cursorParam: string): string {
              THEN (ARRAY_AGG(DISTINCT e."supermarketLocationId"))[1]
            END AS "supermarketLocationId"
     FROM "entry" e
-    GROUP BY e."lineId", e."itemId", e."pricePaidCents", e."pricePaidCurrency"
+    -- The unit keys the group (plan 0246, section 3.5), so a row's quantity
+    -- is always in one unit.
+    GROUP BY e."lineId", e."itemId", e."unit", e."pricePaidCents", e."pricePaidCurrency"
   ),
   "kept" AS (
     SELECT f.*
@@ -413,6 +447,8 @@ function foldedRows(readerParam: string, cursorParam: string): string {
          k."itemSnapshot",
          CASE WHEN k."anyBought" THEN 'BOUGHT' ELSE 'NOT_AVAILABLE' END AS "outcome",
          k."quantity",
+         k."unit",
+         k."estimated",
          k."pricePaidCents",
          k."pricePaidCurrency",
          k."priceScopeId",
@@ -449,8 +485,9 @@ function foldedRows(readerParam: string, cursorParam: string): string {
 export const PURCHASE_BASKET_ROWS_SQL = `
   WITH "entry" AS (
     SELECT s.id, s."lineId", s."itemId", s."outcome", s."quantity",
-           s."settledAt", s."pricePaidCents", s."pricePaidCurrency",
-           s."priceScopeId", s."supermarketLocationId", s."itemSnapshot"
+           s."unit", s."estimated", s."settledAt", s."pricePaidCents",
+           s."pricePaidCurrency", s."priceScopeId", s."supermarketLocationId",
+           s."itemSnapshot"
     FROM "line_settlements" s
     JOIN "baskets" gl ON gl.id = s."basketId"
     WHERE s."basketId" = $2::uuid
@@ -477,7 +514,7 @@ export const PURCHASE_SESSION_ROWS_SQL = `
   ${sessionWindowCtes('$2', '')},
   "entry" AS (
     SELECT x.id, x."lineId", x."itemId", x."outcome", x."quantity",
-           x."settledAt", x."pricePaidCents", x."pricePaidCurrency",
+           x."unit", x."estimated", x."settledAt", x."pricePaidCents", x."pricePaidCurrency",
            x."priceScopeId", x."supermarketLocationId", n."itemSnapshot"
     FROM "sessioned" x
     -- Joined back by id for the one column the window does not carry (plan
@@ -509,6 +546,12 @@ export interface PurchaseEntryRow {
   currencies: number;
   currency: string | null;
   unpricedCount: number;
+  /** What was bought per unit, each a `bigint` (plan 0246, section 3.5). */
+  boughtUnit: string | number;
+  boughtGram: string | number;
+  boughtMilliliter: string | number;
+  /** Whether any priced purchase is an estimate (plan 0246 M7). */
+  estimated: boolean | null;
 }
 
 /** One row of either rows read. */
@@ -519,6 +562,9 @@ export interface PurchaseLineRow {
   itemSnapshot: ItemSnapshot | null;
   outcome: string;
   quantity: number;
+  /** What `quantity` counts (plan 0246, section 3.5). */
+  unit: string;
+  estimated: boolean | null;
   pricePaidCents: number | null;
   pricePaidCurrency: string | null;
   /** Null when the folded group did not agree on one (plan 0143, section 6). */

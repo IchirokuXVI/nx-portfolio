@@ -2,6 +2,7 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
   RokuLocaleStore,
+  RokuTranslatorService,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import type {
@@ -79,10 +80,13 @@ const offer = (priceScopeId: string, price: number): ProductOffer => ({
   currency: 'EUR',
   unitPrice: null,
   unitPriceLabel: null,
+  comparablePrice: null,
+  comparableBasis: null,
   observedAt: null,
   sourceKind: 'OFFICIAL_WEB',
   stale: false,
   priceScopeId,
+  piecePrice: null,
 });
 
 /**
@@ -91,6 +95,7 @@ const offer = (priceScopeId: string, price: number): ProductOffer => ({
  */
 const MILK: BasketProduct = {
   id: 'i-milk',
+  quantityStep: null,
   name: { en: 'Milk', es: 'Leche' },
   brand: null,
   size: null,
@@ -112,6 +117,7 @@ const MILK: BasketProduct = {
       name: { en: 'Milk', es: 'Leche' },
     },
   ],
+  approxWeight: null,
 };
 
 /** The same product with no price at the shop: what an "unlisted" mark is about. */
@@ -134,6 +140,8 @@ async function render(options: {
   readonly product?: BasketProduct;
   readonly shelf?: BasketShelfMark | null;
   readonly row?: BasketRow;
+  /** A translator that echoes the values a sentence was given. */
+  readonly echoValues?: boolean;
 }) {
   TestBed.resetTestingModule();
 
@@ -142,6 +150,28 @@ async function render(options: {
     providers: [
       provideVelistaTesting({ basePath: '/velista' }),
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
+      // Listed after the testing module's own, which is what makes it win.
+      ...(options.echoValues === true
+        ? [
+            {
+              provide: RokuTranslatorService,
+              useValue: {
+                loaded: signal(true),
+                locale: signal('en'),
+                getLocale: () => 'en',
+                t: (
+                  key: string,
+                  _ns?: string,
+                  _l?: string,
+                  values?: unknown
+                ) =>
+                  values === undefined
+                    ? key
+                    : `${key}:${JSON.stringify(values)}`,
+              },
+            },
+          ]
+        : []),
     ],
   }).compileComponents();
 
@@ -212,6 +242,78 @@ describe('BasketRowComponent: prices from one shop', () => {
     // The colour is never the only carrier: the sentence is in the accessible
     // name too (section 7).
     expect(rowLabel(fixture)).toContain('basket.price.cheaperAt');
+  });
+
+  describe('a product sold by the kilo (velista 0179)', () => {
+    const LOOSE: BasketProduct = { ...MILK, unit: 'KILOGRAM' };
+    const PIECE: BasketProduct = {
+      ...LOOSE,
+      approxWeight: 1560,
+      offer: { ...offer('s-dia', 0.79), piecePrice: 1.23 },
+      offers: [
+        { ...offer('s-dia', 0.79), piecePrice: 1.23 },
+        { ...offer('s-merca', 0.95), piecePrice: 1.48 },
+      ],
+    };
+
+    it('says the cheaper price of a loose product is a price per kilo', async () => {
+      const fixture = await render({
+        atShop: true,
+        product: LOOSE,
+        echoValues: true,
+        mark: { kind: 'cheaper', price: 0.79, currency: 'EUR', chain: 'Dia' },
+      });
+
+      expect(caption(fixture)).toContain(
+        'basket.price.cheaperAt:{"price":"€0.79 catalog.per.KILOGRAM","chain":"Dia"}'
+      );
+    });
+
+    it('says the cheaper price of a kilo piece is a price per kilo', async () => {
+      const fixture = await render({
+        atShop: true,
+        product: PIECE,
+        echoValues: true,
+        mark: { kind: 'cheaper', price: 0.79, currency: 'EUR', chain: 'Dia' },
+      });
+
+      expect(caption(fixture)).toContain(
+        'basket.price.cheaperAt:{"price":"€0.79 catalog.per.KILOGRAM","chain":"Dia"}'
+      );
+    });
+
+    it('says the price elsewhere of a product sold by the kilo is per kilo', async () => {
+      const fixture = await render({
+        atShop: true,
+        product: {
+          ...LOOSE,
+          offers: [offer('s-dia', 0.79)],
+          atShop: DIA_ONLY.atShop,
+        },
+        echoValues: true,
+        mark: {
+          kind: 'unlisted',
+          chain: 'Mercadona',
+          elsewhere: { price: 0.79, currency: 'EUR', chain: 'Dia' },
+        },
+      });
+
+      expect(caption(fixture)).toContain(
+        'basket.price.cheaperAt:{"price":"€0.79 catalog.per.KILOGRAM","chain":"Dia"}'
+      );
+    });
+
+    it('says the cheaper price of a pack bare', async () => {
+      const fixture = await render({
+        atShop: true,
+        echoValues: true,
+        mark: { kind: 'cheaper', price: 0.79, currency: 'EUR', chain: 'Dia' },
+      });
+
+      expect(caption(fixture)).toContain(
+        'basket.price.cheaperAt:{"price":"€0.79","chain":"Dia"}'
+      );
+    });
   });
 
   it('says it is not sold here, and where it is sold (velista 0139)', async () => {
@@ -305,7 +407,7 @@ describe('BasketRowComponent: prices from one shop', () => {
   });
 
   /** The settle controls never leave a row, listed or not (section 5). */
-  it('keeps the status control and the reel on a line the shop does not list', async () => {
+  it('keeps the status control and the amount on a line the shop does not list', async () => {
     const fixture = await render({
       atShop: true,
       mark: { kind: 'unlisted', chain: 'Mercadona', elsewhere: null },
@@ -313,7 +415,7 @@ describe('BasketRowComponent: prices from one shop', () => {
 
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('button.status')).not.toBeNull();
-    expect(element.querySelector('lib-quantity-reel')).not.toBeNull();
+    expect(element.querySelector('.amount')).not.toBeNull();
   });
 });
 
@@ -338,7 +440,7 @@ describe('BasketRowComponent: what the shop does not have', () => {
     // Still a line to buy: the shelf may be restocked.
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('button.status')).not.toBeNull();
-    expect(element.querySelector('lib-quantity-reel')).not.toBeNull();
+    expect(element.querySelector('.amount')).not.toBeNull();
   });
 
   it('draws no shelf line on a row the shop said nothing about', async () => {

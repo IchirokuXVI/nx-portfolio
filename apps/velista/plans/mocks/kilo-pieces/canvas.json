@@ -1,0 +1,68 @@
+{
+  "title": "Velista: a piece sold by the kilo",
+  "lede": "Plan <code>0179</code>, with backend <code>0244</code> behind it. The catalog now has four kinds of product: a fixed pack, a product sold by the kilo, a kilo piece (a cheese of about 1,56 kg priced per kilo) and a piece priced as one (a 580 g salad at 6,50 €). Today velista shows the cheese as \"1560 g\" for \"13,42 €\" and a basket line of one piece adds 13,42 €. The piece costs 20,94 €. These boards show the four kinds in the product row, the shopping list row and the product page, Day in Spanish and Night in English, with no new element and no new colour: the weight is a size, the piece price is the price, and the price per kilo is the unit line the card already has. The piece price is the server's, never computed here. Photos are the Open Food Facts copies from <code>../typeahead/photos</code>, CC BY-SA 3.0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    {
+      "file": "Rows.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 860,
+      "h": 900,
+      "title": "The product row: the four kinds, Day and Night"
+    },
+    {
+      "file": "Basket.dc.html",
+      "x": 920,
+      "y": 0,
+      "w": 860,
+      "h": 560,
+      "title": "The shopping list row and its total"
+    },
+    {
+      "file": "Product.dc.html",
+      "x": 0,
+      "y": 980,
+      "w": 860,
+      "h": 600,
+      "title": "The product page: a kilo piece, and a product sold by the kilo"
+    },
+    {
+      "file": "Headline.dc.html",
+      "x": 920,
+      "y": 640,
+      "w": 860,
+      "h": 400,
+      "title": "A or B: the headline of a product sold by the kilo"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "kinds",
+      "x": 0,
+      "y": -440,
+      "w": 420,
+      "text": "THE FOUR KINDS (backend 0244, section 1).\nFixed pack: a size, price is the pack. Unchanged.\nSold by the kilo: KILOGRAM, no size, no weight. Price is a kilo.\nKilo piece: KILOGRAM, no size, approxWeight in grams. Price is a kilo, piecePrice comes from the server.\nPiece priced as one: UNIT, no size, approxWeight. Price is the piece, as a pack."
+    },
+    {
+      "id": "rules",
+      "x": 460,
+      "y": -440,
+      "w": 420,
+      "text": "WHAT EACH PLACE SAYS.\nThe weight line: \"~1,56 kg\" or \"~580 g\", for any product with a weight, in the size's place, through Intl. Always with the tilde: the weight is an estimate, and the tilde is the sign the total already uses for one.\nThe headline: piecePrice for a kilo piece, \"13,42 € / kg\" for a product sold by the kilo, price for everything else.\nThe unit line: always on a kilo piece, also at exactly 1 kg. Never on a product sold by the kilo. Rule 5 of 0101 for a pack and for a piece priced as one.\nEvery \"/ kg\" and \"/ L\" is drawn smaller than its number, in the muted colour, close after it, wherever a price is drawn: the headline, the unit line, the basket caption and the price table.\nThe detail wraps at its separator when it does not fit beside a two line price, so the weight is never cut short. The brand gives way to a second line, the number does not."
+    },
+    {
+      "id": "totals",
+      "x": 920,
+      "y": -440,
+      "w": 420,
+      "text": "THE TOTALS.\nA list total and a basket total add piecePrice for a kilo piece and price for every other product. Two cheese pieces are 41,88 €.\nA kilo piece whose offer has a price and no piecePrice adds nothing and counts as unpriced.\nA loose product still adds quantity times the price per kilo. The owner set that aside on 2026-11-03 (0244, D4)."
+    },
+    {
+      "id": "ask",
+      "x": 1380,
+      "y": -440,
+      "w": 400,
+      "text": "THE OWNER'S CHOICES, 2026-11-05.\n1. The tilde, not \"aprox.\", on every weight, to save room.\n2. \"/ kg\" smaller than its number everywhere. A product sold by the kilo took too much room and its number sat out of line with the other prices.\n3. B for the headline of a product sold by the kilo, with less room on both sides of the slash."
+    }
+  ]
+}

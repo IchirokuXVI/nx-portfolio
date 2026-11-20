@@ -50,7 +50,11 @@ import {
   PRICE_SOURCE_KIND_OPTIONS,
 } from '../catalog-enums';
 import type { ItemScopePrices } from '../catalog-seed';
-import { itemPriceSource, pricePolicySource } from '../catalog-sources';
+import {
+  itemPriceSource,
+  pricePolicySource,
+  priceSource,
+} from '../catalog-sources';
 import { holdsOwnPrice, ProductCounts } from './product-context';
 import {
   formatDay,
@@ -102,6 +106,31 @@ export function toShownBecause(value: unknown): ShownBecause | null {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** What a price of a product sold by the kilo is per. */
+const KILO_WORD = 'kg';
+
+/** The word a price per unit is printed with. */
+const UNIT_WORD = unitPriceUnit('UNIT', null);
+
+/**
+ * Whether a unit price only repeats the price beside it: a price per unit
+ * equal to the price, which a piece priced as one carries (a melon at 6.50
+ * and 6.50 per unit). A pack whose unit price differs is never one.
+ */
+function repeatsPrice(
+  row: Pick<
+    Wire.CatalogItemPriceView,
+    'price' | 'unitPrice' | 'unitBasis' | 'unitPriceLabel'
+  >
+): boolean {
+  return (
+    unitPriceUnit(row.unitBasis, row.unitPriceLabel) === UNIT_WORD &&
+    row.price !== null &&
+    row.unitPrice !== null &&
+    Number(row.price) === Number(row.unitPrice)
+  );
+}
 
 /** What one price behind a scope is, beside its numbers. */
 export type PriceRowState =
@@ -185,8 +214,22 @@ export interface ScopeRowView {
   /** The source of the shown price, already translated. */
   readonly source: string;
   readonly seen: string;
+  /**
+   * What a unit costs, or `''`. Empty beside a price per unit that equals
+   * the price: a piece priced as one would print one figure twice.
+   */
   readonly unitPrice: string;
+  /**
+   * The price at the scope. For a product sold by the kilo whose pieces state
+   * a weight, the server's price of one piece, and `unitPrice` is the price
+   * per kilo (admin plan 0068).
+   */
   readonly price: string;
+  /**
+   * Whether `unitPrice` is the one figure that says what a kilo costs, and
+   * so is drawn at every width.
+   */
+  readonly perKilo: boolean;
   readonly stale: boolean;
   /** The day a typed price is held until, or `''` when none is held. */
   readonly heldUntil: string;
@@ -362,7 +405,9 @@ export interface ChainPanelView {
                     <span class="chip">{{ scope.source }}</span>
                     <span class="muted seen">{{ scope.seen }}</span>
                   </span>
-                  <span class="muted unit">{{ scope.unitPrice }}</span>
+                  <span [class.kept]="scope.perKilo" class="muted unit">{{
+                    scope.unitPrice
+                  }}</span>
                   <span class="price">{{ scope.price }}</span>
                 } @else {
                   <span class="muted none">{{
@@ -805,6 +850,12 @@ export interface ChainPanelView {
         display: none;
       }
 
+      /* The price per kilo beside the price of a piece is the price the
+         product is sold at, so it stays. */
+      .unit.kept {
+        display: inline;
+      }
+
       .seen {
         min-inline-size: 0;
       }
@@ -856,6 +907,24 @@ export class ProductPricesTab {
     readonly scope: ScopeRowView;
     readonly row: PriceRowView;
   } | null>(null);
+
+  /** The record the tab is a part of: its unit says what a price means. */
+  private readonly _record = inject(RECORD_CONTEXT);
+
+  /**
+   * The server's price of one piece, by scope, for a product sold by the kilo
+   * (admin plan 0068). Empty until read, and after a read that failed.
+   */
+  private readonly _piecePrices = signal<ReadonlyMap<string, number>>(
+    new Map()
+  );
+  /** Which read of the piece prices is the latest, so an older one is dropped. */
+  private _pieceGeneration = 0;
+
+  /** Whether the prices of the product are prices of a kilo. */
+  private readonly _perKilo = computed(
+    () => this._record.row()?.['defaultUnit'] === 'KILOGRAM'
+  );
 
   /** How old a price of each source may be, in days. `null` is never too old. */
   private readonly _maxAgeDays = signal<ReadonlyMap<string, number | null>>(
@@ -945,13 +1014,14 @@ export class ProductPricesTab {
   constructor() {
     // The page opened the product for its counts. A tab that is drawn with no
     // count read before it opens the product itself.
-    const id = inject(RECORD_CONTEXT).id;
+    const id = this._record.id;
     if (untracked(this.product.id) !== id) {
       void this.product.open(id);
     }
 
     void this._choices.loadChains();
     void this._readPolicies();
+    void this._readPiecePrices(id);
 
     // A price was added by the form under this tab, or removed here: the
     // scopes and their count are read again.
@@ -962,6 +1032,7 @@ export class ProductPricesTab {
         if (version !== seen) {
           seen = version;
           void this.product.reloadPrices();
+          void this._readPiecePrices(id);
         }
       });
     });
@@ -1057,6 +1128,40 @@ export class ProductPricesTab {
     }
   }
 
+  /**
+   * The price of one piece at each scope, as the server works it out (backend
+   * plan 0244). Every page of the product's offers is read. The back office
+   * never computes it: a scope the server gave none for prints none.
+   */
+  private async _readPiecePrices(itemId: string): Promise<void> {
+    // A slow first read must not land over the one a price change started.
+    this._pieceGeneration += 1;
+    const generation = this._pieceGeneration;
+    const pieces = new Map<string, number>();
+    try {
+      const gateway = this._gateways.for(priceSource());
+      let cursor: string | undefined;
+      do {
+        const page = await gateway.list({ cursor, filters: { itemId } });
+        for (const offer of page.items) {
+          if (offer.itemId === itemId && typeof offer.piecePrice === 'number') {
+            pieces.set(offer.priceScopeId, offer.piecePrice);
+          }
+        }
+        cursor = page.nextCursor ?? undefined;
+      } while (cursor !== undefined);
+    } catch {
+      // No piece price read, none drawn. The prices themselves still are.
+      if (generation === this._pieceGeneration) {
+        this._piecePrices.set(new Map());
+      }
+      return;
+    }
+    if (generation === this._pieceGeneration) {
+      this._piecePrices.set(pieces);
+    }
+  }
+
   private _scopeRow(
     scope: ItemScopePrices,
     followers: number | null
@@ -1069,6 +1174,13 @@ export class ProductPricesTab {
     const until = scope.protectedUntil ?? null;
     const held = until !== null && new Date(until).getTime() > now;
     const limits = this._maxAgeDays();
+    const perKilo = this._perKilo();
+    const piece = perKilo
+      ? (this._piecePrices().get(scope.priceScopeId) ?? null)
+      : null;
+    const perKiloPrice = (
+      row: Pick<Wire.CatalogItemPriceView, 'price' | 'currency'>
+    ): string => formatUnitPrice(row.price, KILO_WORD, row.currency, locale);
 
     return {
       id: scope.priceScopeId,
@@ -1090,20 +1202,34 @@ export class ProductPricesTab {
           ? ''
           : this._label(PRICE_SOURCE_KIND_OPTIONS, shown.sourceKind),
       seen: shown === null ? '' : formatSeen(shown.lastObservedAt, now, locale),
+      // A product sold by the kilo: the price of a piece, when the server gave
+      // one, beside the price of a kilo. With no piece price, the price of a
+      // kilo once, in the price's own place, so it is never dropped.
       unitPrice:
         shown === null
           ? ''
-          : formatUnitPrice(
-              shown.unitPrice,
-              unitPriceUnit(shown.unitBasis, shown.unitPriceLabel),
-              shown.currency,
-              locale
-            ),
+          : perKilo
+            ? piece === null
+              ? ''
+              : perKiloPrice(shown)
+            : repeatsPrice(shown)
+              ? ''
+              : formatUnitPrice(
+                  shown.unitPrice,
+                  unitPriceUnit(shown.unitBasis, shown.unitPriceLabel),
+                  shown.currency,
+                  locale
+                ),
       price:
         shown === null
           ? ''
-          : formatPrice(shown.price, shown.currency, locale) ||
+          : (perKilo
+              ? piece === null
+                ? perKiloPrice(shown)
+                : formatPrice(piece, shown.currency, locale)
+              : formatPrice(shown.price, shown.currency, locale)) ||
             this._translate.t('catalog.productPrices.noTillPrice'),
+      perKilo: perKilo && piece !== null,
       stale: scope.stale === true,
       heldUntil: held ? formatDay(until, locale) : '',
       because: toShownBecause(scope.shownBecause),
@@ -1129,8 +1255,12 @@ export class ProductPricesTab {
             state === 'ended'
               ? formatDay(row.validUntil, locale)
               : formatDay(row.lastObservedAt, locale),
+          // Behind a kilo product every price is the price of a kilo, and says
+          // so, so it never sits unlabelled beside the price of a piece.
           price:
-            formatPrice(row.price, row.currency, locale) ||
+            (perKilo
+              ? perKiloPrice(row)
+              : formatPrice(row.price, row.currency, locale)) ||
             formatUnitPrice(
               row.unitPrice,
               unitPriceUnit(row.unitBasis, row.unitPriceLabel),

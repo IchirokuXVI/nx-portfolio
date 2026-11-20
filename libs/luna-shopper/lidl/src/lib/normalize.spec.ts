@@ -1,12 +1,14 @@
 import { UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
-import searchPage from './__fixtures__/search-page.json';
+import productApproximateWeight from './__fixtures__/product-approximate-weight.json';
 import productShortCode from './__fixtures__/product-short-code.json';
 import productSinglePrice from './__fixtures__/product-single-price.json';
 import productTwoRegionPrices from './__fixtures__/product-two-region-prices.json';
 import productUnpriced from './__fixtures__/product-unpriced.json';
+import searchPage from './__fixtures__/search-page.json';
 import storePage from './__fixtures__/store-page.json';
 import { isGroceryCategory } from './categories';
 import {
+  nextListOffset,
   normalizeListPage,
   normalizeListRow,
   normalizeProduct,
@@ -45,6 +47,7 @@ function emptyRow(externalId: string): LidlListRow {
     brand: null,
     siteCategory: '',
     categoryPath: [],
+    categoryBreadcrumbs: null,
     path: null,
     sizeFormat: null,
     listPrice: null,
@@ -62,6 +65,22 @@ describe('normalizeListPage', () => {
     expect(page.offset).toBe(325);
     expect(page.fetchsize).toBe(5);
     expect(page.rows).toHaveLength(5);
+    expect(page.itemCount).toBe(5);
+  });
+
+  it('counts every item the page carried, also a tile that is no product (plan 0256)', () => {
+    const items = (searchPage as { items: unknown[] }).items;
+    const withTiles = normalizeListPage({
+      ...searchPage,
+      items: [{ banner: { title: 'Ofertas' } }, ...items, {}],
+    });
+
+    expect(withTiles.rows).toHaveLength(5);
+    expect(withTiles.itemCount).toBe(7);
+  });
+
+  it('counts no items on a page that carries none', () => {
+    expect(normalizeListPage({ numFound: 3 }).itemCount).toBe(0);
   });
 
   it('reads the fields the index carries', () => {
@@ -77,6 +96,9 @@ describe('normalizeListPage', () => {
         'Quesos, productos lácteos y huevos',
         'Leche y nata',
       ],
+      // The index states the list and files this row nowhere in the online
+      // shop tree (plan 0268).
+      categoryBreadcrumbs: [],
       path: '/p/vemondo-bebida-de-almendras-con-calcio/p11038145',
       sizeFormat: '4x1 / l',
       listPrice: 3.49,
@@ -139,6 +161,29 @@ describe('normalizeListPage', () => {
   });
 });
 
+describe('nextListOffset (plan 0256)', () => {
+  const page = (itemCount: number, fetchsize: number | null) => ({
+    rows: [],
+    total: 679,
+    offset: 0,
+    fetchsize,
+    itemCount,
+  });
+
+  it('steps by the items the page carried', () => {
+    expect(nextListOffset(page(60, 60), 120, 100)).toBe(180);
+  });
+
+  it('steps by the echoed size when the page carried no items', () => {
+    expect(nextListOffset(page(0, 60), 120, 100)).toBe(180);
+  });
+
+  it('steps by the asked size when the page stated neither', () => {
+    expect(nextListOffset(page(0, null), 120, 100)).toBe(220);
+    expect(nextListOffset(page(0, 0), 120, 100)).toBe(220);
+  });
+});
+
 describe('normalizeProduct', () => {
   it('reads one price and the regions that pay it', () => {
     const product = readFixture(productSinglePrice, '11671605');
@@ -197,6 +242,18 @@ describe('normalizeProduct', () => {
     expect(product?.categorySlug).toBe('detergents');
   });
 
+  it('weighs a tray printed "Aprox." and gives it no size (plan 0244)', () => {
+    // Captured on 2026-11-05: a chorizo tray printed `Aprox.450 g`, one
+    // price and no price per kilo, so a piece priced as one.
+    const product = readFixture(productApproximateWeight, '11031963');
+
+    expect(product?.sizeFormat).toBe('Aprox.450 g');
+    expect(product?.approxWeight).toBe(450);
+    expect(product?.unitSize).toBeNull();
+    expect(product?.unit).toBeNull();
+    expect(product?.prices.length).toBeGreaterThan(0);
+  });
+
   it('never reads an eight digit code as an EAN', () => {
     const product = readFixture(productShortCode, '11029954');
 
@@ -205,6 +262,7 @@ describe('normalizeProduct', () => {
     expect(product?.ian).toBe('80532');
     expect(product?.unitSize).toBe(400);
     expect(product?.unit).toBe(UnitOfMeasure.GRAM);
+    expect(product?.approxWeight).toBeNull();
     expect(product?.sizeFormat).toBe('400 g');
     // A single size is not a pack (plan 0162).
     expect(product?.packCount).toBeNull();
@@ -228,6 +286,398 @@ describe('normalizeProduct', () => {
   it('reads a page with no payload as no product', () => {
     expect(readFixture([], '11029954')).toBeNull();
     expect(readFixture(productShortCode, '404040')).toBeNull();
+  });
+});
+
+describe('every path a product is filed under (plan 0268)', () => {
+  const page = normalizeListPage(searchPage);
+  const NEED_WORLD_QUESO = [
+    'Mundos de necesidad',
+    'Comida y cerca de la comida',
+    'Quesos, productos lácteos y huevos',
+    'Queso',
+  ];
+
+  it('reads the online shop breadcrumbs the index prints beside a row', () => {
+    const kitchen = page.rows.find((row) => row.externalId === '11110760');
+
+    // In `meta`, not in `data`: the breadcrumb is the one path the row has
+    // in the online shop tree.
+    expect(kitchen?.categoryBreadcrumbs).toEqual([
+      ['Hogar y decoración', 'Cocina'],
+    ]);
+  });
+
+  it('reads a row that prints no breadcrumb list as stating none', () => {
+    const [almonds] = page.rows;
+    const data = (
+      searchPage as { items: Array<{ gridbox: { data: unknown } }> }
+    ).items[0].gridbox.data;
+
+    expect(almonds.categoryBreadcrumbs).toEqual([]);
+    expect(normalizeListRow(data)?.categoryBreadcrumbs).toBeNull();
+  });
+
+  it('gives a product the breadcrumbs of its index row as a second path', () => {
+    const kitchen = page.rows.find((row) => row.externalId === '11110760');
+    // This page was captured before LIDL printed the list on a product page,
+    // so the row's breadcrumbs are what is known.
+    const product = readFixture(productShortCode, '11029954', {
+      categoryBreadcrumbs: kitchen?.categoryBreadcrumbs ?? null,
+    });
+
+    expect(product?.categoryPaths).toEqual([
+      product?.categoryPath,
+      ['Hogar y decoración', 'Cocina'],
+    ]);
+    expect(product?.categoryPaths[0]).toEqual(product?.categoryPath);
+    // The page did not state the list itself, so the paths prove nothing
+    // about a path stored before.
+    expect(product?.categoryPathsStated).toBe(false);
+  });
+
+  it('gives a product with no breadcrumb one path, and says it did not state its paths', () => {
+    // Captured on 2026-11-05, when the page states the list, and it is empty.
+    const product = readFixture(productApproximateWeight, '11031963');
+
+    expect(product?.categoryPaths).toEqual([
+      [
+        'Mundos de necesidad',
+        'Comida y cerca de la comida',
+        'Carne y aves',
+        'Carne de cerdo',
+      ],
+    ]);
+    // An empty list states nothing (owner decision 95b).
+    expect(product?.categoryPathsStated).toBe(false);
+  });
+
+  it('takes the row list when the page states an empty list, as when it leaves the list out (owner decision 101b)', () => {
+    // The 2026-11-05 page states `wonCategoryBreadcrumbs: []`.
+    const product = readFixture(productApproximateWeight, '11031963', {
+      categoryBreadcrumbs: [['Hogar y decoración', 'Cocina']],
+    });
+
+    expect(product?.categoryPaths).toEqual([
+      [
+        'Mundos de necesidad',
+        'Comida y cerca de la comida',
+        'Carne y aves',
+        'Carne de cerdo',
+      ],
+      ['Hogar y decoración', 'Cocina'],
+    ]);
+    // The mode rule does not change: the row's list proves nothing.
+    expect(product?.categoryPathsStated).toBe(false);
+  });
+
+  it('takes the page list over the row list when the page list yields a path', () => {
+    const product = normalizeProduct(
+      {
+        keyfacts: { wonCategoryPrimary: NEED_WORLD_QUESO.join('/') },
+        wonCategoryBreadcrumbs: [[{ id: '1', name: 'Alimentación' }]],
+      },
+      {
+        row: {
+          ...emptyRow('1'),
+          categoryBreadcrumbs: [['Hogar y decoración', 'Cocina']],
+        },
+        observedAt: OBSERVED_AT,
+      }
+    );
+
+    expect(product?.categoryPaths).toEqual([
+      NEED_WORLD_QUESO,
+      ['Alimentación'],
+    ]);
+    expect(product?.categoryPathsStated).toBe(true);
+  });
+
+  it('takes the row list when the page list holds only an empty breadcrumb', () => {
+    const product = normalizeProduct(
+      {
+        keyfacts: { wonCategoryPrimary: NEED_WORLD_QUESO.join('/') },
+        wonCategoryBreadcrumbs: [[]],
+      },
+      {
+        row: {
+          ...emptyRow('1'),
+          categoryBreadcrumbs: [['Hogar y decoración', 'Cocina']],
+        },
+        observedAt: OBSERVED_AT,
+      }
+    );
+
+    expect(product?.categoryPaths).toEqual([
+      NEED_WORLD_QUESO,
+      ['Hogar y decoración', 'Cocina'],
+    ]);
+    expect(product?.categoryPathsStated).toBe(false);
+  });
+
+  it('gives a product with no path at all no paths', () => {
+    expect(
+      normalizeProduct(
+        { keyfacts: {} },
+        { row: emptyRow('1'), observedAt: OBSERVED_AT }
+      )?.categoryPaths
+    ).toEqual([]);
+  });
+
+  it('keeps a hidden node and every breadcrumb, root first, without repeats', () => {
+    const product = normalizeProduct(
+      {
+        keyfacts: {
+          wonCategoryPrimary: NEED_WORLD_QUESO.join('/'),
+        },
+        wonCategoryBreadcrumbs: [
+          [
+            { id: '1', name: 'Alimentación', hiddenCategory: false },
+            { id: '2', name: 'Quesos', hiddenCategory: true },
+          ],
+          [{ id: '3', name: 'Especial otoño', hiddenCategory: false }],
+          [{ id: '3', name: 'Especial otoño', hiddenCategory: false }],
+        ],
+      },
+      { row: emptyRow('1'), observedAt: OBSERVED_AT }
+    );
+
+    expect(product?.categoryPaths).toEqual([
+      NEED_WORLD_QUESO,
+      ['Alimentación', 'Quesos'],
+      ['Especial otoño'],
+    ]);
+    expect(product?.categoryPathsStated).toBe(true);
+  });
+
+  it('keeps the readable paths of a list read in part, and says it did not state its paths', () => {
+    const product = normalizeProduct(
+      {
+        keyfacts: { wonCategoryPrimary: NEED_WORLD_QUESO.join('/') },
+        wonCategoryBreadcrumbs: [
+          [{ id: '1', name: 'Alimentación', hiddenCategory: false }],
+          [{ id: '4', name: '' }],
+          'not a path',
+        ],
+      },
+      { row: emptyRow('1'), observedAt: OBSERVED_AT }
+    );
+
+    expect(product?.categoryPaths).toEqual([
+      NEED_WORLD_QUESO,
+      ['Alimentación'],
+    ]);
+    // A part the code could not read may name a path a REPLACE would drop.
+    expect(product?.categoryPathsStated).toBe(false);
+  });
+
+  it('says a path with one unreadable node was not read in full', () => {
+    const product = normalizeProduct(
+      {
+        keyfacts: { wonCategoryPrimary: NEED_WORLD_QUESO.join('/') },
+        wonCategoryBreadcrumbs: [
+          [
+            { id: '1', name: 'Alimentación' },
+            { id: '2', title: 'Quesos' },
+          ],
+        ],
+      },
+      { row: emptyRow('1'), observedAt: OBSERVED_AT }
+    );
+
+    expect(product?.categoryPaths).toEqual([
+      NEED_WORLD_QUESO,
+      ['Alimentación'],
+    ]);
+    expect(product?.categoryPathsStated).toBe(false);
+  });
+
+  describe('a page list read only in part (owner decision 115b)', () => {
+    const partPage = {
+      keyfacts: { wonCategoryPrimary: NEED_WORLD_QUESO.join('/') },
+      wonCategoryBreadcrumbs: [[{ name: 'Alimentación' }], [{ id: 'x' }]],
+    };
+
+    it('adds the row list to the readable paths of the page list', () => {
+      const product = normalizeProduct(partPage, {
+        row: {
+          ...emptyRow('1'),
+          categoryBreadcrumbs: [['Hogar y decoración', 'Cocina']],
+        },
+        observedAt: OBSERVED_AT,
+      });
+
+      expect(product?.categoryPaths).toEqual([
+        NEED_WORLD_QUESO,
+        ['Alimentación'],
+        ['Hogar y decoración', 'Cocina'],
+      ]);
+      // The row's list proves nothing, and the page's list was not read in
+      // full: the paths are not stated.
+      expect(product?.categoryPathsStated).toBe(false);
+    });
+
+    it('adds no path from a row whose own list is empty', () => {
+      const product = normalizeProduct(partPage, {
+        row: { ...emptyRow('1'), categoryBreadcrumbs: [] },
+        observedAt: OBSERVED_AT,
+      });
+
+      expect(product?.categoryPaths).toEqual([
+        NEED_WORLD_QUESO,
+        ['Alimentación'],
+      ]);
+      expect(product?.categoryPathsStated).toBe(false);
+    });
+
+    it('adds no path from a row whose own list is unreadable', () => {
+      const row = normalizeListRow(
+        { productId: '1' },
+        { wonCategoryBreadcrumbs: [[{ id: '1', label: 'Cocina' }]] }
+      );
+      if (!row) {
+        throw new Error('the row has an id');
+      }
+      const product = normalizeProduct(partPage, {
+        row,
+        observedAt: OBSERVED_AT,
+      });
+
+      expect(product?.categoryPaths).toEqual([
+        NEED_WORLD_QUESO,
+        ['Alimentación'],
+      ]);
+      expect(product?.categoryPathsStated).toBe(false);
+    });
+
+    it('drops a row path the page list already names', () => {
+      const product = normalizeProduct(partPage, {
+        row: {
+          ...emptyRow('1'),
+          categoryBreadcrumbs: [['Alimentación'], ['Hogar y decoración']],
+        },
+        observedAt: OBSERVED_AT,
+      });
+
+      expect(product?.categoryPaths).toEqual([
+        NEED_WORLD_QUESO,
+        ['Alimentación'],
+        ['Hogar y decoración'],
+      ]);
+    });
+
+    it('still ignores the row list beside a page list read in full', () => {
+      const product = normalizeProduct(
+        {
+          keyfacts: { wonCategoryPrimary: NEED_WORLD_QUESO.join('/') },
+          wonCategoryBreadcrumbs: [[{ name: 'Alimentación' }]],
+        },
+        {
+          row: {
+            ...emptyRow('1'),
+            categoryBreadcrumbs: [['Hogar y decoración', 'Cocina']],
+          },
+          observedAt: OBSERVED_AT,
+        }
+      );
+
+      expect(product?.categoryPaths).toEqual([
+        NEED_WORLD_QUESO,
+        ['Alimentación'],
+      ]);
+      expect(product?.categoryPathsStated).toBe(true);
+    });
+  });
+
+  it('reads a list that is not empty and of which nothing is readable as no list', () => {
+    // A renamed field: every node is of another shape.
+    const product = normalizeProduct(
+      {
+        keyfacts: { wonCategoryPrimary: NEED_WORLD_QUESO.join('/') },
+        wonCategoryBreadcrumbs: [
+          [{ id: '1', label: 'Alimentación' }],
+          [{ id: '2', label: 'Quesos' }],
+        ],
+      },
+      {
+        row: {
+          ...emptyRow('1'),
+          categoryBreadcrumbs: [['Hogar y decoración', 'Cocina']],
+        },
+        observedAt: OBSERVED_AT,
+      }
+    );
+
+    // The row's list is the fall back, as for a page that prints none.
+    expect(product?.categoryPaths).toEqual([
+      NEED_WORLD_QUESO,
+      ['Hogar y decoración', 'Cocina'],
+    ]);
+    expect(product?.categoryPathsStated).toBe(false);
+  });
+
+  it('reads an index row list of which nothing is readable as no list', () => {
+    const row = normalizeListRow(
+      { productId: '1' },
+      { wonCategoryBreadcrumbs: [[{ id: '1', label: 'Cocina' }]] }
+    );
+
+    expect(row?.categoryBreadcrumbs).toBeNull();
+  });
+
+  it('says a page with a need world path and an empty list did not state its paths (owner decision 95b)', () => {
+    const product = normalizeProduct(
+      {
+        keyfacts: { wonCategoryPrimary: NEED_WORLD_QUESO.join('/') },
+        wonCategoryBreadcrumbs: [],
+      },
+      { row: emptyRow('1'), observedAt: OBSERVED_AT }
+    );
+
+    expect(product?.categoryPaths).toEqual([NEED_WORLD_QUESO]);
+    // An empty list is not a statement: it cannot clear a stored path.
+    expect(product?.categoryPathsStated).toBe(false);
+  });
+
+  it('says a page with a need world path and a real list read in full stated its paths', () => {
+    const product = normalizeProduct(
+      {
+        keyfacts: { wonCategoryPrimary: NEED_WORLD_QUESO.join('/') },
+        wonCategoryBreadcrumbs: [[{ id: '1', name: 'Alimentación' }]],
+      },
+      { row: emptyRow('1'), observedAt: OBSERVED_AT }
+    );
+
+    expect(product?.categoryPaths).toEqual([
+      NEED_WORLD_QUESO,
+      ['Alimentación'],
+    ]);
+    expect(product?.categoryPathsStated).toBe(true);
+  });
+
+  it('says a page whose list holds one empty breadcrumb did not state its paths', () => {
+    const product = normalizeProduct(
+      {
+        keyfacts: { wonCategoryPrimary: NEED_WORLD_QUESO.join('/') },
+        wonCategoryBreadcrumbs: [[]],
+      },
+      { row: emptyRow('1'), observedAt: OBSERVED_AT }
+    );
+
+    expect(product?.categoryPathsStated).toBe(false);
+  });
+
+  it('says a page that states no need world path did not state its paths', () => {
+    const product = normalizeProduct(
+      { keyfacts: {}, wonCategoryBreadcrumbs: [] },
+      {
+        row: { ...emptyRow('1'), categoryPath: NEED_WORLD_QUESO },
+        observedAt: OBSERVED_AT,
+      }
+    );
+
+    expect(product?.categoryPaths).toEqual([NEED_WORLD_QUESO]);
+    expect(product?.categoryPathsStated).toBe(false);
   });
 });
 

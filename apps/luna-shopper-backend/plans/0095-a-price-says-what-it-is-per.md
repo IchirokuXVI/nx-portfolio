@@ -1,4 +1,4 @@
-> **Status: not built, pending re-evaluation.** Much of the catalog, pricing and line model changed after this plan was written. It will not be built as written: a later session re-evaluates it and writes a new plan if the need remains. The state as of 2026-09-17 is in [plan 0121](./0121-plan-status-2026-09-17.md).
+> **Status: replaced on 2026-11-05.** The need survives as a basis on every price (plan `0157`) and a stored comparable price with its basis (plan `0245`). Nothing of this file is built as written.
 
 # 0095 A price says what it is per
 

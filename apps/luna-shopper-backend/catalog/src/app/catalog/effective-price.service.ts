@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { PriceScopeKind } from '@portfolio/luna-shopper/contracts';
+import {
+  comparablePriceOf,
+  PriceScopeKind,
+  type ComparablePriceInput,
+} from '@portfolio/luna-shopper/contracts';
 import { In, type EntityManager } from 'typeorm';
 import {
+  Item,
   ItemPrice,
   PricePolicy,
   PriceScope,
@@ -294,6 +299,11 @@ export async function recomputeEffectivePrices(
     return;
   }
   const policies: PolicyRow[] = await manager.find(PricePolicy);
+  // The four size fields of every item of the keys, read one time: the
+  // comparison pair is derived from them beside `price` (plan 0245, section 2).
+  const sizes = await itemSizesOf(manager, [
+    ...new Set(keys.map((key) => key.itemId)),
+  ]);
 
   const byScope = new Map<string, Set<string>>();
   for (const key of keys) {
@@ -372,7 +382,8 @@ export async function recomputeEffectivePrices(
             target,
             effective.row,
             effective.stale,
-            effective.nextBoundaryAt
+            effective.nextBoundaryAt,
+            sizes.get(itemId) ?? null
           )
         ) {
           toSave.push(target);
@@ -385,15 +396,56 @@ export async function recomputeEffectivePrices(
   }
 }
 
+/** The size fields of an item the comparison pair is derived from. */
+type ItemSize = Omit<ComparablePriceInput, 'price'>;
+
+/**
+ * The four size fields of these items, by id, in chunks of {@link KEY_CHUNK}.
+ * An item that is gone has no entry, and its rows derive no pair.
+ */
+async function itemSizesOf(
+  manager: EntityManager,
+  itemIds: readonly string[]
+): Promise<Map<string, ItemSize>> {
+  const sizes = new Map<string, ItemSize>();
+  for (let i = 0; i < itemIds.length; i += KEY_CHUNK) {
+    const rows = await manager.find(Item, {
+      select: {
+        id: true,
+        unitSize: true,
+        defaultUnit: true,
+        packCount: true,
+        approxWeight: true,
+      },
+      where: { id: In(itemIds.slice(i, i + KEY_CHUNK)) },
+    });
+    for (const row of rows) {
+      sizes.set(row.id, {
+        unitSize: toNumber(row.unitSize),
+        defaultUnit: row.defaultUnit,
+        packCount: toNumber(row.packCount),
+        approxWeight: toNumber(row.approxWeight),
+      });
+    }
+  }
+  return sizes;
+}
+
 /** Write the answer onto the row. True when something moved. */
 function applyEffective(
   target: SupermarketItem,
   row: CandidatePriceRow | null,
   stale: boolean,
-  nextBoundaryAt: Date | null
+  nextBoundaryAt: Date | null,
+  size: ItemSize | null
 ): boolean {
+  const price = row ? toNumber(row.price) : null;
+  const comparable =
+    size === null ? null : comparablePriceOf({ ...size, price });
   const next = {
-    price: row ? toNumber(row.price) : null,
+    price,
+    comparablePrice: comparable?.price ?? null,
+    comparableBasis: comparable?.basis ?? null,
     currency: row ? row.currency : null,
     unitPrice: row ? toNumber(row.unitPrice) : null,
     unitPriceLabel: row ? row.unitPriceLabel : null,
@@ -407,6 +459,8 @@ function applyEffective(
   };
   const same =
     toNumber(target.price) === next.price &&
+    toNumber(target.comparablePrice) === next.comparablePrice &&
+    (target.comparableBasis ?? null) === next.comparableBasis &&
     (target.currency ?? null) === next.currency &&
     toNumber(target.unitPrice) === next.unitPrice &&
     (target.unitPriceLabel ?? null) === next.unitPriceLabel &&
