@@ -270,6 +270,17 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
         message:
           'Category cat21449123 Congelados was refused twice and was not read.',
       },
+      {
+        // A category past the paging ceiling (owner decision 124b), so the
+        // run screen draws the truncation with nothing listening.
+        code: 'LISTING_TRUNCATED',
+        offerId: null,
+        page: null,
+        name: 'Bebidas',
+        message:
+          'Category cat20003 Bebidas: Carrefour states 1,100 products in ' +
+          'Bebidas and serves only the first 1,008. The rest were not read.',
+      },
     ],
     documentSha256: null,
     abortRequestedAt: null,
@@ -278,6 +289,14 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     // backend plans 0249 and 0251), so the run screen draws the Carrefour
     // part of its report with nothing listening.
     report: {
+      truncatedCategories: [
+        {
+          id: 'cat20003',
+          name: 'Bebidas',
+          totalResults: 1100,
+          path: ['Bebidas'],
+        },
+      ],
       unreadableCategories: ['/supermercado/congelados/cat21449123/c'],
       askedAgain: [
         { id: 'cat20002', name: 'Lácteos', read: true },

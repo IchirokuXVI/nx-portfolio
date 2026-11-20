@@ -23,8 +23,8 @@ export interface RunWarningRow {
   readonly page: string;
   /**
    * What the leaflet printed, where the warning carries it. `''` for a blank
-   * name and for `LISTING_UNREAD` and `LISTING_SHORT`, whose sentence always
-   * names the part.
+   * name and for `LISTING_UNREAD`, `LISTING_SHORT` and `LISTING_TRUNCATED`,
+   * whose sentence always names the part.
    */
   readonly name: string;
   /** The harvester's own sentence, shown as it came. */
@@ -85,7 +85,11 @@ export function runWarningRows(
  * runtime enum to import.
  */
 const CODES_WHOSE_SENTENCE_NAMES_THE_PART: ReadonlySet<Wire.EnumsHarvestWarningCode> =
-  new Set<Wire.EnumsHarvestWarningCode>(['LISTING_UNREAD', 'LISTING_SHORT']);
+  new Set<Wire.EnumsHarvestWarningCode>([
+    'LISTING_UNREAD',
+    'LISTING_SHORT',
+    'LISTING_TRUNCATED',
+  ]);
 
 /**
  * How many products this run put in front of a person.

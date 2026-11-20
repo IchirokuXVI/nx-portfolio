@@ -59,6 +59,21 @@ describe('runWarningRows', () => {
     expect(rows.map((row) => row.name)).toEqual(['', '']);
   });
 
+  it('hides the name of a part past the paging ceiling, whose sentence names it (owner decision 124b)', () => {
+    const rows = runWarningRows(
+      withWarnings([
+        warning(
+          'LISTING_TRUNCATED',
+          'Bebidas',
+          'Category cat20003 Bebidas: Carrefour states 1,100 products in ' +
+            'Bebidas and serves only the first 1,008. The rest were not read.'
+        ),
+      ])
+    );
+
+    expect(rows.map((row) => row.name)).toEqual(['']);
+  });
+
   it('keeps the bold name of an import warning whose sentence quotes it', () => {
     const rows = runWarningRows(
       withWarnings([

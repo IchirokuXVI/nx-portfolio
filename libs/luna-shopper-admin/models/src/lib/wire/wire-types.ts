@@ -4112,6 +4112,7 @@ export type EnumsHarvestWarningCode =
   | 'APPROX_WEIGHT_ROWS_DISAGREE'
   | 'LISTING_UNREAD'
   | 'LISTING_SHORT'
+  | 'LISTING_TRUNCATED'
   | 'DETAIL_UNREAD';
 
 /**

@@ -3,7 +3,10 @@ import {
   CARREFOUR_REFUSAL_POLICY,
   CarrefourClient,
 } from '@portfolio/luna-shopper/carrefour';
-import { HarvestWarningCode } from '@portfolio/luna-shopper/contracts';
+import {
+  HarvestWarningCode,
+  type HarvestRunWarning,
+} from '@portfolio/luna-shopper/contracts';
 import {
   SourceBlockedError,
   SourceGuard,
@@ -260,6 +263,18 @@ const failedOf = (runContext: RunContext): number =>
     (sum: number, [counters]: [{ failed?: number }]) =>
       sum + (counters.failed ?? 0),
     0
+  );
+
+/** Every warning the run wrote, in order. */
+const warnings = (runContext: RunContext): HarvestRunWarning[] =>
+  (runContext.warn as jest.Mock).mock.calls.map(
+    ([warning]: [HarvestRunWarning]) => warning
+  );
+
+/** The `LISTING_TRUNCATED` warnings the run wrote (owner decision 124b). */
+const truncatedWarnings = (runContext: RunContext): HarvestRunWarning[] =>
+  warnings(runContext).filter(
+    (warning) => warning.code === HarvestWarningCode.LISTING_TRUNCATED
   );
 
 describe('CarrefourCatalogRunner', () => {
@@ -2315,8 +2330,19 @@ describe('CarrefourCatalogRunner', () => {
             unreadableCategories: [],
           })
         );
-        // Not unread, so no LISTING_UNREAD: the same as a capped node.
-        expect(runContext.warn).not.toHaveBeenCalled();
+        // Not unread, so no LISTING_UNREAD: one LISTING_TRUNCATED and nothing
+        // else, the same as a capped node (owner decision 124b).
+        expect(warnings(runContext)).toEqual([
+          {
+            code: HarvestWarningCode.LISTING_TRUNCATED,
+            name: 'Bebidas',
+            offerId: null,
+            page: null,
+            message:
+              'Category cat1 Bebidas: Carrefour states 1,100 products in ' +
+              'Bebidas and serves only the first 1,008. The rest were not read.',
+          },
+        ]);
         expect(runContext.report).not.toHaveBeenCalledWith({ failed: 1 });
         expect(warn).toHaveBeenCalledWith(
           expect.stringContaining(
@@ -2326,10 +2352,93 @@ describe('CarrefourCatalogRunner', () => {
       });
 
       it('keeps a category whose pages state exactly the ceiling read whole', async () => {
-        await crawl(new TestRunner(pastCeiling(900, 1008)));
+        const runContext = await crawl(new TestRunner(pastCeiling(900, 1008)));
 
         expect(report.wholeListings).toHaveLength(1);
         expect(report.notWhole).toEqual([]);
+        expect(truncatedWarnings(runContext)).toEqual([]);
+      });
+
+      it('warns about a frontier capped node, which no smaller category splits (owner decision 124b)', async () => {
+        const capped = link('cat9', 'Limpieza');
+        const pages = states();
+        pages['/supermercado/la-despensa/cat20001/c'] = page({
+          firstLevel: [capped, bebidas, ofertas],
+        });
+        pages[capped.url] = page({ totalResults: 2000 });
+        const runContext = await crawl(new TestRunner(pages));
+
+        expect(truncatedWarnings(runContext)).toEqual([
+          {
+            code: HarvestWarningCode.LISTING_TRUNCATED,
+            name: 'Limpieza',
+            offerId: null,
+            page: null,
+            message:
+              'Category cat9 Limpieza: Carrefour states 2,000 products in ' +
+              'Limpieza and serves only the first 1,008. The rest were not ' +
+              'read. It has no smaller category to page instead.',
+          },
+        ]);
+      });
+
+      it('warns once for a category seen past the ceiling twice, with the larger total (owner decision 124b)', async () => {
+        // Bebidas states 1,050 on the walk until a 503 cuts it at offset 24,
+        // and 1,100 on the pages the end pass reads.
+        const pages = pastCeiling(900, 1100);
+        pages[at(0)] = page({
+          totalResults: 1050,
+          cards: [card('b0', 'Agua 0 1,5 l.', '0,39 €')],
+        });
+        const runContext = await crawl(
+          new StatusRunner(pages, { [at(24)]: [503] })
+        );
+
+        expect(truncatedWarnings(runContext)).toEqual([
+          expect.objectContaining({
+            name: 'Bebidas',
+            message: expect.stringContaining(
+              'Carrefour states 1,100 products in Bebidas'
+            ),
+          }),
+        ]);
+      });
+
+      it('warns about a category both truncated and unreadable with both warnings (owner decision 124b)', async () => {
+        // Bebidas states 1,100 and its second page answers 404, which the end
+        // pass never asks again.
+        const pages = pastCeiling(900, 1100);
+        delete pages[at(24)];
+        const runContext = await crawl(new TestRunner(pages));
+
+        expect(
+          warnings(runContext).map((warning) => [warning.code, warning.name])
+        ).toEqual([
+          [HarvestWarningCode.LISTING_UNREAD, 'Bebidas'],
+          [HarvestWarningCode.LISTING_TRUNCATED, 'Bebidas'],
+        ]);
+      });
+
+      it('still warns about a truncation when the walk is aborted after it (owner decision 124b)', async () => {
+        const runner = new TestRunner(pastCeiling(900, 1100));
+        const controller = new AbortController();
+        const runContext = context(controller.signal);
+        (runContext.report as jest.Mock).mockImplementation(async () => {
+          if (runner.asked.includes(at(1008 - 24))) {
+            controller.abort();
+          }
+        });
+        await runner.run(
+          runContext,
+          report,
+          { supermarketId: CHAIN, priceScopeId: SCOPE },
+          source({ delistCountsCrawl: true })
+        );
+
+        expect(runContext.signal.aborted).toBe(true);
+        expect(warnings(runContext).map((warning) => warning.code)).toEqual([
+          HarvestWarningCode.LISTING_TRUNCATED,
+        ]);
       });
 
       it('names a frontier capped node and a category truncated while paged in the one record', async () => {
@@ -2375,6 +2484,17 @@ describe('CarrefourCatalogRunner', () => {
             askedAgain: [{ id: 'cat1', name: 'Bebidas', read: true }],
           })
         );
+        // Read the second time, so no LISTING_UNREAD, and one truncation.
+        expect(warnings(runContext)).toEqual([
+          expect.objectContaining({
+            code: HarvestWarningCode.LISTING_TRUNCATED,
+            name: 'Bebidas',
+            message: expect.stringContaining(
+              'Carrefour states 1,100 products in Bebidas and serves only ' +
+                'the first 1,008.'
+            ),
+          }),
+        ]);
       });
     });
 

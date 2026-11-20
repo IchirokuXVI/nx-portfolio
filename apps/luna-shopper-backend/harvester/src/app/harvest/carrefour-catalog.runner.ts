@@ -77,11 +77,27 @@ export class CarrefourCatalogRunner implements CatalogRunner {
     // the ingest adds no products to it (plan 0217).
     context.countProgressItself();
     const client = this.createClient(context, source);
+    /**
+     * Every category the ceiling truncated: the frontier's capped nodes,
+     * then each frontier category whose pages stated a total past the
+     * ceiling while it was paged (owner decision 116b). Both are the same
+     * fact, rows the storefront will not serve, so both land in the one
+     * record and both keep the crawl from being declared whole. Declared
+     * here, outside the walk, so the `finally` can warn about each one
+     * however the walk ended (owner decision 124b).
+     */
+    const truncated: CarrefourCappedCategory[] = [];
+    /** The ids of the frontier's capped nodes, which no page of a walk read. */
+    const cappedIds = new Set<string>();
 
     try {
       // --- 1. The frontier ------------------------------------------------
       await context.setStage('FRONTIER', 'Finding the categories to page');
       const frontier = await client.walkCategories(readSeedPath(source.config));
+      for (const capped of frontier.capped) {
+        truncated.push(capped);
+        cappedIds.add(capped.id);
+      }
       const planned = frontier.categories.reduce(
         (total, category) => total + category.totalResults,
         0
@@ -121,14 +137,6 @@ export class CarrefourCatalogRunner implements CatalogRunner {
        * here with no error and leaves `unreadable`.
        */
       const lost = new Map<string, LostCategory>();
-      /**
-       * Every category the ceiling truncated: the frontier's capped nodes,
-       * then each frontier category whose pages stated a total past the
-       * ceiling while it was paged (owner decision 116b). Both are the same
-       * fact, rows the storefront will not serve, so both land in the one
-       * record and both keep the crawl from being declared whole.
-       */
-      const truncated: CarrefourCappedCategory[] = [...frontier.capped];
       let blocked: unknown = null;
       for (const category of frontier.categories) {
         // An abort, a person's or the refusal guard's (plan 0215), ends the
@@ -267,6 +275,11 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       // fetched are valid data (plan 0038, section 6.6); what a block costs is
       // the rest of the crawl, not the part that worked.
     } finally {
+      // Once per category, with the largest total it stated, however the
+      // walk ended: a truncation is a fact about pages that were read, so an
+      // abort, a block or a throw takes nothing from it. The executor flushes
+      // the context after the runner on every path.
+      warnTruncated(context, truncated, cappedIds);
       // Including when the run aborted, and including when it never opened a
       // page (plan 0090, section 11).
       await client.close();
@@ -415,7 +428,9 @@ export class CarrefourCatalogRunner implements CatalogRunner {
    * every other category's are.
    *
    * Once per category: the end pass of the same category raises the recorded
-   * total and adds no second entry.
+   * total and adds no second entry. The `LISTING_TRUNCATED` warning is not
+   * written here but at the end of the run, from the record, so it carries
+   * the final total (owner decision 124b).
    */
   private noteCeiling(
     context: RunContext,
@@ -893,6 +908,50 @@ function warnUnread(
       )
     );
   }
+}
+
+/**
+ * One `LISTING_TRUNCATED` per category the paging ceiling truncated (owner
+ * decision 124b), so an operator sees it on the run page without opening the
+ * report's `truncatedCategories`.
+ *
+ * Written once, at the end, with the largest total the category stated: a
+ * category the end pass sees again raises its total in `truncated` and adds
+ * no entry, so it warns once with the better number. A capped frontier node
+ * was never paged, and its sentence says no smaller category splits it.
+ *
+ * A category both truncated and unreadable gets this warning beside its
+ * `LISTING_UNREAD`: the two say different things, rows the storefront will
+ * not serve and rows the run did not read.
+ */
+function warnTruncated(
+  context: RunContext,
+  truncated: readonly CarrefourCappedCategory[],
+  cappedIds: ReadonlySet<string>
+): void {
+  for (const category of truncated) {
+    const where =
+      category.path.length > 0 ? category.path.join(' > ') : category.name;
+    const split = cappedIds.has(category.id)
+      ? ' It has no smaller category to page instead.'
+      : '';
+    context.warn({
+      code: HarvestWarningCode.LISTING_TRUNCATED,
+      offerId: null,
+      page: null,
+      name: category.name,
+      message:
+        `Category ${category.id} ${where}: Carrefour states ` +
+        `${count(category.totalResults)} products in ${category.name} and ` +
+        `serves only the first ${count(CARREFOUR_CEILING)}. The rest were ` +
+        `not read.${split}`,
+    });
+  }
+}
+
+/** A count as an English sentence prints it, 1,100 and not 1100. */
+function count(value: number): string {
+  return value.toLocaleString('en-US');
 }
 
 /**
