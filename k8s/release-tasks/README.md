@@ -432,6 +432,39 @@ ENVIRONMENT=staging \
   bash k8s/release-tasks/tasks/0005-unlink-deleted-accounts/check.sh
 ```
 
+## Task 0006
+
+`0006-kilo-pieces-state-their-weight` corrects the products that hold the
+weight of a piece as a fixed size (backend plan 0244, section 7).
+
+- **It runs a command inside the harvester pod.** `post.sh` runs
+  `node kilo-pieces.js`. A sized Mercadona piece sold by the kilo becomes
+  `KILOGRAM` with no size, and its old size becomes its approximate weight. A
+  sized piece priced as one (Mercadona label `ud`, LIDL "Aprox.") becomes
+  `UNIT` with no size and keeps its old size as its weight. A product with two
+  or more Mercadona rows sold by weight keeps the row with the lowest price per
+  kilo, and each other row gets a new product of its own. Each change is one
+  `item.update` or create with the harvester's actor. No price changes.
+- **It is armed for staging and for production.** The staging window ends on
+  2026-11-26 and the production one on 2026-12-03, and `PRODUCTION_RELEASE` is
+  `0.20.0`. A release published after that date needs the dates moved in a
+  commit before it.
+- **It states three ceilings per environment**, `MAX_KILO_<ENVIRONMENT>`,
+  `MAX_PIECE_<ENVIRONMENT>` and `MAX_SPLIT_<ENVIRONMENT>`: 200, 20 and 10. The
+  production data held 131, 12 and 6 on 2026-11-19. `check.sh` counts with
+  `--count` and refuses above them. `post.sh` counts again and passes them to
+  the command, so the command refuses too.
+- **Its `check.sh` passes where the pod has no `kilo-pieces.js` yet**, because
+  this release adds the command. `post.sh` refuses there.
+- **It leaves no marker, and it does not need one.** A converted product no
+  longer matches its selection, and a split product holds one Mercadona row. A
+  split that created a product and failed before it moved the row is finished
+  by the next run, which binds the row to that product.
+- **The next Mercadona run finishes the work.** A product that a split created
+  has no price until that run writes one, and the run rewrites the weight of
+  each piece from the live value. `post.sh` prints how many kilo pieces still
+  wait for a weight.
+
 ## Task 0007
 
 `0007-wash-count-leaves-products` takes the wash count off the products that
