@@ -23,6 +23,9 @@
   padding-block-start: calc(var(--app-space-4) + var(--app-safe-top));
   padding-block-end: calc(var(--app-space-8) + var(--app-safe-bottom));
   overflow-y: auto;
+  // A containing block, so a hidden helper inside it scrolls with it rather than
+  // with the document (scroll-containers-are-positioned.spec.ts).
+  position: relative;
   color: var(--app-text-primary);
   font-size: var(--app-text-base);
   line-height: var(--app-leading-body);

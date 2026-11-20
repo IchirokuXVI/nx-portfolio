@@ -41,6 +41,9 @@
   flex-direction: column;
   min-block-size: 0;
   overflow-y: auto;
+  // A containing block, so a hidden helper inside it scrolls with it rather than
+  // with the document (scroll-containers-are-positioned.spec.ts).
+  position: relative;
 }
 
 @mixin visually-hidden {

@@ -60,6 +60,7 @@ import {
   walkFrontier,
   type CarrefourFrontier,
 } from './categories';
+import { formatCount } from './count';
 import { parseDrives, type CarrefourDrive } from './drives';
 import {
   CarrefourBrowserError,
@@ -454,7 +455,7 @@ export class CarrefourClient {
           page,
           stated === null
             ? 'Carrefour answered an empty page that states no total'
-            : `Carrefour answered an empty page that states ${stated} results`,
+            : `Carrefour answered an empty page that states ${formatCount(stated)} results`,
           url
         );
       }

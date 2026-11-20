@@ -214,7 +214,16 @@
 //
 // `display: block` so a page's `block-size: 100%` resolves against the slot, whose
 // height is definite because it is a flexed item of a column that has one.
+//
+// **Positioned, as every scroller in velista is.** A scroller clips and carries only the
+// absolutely positioned boxes whose containing block it is. With no positioned ancestor
+// that block is the document, so a visually hidden helper (a live region, an `sr-only`
+// label) deep inside a page scroller kept its place thousands of pixels down and made the
+// document that tall. On a long list a drag that started on the field or the bar then
+// scrolled the whole frame up the screen, header first, with empty ground below it.
+// `scroll-containers-are-positioned.spec.ts` holds the rule for every stylesheet.
 .app-page {
+  position: relative;
   display: block;
   flex: 1;
   min-block-size: 0;

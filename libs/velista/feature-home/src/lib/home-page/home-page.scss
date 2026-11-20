@@ -48,6 +48,9 @@
   min-block-size: 0;
   padding: var(--app-space-5) var(--app-space-5) var(--app-space-6);
   overflow-y: auto;
+  // A containing block, so a hidden helper inside it scrolls with it rather than
+  // with the document (scroll-containers-are-positioned.spec.ts).
+  position: relative;
 }
 
 .zones {

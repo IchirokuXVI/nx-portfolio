@@ -1,4 +1,4 @@
-> **PR:** [#972](https://github.com/IchirokuXVI/nx-portfolio/pull/972)
+> **PR:** [#972](https://github.com/IchirokuXVI/nx-portfolio/pull/972), [#1051](https://github.com/IchirokuXVI/nx-portfolio/pull/1051) (the `LISTING_TRUNCATED` label)
 
 # 0071: every run warning and report field has words
 
@@ -120,6 +120,7 @@ the run page for one Carrefour, one DEZA and one El Jamón run of the memory bac
 | `harvest.warning.APPROX_WEIGHT_ROWS_DISAGREE` | Two weights for one piece |
 | `harvest.warning.LISTING_UNREAD` | A part was not read |
 | `harvest.warning.LISTING_SHORT` | A part was read short |
+| `harvest.warning.LISTING_TRUNCATED` | A part was past the paging ceiling |
 | `harvest.warning.DETAIL_UNREAD` | Product pages stopped answering |
 | `harvest.run.report.unreadable` | Not read |
 | `harvest.run.report.askedAgain` | Asked again at the end |
@@ -205,8 +206,9 @@ stopped" cell (`harvest.run.report.stoppedBy.FAILED`). The runner names such a s
 an empty cell.
 
 **D7 (owner, answered 2026-11-16):** the bold name of a warning is hidden by code, not by
-reading the sentence. Only `LISTING_UNREAD` and `LISTING_SHORT` hide it, because their
-sentence always states the part they are about and a runner may or may not also set `name`.
+reading the sentence. Only `LISTING_UNREAD` and `LISTING_SHORT` hide it, and since PR #1051
+`LISTING_TRUNCATED` (owner decision 124b), because their sentence always states the part they
+are about and a runner may or may not also set `name`.
 Every other warning that has a name keeps its bold name, also when its sentence quotes the
 name. A leaflet import list thus has a bold product name on every row that has one, and the
 operator can scan it by product. A blank name draws no `<strong>`.

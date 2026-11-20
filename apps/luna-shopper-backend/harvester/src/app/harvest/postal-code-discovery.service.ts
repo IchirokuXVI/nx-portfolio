@@ -25,7 +25,11 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
-import { DiscoveredPlace, PostalCodeDiscoveryRequest } from '../entities';
+import {
+  DiscoveredPlace,
+  PostalCodeDiscoveryRequest,
+  type SupermarketSource,
+} from '../entities';
 import { CatalogClient } from './catalog-client.service';
 import { HarvestRunStore } from './harvest-run.store';
 import { toPostalCodeDiscoveryRequestView } from './harvest.mappers';
@@ -55,6 +59,12 @@ export interface PlaceSourceRef {
    * (D3). A place from a radius search stays `NEW` and waits for a person.
    */
   autoImportPlaces: boolean;
+  /**
+   * The chain's row as `runWalkConfig` reads it, and null for OpenStreetMap,
+   * so a queue run stores the adapter that walks it by the spawn's rule
+   * (owner decision 137b).
+   */
+  walkSource: Pick<SupermarketSource, 'adapterKey' | 'config'> | null;
 }
 
 /** The one member of the set that is not a chain. */
@@ -63,6 +73,7 @@ const OPEN_STREET_MAP: PlaceSourceRef = {
   supermarketId: null,
   label: 'OpenStreetMap',
   autoImportPlaces: false,
+  walkSource: null,
 };
 
 interface QueueCursor {
@@ -230,6 +241,7 @@ export class PostalCodeDiscoveryService {
           supermarketId: row.supermarketId,
           label: row.adapterKey,
           autoImportPlaces: row.autoImportPlaces,
+          walkSource: { adapterKey: row.adapterKey, config: row.config },
         })),
     ];
   }

@@ -1,6 +1,6 @@
 import { GatewayError } from '../gateway-error';
 import { HarvestMemory } from './harvest-memory';
-import { MERCADONA_WEEKLY_PRESET } from './harvest-seed';
+import { memoryWalkFingerprint, MERCADONA_WEEKLY_PRESET } from './harvest-seed';
 
 /**
  * Presets out of memory (admin plan 0030, section 6).
@@ -148,7 +148,8 @@ describe('HarvestMemory, presets', () => {
   /**
    * Owner decisions 127b and 130b: a spawn records its chain's source row, its
    * adapter and the fingerprint of its config, the one the seeded runs of the
-   * chain walked under. A store discovery of no chain records none of them.
+   * chain walked under. A store discovery of no chain records no row, and
+   * `osm-places`, the adapter that walks it (owner decision 137b).
    */
   it('records the source row, adapter and config fingerprint of a spawn', async () => {
     const memory = new HarvestMemory();
@@ -170,8 +171,8 @@ describe('HarvestMemory, presets', () => {
     expect(walk.configFingerprint).toBe(seeded.configFingerprint);
     expect(anywhere).toMatchObject({
       sourceId: null,
-      adapterKey: null,
-      configFingerprint: null,
+      adapterKey: 'osm-places',
+      configFingerprint: memoryWalkFingerprint('osm-places', {}),
     });
   });
 

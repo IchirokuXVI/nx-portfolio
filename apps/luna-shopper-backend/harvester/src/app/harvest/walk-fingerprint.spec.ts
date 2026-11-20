@@ -1,6 +1,11 @@
+import { HarvestRunMode } from '@portfolio/luna-shopper/contracts';
 import { createHash } from 'node:crypto';
 import type { SupermarketSource } from '../entities';
-import { canonicalJson, walkConfigFingerprint } from './walk-fingerprint';
+import {
+  canonicalJson,
+  runWalkConfig,
+  walkConfigFingerprint,
+} from './walk-fingerprint';
 
 /**
  * The digest of what shaped a walk outside its request (owner decision 130b).
@@ -117,5 +122,56 @@ describe('canonicalJson', () => {
 
   it('leaves out a key whose value is undefined, as JSON does', () => {
     expect(canonicalJson({ a: undefined, b: 1 })).toBe('{"b":1}');
+  });
+});
+
+/**
+ * Which adapter a run stores as the one that walks it (owner decision 137b).
+ */
+describe('runWalkConfig', () => {
+  const osm = {
+    adapterKey: 'osm-places',
+    configFingerprint: walkConfigFingerprint({
+      adapterKey: 'osm-places',
+      config: {},
+    }),
+  };
+
+  it('gives a store discovery with no source row osm-places', () => {
+    expect(runWalkConfig(HarvestRunMode.STORE_DISCOVERY, null)).toEqual(osm);
+  });
+
+  it('gives a store discovery of a chain that lists no shops osm-places', () => {
+    expect(
+      runWalkConfig(HarvestRunMode.STORE_DISCOVERY, {
+        adapterKey: 'manual',
+        config: { note: 'typed by hand' },
+      })
+    ).toEqual(osm);
+  });
+
+  it("gives a store discovery of a chain that lists its shops the chain's row", () => {
+    const row = { adapterKey: 'lidl-api' as const, config: { country: 'ES' } };
+    expect(runWalkConfig(HarvestRunMode.STORE_DISCOVERY, row)).toEqual({
+      adapterKey: 'lidl-api',
+      configFingerprint: walkConfigFingerprint(row),
+    });
+  });
+
+  it("gives a catalog discovery its source row's values", () => {
+    const row = { adapterKey: 'carrefour-web' as const, config: { a: 1 } };
+    expect(runWalkConfig(HarvestRunMode.CATALOG_DISCOVERY, row)).toEqual({
+      adapterKey: 'carrefour-web',
+      configFingerprint: walkConfigFingerprint(row),
+    });
+  });
+
+  it('gives a file import neither, whatever row its chain has', () => {
+    expect(
+      runWalkConfig(HarvestRunMode.FILE_IMPORT, {
+        adapterKey: 'mercadona-api',
+        config: {},
+      })
+    ).toEqual({ adapterKey: null, configFingerprint: null });
   });
 });

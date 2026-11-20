@@ -18,6 +18,9 @@
   min-block-size: 0;
   padding-block-end: var(--app-space-8);
   overflow-y: auto;
+  // A containing block, so a hidden helper inside it scrolls with it rather than
+  // with the document (scroll-containers-are-positioned.spec.ts).
+  position: relative;
 }
 
 // The page's gutter. The rail of products is the one thing outside it: it takes the

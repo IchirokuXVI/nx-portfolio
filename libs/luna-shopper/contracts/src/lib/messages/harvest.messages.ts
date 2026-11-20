@@ -863,22 +863,24 @@ export interface HarvestRunView {
    * (`workers`, `maxRequestsPerSecond`) and `enabled` are not in it: they change
    * how fast a walk goes, not what it walks.
    *
-   * Null for a run that used no source row (a file import, an OpenStreetMap
-   * store discovery), for a run the postal code queue started (that worker
-   * stores neither field, even when the run names a source row), and for every
-   * run stored before the column existed.
+   * A store discovery that OpenStreetMap walks (no chain, or a chain whose
+   * adapter lists no shops) carries the digest of `osm-places` with an empty
+   * config instead (owner decision 137b), so two such runs carry one digest.
+   * The postal code queue stores both fields by the same rule as a person's
+   * spawn. Null for a file import, which no adapter walks, and for every run
+   * stored before that rule.
    * {@link walkedUnderSameConfig} is the one rule that compares two of them,
    * and a null on either side answers no.
    */
   configFingerprint: string | null;
   /**
-   * The adapter of the source row the run used, as it was when the run was
-   * spawned (owner decision 127b), so a reader can ask
+   * The adapter that walked the run, as it was when the run was spawned
+   * (owner decisions 127b and 137b): the source row's, or `osm-places` for a
+   * store discovery OpenStreetMap walks. A reader can thus ask
    * {@link adapterCapabilities} about the run without the sources list.
    *
-   * Null where {@link configFingerprint} is: a run that used no source row, a
-   * run the postal code queue started, and every run stored before the column
-   * existed. **A reader must treat a null, absent or unknown key as
+   * Null where {@link configFingerprint} is: a file import, and every run
+   * stored before that rule. **A reader must treat a null, absent or unknown key as
    * an adapter whose walk total is not comparable**: `adapterCapabilities`
    * answers `comparableWalkTotal: false` for it, so no estimate is drawn.
    */
