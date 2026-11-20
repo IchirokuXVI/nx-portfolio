@@ -67,7 +67,7 @@ describe('EarlierRunTotals', () => {
       mode: 'CATALOG_DISCOVERY',
       status: 'COMPLETED',
       reverted: false,
-      limit: 2,
+      limit: 5,
     });
   });
 
@@ -90,7 +90,7 @@ describe('EarlierRunTotals', () => {
         presetId: PRESET,
         status: 'COMPLETED',
         reverted: false,
-        limit: 2,
+        limit: 5,
       });
     });
 
@@ -115,8 +115,42 @@ describe('EarlierRunTotals', () => {
         mode: 'CATALOG_DISCOVERY',
         status: 'COMPLETED',
         reverted: false,
-        limit: 2,
+        limit: 5,
       });
+    });
+
+    /** The newest preset run gives nothing usable, an older one of it does. */
+    it('reads past preset runs that give no usable total to an older one of the preset', async () => {
+      const listRuns = listing([
+        { ...COMPLETED, id: 'preset-empty', presetId: PRESET, processed: 0 },
+        { ...COMPLETED, id: 'preset-short', presetId: PRESET, processed: 500 },
+        { ...COMPLETED, id: 'preset-whole', presetId: PRESET, processed: 2300 },
+        { ...COMPLETED, id: 'chain-newer', processed: 3000 },
+      ]);
+      const totals = setUp(listRuns);
+
+      // 824 processed, so the run of 500 is smaller than the part and skipped.
+      await totals.resolve(fromPreset);
+
+      expect(totals.of(fromPreset)).toBe(2300);
+      expect(listRuns).toHaveBeenCalledTimes(1);
+    });
+
+    it('reads past chain runs that give no usable total to an older one of the chain', async () => {
+      const listRuns = listing([
+        { ...COMPLETED, id: 'preset-short', presetId: PRESET, processed: 500 },
+        { ...COMPLETED, id: 'chain-empty', processed: 0 },
+        { ...COMPLETED, id: 'chain-short', processed: 600 },
+        { ...COMPLETED, id: 'chain-whole', processed: 2500 },
+      ]);
+      const totals = setUp(listRuns);
+
+      await totals.resolve(fromPreset);
+
+      // The preset's one run is short, so the chain is read, and its newest
+      // usable run is the one of 2500, not the preset's run of 500 it also lists.
+      expect(totals.of(fromPreset)).toBe(2500);
+      expect(listRuns).toHaveBeenCalledTimes(2);
     });
 
     it('asks a preset over every chain by its preset only', async () => {

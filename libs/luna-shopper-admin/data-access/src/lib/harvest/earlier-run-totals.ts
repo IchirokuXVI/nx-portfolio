@@ -6,10 +6,13 @@ import {
 } from '@portfolio/luna-shopper-admin/models';
 import { HARVEST_SERVICE, type RunQuery } from './harvest-service';
 
+/** How many completed runs one step reads to find one with a usable total. */
+const REFERENCE_PAGE = 5;
+
 /**
  * The approximate total of a run that does not know its own (decision 86 of
  * the harvester round): what the latest completed, unreverted run of the same
- * kind processed.
+ * kind that gives a usable total processed.
  *
  * **The same kind is chosen the way the harvester chooses the reference of a
  * duration estimate** (backend plan 0206, section 8, `estimateRun`): the
@@ -22,8 +25,8 @@ import { HARVEST_SERVICE, type RunQuery } from './harvest-service';
  * filters by chain, not by source, which is the same thing while a chain has
  * one source row. And it orders by `requestedAt`, where the estimate orders by
  * `finishedAt`, which differs only when two runs of one kind overlapped. The
- * cost of preferring the preset is a second read when the preset has no
- * completed run but the chain does.
+ * cost of preferring the preset is a second read when no completed run of the
+ * preset gives a usable total but one of the chain does.
  *
  * **One lookup per run.** The answer is held by the id of the run it was asked
  * for, so the header, the Runs tab and the run's own page share it, and the
@@ -91,9 +94,11 @@ export class EarlierRunTotals {
   }
 
   /**
-   * What the newest completed, unreverted run under this filter processed,
-   * leaving the run itself out. A page of two, so the run itself can be
-   * skipped when it is the newest completed one.
+   * What the newest completed, unreverted run under this filter that gives a
+   * usable total processed, leaving the run itself out. Usable means it
+   * processed something and no less than this run has processed so far, the
+   * same bound the progress line applies. One read of a small page, so an
+   * older run still answers when the newest one does not.
    */
   private async _newest(
     run: HarvestRun,
@@ -103,9 +108,18 @@ export class EarlierRunTotals {
       ...filter,
       status: 'COMPLETED',
       reverted: false,
-      limit: 2,
+      limit: REFERENCE_PAGE,
     });
-    return earlierTotal(page.items.find((item) => item.id !== run.id));
+    for (const item of page.items) {
+      if (item.id === run.id) {
+        continue;
+      }
+      const total = earlierTotal(item);
+      if (total !== null && total >= run.processed) {
+        return total;
+      }
+    }
+    return null;
   }
 
   private _hold(runId: string, total: number | null): void {

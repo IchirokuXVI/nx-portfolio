@@ -127,19 +127,20 @@ export class HarvestMemory implements HarvestServiceI {
     input: Wire.SpawnHarvestRunDto
   ): Promise<Wire.HarvestHarvestRunView> {
     // The real service answers 409 carrying the active run's id. Its database
-    // holds one active run per chain (`uq_harvest_run_active`) and one store
-    // discovery over every chain, so the seed can hold a Mercadona walk and a
-    // DEZA walk at once. Refusing here too keeps the screen's conflict branch
-    // reachable with no backend.
+    // holds two rules, and this mirrors both. `uq_harvest_run_active`: a run of
+    // a chain is refused while that chain has a PENDING or RUNNING run of any
+    // mode. `uq_harvest_run_active_store_discovery`: a store discovery is
+    // refused while any store discovery is PENDING or RUNNING, of any chain or
+    // of none. A run with no chain is held by the second rule only, so one that
+    // is not a store discovery is never refused. The seed can thus hold a
+    // Mercadona walk and a DEZA walk at once. Refusing here too keeps the
+    // screen's conflict branch reachable with no backend.
     const chain = input.supermarketId ?? null;
     const active = this._runs.find(
       (run) =>
         (run.status === 'PENDING' || run.status === 'RUNNING') &&
-        (chain !== null
-          ? run.supermarketId === chain
-          : run.supermarketId === null &&
-            run.mode === 'STORE_DISCOVERY' &&
-            input.mode === 'STORE_DISCOVERY')
+        ((chain !== null && run.supermarketId === chain) ||
+          (input.mode === 'STORE_DISCOVERY' && run.mode === 'STORE_DISCOVERY'))
     );
     if (active !== undefined) {
       throw new GatewayError({

@@ -10,6 +10,8 @@ import { MERCADONA_WEEKLY_PRESET } from './harvest-seed';
  */
 const MERCADONA = 'sm_mercadona';
 const DEZA = 'sm_deza';
+const CARREFOUR = 'sm_carrefour';
+const DIA = 'sm_dia';
 
 describe('HarvestMemory, presets', () => {
   it('lists a chain presets by name, each with its latest run', async () => {
@@ -92,6 +94,42 @@ describe('HarvestMemory, presets', () => {
     ).resolves.toMatchObject({ supermarketId: MERCADONA });
   });
 
+  /**
+   * One active store discovery in the whole database, as
+   * `uq_harvest_run_active_store_discovery` holds it: a store discovery of
+   * another chain is in the way, a catalog run of another chain is not.
+   */
+  it('refuses a store discovery while a store discovery of another chain is going', async () => {
+    const memory = new HarvestMemory();
+    await memory.spawnRun({
+      supermarketId: CARREFOUR,
+      mode: 'STORE_DISCOVERY',
+    });
+
+    await expect(
+      memory.spawnRun({ supermarketId: DIA, mode: 'STORE_DISCOVERY' })
+    ).rejects.toMatchObject({ status: 409, code: 'conflict' });
+    await expect(
+      memory.spawnRun({ supermarketId: DIA, mode: 'CATALOG_DISCOVERY' })
+    ).resolves.toMatchObject({ supermarketId: DIA });
+  });
+
+  /** A store discovery with no chain, as the postal code queue starts, also holds the lock. */
+  it('refuses a store discovery of a chain while one with no chain is going', async () => {
+    const memory = new HarvestMemory();
+    await memory.spawnRun({ mode: 'STORE_DISCOVERY' });
+
+    await expect(
+      memory.spawnRun({ supermarketId: DIA, mode: 'STORE_DISCOVERY' })
+    ).rejects.toMatchObject({ status: 409, code: 'conflict' });
+    await expect(
+      memory.spawnRun({ mode: 'STORE_DISCOVERY' })
+    ).rejects.toMatchObject({ status: 409, code: 'conflict' });
+    await expect(
+      memory.spawnRun({ supermarketId: CARREFOUR, mode: 'CATALOG_DISCOVERY' })
+    ).resolves.toMatchObject({ supermarketId: CARREFOUR });
+  });
+
   /** The seeded DEZA walk counts up on each read, with no total to stop at. */
   it('moves a running walk that does not know its total', async () => {
     const memory = new HarvestMemory();
@@ -105,7 +143,8 @@ describe('HarvestMemory, presets', () => {
 
   it('records the preset on a run started from it', async () => {
     const memory = new HarvestMemory();
-    // The seed holds a running walk, and one harvester runs one thing.
+    // The seed holds a running Mercadona walk, and a chain runs one run at a
+    // time.
     await memory.abortRun('run-catalog-running');
 
     const run = await memory.startPreset(MERCADONA_WEEKLY_PRESET);
