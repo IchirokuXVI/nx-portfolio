@@ -13,11 +13,18 @@ class Unreadable extends Error {}
  * The run's own request, read back from `harvest_runs.input` in a preset's
  * input shape (owner decision 114a), or null when it cannot be read.
  *
+ * **A record of what ran, not a request.** It has a preset's input type for
+ * its shape only, and it states resolved values (`writes` and `details` are
+ * always there). The spawn refuses some of them for some chains, so it must
+ * never be resubmitted as a run request or saved as a preset.
+ *
  * **Read, never trusted.** The column is a free JSON bag that has changed
- * shape across plans, so a field that is absent is left out, or given the
- * value its runner reads in its place, and a field of the wrong type makes
- * the whole input unknown. Null is the honest answer then: a run whose
- * request is partly read would be drawn as a run that asked for less.
+ * shape across plans. A field that is absent is left out, or given the value
+ * its runner reads in its place. A field of the wrong type makes the whole
+ * input null, and that is stricter than the executor: a stored
+ * `postalCodes: [14013]` of numbers reads as null here, although the run that
+ * stored it ran. Null is the honest answer then: a run whose request is
+ * partly read would be drawn as a run that asked for less.
  *
  * What the spawn stores beside the request and a preset does not hold is left
  * out: the chain (the run's own column), a file import's document (its digest
