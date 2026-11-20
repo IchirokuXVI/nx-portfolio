@@ -92,6 +92,17 @@ describe('HarvestMemory, presets', () => {
     ).resolves.toMatchObject({ supermarketId: MERCADONA });
   });
 
+  /** The seeded DEZA walk counts up on each read, with no total to stop at. */
+  it('moves a running walk that does not know its total', async () => {
+    const memory = new HarvestMemory();
+
+    const first = await memory.readRun('run-deza-running');
+    const second = await memory.readRun('run-deza-running');
+
+    expect(second.processed).toBeGreaterThan(first.processed);
+    expect(second).toMatchObject({ status: 'RUNNING', totalPlanned: null });
+  });
+
   it('records the preset on a run started from it', async () => {
     const memory = new HarvestMemory();
     // The seed holds a running walk, and one harvester runs one thing.

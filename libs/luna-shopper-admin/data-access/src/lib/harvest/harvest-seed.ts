@@ -360,7 +360,7 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
   {
     // A DEZA walk still going, beside the Mercadona one: the harvester holds
     // one active run per chain, not one in all (`uq_harvest_run_active`). It
-    // does not know its total, so its page reads "1,824 of about 2,361" with
+    // does not know its total, so its page reads "1,200 of about 2,361" with
     // a bar, from the completed DEZA walk below (decision 86 of the harvester
     // round). Started from the DEZA preset, which has no completed run of its
     // own, so the estimate falls back to the chain and mode (owner decision
@@ -378,10 +378,10 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     finishedAt: null,
     heartbeatAt: '2026-09-03T09:59:50.000Z',
     totalPlanned: null,
-    processed: 1824,
+    processed: 1200,
     created: 0,
     updated: 0,
-    unchanged: 1824,
+    unchanged: 1200,
     notFound: 0,
     skipped: 0,
     failed: 0,

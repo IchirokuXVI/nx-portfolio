@@ -1520,9 +1520,14 @@ export class HarvestMemory implements HarvestServiceI {
       return;
     }
 
+    // A run that does not know its total (a DEZA walk) still counts up; it
+    // used to be pinned at zero against a total of nothing.
     const total = run.totalPlanned ?? 0;
     run.heartbeatAt = new Date().toISOString();
-    run.processed = Math.min(total, run.processed + 137);
+    run.processed =
+      run.totalPlanned === null
+        ? run.processed + 137
+        : Math.min(total, run.processed + 137);
     run.created += 61;
     run.unchanged += 76;
 
