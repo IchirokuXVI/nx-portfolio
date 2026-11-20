@@ -25,6 +25,9 @@ setupSwagger(app, { title, description });     // gateway only
 - **`PlatformModule.forRoot`** installs pino logging (`nestjs-pino`), the global
   `GlobalExceptionFilter` (problem+json envelope, HTTP and NATS), and the global
   `ValidationPipe`. Log level comes from the validated `LOG_LEVEL` env var.
+  The pipe (`createValidationPipe`) converts implicitly, and that conversion
+  turns the query text `false` into `true`. A boolean query flag thus reads its
+  raw text through `asQueryFlag` from this library (PRs #1029 and #1031).
 - **`bootstrapPlatform`** routes Nest's logs through pino, installs the
   correlation middleware before the router, optionally enables URI versioning, and
   enables shutdown hooks.

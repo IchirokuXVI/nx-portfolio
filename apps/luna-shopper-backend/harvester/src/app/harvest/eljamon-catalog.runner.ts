@@ -112,8 +112,10 @@ export class SilentAttempts {
  * **Each product goes to the sink as soon as its observation is whole** (plan
  * 0267): a known one when it is listed, a new one when its page answers or
  * fails. The sink writes a chunk each time `PRODUCT_CHUNK` products wait, so a
- * walk that dies part way keeps what it read, less at most the chunk that was
- * not full. Only a row whose page the walk did not read waits for the end,
+ * walk that dies part way keeps the chunks that were written. It loses the
+ * chunk that was not full, and a process that dies also loses what was still
+ * queued or in flight (plan 0267, notes of 2026-11-20). Only a row whose page
+ * the walk did not read waits for the end,
  * because only the end knows whether its page will be read.
  *
  * **Every category path of a product is stated at the end** (plan 0268): the

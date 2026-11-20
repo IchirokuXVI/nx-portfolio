@@ -52,8 +52,8 @@ export { entryKey } from './matching';
  *    reads. A product goes when the section that saw it first ends, after its
  *    split queries (plan 0267, section 6), and the sink writes a chunk each
  *    time `PRODUCT_CHUNK` products wait. A walk that dies part way thus keeps
- *    the rows that were written, less what was still queued or in flight in
- *    the sink when it died.
+ *    the rows that were written, less the chunk that was not full and what
+ *    was still queued or in flight in the sink when it died.
  * 4. Read back which catalog item each product resolved to, from the outcomes.
  * 5. Resolve the shop codes through `source_locations` (plan 0084, section 6),
  *    and store a claim for every product at every shop, positive **and**
