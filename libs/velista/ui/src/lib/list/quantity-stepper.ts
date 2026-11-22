@@ -106,7 +106,11 @@ export interface RefusalWords {
  * drawn, not hidden** (decision D): an end carries `aria-disabled` and ignores the
  * press, so focus stays on the button. **A hold repeats** after
  * `QUANTITY_HOLD_DELAY_MS`, from 300 ms down to 100 ms, and never takes an amount to
- * 0 (S8b): at 0 a line leaves the list's view, and that must take a press.
+ * 0 (S8b): at 0 a line leaves the list's view, and that must take a press. **A
+ * hold goes on until the finger lifts** (velista `0193`): the pointer is captured,
+ * and from the first repeat a moving touch no longer scrolls, so a wandering finger
+ * keeps stepping. Before the first repeat a swipe still scrolls the list. While a
+ * hold is down no text is selected anywhere on the page.
  *
  * **It never changes size**, whatever it holds: 155, 191 or 168 by 48 CSS px.
  * Typing is possible only in the two sheet variants (S9).
@@ -332,6 +336,22 @@ export class QuantityStepper {
   private _draftPress = false;
   private _announceTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly _onScroll = () => this._stopRepeat();
+  /**
+   * The button a primary pointer holds down, from `pointerdown` until it goes up or
+   * is cancelled (velista `0193`). Null when no hold is down.
+   */
+  private _holdButton: HTMLElement | null = null;
+  /** The hold repeated, so its touch no longer scrolls the page (velista `0193`, 1). */
+  private _holdClaimed = false;
+  /** No text was selected when the hold went down, so a selection now is the hold's. */
+  private _selectionWasEmpty = true;
+  /**
+   * A touch that moves while a hold that repeated is down does not pan, so the
+   * browser never takes it for a scroll and never cancels the pointer.
+   */
+  private readonly _onTouchMove = (event: Event) => event.preventDefault();
+  /** A hold that lasts selects no text anywhere on the page (velista `0193`, 5). */
+  private readonly _onSelectStart = (event: Event) => event.preventDefault();
 
   constructor() {
     // A render means the caller has had its chance to redraw; from here its `value`
@@ -397,6 +417,7 @@ export class QuantityStepper {
     }
     this._swallowClick = false;
     this._stopRepeat();
+    this._releaseHold();
     this._holdCount = 0;
     // Down comes before the focus moves, so typed text is still a draft here. The
     // owner's rule: this gesture commits the text only, with no step and no repeat.
@@ -404,6 +425,23 @@ export class QuantityStepper {
     if (this._draftPress || this.disabled() || this._atEnd(direction)) {
       return;
     }
+    // The pointer stays with the button wherever it goes, for every pointer type:
+    // a slide off no longer ends the hold, only a lift or a cancel does.
+    const button = event.currentTarget as HTMLElement | null;
+    this._holdButton = button;
+    if (typeof event.pointerId === 'number') {
+      try {
+        button?.setPointerCapture?.(event.pointerId);
+      } catch {
+        // The pointer is no longer active; its up or cancel ends the hold as before.
+      }
+    }
+    const selection = this._document.getSelection?.();
+    this._selectionWasEmpty =
+      !selection || selection.rangeCount === 0 || selection.isCollapsed;
+    this._document.addEventListener('selectstart', this._onSelectStart, {
+      capture: true,
+    });
     this._document.defaultView?.addEventListener('scroll', this._onScroll, {
       capture: true,
       passive: true,
@@ -415,19 +453,25 @@ export class QuantityStepper {
   }
 
   /**
-   * The finger leaves the button: a lift, a slide off or a cancel. When the hold
-   * repeated, also when the repeat had already stopped at an end or on a scroll,
-   * every pointer click is swallowed until the next `pointerdown` on the control:
-   * a hold that stopped at the last amount above 0 must not reach 0 on the release
-   * (S8b), however late a touch browser sends that click, and also after the
-   * finger slid off and back on.
+   * The finger or the button goes up, or the pointer is cancelled. A slide off the
+   * button ends nothing (velista `0193`): the pointer is captured, so the hold goes
+   * on until the lift. When the hold repeated, also when the repeat had already
+   * stopped at an end or on a scroll, every pointer click is swallowed until the
+   * next `pointerdown` on the control: a hold that stopped at the last amount above
+   * 0 must not reach 0 on the release (S8b), however late a touch browser sends that
+   * click. A press that did not repeat and is released off the button steps
+   * nothing either: with the capture its click now reaches the button, and only a
+   * press released on the button steps.
    */
-  endHold(): void {
+  endHold(event?: PointerEvent): void {
     this._stopRepeat();
     if (this._holdCount > 0) {
       this._swallowClick = true;
       this._holdCount = 0;
+    } else if (event && this._releasedOff(event)) {
+      this._swallowClick = true;
     }
+    this._releaseHold();
   }
 
   /** Arrow keys, Home and End on the sheet's field (the APG spinbutton pattern). */
@@ -551,6 +595,58 @@ export class QuantityStepper {
     });
   }
 
+  /**
+   * The hold is over: the touch may scroll again and text may be selected again. A
+   * selection that started during the hold anyway is cleared; one the page had
+   * before the press is left as it was.
+   */
+  private _releaseHold(): void {
+    this._document.removeEventListener('touchmove', this._onTouchMove, {
+      capture: true,
+    });
+    this._document.removeEventListener('selectstart', this._onSelectStart, {
+      capture: true,
+    });
+    if (this._holdButton !== null) {
+      this._clearHoldSelection();
+    }
+    this._holdButton = null;
+    this._holdClaimed = false;
+  }
+
+  /** From the first repeat the hold owns its touch: a move no longer scrolls. */
+  private _claimHold(): void {
+    if (this._holdClaimed || this._holdButton === null) {
+      return;
+    }
+    this._holdClaimed = true;
+    this._document.addEventListener('touchmove', this._onTouchMove, {
+      capture: true,
+      passive: false,
+    });
+  }
+
+  private _clearHoldSelection(): void {
+    if (!this._selectionWasEmpty) {
+      return;
+    }
+    const selection = this._document.getSelection?.();
+    if (selection && selection.rangeCount > 0 && !selection.isCollapsed) {
+      selection.removeAllRanges();
+    }
+  }
+
+  /** Whether a release that has coordinates happened outside the held button. */
+  private _releasedOff(event: PointerEvent): boolean {
+    const button = this._holdButton;
+    const { clientX: x, clientY: y } = event;
+    if (button === null || typeof x !== 'number' || typeof y !== 'number') {
+      return false;
+    }
+    const box = button.getBoundingClientRect();
+    return x < box.left || x > box.right || y < box.top || y > box.bottom;
+  }
+
   /** One step of the hold: from the current value, so the caller's answer is the base. */
   private _repeat(direction: 1 | -1): void {
     this._holdTimer = null;
@@ -573,6 +669,8 @@ export class QuantityStepper {
       return;
     }
     this._holdCount++;
+    this._claimHold();
+    this._clearHoldSelection();
     this._emit(next, true);
     this._announceLater();
     const interval = Math.max(

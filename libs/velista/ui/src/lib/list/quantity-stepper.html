@@ -20,10 +20,10 @@
     <button
       (click)="press(-1, $event)"
       (contextmenu)="$event.preventDefault()"
+      (lostpointercapture)="endHold()"
       (pointercancel)="endHold()"
       (pointerdown)="startHold(-1, $event)"
-      (pointerleave)="endHold()"
-      (pointerup)="endHold()"
+      (pointerup)="endHold($event)"
       [attr.aria-disabled]="disabled() || minusAtEnd() ? 'true' : null"
       [attr.aria-label]="
         'amount.less' | rokuT: { step: lessStep(), name: name() }
@@ -81,10 +81,10 @@
     <button
       (click)="press(1, $event)"
       (contextmenu)="$event.preventDefault()"
+      (lostpointercapture)="endHold()"
       (pointercancel)="endHold()"
       (pointerdown)="startHold(1, $event)"
-      (pointerleave)="endHold()"
-      (pointerup)="endHold()"
+      (pointerup)="endHold($event)"
       [attr.aria-disabled]="disabled() || plusAtEnd() ? 'true' : null"
       [attr.aria-label]="
         'amount.more' | rokuT: { step: moreStep(), name: name() }
