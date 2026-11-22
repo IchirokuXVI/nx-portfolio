@@ -757,9 +757,12 @@ describe('LineRow', () => {
       expect(pressed[0].body).not.toContain('transition');
     });
 
-    it('sinks a row whose tap opens the line, and never an inert one', () => {
-      // `.inert` is exactly a row whose `onRowClick` returns early.
-      expect(pressed[0].selector).toMatch(/^\.row:not\(\.inert\):active:not\(/);
+    it('sinks a row whose tap opens the line, and never an inert or a clearing one', () => {
+      // `.inert` and `.clearing` (velista 0199) are exactly the rows whose
+      // `onRowClick` returns early.
+      expect(pressed[0].selector).toMatch(
+        /^\.row:not\(\.inert,\s*\.clearing\):active:not\(/
+      );
     });
 
     it('leaves out a press on the stepper, a button or the photo viewer, and only those', () => {
@@ -1527,9 +1530,10 @@ describe('LineRow: a row being cleared (velista 0199)', () => {
   });
 
   it('draws the lock on the sunken surface of a pressed row, from tokens only', () => {
-    const scss = readFileSync(join(__dirname, 'line-row.scss'), 'utf8');
-    const rule = scss.match(/\.row\.clearing\s*\{([^}]*)\}/)?.[1] ?? '';
+    const rule = compiledRules('line-row.scss').find(
+      (one) => one.selector === '.row.clearing'
+    );
 
-    expect(rule).toContain('background: var(--app-surface-sunken)');
+    expect(rule?.body).toMatch(/background:\s*var\(--app-surface-sunken\);/);
   });
 });

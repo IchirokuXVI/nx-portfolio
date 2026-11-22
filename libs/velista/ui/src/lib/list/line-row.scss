@@ -31,13 +31,14 @@
 }
 
 // The row's own press, in place of the browser's box (velista 0196). It draws exactly
-// when the press will open the line: never on an inert row, whose tap does nothing.
+// when the press will open the line: never on an inert row or a row being cleared
+// (velista 0199), whose tap does nothing.
 // `:active` holds on every ancestor of the pressed element, so a press inside the
 // stepper, a button (the choose buttons, the picture's zoom) or the photo viewer's
 // dialog, which sits in the row's DOM, would draw it too; `:has()` leaves those out.
 // A picture with no zoom is decoration: its tap opens the line, so it sinks the row.
 // No transition: the press shows at once and goes on release.
-.row:not(.inert):active:not(
+.row:not(.inert, .clearing):active:not(
     :has(lib-quantity-stepper:active, button:active, lib-photo-viewer:active)
   ) {
   background: var(--app-surface-sunken);
