@@ -114,6 +114,25 @@ export class LineSettlement {
   quantity!: number;
 
   /**
+   * How many of {@link quantity} lowered the line, which is how many of them
+   * met what the list asked (plan 0274, section 1). Never more than
+   * {@link quantity} and never below zero (`ck_line_settlements_applied`), and
+   * `0` for `NOT_AVAILABLE`.
+   *
+   * A settle lowers the line by at most what it holds, so a buy of four on a
+   * line asking three has `applied` 3: three units met the ask and one is above
+   * it. That is what lets an open basket's ask survive a buy above it. The ask
+   * is the line's `quantity` plus the `applied` of this basket's standing buys,
+   * and the units above it are `quantity - applied`, never stored.
+   *
+   * **No default, on purpose.** Every writer of a settlement has to say how
+   * much of it met the ask, and an insert that does not name this column is
+   * refused by the `NOT NULL` rather than given a number nobody chose.
+   */
+  @Column({ type: 'int' })
+  applied!: number;
+
+  /**
    * What {@link quantity} counts: the line's unit when it was settled (plan
    * 0246, section 3.5). {@link pricePaidCents} is the price of one of it (M7).
    */

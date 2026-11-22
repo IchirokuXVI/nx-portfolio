@@ -209,6 +209,9 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
         outcome,
         quantity:
           outcome === SettlementOutcome.BOUGHT ? (options.quantity ?? 1) : 0,
+        // Every unit met the ask, which is what a buy before plan 0274 reads as.
+        applied:
+          outcome === SettlementOutcome.BOUGHT ? (options.quantity ?? 1) : 0,
         unit: options.unit ?? 'UNIT',
         estimated: options.estimated ?? false,
         settledByUserId: byParticipant ? null : (options.userId ?? reader),

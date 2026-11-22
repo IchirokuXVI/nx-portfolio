@@ -35,9 +35,12 @@ import {
  * It used to be the sum of the basket's origin rows, which were a copy of what
  * the list asked when the run composed it. A basket holds nothing of its own any
  * more, so the ask is recomputed from the two things that are still written down:
- * **`asked` is `bought + left`**, where `left` is the line's current `quantity`
- * and `bought` is this basket's standing purchases of it. That is the same
- * arithmetic `basket-rows.ts` does for the basket screen, so a trip and the
+ * **`asked` is `left` plus the units of this basket's buys that met the ask**,
+ * where `left` is the line's current `quantity` and those units are the
+ * `applied` of this basket's standing purchases of it (plan 0274). A buy above
+ * the ask lowers the line by what it held and no more, so the units above it
+ * are in `bought` and not in `asked`. It is {@link OPEN_BASKET_ASKED}, the same
+ * arithmetic `basket-rules` does for the basket screen, so a trip and the
  * basket it is a trip of cannot show different numbers.
  *
  * A line at zero with nothing bought is in neither half and is not a row of the
@@ -59,23 +62,12 @@ export function basketAskedCte(basketParam: string | null): string {
     UNION ALL
     SELECT gl.id AS "basketId",
            ll.id AS "lineId",
-           (ll.quantity + b."bought")::int AS "asked"
+           ${OPEN_BASKET_ASKED} AS "asked"
     FROM "shopping_lists" sl
     JOIN "zone_memberships" m ON m."zoneId" = sl."zoneId"
     JOIN "baskets" gl ON gl."ownerUserId" = m."userId"
     JOIN "list_lines" ll ON ll."listId" = sl.id
-    -- Within one line, and in the line's unit (plan 0246, section 3.5): a buy
-    -- made before the line changed its unit is not added to what it asks.
-    LEFT JOIN LATERAL (
-      SELECT COALESCE(
-               SUM(s."quantity") FILTER (WHERE s."outcome" = 'BOUGHT'), 0
-             )::int AS "bought"
-      FROM "line_settlements" s
-      WHERE s."basketId" = gl.id
-        AND s."lineId" = ll.id
-        AND s."unit" = ll."unit"
-        AND s."revertedAt" IS NULL
-    ) b ON TRUE
+    ${basketLineBuys('gl.id', 'll.id', 'll."unit"')}
     WHERE sl.id = $1::uuid
       AND ${OPEN_GENERATED_BASKET}
       AND EXISTS (
@@ -90,3 +82,51 @@ export function basketAskedCte(basketParam: string | null): string {
       AND (ll.quantity > 0 OR b."bought" > 0) ${open}
   )`;
 }
+
+/**
+ * One basket's standing buys of one line, summed, as a lateral join aliased
+ * `b` with two columns (plan 0274, section 3):
+ *
+ * - **`bought`**, the units bought, which is what a revert takes back and
+ *   what the screen calls bought;
+ * - **`applied`**, the units of those buys that met what the line asked,
+ *   which is the half of the ask a buy took off the line.
+ *
+ * Within one line, and in the unit given (plan 0246, section 3.5): a buy made
+ * before the line changed its unit is not added to what it asks. The three
+ * arguments are SQL expressions for the basket, the line and that unit.
+ *
+ * One fragment for every read that derives an ask (the trips read through
+ * {@link basketAskedCte}, the freeze at finish, and the basket read of a
+ * finished trip), so none of them can count the ask another way.
+ */
+export function basketLineBuys(
+  basketExpr: string,
+  lineExpr: string,
+  unitExpr: string
+): string {
+  return `LEFT JOIN LATERAL (
+    SELECT COALESCE(
+             SUM(s."quantity") FILTER (WHERE s."outcome" = 'BOUGHT'), 0
+           )::int AS "bought",
+           COALESCE(
+             SUM(s."applied") FILTER (WHERE s."outcome" = 'BOUGHT'), 0
+           )::int AS "applied"
+    FROM "line_settlements" s
+    WHERE s."basketId" = ${basketExpr}
+      AND s."lineId" = ${lineExpr}
+      AND s."unit" = ${unitExpr}
+      AND s."revertedAt" IS NULL
+  ) b ON TRUE`;
+}
+
+/**
+ * What an open basket asks of a line `ll`, beside {@link basketLineBuys} as
+ * `b` (plan 0274, section 3): `left` plus the units of this basket's buys that
+ * met the ask, computed, never stored. The units above the ask are
+ * `bought - applied`, which no read stores either.
+ *
+ * `rowNumbersOf` in `@portfolio/luna-shopper/basket-rules` is the same rule
+ * for the basket screen.
+ */
+export const OPEN_BASKET_ASKED = `(ll.quantity + b."applied")::int`;

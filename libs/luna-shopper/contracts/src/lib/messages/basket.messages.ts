@@ -284,7 +284,11 @@ export interface BasketRowView {
   unit: LineUnit;
   left: number;
   bought: number;
-  /** `bought + left`, computed, never stored. */
+  /**
+   * `left` plus the units of this basket's buys that met the ask, computed,
+   * never stored (plan 0274). The units bought above the ask are
+   * `bought - asked + left`.
+   */
   asked: number;
   /**
    * The sum of the entries' `boughtElsewhere` (plan 0188): units somebody bought

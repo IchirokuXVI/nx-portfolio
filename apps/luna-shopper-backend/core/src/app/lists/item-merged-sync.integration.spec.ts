@@ -167,8 +167,8 @@ describeIntegration('core and a product merge (real Postgres)', () => {
     ]);
     await dataSource.query(
       `INSERT INTO "line_settlements"
-              ("lineId", "listId", "outcome", "quantity", "itemId", "settledByUserId")
-       VALUES ($1, $2, 'BOUGHT', 1, $3, $4)`,
+              ("lineId", "listId", "outcome", "quantity", "applied", "itemId", "settledByUserId")
+       VALUES ($1, $2, 'BOUGHT', 1, 1, $3, $4)`,
       [single.id, listId, merged, owner]
     );
     const singleVersion = (await lineOf(single.id)).version;

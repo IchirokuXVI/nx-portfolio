@@ -258,7 +258,8 @@ describeIntegration(
         context,
         lines,
         listAccess,
-        events as never
+        events as never,
+        dataSource
       );
       settlements = new SettlementService(
         dataSource,

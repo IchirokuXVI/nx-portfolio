@@ -234,6 +234,7 @@ describeIntegration('the ask a finish writes down (real Postgres)', () => {
         itemId: null,
         outcome: SettlementOutcome.BOUGHT,
         quantity,
+        applied: quantity,
         settledByUserId: ids.shopper,
         settledByParticipantId: null,
         settledAt: new Date('2026-03-01T11:00:00Z'),
