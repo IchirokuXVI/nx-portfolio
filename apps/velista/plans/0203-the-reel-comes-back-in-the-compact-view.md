@@ -20,6 +20,11 @@
 > old reel did; the reel takes the snap points of velista `0195` as an input; and the due
 > row's button in the compact view says only "Add" / "Añadir".
 >
+> Amended again on 2026-11-22: the owner extended that ruling to the default view. The due
+> row's button says "Add" / "Añadir" with no amount in both views, because the amount is on
+> the control beside it (the stepper or the reel). Its accessible name keeps naming the
+> amount and the product.
+>
 > **The mock is approved, and it shows the reel is viable**: `apps/velista/plans/mocks/compact-reel/`,
 > published at https://claude.ai/artifact/U74Z1MyvcxEK6PN3CRn8N6. Take every look and word
 > from its boards (section 1 lists them) and the notes in its `canvas.json`, the `ReelUnit`
@@ -120,18 +125,22 @@ page's table of lists.
    step at once (`quantityRuns.step` then `flush`), so the run and the row's saving behave as
    for a press.
 6. **The due rows.** In the compact view the due row draws the reel with `min` 1, the same
-   52 by 44 as the rows above, in one column. Its button says only "Add" / "Añadir", with no
-   amount on it: the amount is the reel beside it. Today the button says the amount ("Add 3",
-   `list.due.add` with `amountWords()`); in the compact view its visible words drop the
-   amount (a new key). Its accessible name (`list.due.addLabel`, "Add 3 of <name> to the
-   list") is not part of the ruling and stays as it is. The default view's due button is
-   not part of this ruling either and keeps its words.
-7. **The product page's table.** In the compact view each stepper of `lists-table` is a reel.
+   52 by 44 as the rows above, in one column.
+7. **The due row's button, in both views.** It says only "Add" / "Añadir", with no amount on
+   it, in the compact view and in the default view: the amount is on the control beside it,
+   the reel or the stepper. Today the button says the amount ("Add 3", `list.due.add` with
+   `amountWords()`, `due-line-row.ts:73`). The visible words become a key with no amount,
+   and `list.due.add` with its count goes if nothing else reads it. Its accessible name
+   (`list.due.addLabel`, "Add 3 of <name> to the list", `due-line-row.ts:67` to `:69`) keeps
+   naming the amount and the product, in both views, so a screen reader still hears what
+   the press adds.
+8. **The product page's table.** In the compact view each stepper of `lists-table` is a reel.
    A reel closed above 0 on a list with no line makes the line at the reel's amount: `added`
    carries the amount, and the product page's add writes it. A reel on a line steps it as a
    press does.
-8. The default view is unchanged everywhere.
-9. Velista `0193`, `0194` and `0199` do not apply to the reel; it has no hold and no trash.
+9. The default view is unchanged everywhere, apart from the words of the due row's button
+   (target state 7).
+10. Velista `0193`, `0194` and `0199` do not apply to the reel; it has no hold and no trash.
 
 ### Scope
 
@@ -198,15 +207,18 @@ Spanish and Night in English:
    `--app-quantity-width` and `--app-quantity-height`, and the tokens are 52 px and 44 px.
 9. With no `snaps` input the reel stops at 1000; with `snaps` `[990, 1000]` a step up from
    975 g lands on 990.
-10. In the compact view the due row's button reads "Add" with no amount; in the default view
-    it reads "Add 3" as today.
+10. The due row's button reads "Add" / "Añadir" with no amount in the compact view and in
+    the default view, with an amount of 3 and of 1,5 kg.
+11. In both views the due row's button keeps its accessible name with the amount and the
+    product: "Add 3 of <name> to the list" (`list.due.addLabel`).
 
 ## 3. Acceptance criteria
 
 - In the compact view the reel is the control on the zone list, the due rows and the product
   page's table, and steps by the rule of today.
 - Every reel is 52 by 44 with the number over its unit, so the reels of a list line up.
-- Nothing changes in the default view.
+- Nothing changes in the default view but the due row's button, which says "Add" in both
+  views and names the amount only in its accessible name.
 
 ## Not in this plan
 

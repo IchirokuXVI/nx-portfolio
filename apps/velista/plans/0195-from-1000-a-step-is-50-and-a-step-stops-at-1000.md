@@ -16,6 +16,12 @@
 > skip. The mocks are `apps/velista/plans/mocks/basket-row-buys/` and
 > `apps/velista/plans/mocks/compact-reel/`.
 >
+> Amended again on 2026-11-22: the owner ruled on the point that was open (target state 6). A
+> step that leaves a snap point which is off the step's grid lands on the next grid value in
+> that direction. With an ask of 990 g and a step of 25, 975 up gives 990 and then down gives
+> 975, and 990 up gives 1000 and then down gives 990, so plus then minus returns across a
+> snap point. The rule needs no memory of the previous value.
+>
 > Amends velista `0188` (S7b, the step rule) and velista `0186` decision D (on a product step
 > of 100 a typed 975 g went to 1075; it now goes to 1000). Independent of every other plan of
 > this round; it can be built and released alone. The reel of velista `0203` steps through
@@ -78,30 +84,53 @@ the snap point by default; a caller can pass more.
    point below its `min` or above its ceiling is ignored. One helper in `line-unit.ts`
    (`snapPointsWithin(snaps, min, max)`) drops those points, and both controls call it, so
    no caller writes its own filter or clamp.
-6. **After a snap off the grid.** A step that lands on a point off the step grid (990 with a
-   step of 25) leaves the amount there, and the next step away from it moves by the step
-   from that amount, as a typed amount does today: 990 down is 965. This follows from the
-   rule of `stepFrom`; the owner has not ruled on it, and the builder does not add a snap
-   back to the grid.
-7. Plus then minus still returns to the start for every amount on a step's grid when no
-   point lies between them. For an amount that crossed a point, it returns to the point,
-   which is the rule.
-8. **The controls take the points.** `QuantityStepper` (`quantity-stepper.ts`) gains an
+6. **A step away from a snap point returns to the grid** (the owner, 2026-11-22). **The
+   grid** at an amount is the multiples of the step that a press there uses: going up, of
+   `stepAt(value)`; going down, of `stepAt(value - base)`, the step a minus already takes
+   away. So the grid is the base step (25 g) below 1000 and 50 from 1000, and every
+   multiple of 50 is also on the grid of 25. When `value` is one of the snap points the
+   press uses and is not on the grid of that direction, the step does not move by the
+   step: going up it gives the lowest grid value above `value`, and going down the highest
+   grid value below it. The snap rule of target state 4 still applies over that result.
+   Examples, with an ask of 990 g and a step of 25:
+   - 975 up gives 990 (the snap), then down gives 975 (the grid below 990);
+   - 990 up gives 1000 (the grid above 990, which is also the point 1000), then down gives
+     990 (the snap);
+   - with an ask of 1030 g: 1000 up gives 1030 (the snap), then up gives 1050 (the grid of 50
+     above 1030), then down gives 1030 (the snap), then down gives 1000 (the grid of 50 below
+     1030).
+
+   The rule reads only `value` and the snap points, never the value before it, so it needs
+   no memory. A point that is on the grid (1000, or an ask of 975 g on a step of 25) steps as
+   any amount does.
+7. **A typed amount that is not a snap point** keeps the rule of today: it moves by the step
+   from that amount, so 1010 up is 1060 and down is 1010 again. The one case that does not
+   return is the one this plan already accepts for 1000: a typed amount off the grid that
+   steps onto a snap point. With an ask of 990, a typed 980 up gives 990, and down from there
+   gives 975, not 980.
+8. Plus then minus returns to the start for every amount on a step's grid, also when a snap
+   point lies between them: the snap takes the plus, and the return to the grid takes the
+   minus. Only a typed amount off the grid that a press carries onto a point does not return
+   (target state 7).
+9. **The controls take the points.** `QuantityStepper` (`quantity-stepper.ts`) gains an
    input `snaps: readonly number[]`, default `QUANTITY_SNAP_POINTS`, and passes it, through
    `snapPointsWithin` with its `min` and ceiling, to every `stepFrom` and `canStepUp` call
    (a press, a key, a hold). The reel of velista `0203` takes the same input with the same
    default. Who passes a second point is the business of velista `0201` (the buy steppers of
    the basket row sheet) and velista `0204` (its reels). Everywhere else only 1000 applies,
    and no other caller passes `snaps`.
-9. The words of the buttons' accessible names say what the next press moves: `moreStep`
-   uses the real difference (`stepFrom(value, 1) - value`), as `lessStep` already does, so a
-   plus at 990 g says "10 g". Both read the same `snaps` the press uses, so a plus at 975 g
-   with an ask of 990 g says "15 g".
-10. `canStepUp` keeps its two rules over the new results.
-11. The doc comments of `stepAt`, `stepFrom`, `QUANTITY_COARSE_FROM` and
+10. The words of the buttons' accessible names say what the next press moves: `moreStep`
+    uses the real difference (`stepFrom(value, 1) - value`), as `lessStep` already does, so
+    a plus at 990 g says "10 g". Both read the same `snaps` the press uses, so a plus at
+    975 g with an ask of 990 g says "15 g", and a minus at 990 g with that ask says "15 g"
+    (back to the grid at 975).
+11. `canStepUp` keeps its two rules over the new results.
+12. The doc comments of `stepAt`, `stepFrom`, `QUANTITY_COARSE_FROM` and
     `QUANTITY_SNAP_POINTS` state the new rule and its examples (1000 g to 1050 g; 1025 g
     down to 1000 g; 990 g up to 1000 g; a count at 1000 to 1050; with points 990 and 1000,
-    975 up to 990 then 1000).
+    975 up to 990 then 1000; a step away from a snap point off the grid, 990 down to 975 and
+    1030 up to 1050). The comment of `stepFrom` that says "No grid and no snapping"
+    (`line-unit.ts:224`) is rewritten: a typed amount still has no grid, a snap point does.
 
 ### Scope
 
@@ -142,17 +171,29 @@ In `line-unit.spec.ts`:
    to the start.
 9. With `snaps` left out, the result equals the result with `[1000]`.
 10. Points 990 and 1000, grams: 975 up 990, 990 up 1000; 1010 down 1000, 1000 down 990.
-11. A point equal to the value is not a stop: points 990 and 1000, 990 down 965 and 990 up
+11. A point equal to the value is not a stop: points 990 and 1000, 990 down 975 and 990 up
     1000.
-12. Off the grid after a snap: points 990 and 1000, 990 down 965, 965 down 940.
-13. A point at or below 0, or above 99 999, is ignored; `snapPointsWithin([1, 1000], 1,
+12. Back to the grid from a snap point (target state 6), points 1000 and 990, step 25: 975
+    up 990, then down 975; 990 up 1000, then down 990; 990 down 975, then 975 down 950.
+13. Back to the grid above 1000, points 1000 and 1030: 1000 up 1030, up 1050, down 1030,
+    down 1000.
+14. A snap point on the grid steps as any amount: points 1000 and 975, 975 up 1000 and 975
+    down 950.
+15. A product step of 100, points 1000 and 990: 990 up 1000 and 990 down 900.
+16. A typed amount that is not a snap point keeps today's rule: points 1000 and 990, 1010 up
+    1060 and down 1010 again; a typed 980 up 990, then down 975 (the accepted case of target
+    state 7).
+17. No memory: `stepFrom(990, 'GRAM', -1, null, [1000, 990])` is 975 whatever value the
+    spec stepped from before, and the same call made twice gives the same answer.
+18. A point at or below 0, or above 99 999, is ignored; `snapPointsWithin([1, 1000], 1,
     99999)` drops the 1, and a point below the caller's `min` is never a result.
-14. An empty list passed on purpose snaps nowhere: 990 up 1015, and 1025 down 975 (1025
+19. An empty list passed on purpose snaps nowhere: 990 up 1015, and 1025 down 975 (1025
     minus the step of 50 at 1000).
 
 In `quantity-stepper.spec.ts`: the plus at 990 g is named with "10 g", at 1000 g with
-"50 g"; with `snaps` `[990, 1000]` the plus at 975 g lands on 990 and is named with "15 g";
-with no `snaps` input the stepper stops at 1000.
+"50 g"; with `snaps` `[990, 1000]` the plus at 975 g lands on 990 and is named with "15 g",
+and then the minus is named with "15 g" and lands on 975; with no `snaps` input the stepper
+stops at 1000.
 
 ## 2. Acceptance criteria
 
@@ -160,6 +201,8 @@ with no `snaps` input the stepper stops at 1000.
 - No press crosses 1000 without stopping on it, unless the caller passed an empty list on
   purpose.
 - A caller that passes another point lands on it exactly, in both directions.
+- A step away from a snap point off the grid lands on the grid, so plus then minus returns
+  across a snap point.
 - Every stepper of the app shows it, with no change outside `line-unit.ts`, the stepper's
   `snaps` input and the step words.
 

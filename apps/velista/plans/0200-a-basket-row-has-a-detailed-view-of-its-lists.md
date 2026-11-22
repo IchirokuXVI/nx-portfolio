@@ -23,13 +23,24 @@
 > picture opens the picture viewer; an entry whose ask the reader may not change draws a
 > disabled stepper that explains itself in a popover when pressed.
 >
+> Amended again on 2026-11-22: the disabled stepper is `aria-disabled`, never the `disabled`
+> attribute, so it stays focusable and a press, Enter or Space opens its popover; its reason
+> is also linked with `aria-describedby`. And the ask stepper sends the list's whole ask:
+> backend `0274` makes the demand route (`BasketStore.setDemand`) take `quantity` as what
+> the list asks for in total (what the line holds plus what this basket already bought
+> toward it), no longer the line's `left`, and the release raises `minClientVersion` so
+> that old clients stop. So this view shows and sends `entry.asked` (read from the wire,
+> velista `0201`), and every other caller of `setDemand` in velista changes or goes (Scope).
+>
 > **The mock is approved**: `apps/velista/plans/mocks/basket-row-buys/`, published at
 > https://claude.ai/artifact/BfjSwJoGP4hyuG3DXTEiy6. Take every look and word from its
 > boards (section 1 lists them) and the notes in its `canvas.json`.
 >
 > Linked plans: velista `0201` (the row sheet records buys) cannot be released without this
 > plan, because after it the row sheet has no way to change a list's ask or product.
-> **Release `0200`, `0201` and backend `0273` together.** Velista `0204` (the reel in the
+> **Release `0200`, `0201` and backends `0273` and `0274` together** (`0274` changes what
+> the demand route's `quantity` means, so this view and the basket page's card holdings
+> cannot ship apart from it). Velista `0204` (the reel in the
 > compact view) leaves this view as it is: it has typing, so it keeps the button stepper in
 > both views. The ask stepper of this view takes no second snap point (velista `0195`): it
 > keeps the default stop at 1000 only.
@@ -50,7 +61,20 @@
 > `libs/velista/ui/src/lib/list/product-picture.ts`; `libs/velista/ui/src/lib/photo/photo-viewer.ts`;
 > `libs/velista/ui/src/lib/catalog/product-row.scss` (the product card's compact row the
 > mock copies); `libs/velista/ui/src/lib/styles/_themes.scss:127` and `:234`
-> (`--app-action-quiet-fg`).
+> (`--app-action-quiet-fg`). On this branch:
+> `libs/velista/ui/src/lib/list/quantity-stepper.ts:179` (the `disabled` input) and
+> `quantity-stepper.html:27`, `:51`, `:60`, `:88` (the ends and the field already carry
+> `aria-disabled` and `readOnly`, never `disabled`); `libs/velista/models/src/lib/basket-view.ts:1336`
+> to `:1350` (`BasketDemandRequest`: `quantity` "What that list asks for from now on", `from`
+> "The entry's `left` the person was looking at"); the callers of `setDemand`:
+> `settle-sheet.ts:300` to `:304` (`demandRuns`), `:943` and `:960` to `:965` (`raise`, the
+> other lists path), `:1010` to `:1013` (`_fromNow`, `from: entry.left`), `:1573` (`demand`);
+> `libs/velista/feature-shopping-lists/src/lib/basket-page/basket-page.ts:2514` to `:2517`
+> (`holdingsOf`, a card holding's amount is `entry.left`) and `:2589` to `:2600`
+> (`_sendHolding`, `setDemand({ lineId, quantity: run.to, from: run.from })`);
+> `libs/velista/feature-shopping-lists/src/lib/row-entries/row-entries.ts:319` to `:321`
+> (`asks` and `shown` read `entry.left`); `libs/velista/data-access/src/lib/baskets/basket-memory.ts:1423`
+> (the fake's `setDemand`).
 
 ## Brief for the agent
 
@@ -68,7 +92,12 @@ and "Change for all lists" out of the row sheet.
 - The change sheets exist: `rows/:rowKey/change/:lineId` for one line and
   `rows/:rowKey/change` for every line the reader may change.
 - Changing the ask is `BasketStore.setDemand`, which the row sheet calls today through
-  `demandRuns`. It writes to the household's list, not to the basket.
+  `demandRuns`. It writes to the household's list, not to the basket. Today its `quantity`
+  is the line's new `left` and its `from` the `left` the reader saw. After backend `0274`
+  its `quantity` is the list's whole ask (what the line holds plus what this basket already
+  bought toward it), and `from` is what that plan documents for the route. Old clients are
+  cut off by a raised `minClientVersion` at release, so no client sends the old meaning to
+  the new server.
 - A sheet is a child route under the `sheet` segment, through `sheet()` (CLAUDE.md, "Sheets
   are addressed under a `sheet` segment"). Its cancel uses `SheetNavigation.dismiss` with a
   fallback URL.
@@ -106,10 +135,14 @@ and "Change for all lists" out of the row sheet.
      `entry.bought` and `entry.asked`. It is plain text and takes no colour, and it is never
      cut;
    - at the right of the name block, what the list asks for: the typed stepper of velista
-     `0188` (`sheet-narrow` for a count, `sheet` for a weight, as the mock draws them), saved
-     through `setDemand` exactly as `demandRuns` does today (a typed amount at once, presses
-     after the quiet beat). It passes no `snaps` (velista `0195`), so only the stop at 1000
-     applies;
+     `0188` (`sheet-narrow` for a count, `sheet` for a weight, as the mock draws them). **It
+     shows and sends the list's whole ask**: its value is `entry.asked` (read from the wire,
+     velista `0201`), and a run sends `setDemand` with `quantity` the run's `to`, which is
+     the new whole ask, and `from` as backend `0274` documents it for the route. The timing
+     is the one `demandRuns` has today (a typed amount at once, presses after the quiet
+     beat), but the numbers are not: it never sends `entry.left`. A list asking 3 with 2
+     bought shows 3, and a plus sends 4. It passes no `snaps` (velista `0195`), so only the
+     stop at 1000 applies;
    - **the list's product, on one line** under it: a small picture (28 px), the product
      name, then " · brand size" ("Leche semidesnatada · Hacendado 1 L"). The brand and size
      are never cut; the name is cut first. The line is drawn also when every list has the
@@ -133,12 +166,24 @@ and "Change for all lists" out of the row sheet.
      <group> can change what this list asks for." / "Solo los miembros de <group> pueden
      cambiar lo que pide esta lista."
    This replaces "otherwise the number in the exact form".
+   **The reason is also linked with `aria-describedby`** from the stepper to a visually
+   hidden element that holds the same words, so a screen reader hears why when it reaches
+   the stepper, without opening anything. The popover shows the same words for a sighted
+   reader.
 9. **The disabled stepper.** `QuantityStepper` gains a whole stepper disabled state, drawn
    when its `disabled` input is true: no raised fill, the hairline (`--app-border-subtle`) in
    place of the strong border, the number in `--app-text-muted` at its usual size and
-   weight, both glyphs in `--app-text-muted` at 60% opacity. It stays pressable so the
-   popover can open, and it steps nothing. The mock's note measures the number at 5.33 to 1
-   on Day and 6.66 to 1 on Night on the sheet.
+   weight, both glyphs in `--app-text-muted` at 60% opacity. The mock's note measures the
+   number at 5.33 to 1 on Day and 6.66 to 1 on Night on the sheet.
+   **It is `aria-disabled="true"`, never the `disabled` attribute.** It stays in the tab
+   order and takes a press: a press, Enter or Space on it opens the popover of target state
+   8 and changes nothing (no `stepped`, no `valueChange`, no write). The `disabled`
+   attribute would take it out of the tab order and swallow the press, so the reader could
+   never learn why. The stepper already marks its ends and its field with `aria-disabled`
+   and `readOnly` (`quantity-stepper.html:27`, `:51`, `:60`, `:88`); the whole stepper state
+   keeps that, and gives the host one output for a press while disabled, which the detailed
+   view uses to open the popover. It also takes the id of the reason element as an input
+   and puts it in `aria-describedby`.
 10. **The row sheet loses** each entry's swap icon and "Change for all lists". Its steppers
     are unchanged by this plan; velista `0201` turns them into buys.
 11. The change sheets return to the view they were opened from: the detailed view.
@@ -146,12 +191,37 @@ and "Change for all lists" out of the row sheet.
 
 ### Scope
 
-- Work in `feature-shopping-lists` (row entries, the settle sheet, the new detailed view),
-  `feature-shell` (the route), the i18n files.
+- Work in `feature-shopping-lists` (row entries, the settle sheet, the new detailed view,
+  the basket page's card holdings), `feature-shell` (the route), `models` (the doc comments
+  of `BasketDemandRequest`), `data-access` (the fake's `setDemand`), the i18n files.
 - In `libs/velista/ui/src/lib/list/quantity-stepper.*`, add the whole stepper disabled state
   of target state 9 and nothing else. Other lanes touch the same files: velista `0193` and
   `0194` (the hold), `0195` (the `snaps` input and the step words), `0201` (the `target`
   input). Rebase onto whichever of them lands first.
+- **Every caller of `setDemand` in velista sends the whole ask, or goes.** After backend
+  `0274` a `quantity` of `left` lowers the list's ask by what this basket bought. The
+  callers on this branch, and the plan that changes each:
+  - the row sheet's `demandRuns` and its send `demand` (`settle-sheet.ts:300` to `:304`,
+    `:1564` to `:1577`, with `_fromNow` at `:1010`): velista `0201` removes them from the
+    row sheet (its target state 9). This plan's detailed view is the new caller, with the
+    whole ask;
+  - the row sheet's other lists path, `raise` (`settle-sheet.ts:921` to `:965`), which calls
+    `setDemand` for a list that holds the product at zero and calls `demand` with
+    `from: entry.left` for a list that already asks: velista `0201` removes it (its target
+    state 9, a buy for another list goes through `buyForList`);
+  - the card holdings on the basket page (`basket-page.ts:2514` to `:2517`, the amount drawn
+    is `entry.left`, and `:2589` to `:2600`, `_sendHolding` sends the run's `to` and `from`):
+    **this plan**. Neither plan scoped them before; they are an ask stepper like this view's,
+    so the holding's amount becomes `entry.asked` and the run sends the whole ask, with
+    `from` as backend `0274` documents it. The sentence after a refused write keeps its
+    words;
+  - the fake (`basket-memory.ts:1423`) and its specs: **this plan**. Its `setDemand` reads
+    `quantity` as the whole ask and sets the line's `left` from it by backend `0274`'s rule
+    (target state 5 there: an ask below what the basket's buys met leaves `left` at 0).
+
+  `BasketDemandRequest` (`basket-view.ts:1336` to `:1350`) says so in its doc comments:
+  `quantity` is the list's whole ask, and `from` is what backend `0274` documents. The
+  store's `setDemand` passes the body through and does not change.
 - Do NOT change the change sheets, the settle actions, or what the row sheet's steppers do.
 
 ### Constraints
@@ -166,6 +236,9 @@ and "Change for all lists" out of the row sheet.
 ### Action boundaries
 
 - Stop and ask if the mock shows something on a row this plan does not list.
+- Stop if backend `0274` is not built, or if its route documentation does not say what
+  `from` is for a whole ask (a stand in for its answers is fine while it is being built).
+- Stop and ask if a caller of `setDemand` exists that the Scope does not name.
 
 ### Progress evidence
 
@@ -207,23 +280,39 @@ in Spanish:
 6. "Change" draws only where the entry is changeable, and it is the only element of the line
    that navigates; a click on the line's text does nothing.
 7. A typed ask is sent once through `setDemand`; presses wait the quiet beat.
-8. "Change" and "Change for all lists" navigate to the change sheets; their back returns to
-   the detailed view.
-9. A press on a disabled stepper opens the popover with the words for a group the reader is
-   not in, and with the group's name for the reader's own group; it sends nothing.
-10. A picture with a photo opens the picture viewer; a product with no photo draws the
+8. The ask stepper shows `entry.asked`, not `entry.left`: an entry asking 3 with 2 bought
+   (`left` 1) shows 3, and one plus sends `setDemand` with `quantity: 4`, never `2`.
+9. A card holding on the basket page shows `entry.asked`, and a run on it sends `quantity`
+   the new whole ask. No caller of `setDemand` in velista sends `entry.left` as `quantity`
+   (a spec over the store double asserts it for the detailed view and for the card).
+10. The fake's `setDemand` with the whole ask leaves the entry's `asked` at that number and
+    its `bought` unchanged.
+11. "Change" and "Change for all lists" navigate to the change sheets; their back returns to
+    the detailed view.
+12. A press on a disabled stepper opens the popover with the words for a group the reader is
+    not in, and with the group's name for the reader's own group; it sends nothing.
+13. A picture with a photo opens the picture viewer; a product with no photo draws the
     default icon and no button.
-11. In `quantity-stepper.spec.ts`: with `disabled` true the host carries the whole stepper
+14. In `quantity-stepper.spec.ts`: with `disabled` true the host carries the whole stepper
     disabled state and a press emits no `stepped`.
-12. The row sheet draws no swap icon and no "Change for all lists".
-13. `routes.spec.ts` still passes: the new route is under the marker.
+15. With `disabled` true no element of the stepper has the `disabled` attribute; the
+    stepper carries `aria-disabled="true"` and stays in the tab order.
+16. With `disabled` true, a click, Enter and Space each emit the press output once and no
+    `stepped` or `valueChange`; in the detailed view each opens the popover and sends
+    nothing.
+17. The disabled stepper's `aria-describedby` names an element whose text is the popover's
+    reason, for a group the reader is not in and for the reader's own group, before any
+    press.
+18. The row sheet draws no swap icon and no "Change for all lists".
+19. `routes.spec.ts` still passes: the new route is under the marker.
 
 ## 3. Acceptance criteria
 
 - The product of a list can be changed only from the detailed view, and only through
   "Change" or "Change for all lists".
 - A list's ask can be changed from the detailed view.
-- A reader sees why an ask cannot be changed.
+- A reader sees why an ask cannot be changed, and a screen reader hears it at the stepper.
+- Every write of an ask from velista sends the list's whole ask.
 - The row sheet keeps one job: recording buys (with velista `0201`).
 
 ## Not in this plan

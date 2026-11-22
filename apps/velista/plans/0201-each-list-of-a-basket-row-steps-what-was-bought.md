@@ -23,6 +23,12 @@
 > "Comprado para otra lista" are final. A guest sees no "Lists and amounts" and no "Bought
 > for another list".
 >
+> Amended again on 2026-11-22: the ask comes from the wire. Backend `0274` adds `asked` to
+> every entry, in the basket read, in every write answer and in the socket patches, so
+> velista stops computing an entry's ask as `bought + left` (target state 10). The release
+> raises `minClientVersion`, because the demand route's `quantity` changes meaning with it
+> (velista `0200`).
+>
 > This was the design of the sheet before velista `0139`: the entries pane of velista `0090`
 > had a "got" reel per list (commit `3b8da1e91`, `row-entries.ts`, output `allocated`),
 > removed by `9f74867a1`. Its revert then took units from the whole row; this plan takes
@@ -42,6 +48,11 @@
 > "· 4" after a buy of 4), amber can never show, and a minus after such a buy raises the
 > list's ask. Velista `0204` later draws these steppers as reels
 > in the compact view.
+>
+> **Release note: this release raises `minClientVersion`.** Backend `0274` changes what the
+> demand route's `quantity` means (the whole ask, no longer `left`), so a client of before
+> this release must not reach the new server. The release notes say it, and the velista
+> unit's release raises the number in the same deploy.
 >
 > What the backend already does, read on `dev` at `e06813139` (no change needed):
 > - A settle with `lineIds: [lineId]`, a `quantity`, `from` equal to that line's `left` and no
@@ -64,6 +75,22 @@
 > `libs/velista/feature-shopping-lists/src/lib/settle-sheet/settle-sheet.ts:299` to `:309`
 > (`demandRuns`, `raiseRuns`), `:520` (`canSettle`), `:921` to `:970` (`raise`);
 > `libs/velista/ui/src/lib/list/quantity-stepper.ts` (the stepper; this plan adds an input).
+> The ask as velista computes it, on this branch:
+> `libs/velista/data-access/src/lib/mapping/basket-mappers.ts:183` to `:243`
+> (`toBasketRowEntry`, `asked: bought + left` at `:231` with its comment "Not on the wire"
+> at `:227`; it maps the entries of the read and, through `toBasketRowResult` at `:469` to
+> `:481`, of every write answer), `:311` (the row's `asked`, already read from the wire with
+> the sum as the fallback, the model to copy), `:983` to `:1030` (`toBasketEntryPatch`, the
+> socket patch, strict, with no `asked`);
+> `libs/velista/models/src/lib/basket-patch.ts:24` to `:45` (`BasketEntryPatch`, no
+> `asked`), `:51` to `:66` (`basketEntryPatchOf`, a write answer applied as a patch),
+> `:228` (`patchEntry`, `asked: patch.bought + patch.left`), `:264` to `:276`
+> (`samePatched`); `libs/velista/models/src/lib/basket-row-fold.ts:175` to `:203`
+> (`rebuildBasketRow`, the row's `asked` from `rowNumbersOf`), `:252` to `:261`
+> (`toRuleEntry`, no `applied`); `libs/luna-shopper/basket-rules/src/lib/basket-rules.ts:71`
+> to `:93` (`BasketRuleEntry`, `BasketRuleNumbers.asked` "`bought + left`", which backend
+> `0274` changes); `libs/velista/data-access/src/lib/baskets/basket-memory.ts:2101`, `:2380`
+> and `:2730` (the fake's `asked: bought + left`).
 
 ## Brief for the agent
 
@@ -77,6 +104,10 @@ it reaches or passes the ask, and make the section "Add it to another list" reco
 
 - `BasketRowEntry` carries `asked`, `bought` (this basket, this trip) and `left`.
   `boughtElsewhere` is not part of `bought` and stays out of this stepper.
+- Today velista computes an entry's `asked` as `bought + left` in three places: the entry
+  mapper, the patch fold and the fake. After a buy above the ask that sum is wrong (a list
+  asking 3 with 4 bought has `left` 0, and the sum says 4). Backend `0274` puts the right
+  number on the wire as `asked`.
 - `BasketStore.settle` and `revert` target every line of the row (`targetOf`). This plan
   needs a target of one line.
 - The sheet gathers a stepper's presses into runs (`quantityRuns`) and writes once they stop.
@@ -125,12 +156,36 @@ it reaches or passes the ask, and make the section "Add it to another list" reco
    heading without the button (velista `0200`, target state 2).
 9. **What goes.** `demandRuns` and `raise` leave the row sheet; the ask is changed only in
    velista `0200`'s detailed view. "Got all N", "They had none" and "Not today" are
-   unchanged.
+   unchanged. With them go the row sheet's two callers of `setDemand` (`demand` and the
+   other lists path of `raise`), which sent the line's `left` as `quantity`; velista `0200`
+   owns the callers that stay.
+10. **The ask comes from the wire** (rule D4). Backend `0274` adds `asked` to every entry:
+    in the basket read, in every write answer and in the socket patches.
+    - **The entry mapper** (`toBasketRowEntry`, `basket-mappers.ts:231`) reads `asked` from
+      the wire, as the row's mapper at `:311` already does: `'asked' in raw ?
+      atLeastZero(raw['asked']) : bought + left`. The sum is only the fallback for a missing
+      field. The comment "Not on the wire" goes. This covers the read and every write answer
+      (`toBasketRowResult` maps its entries through the same function).
+    - **The patch.** `BasketEntryPatch` gains `asked`; `toBasketEntryPatch` reads it with
+      the same fallback (a missing `asked` does not refuse the patch, because a server
+      without it means `bought + left`); `basketEntryPatchOf` copies it; `patchEntry` sets
+      `asked: patch.asked` in place of `patch.bought + patch.left` (`basket-patch.ts:228`);
+      `samePatched` compares it.
+    - **The row fold.** `toRuleEntry` (`basket-row-fold.ts:252`) passes
+      `applied: entry.asked - entry.left` to the shared rules, the field backend `0274`
+      adds to `BasketRuleEntry`, so `rowNumbersOf` gives the row the right `asked` after a
+      patch or a write answer too. Velista adds no sum of its own.
+    - **The fake** (`basket-memory.ts:2101`, `:2380`, `:2730`) keeps the ask it was given and
+      answers `asked` as backend `0274` does, so a memory spec of a buy above the ask reads
+      the original ask.
 
 ### Scope
 
-- Work in `data-access` (the store), `models` (the request shapes), `feature-shopping-lists`
-  (the entries and the settle sheet), `ui` (the stepper's `target` input), the i18n files.
+- Work in `data-access` (the store, the basket mappers, the fake), `models` (the request
+  shapes, `basket-patch.ts`, `basket-row-fold.ts`), `feature-shopping-lists` (the entries
+  and the settle sheet), `ui` (the stepper's `target` input), the i18n files.
+- Do NOT change `libs/luna-shopper/basket-rules`: backend `0274` adds `applied` there, and
+  this plan only passes it.
   Velista `0200` adds the stepper's disabled state and velista `0195` its `snaps` input in
   the same `quantity-stepper.*` files.
 - Do NOT change the zone list, the product page, the settle actions, or the backend.
@@ -192,6 +247,16 @@ beside Night in Spanish:
    1000, the next on 990. The stepper of an entry receives `snaps` `[1000, ask]`, and the
    steppers of "Bought for another list" receive no `snaps` input, so only the default stop
    at 1000 applies.
+9. The entry mapper reads `asked` from the wire: an entry with `asked: 3`, `left: 0`,
+   `bought: 4` maps to `asked` 3; with no `asked` field it maps to `bought + left`.
+10. After a settle answer: a list asking 3 is settled to 4, the write answer carries the
+    entry with `asked: 3`, `left: 0`, `bought: 4`; the row sheet's label still reads "· 3",
+    the number is amber, and the row's `asked` is 3.
+11. After a socket patch: a `basket.linesChanged` patch of the same entry with `asked: 3`,
+    `left: 0`, `bought: 4` leaves the entry's `asked` at 3 and the row's `asked` at 3
+    (`basket-patch.spec.ts`); a patch with no `asked` is applied with `bought + left`.
+12. `toRuleEntry` passes `applied` as `asked - left` (`basket-row-fold.spec.ts`): a row of
+    two entries asking 3 and 1, the first with 4 bought, rebuilds to `asked` 4.
 
 ## 3. Acceptance criteria
 
