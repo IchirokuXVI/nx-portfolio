@@ -1,3 +1,5 @@
+> **PR:** [#1070](https://github.com/IchirokuXVI/nx-portfolio/pull/1070)
+
 # 0198: a price of one reads "/ u"
 
 > Decided on 2026-11-22. A zone list row of a pack or a piece shows its price with no
