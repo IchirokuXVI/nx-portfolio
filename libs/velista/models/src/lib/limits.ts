@@ -123,17 +123,18 @@ export const LINE_CONTENT_COUNTER_FROM = 350;
 export const LINE_QUANTITY_MIN = 0;
 export const LINE_QUANTITY_MAX = 99999;
 
-/** How long a held stepper button waits before it repeats (velista 0188). */
-export const QUANTITY_HOLD_DELAY_MS = 400;
+/** How long a held stepper button waits before it repeats (velista 0188, 0194). */
+export const QUANTITY_HOLD_DELAY_MS = 500;
 
 /**
  * The first interval of a stepper's repeat; each next one is
  * {@link QUANTITY_HOLD_FACTOR} of the last, never under {@link QUANTITY_HOLD_FASTEST_MS}.
- * The intervals are 300, 255, 217, 184, 157, 133, 113, then 100 ms (velista 0188).
+ * The intervals are 300, 244, 198, 161, 131, 106, 86, 70, then 60 ms: eight intervals
+ * of ramp, about 1.3 s, then about 16 steps a second (velista 0188, 0194).
  */
 export const QUANTITY_HOLD_FIRST_MS = 300;
-export const QUANTITY_HOLD_FACTOR = 0.85;
-export const QUANTITY_HOLD_FASTEST_MS = 100;
+export const QUANTITY_HOLD_FACTOR = 0.8125;
+export const QUANTITY_HOLD_FASTEST_MS = 60;
 
 /**
  * How long after the last step a feature writes the run, and the stepper announces

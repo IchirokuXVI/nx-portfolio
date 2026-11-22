@@ -105,7 +105,7 @@ export interface RefusalWords {
  * hundredth of the name the row shows. **The ends are
  * drawn, not hidden** (decision D): an end carries `aria-disabled` and ignores the
  * press, so focus stays on the button. **A hold repeats** after
- * `QUANTITY_HOLD_DELAY_MS`, from 300 ms down to 100 ms, and never takes an amount to
+ * `QUANTITY_HOLD_DELAY_MS`, from 300 ms down to 60 ms, and never takes an amount to
  * 0 (S8b): at 0 a line leaves the list's view, and that must take a press. **A
  * hold goes on until the finger lifts** (velista `0193`): the pointer is captured,
  * and from the first repeat a moving touch no longer scrolls, so a wandering finger
