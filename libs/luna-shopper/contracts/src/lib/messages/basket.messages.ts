@@ -1029,6 +1029,14 @@ export interface BuyForListBasketRequest {
    * it, and made at zero when there is none.
    */
   lineId?: string;
+  /**
+   * The row's product as the gateway read it, the one {@link paid},
+   * {@link itemSnapshot} and {@link content} describe; null when the gateway
+   * read none. Written by the gateway, never by a client. Core reads the row's
+   * product again and refuses with 409 `conflict`, writing nothing, when it is
+   * another, so a price and a name are never recorded for the wrong product.
+   */
+  expectedItemId: string | null;
   /** Units bought, a whole number from 1 to `LINE_QUANTITY_MAX`. */
   quantity: number;
   /** What {@link quantity} counts, the row's. */

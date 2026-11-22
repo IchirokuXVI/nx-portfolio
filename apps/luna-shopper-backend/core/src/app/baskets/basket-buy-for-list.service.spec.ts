@@ -5,6 +5,7 @@ import {
 import {
   BasketFinishedException,
   BasketRowHasNoProductException,
+  ConflictException,
   ForbiddenException,
   NotFoundException,
   ValidationException,
@@ -109,6 +110,7 @@ const request = (
   userId: USER,
   rowKey: ROW,
   targetListId: WRITTEN,
+  expectedItemId: MILK,
   quantity: 2,
   unit: 'UNIT',
   content: 'Whole milk',
@@ -173,6 +175,22 @@ describe('a buy for a list that did not ask (plan 0273)', () => {
       BasketRowHasNoProductException
     );
     expect(touched).toEqual(['row']);
+  });
+
+  it('answers 409 conflict and writes nothing when the row holds another product than the gateway priced', async () => {
+    const OTHER = '5b0f6f7e-6c7c-4d55-9f4e-3a8b2f9d1c09';
+    const { service, touched, prepared } = build();
+
+    // A co-shopper changed the product of the row key's line between the
+    // gateway's read and core's: the price, the snapshot and the name sent
+    // describe another product, so none of them is recorded.
+    for (const expectedItemId of [OTHER, null]) {
+      await expect(
+        service.buyForList(request({ expectedItemId }))
+      ).rejects.toBeInstanceOf(ConflictException);
+    }
+    expect(touched).toEqual(['row', 'row']);
+    expect(prepared).toEqual([]);
   });
 
   it('buys the row’s product and names the line by catalog’s name, never the row line’s text', async () => {

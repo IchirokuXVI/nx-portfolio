@@ -128,6 +128,7 @@ describe('the buy for a list route (plan 0273)', () => {
       userId: 'u-actor',
       rowKey: ROW,
       targetListId: LIST,
+      expectedItemId: ITEM,
       quantity: 2,
       unit: 'UNIT',
       content: 'Leche',
@@ -178,6 +179,62 @@ describe('the buy for a list route (plan 0273)', () => {
     expect(w.message()).not.toHaveProperty('content');
     expect(w.message()).not.toHaveProperty('paid', PAID);
     expect(w.message()).not.toHaveProperty('itemId');
+    // Core holds the write to "no product", so a row that gained one since
+    // is a conflict and not a buy with no price.
+    expect(w.message()).toMatchObject({ expectedItemId: null });
+  });
+
+  it('sends the product it priced as expectedItemId, which the body cannot set', async () => {
+    const w = build();
+    const other = '9a1d73b4-e2c6-4a81-b37d-95f80b2c6e4f';
+
+    await w.controller.buyForList(
+      actor(ParticipantKind.REGISTERED, 'u-actor'),
+      BASKET,
+      ROW,
+      body({ expectedItemId: other } as never)
+    );
+
+    expect(w.message()).toMatchObject({ expectedItemId: ITEM });
+    // Nor does the DTO declare it, so the whitelist strips it from a body.
+    const dto = plainToInstance(BuyForListBasketRowDto, {
+      targetListId: LIST,
+      quantity: 1,
+      unit: 'UNIT',
+      expectedItemId: other,
+    });
+    expect(
+      (
+        await validate(dto, { whitelist: true, forbidNonWhitelisted: true })
+      ).map((error) => error.property)
+    ).toEqual(['expectedItemId']);
+  });
+
+  it('surfaces a failed core call as itself, never as a catalog that did not answer', async () => {
+    const w = build();
+    const failure = new Error('core did not answer');
+    const send = jest.fn(async (subject: string) => {
+      if (subject === BASKET_PATTERNS.searchScope) {
+        throw failure;
+      }
+      return { entries: [], progress: {} };
+    });
+    const controller = new BasketController(
+      { send } as never,
+      {} as never,
+      w.prices as never
+    );
+
+    await expect(
+      controller.buyForList(
+        actor(ParticipantKind.REGISTERED, 'u-actor'),
+        BASKET,
+        ROW,
+        body()
+      )
+    ).rejects.toBe(failure);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(w.prices.choose).not.toHaveBeenCalled();
   });
 
   it('carries the lineId it was given and no name when catalog did not answer', async () => {

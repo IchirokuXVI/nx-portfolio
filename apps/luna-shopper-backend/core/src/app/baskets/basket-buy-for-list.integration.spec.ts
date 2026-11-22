@@ -395,6 +395,7 @@ describeIntegration('a buy for a list that did not ask (real Postgres)', () => {
       userId: w.userId,
       rowKey: w.milk.id,
       targetListId: w.other,
+      expectedItemId: MILK,
       quantity: 2,
       unit: 'UNIT',
       content: 'Whole milk',
@@ -623,6 +624,54 @@ describeIntegration('a buy for a list that did not ask (real Postgres)', () => {
       BasketLineAlreadyInRowException
     );
     expect(await settlementsOnList(w.asking)).toBe(0);
+  });
+
+  it('answers basket_line_already_in_row before the unit, for an entry sent in another unit (spec 3)', async () => {
+    const w = await world();
+
+    await expect(
+      buy(w, { targetListId: w.asking, lineId: w.milk.id, unit: 'GRAM' })
+    ).rejects.toBeInstanceOf(BasketLineAlreadyInRowException);
+    expect(await settlementsOnList(w.asking)).toBe(0);
+  });
+
+  it('answers "Line not found" and writes nothing for a lineId on another list (spec 2)', async () => {
+    const w = await world();
+    const elsewhere = await world();
+
+    await expect(buy(w, { lineId: elsewhere.milk.id })).rejects.toMatchObject({
+      code: 'not_found',
+      message: 'Line not found',
+    });
+    expect(await linesOf(w.other)).toHaveLength(0);
+    expect(await settlementsOnList(w.other)).toBe(0);
+    expect(await standingOf(elsewhere.milk.id)).toHaveLength(0);
+    expect(emitted).toEqual([]);
+  });
+
+  it('refuses a lineId whose line does not hold the row’s product and writes nothing (spec 2)', async () => {
+    const w = await world();
+    const bread = await line(w.other, w.userId, 0, [randomUUID()], 'Bread');
+
+    await expect(buy(w, { lineId: bread.id })).rejects.toMatchObject({
+      code: 'validation_failed',
+    });
+    expect((await linesOf(w.other)).map((row) => row.id)).toEqual([bread.id]);
+    expect(await settlementsOnList(w.other)).toBe(0);
+    expect(emitted).toEqual([]);
+  });
+
+  it('answers 409 conflict and writes nothing when the row holds another product than the gateway priced', async () => {
+    const w = await world();
+
+    // The gateway priced and named another product; the row key's line holds
+    // milk by the time core reads it.
+    await expect(
+      buy(w, { expectedItemId: randomUUID() })
+    ).rejects.toMatchObject({ code: 'conflict' });
+    expect(await linesOf(w.other)).toHaveLength(0);
+    expect(await settlementsOnList(w.other)).toBe(0);
+    expect(emitted).toEqual([]);
   });
 
   it('refuses a guest and writes nothing (spec 4)', async () => {

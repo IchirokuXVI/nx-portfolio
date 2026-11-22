@@ -14,6 +14,7 @@ import {
   BasketFinishedException,
   BasketLineAlreadyInRowException,
   BasketRowHasNoProductException,
+  ConflictException,
   ForbiddenException,
   isUuid,
   NotFoundException,
@@ -138,6 +139,14 @@ export class BasketBuyForListService {
         'This row has no product, so it cannot be bought for another list'
       );
     }
+    // The gateway priced and named the product it read a moment ago. A row
+    // that holds another by now would record that price and that name on
+    // this product, so nothing is written and the client reads the row again.
+    if (itemId !== (req.expectedItemId ?? null)) {
+      throw new ConflictException(
+        'Somebody else changed this while you were looking at it'
+      );
+    }
 
     const paid = paidColumns(req.paid, SettlementOutcome.BOUGHT);
     const itemSnapshot = itemSnapshotColumn(req.itemSnapshot);
@@ -174,10 +183,10 @@ export class BasketBuyForListService {
         // below belongs to the buy and to the `line.settled` after it.
         created = found.created ? { ...found.line } : null;
       }
-      assertLineUnit(line, unit);
       // A line that is already an entry is bought with the plain settle, so
       // the client is told to use it. Asked under the line's lock and through
-      // this transaction's connection, by the statement the read draws with.
+      // this transaction's connection, by the statement the read draws with,
+      // and before the unit, so the answer names the gesture to use.
       if (
         created === null &&
         (await isEntryOf(manager, opened, scope, line.id))
@@ -186,6 +195,7 @@ export class BasketBuyForListService {
           'That line is already on the row, so the buy is a settle'
         );
       }
+      assertLineUnit(line, unit);
 
       // A buy is a change of the line, as a settle's is even on a line at
       // zero (`basket-settle.service.ts`), so every event after it carries a

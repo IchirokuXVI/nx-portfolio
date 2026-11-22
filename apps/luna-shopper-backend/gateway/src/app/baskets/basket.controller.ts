@@ -457,7 +457,7 @@ export class BasketController {
   }
 
   /**
-   * `basket.searchScope` for a settle or a buy, or null when core could not
+   * `basket.searchScope` for a settle, or null when core could not
    * say whose basket this is: there is no owner to price as, and the write
    * itself is about to ask core the same question and will fail or succeed on
    * its own terms. With `lineIds`, the answer's `pick` is the product those
@@ -526,7 +526,10 @@ export class BasketController {
    * body names none, because this write can make a line on another
    * household's list. The gateway learns it as a settle that names no
    * product does, from `basket.searchScope` with the row key's line, and core
-   * reads it again from the row and refuses a row with no product.
+   * reads it again from the row and refuses a row with no product. The
+   * product priced here rides the message as `expectedItemId`, and a row that
+   * holds another by the time core reads it answers 409 `conflict`, so the
+   * client reads the row again and retries.
    *
    * The price and the name are read as for a settle, as the basket's owner.
    * The name is catalog's, in the reader's language or else any it holds, and
@@ -569,15 +572,22 @@ export class BasketController {
   ): Promise<BasketRowResult> {
     const userId = requireAccount(participant);
     // The row's product, read off the row key's line. A row with no product
-    // prices nothing here, and core answers `basket_row_has_no_product`.
-    const scope = await this.searchScopeOf(id, participant, [rowKey]);
-    const itemId =
-      scope === null ? undefined : pricedItemId(undefined, scope.pick);
+    // prices nothing here, and core answers `basket_row_has_no_product`. Not
+    // through `searchScopeOf`: a core that cannot answer this is a failed core
+    // call, as on every other route here, and never a catalog that was silent.
+    const scopeReq: BasketSearchScopeRequest = {
+      basketId: id,
+      participantId: participant.participantId,
+      lineIds: [rowKey],
+    };
+    const scope = await this.nats.send<BasketSearchScope>(
+      BASKET_PATTERNS.searchScope,
+      scopeReq
+    );
+    const itemId = pricedItemId(undefined, scope.pick);
     // Beside each other and under one budget each, as on a settle.
     const [chosen] = await Promise.all([
-      scope === null || itemId === undefined
-        ? NOTHING_CHOSEN
-        : this.choiceIn(scope, itemId, dto),
+      itemId === undefined ? NOTHING_CHOSEN : this.choiceIn(scope, itemId, dto),
       // The basket's add checks the unit of a line it can make, and so does
       // this when it names no line. A named line keeps its own unit, which
       // core holds the buy to.
@@ -593,15 +603,15 @@ export class BasketController {
       rowKey,
       targetListId: dto.targetListId,
       ...(dto.lineId ? { lineId: dto.lineId } : {}),
+      // The product priced and named above, built here and never read from
+      // the body. Core refuses the write when the row holds another by then.
+      expectedItemId: itemId ?? null,
       quantity: dto.quantity,
       unit: dto.unit,
       ...(content ? { content } : {}),
       // Core turns this into 503 `catalog_unavailable` when it must make the
-      // line, and into nothing when the list already holds one. A scope core
-      // could not give left catalog unasked, which is no answer either.
-      ...(scope === null || chosen.unanswered
-        ? { catalogUnanswered: true }
-        : {}),
+      // line, and into nothing when the list already holds one.
+      ...(chosen.unanswered ? { catalogUnanswered: true } : {}),
       paid: chosen.paid ?? undefined,
       ...(chosen.itemSnapshot ? { itemSnapshot: chosen.itemSnapshot } : {}),
     };

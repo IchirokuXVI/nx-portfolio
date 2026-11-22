@@ -96,7 +96,14 @@ a participant with an account who may write to that list.
      budget runs out, it fails, or no reply comes) is not a product with no name: when a line
      must be made, the route answers 503 `catalog_unavailable`, which tells the client to try
      again, and writes nothing. A buy on a line the list already holds needs no name and goes
-     on without catalog.
+     on without catalog. A core that does not answer the gateway's read of the row's product
+     is a failed core call, answered as any other on the controller, and never
+     `catalog_unavailable`.
+   - **The product the gateway priced** rides the message as `expectedItemId`, which the
+     gateway builds and the body cannot set. Core reads the row's product again, and when it
+     is another (a co-shopper changed the row between the two reads) answers 409 `conflict`
+     and writes nothing, so a price, a snapshot and a name are never recorded on the wrong
+     product. The client reads the row again and retries.
    - Insert one `line_settlements` row, `BOUGHT`, with the quantity, `applied = 0` (backend
      `0274`), the price columns and the snapshot exactly as a settle writes them, and leave
      the line's quantity at 0.
