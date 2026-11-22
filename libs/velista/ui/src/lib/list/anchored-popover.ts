@@ -1,15 +1,23 @@
 import {
   CdkConnectedOverlay,
-  type CdkOverlayOrigin,
+  CdkOverlayOrigin,
+  type ConnectedOverlayPositionChange,
   type ConnectedPosition,
   type FlexibleConnectedPositionStrategyOrigin,
 } from '@angular/cdk/overlay';
+import { DOCUMENT, NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
+  ElementRef,
+  inject,
   input,
+  linkedSignal,
   output,
+  signal,
+  viewChild,
 } from '@angular/core';
 
 /** Why an {@link AnchoredPopover} asked to close. */
@@ -103,6 +111,124 @@ const CENTER: ConnectedPosition[] = [
 const VIEWPORT_MARGIN = 16;
 
 /**
+ * How far a popover with a pointer keeps off the edge of what it must not cover
+ * (velista `0206`): 12 px, as the board `compact-reel/OverBought.dc.html` draws it,
+ * so the pointer's tip lands 3 to 4 px off that edge. The pointer's own size and
+ * how far it stands out are in `anchored-popover.scss`.
+ */
+const POINTER_GAP = 12;
+
+/** A box on the screen, in the viewport's pixels. */
+interface Box {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+type Origin = CdkOverlayOrigin | FlexibleConnectedPositionStrategyOrigin;
+
+/** The element an origin stands for, when it is one. A point has none. */
+function elementOf(origin: Origin): Element | null {
+  if (origin instanceof CdkOverlayOrigin) {
+    return origin.elementRef.nativeElement;
+  }
+  if (origin instanceof ElementRef) {
+    return origin.nativeElement as Element;
+  }
+  if (origin instanceof Element) {
+    return origin;
+  }
+  return null;
+}
+
+/** Where an origin is on the screen now. */
+function boxOf(origin: Origin): Box {
+  const element = elementOf(origin);
+  if (element) {
+    const rect = element.getBoundingClientRect();
+    return {
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height,
+    };
+  }
+  const point = origin as {
+    x: number;
+    y: number;
+    width?: number;
+    height?: number;
+  };
+  return {
+    left: point.x,
+    top: point.y,
+    width: point.width ?? 0,
+    height: point.height ?? 0,
+  };
+}
+
+/**
+ * The two places of a popover with a pointer (velista `0206`): wholly above or
+ * wholly below, `POINTER_GAP` off the element it keeps in sight, or off the anchor
+ * when there is none. When there is a row to keep in sight, the places are held
+ * against the row, so the gap is measured from its edge, and the anchor's position
+ * inside the row becomes a horizontal offset: `start` keeps the inset of `START`
+ * from the anchor's start edge, `center` sits over the anchor's middle, and `end`
+ * lines up with the row's end, as the board draws it.
+ */
+function pointedPositions(
+  align: AnchoredPopoverAlign,
+  side: AnchoredPopoverSide,
+  anchor: Box,
+  row: Box | null
+): ConnectedPosition[] {
+  const inset = START[0].offsetX ?? 0;
+  let x: Pick<ConnectedPosition, 'originX' | 'overlayX' | 'offsetX'>;
+  if (align === 'end') {
+    x = { originX: 'end', overlayX: 'end' };
+  } else if (row === null) {
+    x =
+      align === 'center'
+        ? { originX: 'center', overlayX: 'center' }
+        : { originX: 'start', overlayX: 'start', offsetX: inset };
+  } else if (align === 'center') {
+    x = {
+      originX: 'start',
+      overlayX: 'center',
+      offsetX: anchor.left + anchor.width / 2 - row.left,
+    };
+  } else {
+    x = {
+      originX: 'start',
+      overlayX: 'start',
+      offsetX: anchor.left - row.left + inset,
+    };
+  }
+  const above: ConnectedPosition = {
+    ...x,
+    originY: 'top',
+    overlayY: 'bottom',
+    offsetY: -POINTER_GAP,
+  };
+  const below: ConnectedPosition = {
+    ...x,
+    originY: 'bottom',
+    overlayY: 'top',
+    offsetY: POINTER_GAP,
+  };
+  return side === 'below' ? [below, above] : [above, below];
+}
+
+/** Two position lists that say the same thing, so a scroll hands the overlay nothing new. */
+function samePositions(
+  a: ConnectedPosition[],
+  b: ConnectedPosition[]
+): boolean {
+  return a === b || JSON.stringify(a) === JSON.stringify(b);
+}
+
+/**
  * A small popover held against an element on the page, with whatever the container
  * puts in it (velista `0110`).
  *
@@ -119,30 +245,53 @@ const VIEWPORT_MARGIN = 16;
  */
 @Component({
   selector: 'lib-anchored-popover',
-  imports: [CdkConnectedOverlay],
+  imports: [CdkConnectedOverlay, NgTemplateOutlet],
   template: `
     <ng-template
       (detach)="closed.emit('detach')"
       (overlayKeydown)="onKey($event)"
       (overlayOutsideClick)="closed.emit('outside')"
+      (positionChange)="onPosition($event)"
       [cdkConnectedOverlayOpen]="open()"
-      [cdkConnectedOverlayOrigin]="origin()"
+      [cdkConnectedOverlayOrigin]="overlayOrigin()"
       [cdkConnectedOverlayPositions]="positions()"
-      [cdkConnectedOverlayPush]="push()"
+      [cdkConnectedOverlayPush]="push() && !pointer()"
       [cdkConnectedOverlayUsePopover]="'inline'"
-      [cdkConnectedOverlayViewportMargin]="push() ? viewportMargin : 0"
+      [cdkConnectedOverlayViewportMargin]="
+        push() || pointer() ? viewportMargin : 0
+      "
       cdkConnectedOverlay
     >
       <div
         [attr.aria-labelledby]="labelledBy()"
         [attr.role]="role()"
+        [class.accent]="accent()"
         [class.choice]="frame() === 'choice'"
         [class.hint]="frame() === 'hint'"
+        [class.pointed]="pointer()"
+        #pop
         class="pop"
       >
-        <ng-content />
+        @if (pointer()) {
+          <span
+            [class.down]="appliedSide() === 'below'"
+            [class.up]="appliedSide() === 'above'"
+            [style.left.px]="pointerLeft()"
+            #pointerMark
+            aria-hidden="true"
+            class="ptr"
+          ></span>
+        }
+        @if (pointer() && frame() === 'choice') {
+          <div class="clip">
+            <ng-container [ngTemplateOutlet]="content" />
+          </div>
+        } @else {
+          <ng-container [ngTemplateOutlet]="content" />
+        }
       </div>
     </ng-template>
+    <ng-template #content><ng-content /></ng-template>
   `,
   styleUrl: './anchored-popover.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -187,17 +336,151 @@ export class AnchoredPopover {
    */
   readonly push = input(false);
 
+  /**
+   * Whether it points at its anchor (velista `0206`): for a popover about one
+   * control, so it cannot be taken for another row's. It then opens wholly above or
+   * wholly below, never pushed over the anchor, and {@link push} is ignored. Off,
+   * it draws, sits and behaves as it always has.
+   */
+  readonly pointer = input(false);
+
+  /**
+   * An element that holds the anchor, such as its row, which a popover with a
+   * pointer must not cover either (velista `0206`). The gap is measured from its
+   * edge, and `align` `end` lines up with its end. Read only with {@link pointer}.
+   */
+  readonly keepInSight = input<Element | null>(null);
+
+  /**
+   * Draws its border, and its pointer's, in the colour the caller sets on
+   * `--anchored-popover-accent` (velista `0206`). No fill changes.
+   */
+  readonly accent = input(false);
+
   /** It wants to close, and why. */
   readonly closed = output<AnchoredPopoverClose>();
 
   protected readonly viewportMargin = VIEWPORT_MARGIN;
 
-  protected readonly positions = computed(() => {
+  private readonly document = inject(DOCUMENT);
+
+  private readonly popRef = viewChild<ElementRef<HTMLElement>>('pop');
+
+  private readonly pointerRef =
+    viewChild<ElementRef<HTMLElement>>('pointerMark');
+
+  /** Bumped when the page scrolls or resizes, so the places are measured again. */
+  private readonly layout = signal(0);
+
+  /**
+   * The side the overlay put it on, which the pointer follows. The side that was
+   * asked for is its first guess each time it opens, until the overlay says.
+   */
+  protected readonly appliedSide = linkedSignal<AnchoredPopoverSide>(() => {
+    this.open();
+    return this.side();
+  });
+
+  /** The pointer's start edge inside the popover's border, in pixels. */
+  protected readonly pointerLeft = signal(0);
+
+  protected readonly overlayOrigin = computed<Origin>(() => {
+    const row = this.pointer() ? this.keepInSight() : null;
+    return row ?? this.origin();
+  });
+
+  private readonly plainPositions = computed(() => {
     const align = this.align();
     const positions =
       align === 'end' ? END : align === 'center' ? CENTER : START;
     return this.side() === 'below' ? [...positions].reverse() : positions;
   });
+
+  private readonly pointedPositions = computed(
+    () => {
+      // Measured when it opens and after a scroll or a resize: the anchor's place
+      // inside its row is what the horizontal offset is made of.
+      this.open();
+      this.layout();
+      const row = this.keepInSight();
+      return pointedPositions(
+        this.align(),
+        this.side(),
+        boxOf(this.origin()),
+        row ? boxOf(row) : null
+      );
+    },
+    { equal: samePositions }
+  );
+
+  protected readonly positions = computed(() =>
+    this.pointer() ? this.pointedPositions() : this.plainPositions()
+  );
+
+  constructor() {
+    // While a popover with a pointer is open, a scroll or a resize places the
+    // pointer again over the anchor's middle.
+    effect((onCleanup) => {
+      const view = this.document.defaultView;
+      if (!this.open() || !this.pointer() || !view) {
+        return;
+      }
+      let frame = 0;
+      const again = (): void => {
+        if (frame) {
+          return;
+        }
+        frame = view.requestAnimationFrame(() => {
+          frame = 0;
+          this.layout.update((count) => count + 1);
+          this.placePointer();
+        });
+      };
+      view.addEventListener('scroll', again, { capture: true, passive: true });
+      view.addEventListener('resize', again, { passive: true });
+      onCleanup(() => {
+        view.removeEventListener('scroll', again, { capture: true });
+        view.removeEventListener('resize', again);
+        if (frame) {
+          view.cancelAnimationFrame(frame);
+        }
+      });
+    });
+  }
+
+  /** The overlay placed it: the pointer turns to face the anchor and moves over it. */
+  protected onPosition(change: ConnectedOverlayPositionChange): void {
+    this.appliedSide.set(
+      change.connectionPair.overlayY === 'bottom' ? 'above' : 'below'
+    );
+    this.placePointer();
+  }
+
+  /**
+   * Puts the pointer's centre on the anchor's horizontal centre, held to the
+   * straight part of the edge: the edge less the corner's radius and half the
+   * pointer at each end.
+   */
+  private placePointer(): void {
+    const pop = this.popRef()?.nativeElement;
+    if (!this.pointer() || !pop) {
+      return;
+    }
+    const anchor = boxOf(this.origin());
+    const box = pop.getBoundingClientRect();
+    const half = (this.pointerRef()?.nativeElement.offsetWidth ?? 0) / 2;
+    const radius =
+      parseFloat(
+        this.document.defaultView?.getComputedStyle(pop)
+          .borderBottomLeftRadius ?? ''
+      ) || 0;
+    const low = radius + half;
+    const high = box.width - radius - half;
+    const wanted = anchor.left + anchor.width / 2 - box.left;
+    const centre =
+      high < low ? box.width / 2 : Math.min(Math.max(wanted, low), high);
+    this.pointerLeft.set(centre - pop.clientLeft - half);
+  }
 
   /** Escape closes it, and the keypress goes no further. */
   protected onKey(event: KeyboardEvent): void {
