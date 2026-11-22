@@ -1,6 +1,8 @@
 import {
   composeListView,
   DEFAULT_LIST_VIEW_STATE,
+  lineRowFacts,
+  priceWordsText,
   type CatalogItem,
   type Line,
   type ListPageState,
@@ -9,6 +11,8 @@ import {
   type ShoppingListSummary,
 } from '@portfolio/velista/models';
 import { formatMoney } from '@portfolio/velista/platform';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   actionsFor,
   editScopeFor,
@@ -275,6 +279,9 @@ describe('selectListState', () => {
     /** A price as the row draws it: the reader's money, with its own spaces. */
     const money = (amount: number): string => formatMoney(amount, 'EUR', 'es');
 
+    /** The basis of a price of one (velista 0198), as the key translator answers it. */
+    const PER_UNIT = 'list.row.perUnit';
+
     function item(
       id: string,
       es: string,
@@ -425,7 +432,7 @@ describe('selectListState', () => {
         imageUrl: null,
         favorite: false,
         others: 0,
-        price: { amount: money(0.92), per: null },
+        price: { amount: money(0.92), per: PER_UNIT },
         brand: 'Hacendado',
         size: '1 L',
         // Formatted by the catalog the spec hands in, which spaces with a plain space.
@@ -441,7 +448,7 @@ describe('selectListState', () => {
           expect.objectContaining({
             brand: 'Hacendado',
             size: '1 L',
-            price: { amount: money(0.92), per: null },
+            price: { amount: money(0.92), per: PER_UNIT },
             total: { amount: '1,84 €', estimated: false },
           })
         );
@@ -493,7 +500,7 @@ describe('selectListState', () => {
         expect(row.product).toEqual(
           expect.objectContaining({
             size: '~1,56 kg',
-            price: { amount: money(20.94), per: null },
+            price: { amount: money(20.94), per: PER_UNIT },
             total: { amount: '62,82 €', estimated: true },
           })
         );
@@ -581,7 +588,7 @@ describe('selectListState', () => {
         expect(row.product).toEqual(
           expect.objectContaining({
             itemId: 'cheese',
-            price: { amount: money(20.94), per: null },
+            price: { amount: money(20.94), per: PER_UNIT },
           })
         );
       });
@@ -631,10 +638,84 @@ describe('selectListState', () => {
           expect.objectContaining({
             itemId: 'cheese',
             name: null,
-            price: { amount: money(20.94), per: null },
+            price: { amount: money(20.94), per: PER_UNIT },
           })
         );
       });
+    });
+
+    describe('a price of one reads "/ u" (velista 0198)', () => {
+      function priceOf(lineOverrides: Partial<Line>) {
+        const row = rowOf(lineOverrides);
+        return row.product?.kind === 'shown' ? row.product.price : undefined;
+      }
+
+      it('gives a pack "/ u", a product by the kilo "/ kg" and a kilo piece "/ u"', () => {
+        expect(priceOf({ content: 'Leche', itemIds: ['milk'] })).toEqual({
+          amount: money(0.92),
+          per: PER_UNIT,
+        });
+        expect(
+          priceOf({
+            content: 'Manzanas',
+            itemIds: ['apples'],
+            quantity: 750,
+            unit: 'GRAM',
+          })
+        ).toEqual({ amount: money(2.49), per: 'catalog.per.KILOGRAM' });
+        expect(
+          priceOf({ content: 'Queso', itemIds: ['cheese'], unit: 'UNIT' })
+        ).toEqual({ amount: money(20.94), per: PER_UNIT });
+      });
+
+      it('gives a product with no price no basis either', () => {
+        expect(priceOf({ content: 'Pilas', itemIds: ['battery'] })).toBeNull();
+      });
+
+      it('leaves the piece price bare on a line that counts grams, which is not what it is per', () => {
+        expect(
+          priceOf({
+            content: 'Queso',
+            itemIds: ['cheese'],
+            quantity: 1500,
+            unit: 'GRAM',
+          })
+        ).toEqual({ amount: money(20.94), per: null });
+      });
+
+      it('reads "/ u" after the price in both layouts and in the accessible name', () => {
+        const row = rowOf(
+          { content: 'Leche', itemIds: ['milk'], quantity: 2 },
+          {
+            catalog: catalog({
+              translate: (key) => (key === PER_UNIT ? '/ u' : key),
+            }),
+          }
+        );
+        if (row.product?.kind !== 'shown' || row.product.price === null) {
+          throw new Error('expected a priced product');
+        }
+        const facts = lineRowFacts(row.product);
+
+        // The row of today draws `price.per` after the amount; the compact row's
+        // second fact is the same words; both names join them with a space.
+        expect(row.product.price).toEqual({ amount: money(0.92), per: '/ u' });
+        expect(facts.unitPrice).toEqual(row.product.price);
+        expect(priceWordsText(row.product.price)).toBe(`${money(0.92)} / u`);
+      });
+
+      for (const locale of ['en', 'es']) {
+        it(`reads "/ u" in ${locale}.json`, () => {
+          const json = JSON.parse(
+            readFileSync(
+              join(__dirname, '../../../ui/assets/i18n', `${locale}.json`),
+              'utf8'
+            )
+          ) as { list: { row: { perUnit: string } } };
+
+          expect(json.list.row.perUnit).toBe('/ u');
+        });
+      }
     });
 
     it('shows the cheapest of several products, and counts the others', () => {
@@ -647,7 +728,7 @@ describe('selectListState', () => {
         expect.objectContaining({
           itemId: 'milk',
           others: 2,
-          price: { amount: money(0.92), per: null },
+          price: { amount: money(0.92), per: PER_UNIT },
         })
       );
     });
@@ -664,7 +745,7 @@ describe('selectListState', () => {
           itemId: 'oat',
           favorite: true,
           others: 1,
-          price: { amount: money(2.15), per: null },
+          price: { amount: money(2.15), per: PER_UNIT },
         })
       );
     });

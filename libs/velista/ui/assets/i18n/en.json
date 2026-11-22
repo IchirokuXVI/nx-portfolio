@@ -1221,7 +1221,8 @@
       "pickFor": "For {{name}}",
       "failed": "The products on this list did not load.",
       "retry": "Try again",
-      "about": "about {{price}}"
+      "about": "about {{price}}",
+      "perUnit": "/ u"
     },
     "dropped": {
       "quantity": {
