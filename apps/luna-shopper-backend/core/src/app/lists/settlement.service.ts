@@ -203,6 +203,10 @@ export class SettlementService {
         req.outcome === SettlementOutcome.BOUGHT
           ? Math.max(0, line.quantity - quantity)
           : line.quantity;
+      // The units that lowered the line (plan 0274, section 2), read before
+      // the line moves. A buy made here names no basket, so no basket's ask
+      // reads it, and it is recorded the same way a basket's buy is.
+      const applied = line.quantity - remaining;
 
       if (remaining !== line.quantity) {
         const before = line.quantity;
@@ -232,6 +236,7 @@ export class SettlementService {
           itemId,
           outcome: req.outcome,
           quantity,
+          applied,
           // What `quantity` counts, the line's (plan 0246, section 3.5).
           unit: line.unit ?? 'UNIT',
           settledByUserId: req.userId,

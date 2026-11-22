@@ -202,7 +202,8 @@ describeIntegration(
         context,
         lines,
         listAccess,
-        events as never
+        events as never,
+        dataSource
       );
     });
 
@@ -536,6 +537,8 @@ describeIntegration(
           itemId: null,
           outcome: SettlementOutcome.BOUGHT,
           quantity: 3,
+          // The line was at 0, so none of it met an ask (plan 0274).
+          applied: 0,
           settledByUserId: a.userId,
           settledByParticipantId: null,
           settledAt: new Date(),

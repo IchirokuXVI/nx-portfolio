@@ -90,6 +90,9 @@ function bought(
     id: `s-${seq}`,
     outcome: SettlementOutcome.BOUGHT,
     quantity,
+    // Every unit met the ask unless a spec says otherwise (plan 0274), which
+    // is what every buy written before that plan reads as.
+    applied: over.quantity ?? quantity,
     settledAt: new Date(2026, 0, 1, 10, 0, seq),
     settledByParticipantId: 'p1',
     // A buy that named no product, which is a buy of a line with none.

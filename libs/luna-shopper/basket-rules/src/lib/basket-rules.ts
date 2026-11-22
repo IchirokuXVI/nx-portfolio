@@ -73,6 +73,15 @@ export interface BasketRuleEntry {
   left: number;
   /** What this basket bought, in scope. */
   bought: number;
+  /**
+   * How many of {@link bought} met what the list asked (plan 0274, section 3):
+   * the units of those buys that lowered the line. The rest are above the ask.
+   *
+   * Absent is {@link bought}, every unit counted as asked, which is what the
+   * rule was before plan 0274 and what a caller that cannot know the split
+   * still gets. Core always states it.
+   */
+  applied?: number;
   /** What another basket, or none, bought lately. */
   boughtElsewhere: number;
   /** A standing skip of this basket, inside its window. */
@@ -86,7 +95,10 @@ export interface BasketRuleEntry {
 export interface BasketRuleNumbers {
   left: number;
   bought: number;
-  /** `bought + left`. */
+  /**
+   * `left` plus the units of this basket's buys that met the ask (plan 0274).
+   * The units above the ask are `bought - asked + left`, never stored.
+   */
   asked: number;
   boughtElsewhere: number;
   act: BasketRuleAct | null;
@@ -117,7 +129,8 @@ export interface BasketRuleProgress {
  *    that says the shop had none of a thing nobody asks for.
  * 3. **`DONE`**: nothing is left, and this basket bought some of it. Another
  *    basket can have bought the rest: a row that asked for 3 and bought 2 here
- *    is done, and it reads "2 of 2" because `asked` is `bought + left`.
+ *    is done, and it reads "2 of 2" because `asked` is `left` plus the units of
+ *    this basket's buys that met the ask.
  * 4. **`BOUGHT_ELSEWHERE`**: nothing is left, this basket bought none of it,
  *    and somebody else bought some lately (plan 0203, which reversed plan
  *    0188). A row of several lines has it only when nothing is left on any of
@@ -157,18 +170,24 @@ export function rowStateOf(
  * `boughtElsewhere` is in neither `bought` nor `asked`: those units were never
  * this basket's to buy (plan 0188). It is a number that no count uses (plan
  * 0203, section 3).
+ *
+ * **`asked` is `left + applied`** (plan 0274, section 3): what the lists still
+ * ask, plus the units of this basket's buys that met an ask. A buy above the
+ * ask lowers the line only by what it held, so the units above it are in
+ * `bought` and never in `asked`. Before plan 0274 it was `bought + left`, which
+ * is still the answer for an entry that does not state `applied`.
  */
 export function rowNumbersOf(
   entries: readonly BasketRuleEntry[]
 ): BasketRuleNumbers {
-  const { left, bought, boughtElsewhere } = sumsOf(entries);
+  const { left, bought, applied, boughtElsewhere } = sumsOf(entries);
   let act: BasketRuleAct | null = null;
   for (const entry of entries) {
     if (entry.act && (!act || isNewer(entry.act, act))) {
       act = entry.act;
     }
   }
-  return { left, bought, asked: bought + left, boughtElsewhere, act };
+  return { left, bought, asked: left + applied, boughtElsewhere, act };
 }
 
 /**
@@ -354,17 +373,20 @@ function costOf(
 function sumsOf(entries: readonly BasketRuleEntry[]): {
   left: number;
   bought: number;
+  applied: number;
   boughtElsewhere: number;
 } {
   let left = 0;
   let bought = 0;
+  let applied = 0;
   let boughtElsewhere = 0;
   for (const entry of entries) {
     left += entry.left;
     bought += entry.bought;
+    applied += entry.applied ?? entry.bought;
     boughtElsewhere += entry.boughtElsewhere;
   }
-  return { left, bought, boughtElsewhere };
+  return { left, bought, applied, boughtElsewhere };
 }
 
 /**

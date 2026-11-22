@@ -631,7 +631,10 @@ export interface AdminBasketRowView {
   unit: LineUnit;
   left: number;
   bought: number;
-  /** `bought + left`, computed, never stored. */
+  /**
+   * `left` plus the units of this basket's buys that met the ask, computed,
+   * never stored (plan 0274).
+   */
   asked: number;
   /**
    * Every settlement made through this basket on the row's lines, oldest
