@@ -3,8 +3,24 @@ import { By } from '@angular/platform-browser';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import type { DueLineRowVm } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
+import { join } from 'node:path';
+import { compile } from 'sass';
 import { DueLineRow } from './due-line-row';
 import { QuantityStepper } from './quantity-stepper';
+
+/**
+ * The rules of a component's stylesheet as the browser gets them: compiled by the
+ * repo's `sass`, as the contrast spec does, so nesting is flattened and a selector is
+ * matched as it ships, not as it is written. jest's Angular preset does not inline a
+ * `styleUrl`, so the component definition holds no style text to read.
+ */
+function compiledRules(file: string): { selector: string; body: string }[] {
+  const css = compile(join(__dirname, file)).css;
+  return [...css.matchAll(/([^{}]*)\{([^{}]*)\}/g)].map((match) => ({
+    selector: match[1].replace(/\s+/g, ' ').trim(),
+    body: match[2],
+  }));
+}
 
 function row(overrides: Partial<DueLineRowVm> = {}): DueLineRowVm {
   return {
@@ -181,5 +197,36 @@ describe('DueLineRow (velista 0089)', () => {
     press(fixture, 0);
 
     expect(fixture.componentInstance.amount()).toBe(900);
+  });
+});
+
+/**
+ * Velista 0196, target state 5. The due row's two buttons have no row around them that
+ * the browser would highlight, but each would get the blue box of its own: both turn it
+ * off, and the body, which opens the line, draws its own press instead.
+ */
+describe('DueLineRow, the press (velista 0196)', () => {
+  const rules = compiledRules('due-line-row.scss');
+  const body = (selector: string) =>
+    rules.find((rule) => rule.selector === selector)?.body;
+
+  it('turns off the tap highlight on both buttons', () => {
+    for (const button of ['.body', '.add']) {
+      expect(body(button)).toMatch(
+        /-webkit-tap-highlight-color:\s*transparent;/
+      );
+    }
+  });
+
+  it('sinks the body while it is pressed, with no transition', () => {
+    expect(body('.body:active')).toMatch(
+      /background:\s*var\(--app-surface-sunken\);/
+    );
+    expect(
+      rules.some(
+        (rule) =>
+          rule.selector.startsWith('.body') && rule.body.includes('transition')
+      )
+    ).toBe(false);
   });
 });
