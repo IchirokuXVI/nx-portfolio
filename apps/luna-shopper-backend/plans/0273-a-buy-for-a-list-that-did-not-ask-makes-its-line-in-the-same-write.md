@@ -11,7 +11,10 @@
 >
 > This is the backend half of velista `0201`. Velista `0201` cannot be released without it,
 > and it is of no use without velista `0201`: **release them together**, with velista `0200`
-> (see velista `0201`). It needs nothing else of this round.
+> (see velista `0201`) and backend `0274`. Amended on 2026-11-22 after its review: the
+> ask of the line it makes reads 0 only once backend `0274` records how much of an ask each
+> buy met, so spec 7 needs `0274`; the two can be built side by side. It needs nothing else
+> of this round.
 >
 > What already works and is not changed (read on `dev` at `e06813139`):
 > - A buy for one line of a row: `POST /v1/baskets/:id/rows/:rowKey/settle` with
@@ -66,22 +69,32 @@ a participant with an account who may write to that list.
 
 1. **A new route**, `POST /v1/baskets/:id/rows/:rowKey/buy-for-list`, body:
    `targetListId` (uuid), `lineId` (uuid or absent), `quantity` (integer, 1 to
-   `LINE_QUANTITY_MAX`), `unit`, `itemId`, and the optional `priceScopeId` and
-   `supermarketLocationId` a settle carries. 201 with the row as a settle answers it, so the
-   client updates the row from the answer as it does after a settle.
+   `LINE_QUANTITY_MAX`), `unit`, and the optional `priceScopeId` and
+   `supermarketLocationId` a settle carries. **No `itemId`** (amended on 2026-11-22): the
+   product is the row's, read by the server from `rowKey`, because this write creates a line
+   on another household's list and a product other than the row's is never legitimate
+   there. A row with no product answers 409 `basket_row_has_no_product`. 201 with the row
+   as a settle answers it, so the client updates the row from the answer as it does after a
+   settle.
 2. **One transaction**, in core:
    - Refuse a guest (no `userId`) with the same 403 the add uses.
    - Refuse a finished basket, a list the basket does not cover and a list the actor may not
      write to, as the add does.
-   - With `lineId`: lock that line, check it is on `targetListId`, holds `itemId`, and is not
-     an entry of the row (else 409 `basket_line_already_in_row`, so the client uses the
+   - With `lineId`: lock that line, check it is on `targetListId`, holds the row's product,
+     and is not an entry of the row (else 409 `basket_line_already_in_row`, so the client uses the
      plain settle).
    - Without `lineId`: create the line through the same code `LineService.add` uses, with
      quantity 0, the item, the unit and `named: false`, under the list lock. If an add at 0
      would merge onto an existing line of the product, use that line instead of making a
      second one.
-   - Insert one `line_settlements` row, `BOUGHT`, with the quantity, the price columns and the
-     snapshot exactly as a settle writes them, and leave the line's quantity at 0.
+   - **The new line's text** (amended on 2026-11-22) is the catalog product's name in the
+     request's language, else in any language the product has. It is never the text of the
+     row's line or of another list's line: one household may have typed it, and it must not
+     reach another household's list. A product with no name in any language answers 409
+     `basket_product_has_no_name` and writes nothing.
+   - Insert one `line_settlements` row, `BOUGHT`, with the quantity, `applied = 0` (backend
+     `0274`), the price columns and the snapshot exactly as a settle writes them, and leave
+     the line's quantity at 0.
    - Write the change rows a settle and an add write, and publish the same events, after the
      transaction commits.
    Any failure rolls the whole write back: no line, no buy.
@@ -130,7 +143,11 @@ luna slot run of section 2.
 6. A failure inside the transaction after the line was made (a forced error in the
    settlement insert) leaves no line and no settlement.
 7. After the write the row read names the new entry with `asked` 0 and `bought` the
-   quantity, and a following settle and revert with `lineIds: [lineId]` work on it.
+   quantity (with backend `0274` built), and a following settle and revert with
+   `lineIds: [lineId]` work on it.
+8. A row with no product answers 409 `basket_row_has_no_product`; a product with no name in
+   any language answers 409 `basket_product_has_no_name`; the new line's text is the
+   product's name, never the row's line text.
 
 ## 2. Slot check
 

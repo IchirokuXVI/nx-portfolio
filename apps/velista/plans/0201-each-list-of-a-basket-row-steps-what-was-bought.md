@@ -11,6 +11,10 @@
 > buy for a list that did not ask makes its line at an asked amount of 0 (backend `0273`).
 > Guests never see that section.
 >
+> Revised on 2026-11-22 with velista `0200`: the row sheet has one job, recording buys, and
+> says so in a heading ("What you bought" / "Lo que has comprado", or the mock's words).
+> Changing an ask or a product moved to the detailed view of velista `0200`.
+>
 > This was the design of the sheet before velista `0139`: the entries pane of velista `0090`
 > had a "got" reel per list (commit `3b8da1e91`, `row-entries.ts`, output `allocated`),
 > removed by `9f74867a1`. Its revert then took units from the whole row; this plan takes
@@ -20,10 +24,13 @@
 > (`apps/velista/plans/mocks/basket-row-buys/`), with the frames of section 1. Build nothing
 > visible before it is approved.
 >
-> Depends on velista `0200` (the menu and the ask sheet) and on backend `0273` (a buy for a
-> list that did not ask). **Release `0200`, `0201` and backend `0273` together.** Without
-> `0200` the sheet loses the only place to change an ask; without `0273` the section "Add it
-> to another list" cannot record a buy. Velista `0204` later draws these steppers as reels
+> Depends on velista `0200` (the detailed view), backend `0273` (a buy for a list that did
+> not ask) and backend `0274` (a buy records how much of the ask it met). **Release `0200`,
+> `0201` and backends `0273` and `0274` together.** Without `0200` the row sheet loses the
+> only place to change an ask; without `0273` the section "Add it to another list" cannot
+> record a buy; without `0274` the ask moves with every buy above it (a list asking 3 reads
+> "· 4" after a buy of 4), amber can never show, and a minus after such a buy raises the
+> list's ask. Velista `0204` later draws these steppers as reels
 > in the compact view.
 >
 > What the backend already does, read on `dev` at `e06813139` (no change needed):
@@ -95,8 +102,12 @@ it reaches or passes the ask, and make the section "Add it to another list" reco
    up calls `buyForList` with the list, its `lineId` from `productLists` (or none) and the
    quantity. After the answer that list is an entry of the row and leaves the section. The
    section is still never drawn for a guest.
-8. **What goes.** `demandRuns` and `raise` leave the sheet; the ask is changed only through
-   velista `0200`'s ask sheet. "Got all N", "They had none" and "Not today" are unchanged.
+8. **The heading.** The lists of the row sheet sit under a heading that states the sheet's
+   job, "What you bought" / "Lo que has comprado" (the mock's words), with velista `0200`'s
+   "Lists and amounts" button in the same row.
+9. **What goes.** `demandRuns` and `raise` leave the row sheet; the ask is changed only in
+   velista `0200`'s detailed view. "Got all N", "They had none" and "Not today" are
+   unchanged.
 
 ### Scope
 
@@ -113,7 +124,9 @@ it reaches or passes the ask, and make the section "Add it to another list" reco
 
 ### Action boundaries
 
-- Stop if the mock is not approved, or if velista `0200` or backend `0273` is not built.
+- Stop if the mock is not approved, or if velista `0200` or backends `0273` and `0274` are
+  not built (a stand in for their answers is fine while they are being built, and is
+  removed before this plan is marked ready).
 - Stop and ask if the server refuses a settle or a revert of one line for an entry whose
   list the reader was not served.
 
@@ -121,12 +134,14 @@ it reaches or passes the ask, and make the section "Add it to another list" reco
 
 The specs of section 2; `npx nx affected -t lint test`; `npx nx build velista`; a walk on a
 slot with two lists asking 3 and 1 and a third list asking nothing: step the first to 3 and
-see green, to 4 and see amber, back to 2; buy 1 for the third list; read the row history.
+see green, to 4 and see amber with the label still "· 3", back to 3 and see green with the
+label still "· 3", back to 2; buy 1 for the third list and see "· 0" in amber; read the row
+history.
 
 ## 1. Frames the mock must have
 
-1. The row sheet with three lists: one below its ask, one at it (green), one above it
-   (amber), each with "<list> · <ask>".
+1. The row sheet with its "What you bought" heading and three lists: one below its ask, one
+   at it (green), one above it (amber), each with "<list> · <ask>".
 2. "Bought for another list" open, with one list stepped to 1.
 3. A list name long enough to be cut.
 
@@ -142,13 +157,17 @@ see green, to 4 and see amber, back to 2; buy 1 for the third list; read the row
 5. `buyForList` is called with `lineId` null for a list with no line, and the list leaves
    the section after the answer.
 6. A guest sees no "Bought for another list".
+7. With the row's answers as backend `0274` gives them: a list asking 3 stepped to 4 reads
+   "· 3" and amber; a minus back to 3 reads "· 3" and green, and the list's ask on the zone
+   list is still 3; a list made by a buy of 2 reads "· 0" and amber.
 
 ## 3. Acceptance criteria
 
 - The steppers of the sheet record buys per list and never change an ask.
 - A shopper sees when a list's ask is reached, and when it is passed.
+- A list's ask does not move when the shopper buys more than it, or takes those units back.
 
 ## Not in this plan
 
-- The menu and the ask sheet (velista `0200`).
+- The detailed view, the change of an ask and of a product (velista `0200`).
 - The reel in the compact view (velista `0204`).
