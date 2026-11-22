@@ -89,14 +89,14 @@
       "x": 0,
       "y": -330,
       "w": 520,
-      "text": "WHICH PLAN EACH FRAME ANSWERS.\nPicker, Icons and Basket: velista 0202, section 1, frames 1 and 2.\nDefault and Compact: 0202 frame 3, and 0203 frames 1 and 5. The two boards draw the same ten lines, so the rows can be counted side by side.\nReel open: 0203 frame 2 and spec 2.\nDue rows: 0203 frame 3. Product page: 0203 frame 4.\nRow sheet: 0204, the one frame it asks for."
+      "text": "WHICH PLAN EACH FRAME ANSWERS.\nPicker, Icons and Basket: velista 0202, section 1, frames 1 and 2.\nDefault and Compact: 0202 frame 3, and 0203 frames 1 and 5. The two boards draw the same ten lines, so the rows can be counted side by side.\nReel open: 0203 frame 2 and spec 2.\nDue rows: 0203 frame 3. Product page: 0203 frame 4.\nRow sheet: 0204, the one frame it asks for, under the rewritten 0200 and 0201.\nEvery zone list frame draws the header of velista 0205: the list's name, and under it \"in Casa\" / \"en Casa\" in the small muted size, both inside the 64 px block. The head block above the search field has no group line."
     },
     {
       "id": "measure",
       "x": 560,
       "y": -330,
       "w": 520,
-      "text": "MEASURED ON THESE FRAMES.\nThe control: the stepper is 155 by 48, the reel 52 by 40 at rest. A weight widens the pill a little (\"1,5 kg\" about 60 px).\nRoom for words at 390: in the compact row the name and its price share 238 px; the same two line row with the stepper left them 135 px.\nRows: the default row is 99 px, the compact row 68 px. Between the head block and the bar there are about 590 px: six rows and a slice of the seventh in the default view, eight and most of the ninth in the compact one. About 45 percent more rows on a screen."
+      "text": "MEASURED ON THESE FRAMES.\nThe control: the stepper is 155 by 48, the reel 52 by 40 at rest. A weight widens the pill a little (\"1,5 kg\" about 60 px).\nRoom for words at 390: in the compact row the name and its price share 238 px; the same two line row with the stepper left them 135 px.\nRows: the default row is 99 px, the compact row 68 px. Between the search field and the bar there are 629 px, now that the group line sits in the header (velista 0205): six rows and a third of the seventh in the default view, nine and a quarter in the compact one. About 45 percent more rows on a screen."
     },
     {
       "id": "choose",
@@ -138,7 +138,7 @@
       "x": 1840,
       "y": 5510,
       "w": 440,
-      "text": "THE ROW SHEET (0204).\nThe colours of 0201 move onto the reel: the resting number and every number on the tape are green when equal to the list's ask and amber above it. Both pass the contrast floor on the raised surface and on the tape: green 5.5 to 1 and amber 4.9 to 1 on Day, both above 8 to 1 on Night.\nThe label is \"<list> · <ask>\", the list name cut first and the ask never. The menu trigger of 0200 stays before each reel. \"Bought for another list\" draws reels too, from 0."
+      "text": "THE ROW SHEET (0204).\nThe colours of 0201 move onto the reel: the resting number and every number on the tape are green when equal to the list's ask and amber above it. Both pass the contrast floor on the raised surface and on the tape: green 5.5 to 1 and amber 4.9 to 1 on Day, both above 8 to 1 on Night.\nThe label is \"<list> · <ask>\", the list name cut first and the ask never. No menu trigger on a row: plan 0200 dropped it. The lists' heading reads \"What you bought\" / \"Lo que has comprado\" (0201), with the text button \"Lists and amounts\" / \"Listas y cantidades\" on its right, which opens the detailed view (0200). \"Bought for another list\" draws reels too, from 0."
     }
   ]
 }

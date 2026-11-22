@@ -1,95 +1,17 @@
 {
-  "title": "Velista: each list of a basket row, its menu and its buys",
-  "lede": "Velista plans <code>0200</code> (a menu per list in the row sheet, and the sheet that changes a list's ask) and <code>0201</code> (each list's stepper records what was bought for that list), with backend <code>0273</code> behind the second. They ship together, so every frame draws the end state of both. Each board shows Day in English on the left and Night in Spanish on the right; the Spanish words are the proposed <code>es</code> keys. Nothing is new in the sheet but the trigger, the menu, the ask after the name and two colours on a number: no container, no tint, no banner. The last row of boards holds the choices, lettered: the default of each is A. The board marked Today is drawn from the source on <code>dev</code>, because the staging test account no longer signs in. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "title": "Velista: a basket row records buys, and a detailed view of its lists",
+  "lede": "Velista plans <code>0201</code> (the row sheet records what was bought for each list) and <code>0200</code> (a detailed view, <code>rows/:rowKey/lists</code>, holds each list's ask and the change of product), with backend <code>0273</code> behind the first. They ship together, so every frame draws the end state of both. Each board shows Day in English on the left and Night in Spanish on the right; the Spanish words are the proposed <code>es</code> keys. The row sheet gains a heading and one text button where \"Change for all lists\" was; the detailed view is a sheet like the shop picker, with the chevron beside its title. No container, no tint, no banner. Two boards are choices, lettered: the default of each is A. The board marked Today is drawn from the source on <code>dev</code>, because the staging test account no longer signs in. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
   "artboards": [
-    {
-      "file": "Today.dc.html",
-      "x": 0,
-      "y": 0,
-      "w": 860,
-      "h": 872,
-      "title": "Today, drawn from source: swap icon, a stepper that asks"
-    },
-    {
-      "file": "TwoLists.dc.html",
-      "x": 940,
-      "y": 0,
-      "w": 860,
-      "h": 872,
-      "title": "0200 frame 1: two lists, one trigger each"
-    },
-    {
-      "file": "MenuOpen.dc.html",
-      "x": 1880,
-      "y": 0,
-      "w": 860,
-      "h": 872,
-      "title": "0200 frame 2: the menu, both choices"
-    },
-    {
-      "file": "MenuOne.dc.html",
-      "x": 2820,
-      "y": 0,
-      "w": 860,
-      "h": 872,
-      "title": "0200 frame 3: one choice, and none"
-    },
-    {
-      "file": "AskSheet.dc.html",
-      "x": 3760,
-      "y": 0,
-      "w": 860,
-      "h": 872,
-      "title": "0200 frame 4: the ask sheet"
-    },
-    {
-      "file": "ThreeLists.dc.html",
-      "x": 0,
-      "y": 1300,
-      "w": 860,
-      "h": 872,
-      "title": "0201 frame 1: under, at and above the ask"
-    },
-    {
-      "file": "OtherList.dc.html",
-      "x": 940,
-      "y": 1300,
-      "w": 860,
-      "h": 872,
-      "title": "0201 frame 2: bought for another list"
-    },
-    {
-      "file": "LongName.dc.html",
-      "x": 1880,
-      "y": 1300,
-      "w": 860,
-      "h": 872,
-      "title": "0201 frame 3: a long name, and a weight"
-    },
-    {
-      "file": "Triggers.dc.html",
-      "x": 0,
-      "y": 2600,
-      "w": 860,
-      "h": 760,
-      "title": "Choice 1: the menu trigger"
-    },
-    {
-      "file": "ItemIcons.dc.html",
-      "x": 940,
-      "y": 2600,
-      "w": 860,
-      "h": 460,
-      "title": "Choice 2: the icon of the second item"
-    },
-    {
-      "file": "Colours.dc.html",
-      "x": 1880,
-      "y": 2600,
-      "w": 860,
-      "h": 760,
-      "title": "Choice 3: how a reached ask shows"
-    }
+    { "file": "Today.dc.html", "x": 0, "y": 0, "w": 860, "h": 872, "title": "Today, drawn from source: swap icon, a stepper that asks" },
+    { "file": "RowSheet.dc.html", "x": 940, "y": 0, "w": 860, "h": 872, "title": "0201 frame 1, 0200 frame 1: what you bought" },
+    { "file": "Guest.dc.html", "x": 1880, "y": 0, "w": 860, "h": 872, "title": "A guest who can change nothing" },
+    { "file": "DetailA.dc.html", "x": 0, "y": 1300, "w": 860, "h": 872, "title": "0200 frame 2, choice A: the ask beside the name" },
+    { "file": "DetailB.dc.html", "x": 940, "y": 1300, "w": 860, "h": 872, "title": "0200 frame 2, choice B: the ask on its own line" },
+    { "file": "DetailAll.dc.html", "x": 1880, "y": 1300, "w": 860, "h": 872, "title": "0200 frame 3: Change for all lists" },
+    { "file": "LongName.dc.html", "x": 0, "y": 2600, "w": 860, "h": 872, "title": "0201 frame 3: a long name in the row sheet" },
+    { "file": "LongDetail.dc.html", "x": 940, "y": 2600, "w": 860, "h": 872, "title": "0200 frame 4: a long name in the detailed view" },
+    { "file": "OtherList.dc.html", "x": 1880, "y": 2600, "w": 860, "h": 872, "title": "0201 frame 2: bought for another list" },
+    { "file": "Colours.dc.html", "x": 0, "y": 3900, "w": 860, "h": 840, "title": "Choice: how a reached ask shows" }
   ],
   "annotations": [
     {
@@ -97,77 +19,70 @@
       "x": 0,
       "y": -250,
       "w": 420,
-      "text": "TODAY.\nEach list has the swap icon in a bordered square, which changes the product of that list's line, and a stepper that changes what the list asks for.\nDrawn from row-entries and the stepper on dev, not photographed: the staging account in tmp/ is refused at sign in, likely since the production copy of 2026-11-19."
+      "text": "TODAY.\nEach list has the swap icon in a bordered square, which changes the product of that list's line, and a stepper that changes what the list asks for.\nDrawn from row-entries and the stepper on dev, not photographed: the staging account no longer signs in."
     },
     {
-      "id": "two",
+      "id": "row",
       "x": 940,
       "y": -250,
       "w": 420,
-      "text": "0200, TARGET STATE 1.\nThe trigger stands where the swap icon was, with no edge, in the muted colour, as the members menu of a group draws it. Its name says the list: Options for Compra semanal.\nIt is drawn 28 px wide and its touch target grows to 44 with a pseudo element over the gap, so the name keeps the room it has today. With a 44 px box, Compra semanal · 3 is cut (see Choice 1, D).\nThe name now carries the ask (0201). The stepper starts at what was bought, 0 here."
+      "text": "0201 TARGET STATES 2, 5, 6, 8; 0200 TARGET STATE 2.\nOne job: the heading says What you bought. Each stepper counts what this basket bought for that list in this trip, and each name carries the list's ask. Compra semanal asks 3, has 1. Básicos asks 2, has 2: green. Cocina asks 1, has 2: amber.\nNo swap icon. Lists and amounts, at the right of the heading, opens the detailed view."
     },
     {
-      "id": "menu",
+      "id": "guest",
       "x": 1880,
       "y": -250,
       "w": 420,
-      "text": "0200, TARGET STATE 2.\nA small menu under the trigger, end aligned, in the top layer: two lines of text, each with a small icon. The swap icon moves into the menu, so the act it named is still recognised.\nWords are not final. EN: Change catalog product, Change requested amount. ES: Cambiar el producto del catálogo, Cambiar la cantidad pedida.\nChoose the second icon in Choice 2."
+      "text": "0200 SPECS 1; 0201 SPECS 6.\nA guest whose lists allow no change of ask or product sees no Lists and amounts, so no page of numbers it can only read. A guest may still record buys, so the steppers stay. Bought for another list is never drawn for a guest."
     },
     {
-      "id": "one",
-      "x": 2820,
-      "y": -250,
-      "w": 420,
-      "text": "0200, SPECS 1.\nBásicos allows one choice, so its menu holds one line. Another list allows neither, so it draws no trigger at all and its stepper keeps the column.\nThe steppers line up on the right in every case, so a row without a trigger only gives its name more room."
-    },
-    {
-      "id": "ask",
-      "x": 3760,
-      "y": -250,
-      "w": 420,
-      "text": "0200, TARGET STATE 3.\nA sheet of its own at rows/:rowKey/ask/:lineId. The title is the list, under it the zone and the line, then one row: Asks for and the typed stepper at the wide sheet size.\nIt saves as it changes, as the stepper does today, so Done only closes it. It opens without focusing the field, so no keyboard covers it until the number is pressed."
-    },
-    {
-      "id": "three",
+      "id": "detail",
       "x": 0,
       "y": 1050,
       "w": 420,
-      "text": "0201, TARGET STATES 2, 5, 6.\nThe stepper counts what this basket bought for that list in this trip. Compra semanal asks 3 and has 1: normal colour. Básicos asks 2 and has 2: the number turns green. Cocina asks 1 and has 2: the number turns amber.\nOnly the number changes. Above the list, Got the other 2 still settles the rest of the row.\nChoose how the colours show in Choice 3."
+      "text": "0200 TARGET STATES 1, 3. CHOOSE A OR B.\nA sheet over the basket, reached from the row sheet; the chevron goes back to it. One larger row per list: name, zone · line, then Bought 2 of 3 in plain text that cannot be pressed. The ask is the only control. Change product opens the change sheet of that list.\nA: the ask stepper sits where the buy stepper sat in the row sheet, so the eye finds the control at the same place. Básicos may change its ask only; Another list may change neither, so its ask is a plain number in the stepper's column.\nWhich letter?"
     },
     {
-      "id": "other",
+      "id": "detailB",
       "x": 940,
       "y": 1050,
       "w": 420,
-      "text": "0201, TARGET STATE 7.\nAdd it to another list becomes Bought for another list. Its steppers start at 0 and a press up records a buy for that list. Despensa is stepped to 1.\nWhen the answer comes back, Despensa becomes a list of the row, Despensa · 0, with its 1 in amber, and leaves this section. A guest never sees the section."
+      "text": "0200 TARGET STATE 3, CHOICE B.\nThe ask gets its own line with a small Asks for at its start and the wider sheet stepper. It names the number outright, at the cost of a taller row: three lists fill most of the screen.\nBought 2 of 3 stays in the name block in both layouts, so the read only number and the editable one never share a line."
+    },
+    {
+      "id": "all",
+      "x": 1880,
+      "y": 1050,
+      "w": 420,
+      "text": "0200 TARGET STATE 4.\nTwo lists may change their product, so Change for all lists closes the heading's row, as it does in the row sheet today. Drawn with layout A."
     },
     {
       "id": "long",
-      "x": 1880,
-      "y": 1050,
-      "w": 420,
-      "text": "0201, TARGET STATE 5.\nThe name gives way first: Compra semanal de la… · 1,5 kg. The ask is never cut. The line under it is cut on its own.\nA product by weight shows the ask in its exact form with the unit, and the stepper shows the figure over kg, as the sheet stepper already does."
-    },
-    {
-      "id": "c1",
       "x": 0,
       "y": 2350,
       "w": 420,
-      "text": "CHOICE 1, THE TRIGGER.\nA: the ellipsis velista already has, bare. B: three bars, a new glyph. C: no icon, the name itself opens the menu with a small chevron, which leaves the most room for the name. D, the louder one: today's bordered square with the ellipsis in it; at 390 px it cuts Compra semanal · 3.\nWhich letter?"
+      "text": "0201 TARGET STATE 5.\nThe name gives way first: Compra semanal de la… · 1,5 kg. The ask is never cut. The line under it is cut on its own.\nA product by weight shows the ask in its exact form with the unit, and the stepper the figure over kg, as the sheet stepper already does."
     },
     {
-      "id": "c2",
+      "id": "longd",
       "x": 940,
       "y": 2350,
       "w": 420,
-      "text": "CHOICE 2, THE ICON OF THE SECOND ITEM.\nThe first item keeps the swap icon it had in the row. A: the list lines icon velista already has. B: a new glyph, plus over minus, the signs of the stepper.\nWhich letter?"
+      "text": "0200 FRAME 4.\nIn the detailed view the name and its zone · line are cut; Bought 0,5 of 1,5 kg and the stepper are not. Drawn with layout A, where the name has the least room."
     },
     {
-      "id": "c3",
+      "id": "other",
       "x": 1880,
       "y": 2350,
       "w": 420,
-      "text": "CHOICE 3, THE COLOURS.\nA: the number only, as the plans say. B: the number and the ask after the name, in the same colour, so the eye joins them. C, the louder one: the number and the capsule's edge, the same 2 px edge an add already draws.\nGreen is the success colour and amber the quiet action colour, in both themes. Which letter?"
+      "text": "0201 TARGET STATE 7.\nAdd it to another list becomes Bought for another list. Its steppers start at 0 and a press up records a buy for that list. Despensa is stepped to 1.\nWhen the answer comes back, Despensa becomes a list of the row, Despensa · 0, with its 1 in amber, and leaves this section."
+    },
+    {
+      "id": "c",
+      "x": 0,
+      "y": 3650,
+      "w": 420,
+      "text": "CHOICE, THE COLOURS.\nA: the number only, as the plans say. B: the number and the ask after the name, in the same colour, so the eye joins them. C, the louder one: the number and the capsule's edge, the same 2 px edge an add already draws.\nGreen is the success colour and amber the quiet action colour, in both themes. Which letter?"
     }
   ]
 }

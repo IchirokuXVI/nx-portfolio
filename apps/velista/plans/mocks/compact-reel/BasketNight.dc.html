@@ -32,12 +32,15 @@
     .hicon { display: flex; margin-right: 8px; color: var(--t); flex: none; }
     .hicon .ic { width: 24px; height: 24px; }
     .title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 1.4; letter-spacing: 0.05em; color: var(--t); }
+    /* velista 0205: an optional subtitle under the title, inside the same 64 px block. */
+    .htext { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+    .htext .title { flex: none; }
+    .hsub { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.4; color: var(--t3); }
     .acts { display: flex; align-items: center; margin-right: -8px; flex: none; }
     .act { position: relative; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 999px; color: var(--t2); flex: none; }
     .act.is-open { background: var(--s); color: var(--t); }
     .act.mark::after { content: ''; position: absolute; inset: 2px; border-radius: 999px; box-shadow: 0 0 0 2px var(--ring); }
     .top { padding: 8px 16px 12px; display: flex; flex-direction: column; gap: 8px; background: var(--g); flex: none; }
-    .ingroup { margin: 0; font-size: 14px; color: var(--t2); }
     .field { display: flex; align-items: center; height: 48px; padding: 0 6px 0 14px; border: 1px solid var(--bs); border-radius: 12px; background: var(--r); font-size: 16px; color: var(--t3); }
     .field > span:first-child { flex: 1; white-space: nowrap; }
     .field .ic { width: 44px; height: 44px; padding: 12px; color: var(--t2); }
@@ -167,7 +170,6 @@
     .ename .nm { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     .ename .ask { flex: none; color: var(--t2); }
     .ewhere { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.4; color: var(--t2); }
-    .emenu { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; color: var(--t3); flex: none; }
     .disc { display: flex; align-items: center; gap: 8px; min-height: 56px; border-bottom: 1px solid var(--b); font-size: 16px; }
     .disc > span:first-child { flex: 1; }
     .disc .ic { color: var(--t2); transform: rotate(180deg); }

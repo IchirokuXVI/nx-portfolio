@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>A long list name is cut first, the ask never; a product by weight</title>
+<title>Row sheet: a long list name is cut first, the ask never; a product by weight</title>
 </head>
 <body>
 <x-dc>
@@ -19,9 +19,8 @@ body { margin: 0; background: #0a0c14; }
   --t: #11141f; --t2: #525a78; --t3: #616a8a;
   --b1: #dde1ed; --b2: #6f7899;
   --act: #ffb454; --on-act: #0a0c14; --q: #8a5a12;
-  --ok: #047857; --danger: #be123c; --focus: #2563eb;
+  --ok: #047857; --focus: #2563eb;
   --scrim: rgba(17, 20, 31, 0.42);
-  --e2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.10);
   --shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
   color-scheme: light;
 }
@@ -30,9 +29,8 @@ body { margin: 0; background: #0a0c14; }
   --t: #f7f8fc; --t2: #c2c8db; --t3: #98a0bb;
   --b1: rgba(255, 255, 255, 0.08); --b2: rgba(255, 255, 255, 0.35);
   --act: #ffb454; --on-act: #0a0c14; --q: #ffb454;
-  --ok: #34d399; --danger: #fb7185; --focus: #60a5fa;
+  --ok: #34d399; --focus: #60a5fa;
   --scrim: rgba(10, 12, 20, 0.74);
-  --e2: inset 0 1px 0 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(10, 12, 20, 0.55);
   --shadow: 0 -18px 40px rgba(10, 12, 20, 0.42);
   color-scheme: dark;
 }
@@ -57,36 +55,30 @@ body { margin: 0; background: #0a0c14; }
 .sub { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
 .happened { margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
 
+/* a sheet reached from another sheet: the chevron beside the title (shop-picker-sheet) */
+.shead { display: flex; align-items: center; gap: 4px; margin-left: -10px; }
+.back { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; background: transparent; color: var(--t2); }
+.back i { width: 24px; height: 24px; display: flex; }
+.shead .title { flex: 1; min-width: 0; }
+.shead + .sub { margin-top: 0; }
+
 /* row entries */
 .entries { margin-top: 8px; }
 .head { display: flex; align-items: center; gap: 8px; min-height: 44px; border-bottom: 1px solid var(--b1); }
 .head h3 { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 600; color: var(--t2); }
-.all { flex: none; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+.all { flex: none; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); white-space: nowrap; }
 .rows { margin: 0; padding: 0; list-style: none; }
 .row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 4px 0; border-bottom: 1px solid var(--b1); }
-.row.tight { gap: 4px; }
 .lbl { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .nm { display: flex; min-width: 0; font-size: 16px; line-height: 1.5; color: var(--t); white-space: nowrap; }
 .nmt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ask { flex: none; white-space: pre; color: var(--t2); font-variant-numeric: tabular-nums; }
 .wh { overflow: hidden; font-size: 12px; line-height: 1.5; color: var(--t2); text-overflow: ellipsis; white-space: nowrap; }
-.nm.trig { align-items: center; }
-.nm.trig .chev { flex: none; width: 16px; height: 16px; margin-left: 4px; color: var(--t2); display: flex; }
-.nm.trig.open .chev { transform: rotate(180deg); }
+.got { font-size: 14px; line-height: 1.5; color: var(--t2); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* today's Change: the swap icon in a bordered square */
 .change { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--b1); border-radius: 12px; background: var(--r); color: var(--t); }
 .change i { width: 20px; height: 20px; display: flex; }
-/* the menu trigger, as member-row draws it: no edge, the muted colour */
-.trigger { position: relative; z-index: 0; flex: none; width: 28px; height: 44px; margin-right: -4px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--t3); }
-.trigger i { width: 20px; height: 20px; display: flex; }
-.trigger::after { content: ''; position: absolute; top: 0; bottom: 0; left: -8px; right: -8px; }
-.trigger.on { color: var(--t); }
-.trigger.on::before { content: ''; position: absolute; left: -4px; right: -4px; top: 4px; bottom: 4px; border-radius: 999px; background: var(--s); z-index: -1; }
-.trigger i { position: relative; }
-.trigger.boxed { width: 44px; margin-right: 0; border: 1px solid var(--b1); border-radius: 12px; background: var(--r); color: var(--t); }
-.trigger.boxed.on { background: var(--s); }
-.trigger.boxed::after, .trigger.boxed.on::before { display: none; }
 
 /* the stepper (quantity-stepper, the owner's D3 Outline) */
 .stp { flex: none; display: inline-grid; grid-template-columns: 48px 72px 48px; height: 48px; border-radius: 999px; background: var(--r); box-shadow: inset 0 0 0 1px var(--b2); }
@@ -107,14 +99,19 @@ body { margin: 0; background: #0a0c14; }
 .stp.ring-over { box-shadow: inset 0 0 0 2px var(--q); }
 .ask.reached { color: var(--ok); }
 .ask.over { color: var(--q); }
-.stp.focus .cell { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: 8px; }
-.caret { display: inline-block; width: 1.5px; height: 18px; margin-left: 1px; vertical-align: middle; background: var(--focus); }
 
-/* the menu: an anchored popover holding role=menu (member-row, anchored-popover) */
-.menu { position: absolute; z-index: 2; left: 0; top: calc(50% + 26px); margin: 0; padding: 4px; list-style: none; min-width: 200px; box-sizing: border-box; border: 1px solid var(--b2); border-radius: 12px; background: var(--o); box-shadow: var(--e2); }
-.item { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; padding: 0 16px 0 12px; border: 0; border-radius: 8px; background: transparent; font-size: 14px; color: var(--t); text-align: left; white-space: nowrap; }
-.item i { flex: none; width: 20px; height: 20px; display: flex; color: var(--t2); }
-.item.hover { background: var(--s); }
+/* the number where a stepper would be (row-entries .row-number, decision I) */
+.rnum { flex: none; display: flex; justify-content: flex-end; align-items: center; width: 168px; height: 48px; font-size: 16px; color: var(--t2); font-variant-numeric: tabular-nums; }
+.rnum.wide { width: 191px; }
+
+/* the detailed view: one larger row per list */
+.drow { padding: 10px 0 6px; border-bottom: 1px solid var(--b1); }
+.drow.nochg { padding-bottom: 10px; }
+.drow:last-child { border-bottom: 0; padding-bottom: 12px; }
+.dtop { display: flex; align-items: center; gap: 12px; }
+.askl { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.askl > span:first-child { flex: 1; min-width: 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+.chg { display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
 
 /* the disclosure and the other lists */
 .disc { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0; border: 0; border-bottom: 1px solid var(--b1); background: transparent; font-size: 16px; color: var(--t); text-align: left; }
@@ -125,21 +122,14 @@ body { margin: 0; background: #0a0c14; }
 /* actions */
 .actions { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; }
 .primary { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; padding: 8px 12px; border: 0; border-radius: 12px; background: var(--act); color: var(--on-act); font-size: 16px; font-weight: 600; }
-.secondary { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; padding: 8px 12px; border: 1px solid var(--b1); border-radius: 12px; background: var(--r); color: var(--t2); font-size: 14px; }
 .quiet { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; padding: 4px; border: 0; background: transparent; font-size: 14px; color: var(--t3); }
 
-/* the ask sheet */
-.askrow { display: flex; align-items: center; gap: 12px; min-height: 64px; margin-top: 12px; border-top: 1px solid var(--b1); border-bottom: 1px solid var(--b1); }
-.askrow > span:first-child { flex: 1; font-size: 16px; color: var(--t); }
-.fine { margin: 12px 0 0; font-size: 12px; line-height: 1.5; color: var(--t3); }
-
-/* the choice boards: a strip of the sheet, lettered */
+/* the choice board: a strip of the sheet, lettered */
 .strip { box-sizing: border-box; width: 390px; padding: 0 16px 8px; border-radius: 16px; background: var(--r); }
 .strip + .letter { margin-top: 24px; }
 .letter { margin: 0 0 8px; font-size: 13px; line-height: 18px; color: #c2c8db; }
 .letter b { display: inline-block; min-width: 18px; color: #ffb454; }
 .stack { display: flex; flex-direction: column; }
-.mstrip { position: relative; height: 150px; }
 </style>
 </helmet>
 <div class="pair"><div class="col"><p class="tag">Day, in English</p><div class="vel day phone">
@@ -147,12 +137,12 @@ body { margin: 0; background: #0a0c14; }
 <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
 <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
 <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
-<div class="scrim"></div><section class="sheet"><div class="handle"></div><h2 class="title">Tomate pera</h2><p class="sub">2,49 € per kg · 1 kg to get</p><p class="happened">Got 1,5 kg today at 2,49 € per kg, at Mercadona, Gran Vía 12.</p><div class="entries"><div class="head"><h3>Asked for on 2 lists</h3><button class="all" type="button">Change for all lists</button></div><ul class="rows"><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal de la casa de la playa</span><span class="ask"> · 1,5 kg</span></span><span class="wh">Piso de la playa de Cullera · Tomate pera para ensalada</span></span><button class="trigger" type="button" aria-haspopup="menu" aria-expanded="false"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.4" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="18.6" cy="12" r="1.75"/></svg></i></button><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">0,5</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span><span class="ask"> · 1 kg</span></span><span class="wh">Casa · Tomates</span></span><button class="trigger" type="button" aria-haspopup="menu" aria-expanded="false"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.4" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="18.6" cy="12" r="1.75"/></svg></i></button><span class="stp reached"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">1</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></li></ul><button class="disc" type="button" aria-expanded="false"><span>Bought for another list</span><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></i></button></div><div class="actions"><button class="primary" type="button">Got the other 1 kg</button><button class="quiet" type="button">They had none</button><button class="quiet" type="button">Not today</button></div></section></div></div><div class="col"><p class="tag">Night, en español</p><div class="vel night phone">
+<div class="scrim"></div><section class="sheet"><div class="handle"></div><h2 class="title">Tomate pera</h2><p class="sub">2,49 € per kg · 1 kg to get</p><p class="happened">Got 1,5 kg today at 2,49 € per kg, at Mercadona, Gran Vía 12.</p><div class="entries"><div class="head"><h3>What you bought</h3><button class="all" type="button">Lists and amounts</button></div><ul class="rows"><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal de la casa de la playa</span><span class="ask"> · 1,5 kg</span></span><span class="wh">Piso de la playa de Cullera · Tomate pera para ensalada</span></span><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">0,5</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span><span class="ask"> · 1 kg</span></span><span class="wh">Casa · Tomates</span></span><span class="stp reached"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">1</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></li></ul><button class="disc" type="button" aria-expanded="false"><span>Bought for another list</span><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></i></button></div><div class="actions"><button class="primary" type="button">Got the other 1 kg</button><button class="quiet" type="button">They had none</button><button class="quiet" type="button">Not today</button></div></section></div></div><div class="col"><p class="tag">Night, en español</p><div class="vel night phone">
 <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Lista de la compra</b></header>
 <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
 <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
 <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
-<div class="scrim"></div><section class="sheet"><div class="handle"></div><h2 class="title">Tomate pera</h2><p class="sub">2,49 € el kg · Por coger: 1 kg</p><p class="happened">Cogido hoy: 1,5 kg a 2,49 € el kg, en Mercadona, Gran Vía 12.</p><div class="entries"><div class="head"><h3>Lo piden 2 listas</h3><button class="all" type="button">Cambiar en todas las listas</button></div><ul class="rows"><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal de la casa de la playa</span><span class="ask"> · 1,5 kg</span></span><span class="wh">Piso de la playa de Cullera · Tomate pera para ensalada</span></span><button class="trigger" type="button" aria-haspopup="menu" aria-expanded="false"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.4" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="18.6" cy="12" r="1.75"/></svg></i></button><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">0,5</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span><span class="ask"> · 1 kg</span></span><span class="wh">Casa · Tomates</span></span><button class="trigger" type="button" aria-haspopup="menu" aria-expanded="false"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.4" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="18.6" cy="12" r="1.75"/></svg></i></button><span class="stp reached"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">1</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></li></ul><button class="disc" type="button" aria-expanded="false"><span>Comprado para otra lista</span><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></i></button></div><div class="actions"><button class="primary" type="button">Ya tengo lo que falta (1 kg)</button><button class="quiet" type="button">No había</button><button class="quiet" type="button">Hoy no</button></div></section></div></div></div>
+<div class="scrim"></div><section class="sheet"><div class="handle"></div><h2 class="title">Tomate pera</h2><p class="sub">2,49 € el kg · Por coger: 1 kg</p><p class="happened">Cogido hoy: 1,5 kg a 2,49 € el kg, en Mercadona, Gran Vía 12.</p><div class="entries"><div class="head"><h3>Lo que has comprado</h3><button class="all" type="button">Listas y cantidades</button></div><ul class="rows"><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal de la casa de la playa</span><span class="ask"> · 1,5 kg</span></span><span class="wh">Piso de la playa de Cullera · Tomate pera para ensalada</span></span><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">0,5</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span><span class="ask"> · 1 kg</span></span><span class="wh">Casa · Tomates</span></span><span class="stp reached"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">1</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></li></ul><button class="disc" type="button" aria-expanded="false"><span>Comprado para otra lista</span><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></i></button></div><div class="actions"><button class="primary" type="button">Ya tengo lo que falta (1 kg)</button><button class="quiet" type="button">No había</button><button class="quiet" type="button">Hoy no</button></div></section></div></div></div>
 </x-dc>
 </body>
 </html>
