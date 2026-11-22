@@ -1,3 +1,5 @@
+> **PR:** [#1063](https://github.com/IchirokuXVI/nx-portfolio/pull/1063)
+
 # 0273: a buy for a list that did not ask makes its line in the same write
 
 > Decided on 2026-11-22. In the basket's line sheet each list's stepper stops changing what
