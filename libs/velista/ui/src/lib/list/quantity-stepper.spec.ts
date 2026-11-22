@@ -617,6 +617,8 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(tos(h)).toEqual([6]);
       pointer(h.minus, 'pointerdown', second);
       pointer(h.minus, 'pointerup', { ...second, clientX: 20, clientY: 220 });
+      // Chrome captures a touch on its own, so its capture is lost after the lift.
+      pointer(h.minus, 'lostpointercapture', second);
       pointerClick(h.minus);
       // As in velista 0188: the second finger stops the repeat and its click adds
       // nothing. The first finger's touch is still claimed and selects nothing.
@@ -644,6 +646,8 @@ describe('QuantityStepper (velista 0188)', () => {
       // against it, and it does not end the first finger's hold.
       pointer(h.minus, 'pointerdown', second);
       pointer(h.minus, 'pointerup', { ...second, clientX: 20, clientY: 220 });
+      // Chrome captures a touch on its own, so its capture is lost after the lift.
+      pointer(h.minus, 'lostpointercapture', second);
       pointerClick(h.minus);
       expect(tos(h)).toEqual([4]);
       expect(selectStart(document.body).defaultPrevented).toBe(true);

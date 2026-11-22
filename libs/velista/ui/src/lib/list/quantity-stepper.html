@@ -20,7 +20,7 @@
     <button
       (click)="press(-1, $event)"
       (contextmenu)="$event.preventDefault()"
-      (lostpointercapture)="endHold()"
+      (lostpointercapture)="endHold($event)"
       (pointercancel)="endHold($event)"
       (pointerdown)="startHold(-1, $event)"
       (pointerup)="endHold($event)"
@@ -82,7 +82,7 @@
     <button
       (click)="press(1, $event)"
       (contextmenu)="$event.preventDefault()"
-      (lostpointercapture)="endHold()"
+      (lostpointercapture)="endHold($event)"
       (pointercancel)="endHold($event)"
       (pointerdown)="startHold(1, $event)"
       (pointerup)="endHold($event)"
