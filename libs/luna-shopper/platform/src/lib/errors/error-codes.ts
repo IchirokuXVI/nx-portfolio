@@ -91,6 +91,19 @@ export const ERROR_CODES = {
    */
   BASKET_LINE_ALREADY_IN_ROW: 'basket_line_already_in_row',
   /**
+   * A buy for a list that does not ask was made on a row whose lines record
+   * no product (plan 0273). The write buys the row's product, so a row of
+   * free text lines has nothing it could buy for another list.
+   */
+  BASKET_ROW_HAS_NO_PRODUCT: 'basket_row_has_no_product',
+  /**
+   * A buy for a list that does not ask had to make the list's line, and the
+   * product has no name in any language catalog holds (plan 0273). The line
+   * is called by the product's name and never by another list's text, so
+   * nothing is written.
+   */
+  BASKET_PRODUCT_HAS_NO_NAME: 'basket_product_has_no_name',
+  /**
    * The number this write was moving is not where the caller believed it started
    * (plan 0057, section 5; plan 0056, section 3.2).
    *
@@ -703,6 +716,10 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // 409 for the same reason: the request was well formed, and what refuses it
   // is a line that is already on the row (plan 0273).
   [ERROR_CODES.BASKET_LINE_ALREADY_IN_ROW]: HttpStatus.CONFLICT,
+  // 409 for the same reason: well formed, and refused by the row's lines or
+  // by what catalog holds of the product (plan 0273).
+  [ERROR_CODES.BASKET_ROW_HAS_NO_PRODUCT]: HttpStatus.CONFLICT,
+  [ERROR_CODES.BASKET_PRODUCT_HAS_NO_NAME]: HttpStatus.CONFLICT,
   // 409 for the same reason and apart from it by code: the request was well
   // formed, and what it conflicts with is state that moved underneath it.
   [ERROR_CODES.STALE_QUANTITY]: HttpStatus.CONFLICT,

@@ -267,7 +267,6 @@ export type BuyForListBasketRowDto = {
   lineId?: string;
   quantity: number;
   unit: 'UNIT' | 'GRAM' | 'MILLILITER';
-  itemId: string;
   priceScopeId?: string;
   supermarketLocationId?: string;
 };
@@ -709,6 +708,8 @@ export type ProblemDetails = {
     | 'basket_finished'
     | 'basket_shop_locked'
     | 'basket_line_already_in_row'
+    | 'basket_row_has_no_product'
+    | 'basket_product_has_no_name'
     | 'stale_quantity'
     | 'account_locked'
     | 'postal_code_unknown'

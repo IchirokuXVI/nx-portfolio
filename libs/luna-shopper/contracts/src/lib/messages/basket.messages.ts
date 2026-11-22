@@ -994,22 +994,26 @@ export interface BuyForListBasketRequest {
   targetListId: string;
   /**
    * That list's line of the product, from `basket.productLists`, when it has
-   * one. It must be on {@link targetListId}, hold {@link itemId}, and not be an
-   * entry of the row, which answers 409 `basket_line_already_in_row`. Absent,
-   * the list's line of the product is found as the list's add finds it, and
-   * made at zero when there is none.
+   * one. It must be on {@link targetListId}, hold the row's product, and not
+   * be an entry of the row, which answers 409 `basket_line_already_in_row`.
+   * Absent, the list's line of the product is found as the list's add finds
+   * it, and made at zero when there is none.
    */
   lineId?: string;
   /** Units bought, a whole number from 1 to `LINE_QUANTITY_MAX`. */
   quantity: number;
   /** What {@link quantity} counts, the row's. */
   unit: LineUnit;
-  /** The product bought, the row's. The gateway refuses one catalog does not know. */
-  itemId: string;
   /**
-   * The product's name in the actor's language, which a line made here
-   * carries with `named: false`. Written by the gateway from catalog, never by
-   * a client. Absent when catalog did not answer, and then no line can be made.
+   * The product's name in the actor's language, else in any language catalog
+   * holds, which a line made here carries with `named: false`. Written by the
+   * gateway from catalog, never by a client. Absent when catalog named it in
+   * no language or did not answer: a line that has to be made then answers
+   * 409 `basket_product_has_no_name`.
+   *
+   * There is no product field (plan 0273, amended on 2026-11-22): the product
+   * is the row's, which core reads from {@link rowKey}, and a row with no
+   * product answers 409 `basket_row_has_no_product`.
    */
   content?: string;
   /** As {@link SettleBasketRowRequest.paid}: written by the gateway. */

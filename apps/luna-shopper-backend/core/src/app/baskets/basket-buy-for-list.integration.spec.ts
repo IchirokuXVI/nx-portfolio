@@ -3,6 +3,7 @@ import {
   BasketStatus,
   LineApprovalStatus,
   LineChangeKind,
+  ListPermission,
   MembershipStatus,
   ParticipantKind,
   SettlementOutcome,
@@ -12,7 +13,11 @@ import {
   type ItemSnapshot,
   type SettlementPaid,
 } from '@portfolio/luna-shopper/contracts';
-import { BasketLineAlreadyInRowException } from '@portfolio/luna-shopper/platform';
+import {
+  BasketLineAlreadyInRowException,
+  BasketProductHasNoNameException,
+  BasketRowHasNoProductException,
+} from '@portfolio/luna-shopper/platform';
 import {
   describeIntegration,
   requiredEnv,
@@ -49,6 +54,10 @@ import { BasketReadService } from './basket-read.service';
 import { BasketRevertService } from './basket-revert.service';
 import { BasketRowResolver } from './basket-row-resolver';
 import { BasketSettleService } from './basket-settle.service';
+import {
+  WRITABLE_AMONG_SQL,
+  type WritableAmongRow,
+} from './basket-sharing.sql';
 import { BasketWriteContext } from './basket-write.context';
 import { BasketMarksReader } from './changes/basket-marks.reader';
 
@@ -71,6 +80,8 @@ describeIntegration('a buy for a list that did not ask (real Postgres)', () => {
 
   const announcer = fakeBasketAnnouncer();
   const emitted: string[] = [];
+  /** The version each event carried, by event, in emission order. */
+  const versions: { event: string; version: number | undefined }[] = [];
   const zoneIds: string[] = [];
   let position = 0;
 
@@ -107,8 +118,17 @@ describeIntegration('a buy for a list that did not ask (real Postgres)', () => {
     const coverage = new BasketCoverageService(baskets);
     const resolver = new BasketRowResolver(baskets, fakeCoreConfig());
     const sharing = {
-      writableAmong: async (_userId: string, listIds: readonly string[]) =>
-        new Set(listIds),
+      // The statement the sharing service asks, so a grant of READ alone is
+      // what refuses spec 5, as in the service.
+      writableAmong: async (userId: string, listIds: readonly string[]) =>
+        new Set(
+          (
+            await dataSource.query<WritableAmongRow[]>(WRITABLE_AMONG_SQL, [
+              userId,
+              [...listIds],
+            ])
+          ).map((row) => row.listId)
+        ),
       liveParticipantById: async (participantId: string) =>
         dataSource
           .getRepository(BasketParticipant)
@@ -161,8 +181,16 @@ describeIntegration('a buy for a list that did not ask (real Postgres)', () => {
       announceReleased: async () => undefined,
     } as never;
     const events = {
-      emit: (event: string) => {
+      emit: (
+        event: string,
+        _zoneId: string,
+        payload: { version?: number; line?: { version?: number } }
+      ) => {
         emitted.push(event);
+        versions.push({
+          event,
+          version: payload?.line?.version ?? payload?.version,
+        });
       },
       emitTo: () => undefined,
     } as never;
@@ -217,6 +245,7 @@ describeIntegration('a buy for a list that did not ask (real Postgres)', () => {
   beforeEach(() => {
     announcer.reset();
     emitted.length = 0;
+    versions.length = 0;
     jest.restoreAllMocks();
   });
 
@@ -235,15 +264,17 @@ describeIntegration('a buy for a list that did not ask (real Postgres)', () => {
     listId: string,
     createdByUserId: string,
     quantity: number,
-    itemIds: readonly string[] = [MILK]
+    itemIds: readonly string[] = [MILK],
+    content = 'Whole milk',
+    named = false
   ): Promise<ListLine> {
     const repo = dataSource.getRepository(ListLine);
     position += 1;
     const saved = await repo.save(
       repo.create({
         listId,
-        content: 'Whole milk',
-        named: false,
+        content,
+        named,
         quantity,
         position,
         createdByUserId,
@@ -345,7 +376,9 @@ describeIntegration('a buy for a list that did not ask (real Postgres)', () => {
       other: other.id,
       basket,
       participantId: await participant(basket, ParticipantKind.OWNER, userId),
-      milk: await line(asking.id, userId, 2),
+      // Typed by the household of the first list, so a line made on the
+      // second must never carry it (plan 0273, amended on 2026-11-22).
+      milk: await line(asking.id, userId, 2, [MILK], 'Our usual milk', true),
     };
   }
 
@@ -361,7 +394,6 @@ describeIntegration('a buy for a list that did not ask (real Postgres)', () => {
       targetListId: w.other,
       quantity: 2,
       unit: 'UNIT',
-      itemId: MILK,
       content: 'Whole milk',
       paid: AT_SHOP,
       itemSnapshot: MILK_NAME,
@@ -425,18 +457,84 @@ describeIntegration('a buy for a list that did not ask (real Postgres)', () => {
       LineChangeKind.ADDED,
     ]);
     expect(emitted).toEqual(['line.added', 'line.settled']);
+    // The buy bumps the line's version as a settle does, so the event after
+    // it carries a newer one than the line was born with.
+    expect(made[0].version).toBe(2);
+    expect(versions).toEqual([
+      { event: 'line.added', version: 1 },
+      { event: 'line.settled', version: 2 },
+    ]);
     expect(result.entries.map((entry) => entry.lineId).sort()).toEqual(
       [w.milk.id, made[0].id].sort()
     );
   });
 
-  it('names the line after the row’s own line when catalog gave no name', async () => {
+  it('names the new line by the product, never by the row line’s typed text (spec 8)', async () => {
     const w = await world();
 
-    await buy(w, { content: undefined, itemSnapshot: null });
+    await buy(w, { content: 'Leche entera' });
 
     const [made] = await linesOf(w.other);
-    expect(made).toMatchObject({ content: 'Whole milk', quantity: 0 });
+    expect(made).toMatchObject({
+      content: 'Leche entera',
+      named: false,
+      quantity: 0,
+    });
+    expect(made.content).not.toBe(w.milk.content);
+  });
+
+  it('answers basket_product_has_no_name and writes nothing when no name is known (spec 8)', async () => {
+    const w = await world();
+
+    await expect(
+      buy(w, { content: undefined, itemSnapshot: null })
+    ).rejects.toBeInstanceOf(BasketProductHasNoNameException);
+    expect(await linesOf(w.other)).toHaveLength(0);
+    expect(await settlementsOnList(w.other)).toBe(0);
+    expect(emitted).toEqual([]);
+  });
+
+  it('answers basket_row_has_no_product for a row of free text and writes nothing (spec 8)', async () => {
+    const w = await world();
+    const free = await line(w.asking, w.userId, 1, [], 'Bread', true);
+
+    await expect(buy(w, { rowKey: free.id })).rejects.toBeInstanceOf(
+      BasketRowHasNoProductException
+    );
+    expect(await linesOf(w.other)).toHaveLength(0);
+    expect(await settlementsOnList(w.other)).toBe(0);
+  });
+
+  it('refuses a list the actor may only read with 403 and writes nothing (spec 5)', async () => {
+    const w = await world();
+    // A member whose grant on the second list is READ alone.
+    const reader = randomUUID();
+    const { zoneId } = await dataSource
+      .getRepository(ShoppingList)
+      .findOneByOrFail({ id: w.other });
+    const membership = await dataSource.getRepository(ZoneMembership).save({
+      zoneId,
+      userId: reader,
+      username: 'Reader',
+      role: ZoneRole.MEMBER,
+      status: MembershipStatus.APPROVED,
+    });
+    await dataSource.getRepository(ListAccess).save({
+      listId: w.other,
+      membershipId: membership.id,
+      permissions: [ListPermission.READ],
+    });
+    const shopper = await participant(
+      w.basket,
+      ParticipantKind.REGISTERED,
+      reader
+    );
+
+    await expect(
+      buy(w, { participantId: shopper, userId: reader })
+    ).rejects.toMatchObject({ code: 'forbidden' });
+    expect(await linesOf(w.other)).toHaveLength(0);
+    expect(await settlementsOnList(w.other)).toBe(0);
   });
 
   it('records the buy on the lineId given and makes no line (spec 2)', async () => {
@@ -446,6 +544,17 @@ describeIntegration('a buy for a list that did not ask (real Postgres)', () => {
     await buy(w, { lineId: kept.id });
 
     expect((await linesOf(w.other)).map((row) => row.id)).toEqual([kept.id]);
+    // A found line at 0 is bumped as a settle bumps one.
+    expect(
+      (
+        await dataSource
+          .getRepository(ListLine)
+          .findOneByOrFail({ id: kept.id })
+      ).version
+    ).toBe(kept.version + 1);
+    expect(versions).toEqual([
+      { event: 'line.settled', version: kept.version + 1 },
+    ]);
     const bought = await standingOf(kept.id);
     expect(bought.map((row) => row.quantity)).toEqual([2]);
     expect(
@@ -536,6 +645,9 @@ describeIntegration('a buy for a list that did not ask (real Postgres)', () => {
       itemId: MILK,
     });
     const entry = settled.entries.find((one) => one.lineId === made.id);
+    // `asked` 0 on the new entry holds only once backend plan 0274 records
+    // how much of an ask each buy met; a later round asserts it here, beside
+    // `applied = 0` on the insert.
     expect(entry).toMatchObject({ left: 0, bought: 3 });
 
     const reverted = await revertService.revert({

@@ -4,6 +4,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   BasketFinishedException,
+  BasketRowHasNoProductException,
   ForbiddenException,
   NotFoundException,
   ValidationException,
@@ -33,7 +34,26 @@ const ELSEWHERE = '5b0f6f7e-6c7c-4d55-9f4e-3a8b2f9d1c06';
 const ROW = '5b0f6f7e-6c7c-4d55-9f4e-3a8b2f9d1c07';
 const MILK = '5b0f6f7e-6c7c-4d55-9f4e-3a8b2f9d1c08';
 
-function build(opened: { status?: BasketStatus; userId?: string | null } = {}) {
+/** The row key's line as the resolver loads it, holding milk or nothing. */
+const entry = (itemIds: string[]) => ({
+  lineId: ROW,
+  listId: WRITTEN,
+  content: 'Milk from the corner shop',
+  itemIds,
+  favoriteItemId: null,
+  tripItemId: null,
+  unit: 'UNIT',
+  quantity: 1,
+  settlements: [],
+});
+
+function build(
+  opened: {
+    status?: BasketStatus;
+    userId?: string | null;
+    rowItemIds?: string[];
+  } = {}
+) {
   const touched: string[] = [];
   const context = {
     open: async () => ({
@@ -51,18 +71,21 @@ function build(opened: { status?: BasketStatus; userId?: string | null } = {}) {
       }),
       row: async () => {
         touched.push('row');
-        return { anchor: { content: 'Milk', itemIds: [MILK] }, entries: [] };
+        const anchor = entry(opened.rowItemIds ?? [MILK]);
+        return { anchor, entries: [anchor] };
       },
     }),
   } as unknown as BasketWriteContext;
+  const prepared: unknown[] = [];
   const dataSource = {
     transaction: async () => {
       touched.push('transaction');
     },
   } as unknown as DataSource;
   const lines = {
-    prepareLineAtZero: async () => {
+    prepareLineAtZero: async (req: unknown) => {
       touched.push('prepare');
+      prepared.push(req);
       return {};
     },
   } as unknown as LineService;
@@ -75,7 +98,7 @@ function build(opened: { status?: BasketStatus; userId?: string | null } = {}) {
     {} as CoreEventsPublisher,
     {} as LineChangeRecorder
   );
-  return { service, touched };
+  return { service, touched, prepared };
 }
 
 const request = (
@@ -88,7 +111,6 @@ const request = (
   targetListId: WRITTEN,
   quantity: 2,
   unit: 'UNIT',
-  itemId: MILK,
   content: 'Whole milk',
   ...extra,
 });
@@ -142,5 +164,43 @@ describe('a buy for a list that did not ask (plan 0273)', () => {
       service.buyForList(request({ unit: undefined as never }))
     ).rejects.toBeInstanceOf(ValidationException);
     expect(touched).toEqual([]);
+  });
+
+  it('answers 409 basket_row_has_no_product for a row with no product, before any write', async () => {
+    const { service, touched } = build({ rowItemIds: [] });
+
+    await expect(service.buyForList(request())).rejects.toBeInstanceOf(
+      BasketRowHasNoProductException
+    );
+    expect(touched).toEqual(['row']);
+  });
+
+  it('buys the row’s product and names the line by catalog’s name, never the row line’s text', async () => {
+    const { service, prepared } = build();
+
+    await service.buyForList(request()).catch(() => undefined);
+
+    // The row key's line was typed 'Milk from the corner shop' by another
+    // household; the line made here is called what catalog calls the product.
+    expect(prepared).toEqual([
+      expect.objectContaining({
+        listId: WRITTEN,
+        itemId: MILK,
+        content: 'Whole milk',
+      }),
+    ]);
+  });
+
+  it('hands no name on when catalog named the product in no language, so no line can be made', async () => {
+    const { service, prepared } = build();
+
+    await service
+      .buyForList(request({ content: undefined }))
+      .catch(() => undefined);
+
+    // The row line's text is not a fallback (plan 0273, amended on
+    // 2026-11-22). `lineAtZeroWithin` refuses a null name with
+    // `basket_product_has_no_name`, which the integration spec pins.
+    expect(prepared).toEqual([expect.objectContaining({ content: null })]);
   });
 });

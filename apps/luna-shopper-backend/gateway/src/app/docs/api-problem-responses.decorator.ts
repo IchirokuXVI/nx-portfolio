@@ -77,6 +77,12 @@ export interface ProblemResponseOptions {
    */
   lineInRow?: boolean;
   /**
+   * The route buys the row's product for a list that does not ask, so a row
+   * with no product and a product with no name each answer 409 with a code
+   * of their own (plan 0273).
+   */
+  rowProduct?: boolean;
+  /**
    * The route renames a line, so a name the list already holds can answer 409
    * with one of the three merge codes (plan 0112, section 7), each told apart
    * from a plain conflict because the client asks, explains, or explains with a
@@ -292,6 +298,12 @@ export function ApiProblemResponses(
   }
   if (options.lineInRow) {
     codes.push(ERROR_CODES.BASKET_LINE_ALREADY_IN_ROW);
+  }
+  if (options.rowProduct) {
+    codes.push(
+      ERROR_CODES.BASKET_ROW_HAS_NO_PRODUCT,
+      ERROR_CODES.BASKET_PRODUCT_HAS_NO_NAME
+    );
   }
   if (options.lineMerge) {
     codes.push(

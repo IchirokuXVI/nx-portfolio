@@ -169,8 +169,13 @@ export class SettleBasketRowDto {
  * A buy of the row's product for a covered list that does not ask for it
  * (plan 0273).
  *
- * The body has no field for a price or a name. The gateway reads both, as it
- * does for a settle, and the name is what a line made here is called.
+ * The body has no field for the product, a price or a name (plan 0273,
+ * amended on 2026-11-22). The product is the row's, which the server reads
+ * from the row key: a row with no product answers 409
+ * `basket_row_has_no_product`. The gateway reads the price and the name as it
+ * does for a settle, and the name is what a line made here is called: a
+ * product catalog names in no language answers 409
+ * `basket_product_has_no_name` when a line would have to be made.
  */
 export class BuyForListBasketRowDto {
   @ApiProperty({
@@ -184,7 +189,7 @@ export class BuyForListBasketRowDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'That list’s line of the product, the `lineId` of `GET :id/products/:itemId/lists`, when it has one. It must be on `targetListId` and hold `itemId`. A line that is already an entry of the row answers 409 `basket_line_already_in_row`: buy on it with the settle. Left out, the list’s line of the product is found as the list’s own add finds it, and made at quantity 0 when there is none.',
+      'That list’s line of the product, the `lineId` of `GET :id/products/:itemId/lists`, when it has one. It must be on `targetListId` and hold the row’s product. A line that is already an entry of the row answers 409 `basket_line_already_in_row`: buy on it with the settle. Left out, the list’s line of the product is found as the list’s own add finds it, and made at quantity 0 when there is none.',
   })
   @IsOptional()
   @IsUUID()
@@ -203,14 +208,6 @@ export class BuyForListBasketRowDto {
 
   @RequiredLineUnit()
   unit!: LineUnit;
-
-  @ApiProperty({
-    format: 'uuid',
-    description:
-      'The product bought: the `productId` of the row. An id the catalog does not know answers 400 `validation_failed` on `itemId`.',
-  })
-  @IsUUID()
-  itemId!: string;
 
   @ApiPropertyOptional({
     format: 'uuid',

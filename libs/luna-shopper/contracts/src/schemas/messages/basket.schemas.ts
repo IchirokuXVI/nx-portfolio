@@ -760,7 +760,6 @@ const buyForListRequest = object(
     lineId: nonEmptyString(),
     quantity: integer({ minimum: 1, maximum: LINE_QUANTITY_MAX }),
     unit: ref(ENUM_IDS.lineUnit),
-    itemId: nonEmptyString(),
     content: nonEmptyString(),
     paid: ref(LIST_SCHEMA_IDS.settlementPaid),
     itemSnapshot: nullableItemSnapshot(),
@@ -773,7 +772,6 @@ const buyForListRequest = object(
     'targetListId',
     'quantity',
     'unit',
-    'itemId',
   ]
 );
 

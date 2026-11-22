@@ -445,23 +445,50 @@ export class BasketController {
     participant: BasketParticipantContext,
     dto: SettleChoiceInput
   ): Promise<SettleChoice> {
+    const scope = await this.searchScopeOf(
+      basketId,
+      participant,
+      dto.itemId === undefined ? dto.lineIds : undefined
+    );
+    if (scope === null) {
+      return NOTHING_CHOSEN;
+    }
+    return this.choiceIn(scope, pricedItemId(dto.itemId, scope.pick), dto);
+  }
+
+  /**
+   * `basket.searchScope` for a settle or a buy, or null when core could not
+   * say whose basket this is: there is no owner to price as, and the write
+   * itself is about to ask core the same question and will fail or succeed on
+   * its own terms. With `lineIds`, the answer's `pick` is the product those
+   * lines record.
+   */
+  private async searchScopeOf(
+    basketId: string,
+    participant: BasketParticipantContext,
+    lineIds: string[] | undefined
+  ): Promise<BasketSearchScope | null> {
     const req: BasketSearchScopeRequest = {
       basketId,
       participantId: participant.participantId,
-      ...(dto.itemId === undefined ? { lineIds: dto.lineIds } : {}),
+      ...(lineIds === undefined ? {} : { lineIds }),
     };
-    let scope: BasketSearchScope;
     try {
-      scope = await this.nats.send<BasketSearchScope>(
+      return await this.nats.send<BasketSearchScope>(
         BASKET_PATTERNS.searchScope,
         req
       );
     } catch {
-      // Core could not say whose basket this is, so there is no owner to price
-      // as. The settle itself is about to ask core the same question and will
-      // fail or succeed on its own terms.
-      return NOTHING_CHOSEN;
+      return null;
     }
+  }
+
+  /** {@link chosenFor}'s price and name of one product, once the scope is known. */
+  private choiceIn(
+    scope: BasketSearchScope,
+    itemId: string | undefined,
+    dto: Pick<SettleChoiceInput, 'supermarketLocationId' | 'unit'>
+  ): Promise<SettleChoice> {
     // The settle's shop: the basket's own if it has one, else the one the
     // client named, else none (plan 0163, section 5). A basket started at a
     // shop refuses another, and a settle that names none records the basket's.
@@ -474,7 +501,7 @@ export class BasketController {
     return this.prices.choose({
       userId: scope.ownerUserId,
       profileId: scope.profileId ?? undefined,
-      itemId: pricedItemId(dto.itemId, scope.pick),
+      itemId,
       supermarketLocationId: own ?? dto.supermarketLocationId,
       servedLocations: scope.servesLocations,
       // The price of one of the row's unit (plan 0246 M7).
@@ -495,10 +522,16 @@ export class BasketController {
    * **Account participants only**, who hold `WRITE` on the list themselves.
    * A guest is refused here, before catalog or core is asked.
    *
-   * The price and the name are read as for a settle, as the basket's owner,
-   * and the name in the reader's language is what a line made here is
-   * called. The unit is checked as the basket's add checks it, because the
-   * write can make a line.
+   * **The product is the row's** (plan 0273, amended on 2026-11-22): the
+   * body names none, because this write can make a line on another
+   * household's list. The gateway learns it as a settle that names no
+   * product does, from `basket.searchScope` with the row key's line, and core
+   * reads it again from the row and refuses a row with no product.
+   *
+   * The price and the name are read as for a settle, as the basket's owner.
+   * The name is catalog's, in the reader's language or else any it holds, and
+   * is what a line made here is called. The unit is checked as the basket's
+   * add checks it, because the write can make a line.
    */
   @Post(':id/rows/:rowKey/buy-for-list')
   @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
@@ -515,6 +548,7 @@ export class BasketController {
     finishedBasket: true,
     shopLocked: true,
     lineInRow: true,
+    rowProduct: true,
     lineUnitMismatch: true,
     lineUnitDiffers: true,
     lineUnitNotOffered: true,
@@ -526,16 +560,22 @@ export class BasketController {
     @Body() dto: BuyForListBasketRowDto
   ): Promise<BasketRowResult> {
     const userId = requireAccount(participant);
+    // The row's product, read off the row key's line. A row with no product
+    // prices nothing here, and core answers `basket_row_has_no_product`.
+    const scope = await this.searchScopeOf(id, participant, [rowKey]);
+    const itemId =
+      scope === null ? undefined : pricedItemId(undefined, scope.pick);
     // Beside each other and under one budget each, as on a settle.
     const [chosen] = await Promise.all([
-      this.chosenFor(id, participant, dto),
-      this.prices.refuseUnknownItem(dto.itemId),
+      scope === null || itemId === undefined
+        ? NOTHING_CHOSEN
+        : this.choiceIn(scope, itemId, dto),
       // The basket's add checks the unit of a line it can make, and so does
       // this when it names no line. A named line keeps its own unit, which
       // core holds the buy to.
-      dto.lineId
+      dto.lineId || itemId === undefined
         ? undefined
-        : this.units.assertOffered([{ unit: dto.unit, itemIds: [dto.itemId] }]),
+        : this.units.assertOffered([{ unit: dto.unit, itemIds: [itemId] }]),
     ]);
     const content = nameIn(chosen.itemSnapshot);
     const req: BuyForListBasketRequest = {
@@ -547,7 +587,6 @@ export class BasketController {
       ...(dto.lineId ? { lineId: dto.lineId } : {}),
       quantity: dto.quantity,
       unit: dto.unit,
-      itemId: dto.itemId,
       ...(content ? { content } : {}),
       paid: chosen.paid ?? undefined,
       ...(chosen.itemSnapshot ? { itemSnapshot: chosen.itemSnapshot } : {}),
@@ -1024,14 +1063,7 @@ export class BasketController {
   }
 }
 
-/**
- * The actor's account, for the two routes that are not delegated writes.
- *
- * Adding a line and renaming a row are authorized by the **person making
- * them**, so a guest is refused here rather than in core: they present a
- * session secret and hold no `WRITE` on anything.
- */
-/** What {@link BasketController.chosenFor} reads of a settle or a buy for a list. */
+/** What {@link BasketController.chosenFor} reads of a settle. */
 interface SettleChoiceInput {
   itemId?: string;
   lineIds?: string[];
@@ -1064,6 +1096,14 @@ function nameIn(snapshot: ItemSnapshot | null): string | null {
   return null;
 }
 
+/**
+ * The actor's account, for the routes that are not delegated writes.
+ *
+ * Adding a line, renaming a row and a buy for a list that does not ask are
+ * authorized by the **person making them**, so a guest is refused here
+ * rather than in core: they present a session secret and hold no `WRITE` on
+ * anything.
+ */
 function requireAccount(participant: BasketParticipantContext): string {
   if (!participant.userId) {
     throw new ForbiddenException(

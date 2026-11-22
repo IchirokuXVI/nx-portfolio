@@ -13,6 +13,7 @@ import {
 import {
   BasketFinishedException,
   BasketLineAlreadyInRowException,
+  BasketRowHasNoProductException,
   ForbiddenException,
   isUuid,
   NotFoundException,
@@ -33,6 +34,7 @@ import { basketScopeOf, type BasketScope } from './basket-line-facts';
 import { elsewhereGapOf } from './basket-read.service';
 import { COVERED_LINES_BY_ID_SQL } from './basket-read.sql';
 import {
+  resolvePick,
   zoneLineItemSet,
   type ZoneAnnouncement,
 } from './basket-settle.service';
@@ -114,11 +116,6 @@ export class BasketBuyForListService {
 
     const unit = requireLineUnit(req.unit);
     const quantity = validQuantity(req.quantity);
-    if (typeof req.itemId !== 'string' || !isUuid(req.itemId)) {
-      throw new ValidationException('itemId must name a product', {
-        messageArgs: { field: 'itemId' },
-      });
-    }
     if (
       req.lineId !== undefined &&
       (typeof req.lineId !== 'string' || !isUuid(req.lineId))
@@ -130,6 +127,17 @@ export class BasketBuyForListService {
     // The row the client drew, which must still be one: the answer is read
     // for it, beside the line this writes on.
     const row = await opened.row(req.rowKey, [req.rowKey]);
+    // The product bought is the row's, by the settle's own rule, and never
+    // one a client names (plan 0273, amended on 2026-11-22): this write can
+    // make a line on another household's list. Read here, before the
+    // transaction, by the resolver every write on a row reads with, as the
+    // settle of a row that names no product reads it.
+    const itemId = resolvePick(row, undefined);
+    if (itemId === null) {
+      throw new BasketRowHasNoProductException(
+        'This row has no product, so it cannot be bought for another list'
+      );
+    }
 
     const paid = paidColumns(req.paid, SettlementOutcome.BOUGHT);
     const itemSnapshot = itemSnapshotColumn(req.itemSnapshot);
@@ -141,9 +149,9 @@ export class BasketBuyForListService {
         ? await this.lines.prepareLineAtZero({
             userId: req.userId,
             listId: req.targetListId,
-            itemId: req.itemId,
+            itemId,
             unit,
-            content: nameOf(req, row.anchor),
+            content: nameOf(req),
             via: opened.via(),
           })
         : null;
@@ -157,11 +165,13 @@ export class BasketBuyForListService {
     await this.dataSource.transaction(async (manager) => {
       let line: ListLine;
       if (prepared === null) {
-        line = await this.lockNamedLine(manager, req);
+        line = await this.lockNamedLine(manager, req, itemId);
       } else {
         const found = await this.lines.lineAtZeroWithin(manager, prepared);
         line = found.line;
-        created = found.created ? found.line : null;
+        // The line as it was born, which its `line.added` carries: the bump
+        // below belongs to the buy and to the `line.settled` after it.
+        created = found.created ? { ...found.line } : null;
       }
       assertLineUnit(line, unit);
       // A line that is already an entry is bought with the plain settle, so
@@ -175,6 +185,12 @@ export class BasketBuyForListService {
           'That line is already on the row, so the buy is a settle'
         );
       }
+
+      // A buy is a change of the line, as a settle's is even on a line at
+      // zero (`basket-settle.service.ts`), so every event after it carries a
+      // newer version than the one a client holds. The quantity stays at 0.
+      line.version += 1;
+      await manager.getRepository(ListLine).save(line);
 
       // The change row a settle writes for a buy. The line asks for nothing
       // before and after, so the recorder writes none, as a settle's on a line
@@ -194,7 +210,7 @@ export class BasketBuyForListService {
         settlements.create({
           lineId: line.id,
           listId: line.listId,
-          itemId: req.itemId,
+          itemId,
           outcome: SettlementOutcome.BOUGHT,
           quantity,
           unit: line.unit ?? 'UNIT',
@@ -275,7 +291,8 @@ export class BasketBuyForListService {
    */
   private async lockNamedLine(
     manager: EntityManager,
-    req: BuyForListBasketRequest
+    req: BuyForListBasketRequest,
+    itemId: string
   ): Promise<ListLine> {
     const line = await manager.getRepository(ListLine).findOne({
       where: { id: req.lineId },
@@ -291,9 +308,9 @@ export class BasketBuyForListService {
     }
     const holds = await manager
       .getRepository(ListLineItem)
-      .count({ where: { lineId: line.id, itemId: req.itemId } });
+      .count({ where: { lineId: line.id, itemId } });
     if (holds === 0) {
-      throw new ValidationException('the line does not hold that product', {
+      throw new ValidationException('lineId does not hold the row product', {
         messageArgs: { field: 'lineId' },
       });
     }
@@ -302,20 +319,17 @@ export class BasketBuyForListService {
 }
 
 /**
- * What a line made here is called: the product's name in the actor's language,
- * as the gateway read it from catalog. When catalog did not answer, the name
- * the row's own line carries, if that line holds the product, so a slow
- * catalog does not stop a buy. Null when neither is known.
+ * What a line made here is called: the product's name in the actor's
+ * language, else in any language catalog holds, as the gateway read it.
+ * Never the text of the row's line or of another list's line (plan 0273,
+ * amended on 2026-11-22): one household may have typed it, and it must not
+ * reach another household's list. Null when catalog named the product in no
+ * language, and then a line that has to be made answers
+ * `basket_product_has_no_name`.
  */
-function nameOf(
-  req: BuyForListBasketRequest,
-  anchor: { content: string; itemIds: readonly string[] }
-): string | null {
+function nameOf(req: BuyForListBasketRequest): string | null {
   const sent = typeof req.content === 'string' ? req.content.trim() : '';
-  if (sent) {
-    return sent;
-  }
-  return anchor.itemIds.includes(req.itemId) ? anchor.content : null;
+  return sent || null;
 }
 
 /** A whole number of units from 1 to {@link LINE_QUANTITY_MAX}. */

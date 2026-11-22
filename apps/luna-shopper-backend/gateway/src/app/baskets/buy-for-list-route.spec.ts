@@ -48,7 +48,10 @@ const PAID = {
   estimated: false,
 };
 
-function build(chosen: SettleChoice = { paid: PAID, itemSnapshot: SNAPSHOT }) {
+function build(
+  chosen: SettleChoice = { paid: PAID, itemSnapshot: SNAPSHOT },
+  pickedItemId: string | null = ITEM
+) {
   const sent: { subject: string; payload: unknown }[] = [];
   const send = jest.fn(async (subject: string, payload: unknown) => {
     sent.push({ subject, payload });
@@ -58,6 +61,8 @@ function build(chosen: SettleChoice = { paid: PAID, itemSnapshot: SNAPSHOT }) {
         profileId: null,
         servesLocations: false,
         supermarketLocationId: null,
+        // The row's product, as core reads it off the row key's line.
+        pick: { pickedItemId, optionCount: pickedItemId === null ? 0 : 1 },
       };
     }
     if (subject === ITEM_PATTERNS.getMany) {
@@ -101,7 +106,6 @@ const body = (
     targetListId: LIST,
     quantity: 2,
     unit: 'UNIT',
-    itemId: ITEM,
     ...extra,
   }) as BuyForListBasketRowDto;
 
@@ -126,7 +130,6 @@ describe('the buy for a list route (plan 0273)', () => {
       targetListId: LIST,
       quantity: 2,
       unit: 'UNIT',
-      itemId: ITEM,
       content: 'Leche',
       paid: PAID,
       itemSnapshot: SNAPSHOT,
@@ -134,7 +137,47 @@ describe('the buy for a list route (plan 0273)', () => {
     expect(w.prices.choose).toHaveBeenCalledWith(
       expect.objectContaining({ userId: OWNER, itemId: ITEM, unit: 'UNIT' })
     );
-    expect(w.prices.refuseUnknownItem).toHaveBeenCalledWith(ITEM);
+    // The product is the row's, asked of core with the row key's line, and
+    // never one the body names (plan 0273, amended on 2026-11-22).
+    expect(
+      w.sent.find((call) => call.subject === BASKET_PATTERNS.searchScope)
+        ?.payload
+    ).toMatchObject({ lineIds: [ROW] });
+    expect(w.prices.refuseUnknownItem).not.toHaveBeenCalled();
+  });
+
+  it('names the line in another language catalog holds when the reader’s is missing', async () => {
+    const w = build({
+      paid: PAID,
+      itemSnapshot: { ...SNAPSHOT, name: { en: 'Milk' } as never },
+    });
+
+    await runWithRequestContext({ correlationId: 'c', locale: 'es' }, () =>
+      w.controller.buyForList(
+        actor(ParticipantKind.REGISTERED, 'u-actor'),
+        BASKET,
+        ROW,
+        body()
+      )
+    );
+
+    expect(w.message()).toMatchObject({ content: 'Milk' });
+  });
+
+  it('prices and names nothing for a row with no product, and core refuses it', async () => {
+    const w = build({ paid: PAID, itemSnapshot: SNAPSHOT }, null);
+
+    await w.controller.buyForList(
+      actor(ParticipantKind.REGISTERED, 'u-actor'),
+      BASKET,
+      ROW,
+      body()
+    );
+
+    expect(w.prices.choose).not.toHaveBeenCalled();
+    expect(w.message()).not.toHaveProperty('content');
+    expect(w.message()).not.toHaveProperty('paid', PAID);
+    expect(w.message()).not.toHaveProperty('itemId');
   });
 
   it('carries the lineId it was given and no name when catalog did not answer', async () => {
@@ -173,7 +216,7 @@ describe('the buy for a list route (plan 0273)', () => {
       (await validate(plainToInstance(BuyForListBasketRowDto, raw))).map(
         (error) => error.property
       );
-    const ok = { targetListId: LIST, quantity: 1, unit: 'UNIT', itemId: ITEM };
+    const ok = { targetListId: LIST, quantity: 1, unit: 'UNIT' };
 
     expect(await errors(ok)).toEqual([]);
     expect(await errors({ ...ok, quantity: 0 })).toEqual(['quantity']);

@@ -86,6 +86,16 @@ export const ERROR_CATALOG: Record<
     en: 'That list already has this product in the basket.',
     es: 'Esa lista ya tiene este producto en la cesta.',
   },
+  // Facts about the row and the product, so the client stops offering the
+  // buy for another list (plan 0273).
+  [ERROR_CODES.BASKET_ROW_HAS_NO_PRODUCT]: {
+    en: 'This row has no product, so it cannot be bought for another list.',
+    es: 'Esta fila no tiene producto, así que no se puede comprar para otra lista.',
+  },
+  [ERROR_CODES.BASKET_PRODUCT_HAS_NO_NAME]: {
+    en: 'This product has no name yet, so it cannot be added to that list.',
+    es: 'Este producto aún no tiene nombre, así que no se puede añadir a esa lista.',
+  },
   // It carries its number in the message rather than only in a code, because
   // the client's job is to say it: "somebody else moved this, it is 3 now" is
   // actionable and "that failed" is not (plan 0057, section 5).

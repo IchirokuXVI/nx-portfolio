@@ -40,8 +40,8 @@ import {
   type UpdateLineResult,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  BasketProductHasNoNameException,
   clampPageSize,
-  ConflictException,
   decodeCursor,
   encodeCursor,
   ForbiddenException,
@@ -195,8 +195,9 @@ export interface LineAtZeroRequest {
   itemId: string;
   unit: LineUnit;
   /**
-   * The product's name in the actor's language, which a line that is not
-   * named carries. Null when the gateway could not read it.
+   * The product's name in the actor's language, else in any language catalog
+   * holds, which a line that is not named carries. Null when catalog named it
+   * in no language.
    */
   content: string | null;
   /** The basket the buy is made through, for the change row. */
@@ -1538,10 +1539,11 @@ export class LineService {
     }
     if (prepared.content === null) {
       // The name of a line that is not named is the product's, which the
-      // gateway reads from catalog. A catalog that did not answer leaves
-      // nothing to call the line, and a line with no name is not written.
-      throw new ConflictException(
-        'The product could not be named just now, so no line was made for it'
+      // gateway reads from catalog, and never another list's text. A product
+      // with no name in any language leaves nothing to call the line, and a
+      // line with no name is not written.
+      throw new BasketProductHasNoNameException(
+        'This product has no name, so no line was made for it'
       );
     }
     const line = await this.createAddedLine(manager, {
