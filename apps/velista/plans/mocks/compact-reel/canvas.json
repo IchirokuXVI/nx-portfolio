@@ -1,6 +1,6 @@
 {
   "title": "Velista: the compact view and the reel",
-  "lede": "Plans <code>0202</code>, <code>0203</code> and <code>0204</code>. The row of <code>0191</code> with the button stepper becomes the default view; the compact view is the two line row with the reel of <code>0043</code> restored, stepping by today's rule. A picker in the header of the zone list and of the basket chooses between them. Every frame is drawn Day in Spanish and Night in English, at 390 by 844, from the source on <code>dev</code> at <code>e06813139</code> and the reel as it was deleted at <code>d8daa824c^</code>. The lines and prices are sample data. Photos are the Open Food Facts copies from <code>../typeahead/photos</code>, CC BY-SA 3.0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. Round 3 (after the owner's review): icon set B everywhere; the basket's picker in the tools row and in the basket's menu; every reel one fixed size so the reels line up; Due rows say only \"Add\"; and a new board, ReelUnit, with the unit drawn under the number. Round 4 (after the owner's second review): the filter button is a funnel on every zone list and on the basket's tools row; the view button \"2\" is final; every reel is 52 by 44 with the number over its unit, in every frame and on the open tape.",
+  "lede": "Plans <code>0202</code>, <code>0203</code> and <code>0204</code>. The row of <code>0191</code> with the button stepper becomes the default view; the compact view is the two line row with the reel of <code>0043</code> restored, stepping by today's rule. A picker in the header of the zone list and of the basket chooses between them. Every frame is drawn Day in Spanish and Night in English, at 390 by 844, from the source on <code>dev</code> at <code>e06813139</code> and the reel as it was deleted at <code>d8daa824c^</code>. The lines and prices are sample data. Photos are the Open Food Facts copies from <code>../typeahead/photos</code>, CC BY-SA 3.0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. The design: icon set B and its header button \"2\"; the picker on the zone list header, and on the basket in the tools row and in the basket's menu; the filter button is a funnel, a new icon, on every zone list header and on the basket's tools row; every reel is 52 by 44 with the unit under the number, in every frame and on the open tape; Due rows say only \"Add\". Approved by the owner on 2026-11-22.",
   "artboards": [
     {
       "file": "Picker.dc.html",
@@ -104,14 +104,14 @@
       "x": 560,
       "y": -330,
       "w": 520,
-      "text": "MEASURED ON THESE FRAMES.\nThe control: the stepper is 155 by 48. The reel is 52 by 44 in every frame (round 4), the number over its unit.\nRoom for words at 390: in the compact row the name and its price share 238 px; the same two line row with the stepper left them 135 px.\nRows: the default row is 99 px, the compact row 68 px. Between the search field and the bar there are 629 px, now that the group line sits in the header (velista 0205): six rows and a third of the seventh in the default view, nine and a quarter in the compact one. About 45 percent more rows on a screen."
+      "text": "MEASURED ON THESE FRAMES.\nThe control: the stepper is 155 by 48. The reel is 52 by 44 in every frame, the number over its unit.\nRoom for words at 390: in the compact row the name and its price share 238 px; the same two line row with the stepper left them 135 px.\nRows: the default row is 99 px, the compact row 68 px. Between the search field and the bar there are 629 px, now that the group line sits in the header (velista 0205): six rows and a third of the seventh in the default view, nine and a quarter in the compact one. About 45 percent more rows on a screen."
     },
     {
       "id": "choose",
       "x": 1120,
       "y": -330,
       "w": 560,
-      "text": "ROUND 4: DECIDED, AND STILL OPEN.\nDecided by the owner: icon set B, and its header button (\"2\"); the basket's picker in the tools row and in the basket's menu (the fourth header action is dropped); one size for every reel, 52 by 44 with the unit under the number (B); Due rows say only \"Add\"; the filter button becomes a funnel.\nStill open:\n1. Whether the real basket filter button takes the funnel too (board Icons, third column).\n2. The words. Proposed: \"Normal\" for Default in Spanish, and Compact drawn as a name with \"More rows on the screen\" under it rather than one line with a colon, because one line wraps at 276 px."
+      "text": "DECIDED BY THE OWNER.\nIcon set B, and its header button (\"2\").\nThe picker on the zone list header, and on the basket in the tools row and in the basket's menu (no fourth header action).\nOne size for every reel, 52 by 44 with the unit under the number.\nDue rows say only \"Add\".\nThe funnel replaces the sliders for the filter on the zone list header and on the basket's tools row (board Icons).\nThe words as drawn: \"Normal\" for Default in Spanish, and Compact as a name with \"More rows on the screen\" under it, because one line with a colon wraps at 276 px."
     },
     {
       "id": "staging",
@@ -139,21 +139,21 @@
       "x": 2260,
       "y": 4840,
       "w": 420,
-      "text": "TWO CHANGES TO THE OLD PILL.\nThe restored pill had a minimum width of 52 and grew with its words, so \"1,5 kg\" made a wider reel than \"6\" and the column broke. Round 4 fixes the box at 52 by 44 with the unit under the number, so every value fits and the column holds. Everything else is the old stylesheet: the subtle border, 12 px radius, the zero style with no fill.\nThe tape's neighbours now print their unit at 11 px, the app's floor (it was 10 px on the round 3 board)."
+      "text": "TWO CHANGES TO THE OLD PILL.\nThe restored pill had a minimum width of 52 and grew with its words, so \"1,5 kg\" made a wider reel than \"6\" and the column broke. The box is fixed at 52 by 44 with the unit under the number, so every value fits and the column holds. Everything else is the old stylesheet: the subtle border, 12 px radius, the zero style with no fill.\nThe tape's neighbours print their unit at 11 px, the app's floor."
     },
     {
       "id": "funnel",
       "x": 1340,
       "y": 1100,
       "w": 440,
-      "text": "THE FUNNEL IS A NEW ICON.\nNo funnel exists in libs/velista/ui icons or in libs/shared/ui. This is a new glyph for libs/velista/ui/src/lib/icons/icons.ts, drawn at the 1.8 stroke and round joins of the header's other icons. It replaces the sliders of FilterIcon on every zone list header and on the basket's tools row.\nPLEASE CONFIRM: the same change applies to the real basket filter button, which draws FilterIcon today.\nNote: the comment on FilterIcon in icons.ts says the sliders were chosen over a funnel on purpose, because the filter sheet also orders and groups, and a funnel says only that rows are removed. The build would rewrite that comment.\nAn active filter keeps today's mark: the glyph in the quiet amber and the count over its corner."
+      "text": "THE FUNNEL IS A NEW ICON.\nNo funnel exists in libs/velista/ui icons or in libs/shared/ui. This is a new glyph for libs/velista/ui/src/lib/icons/icons.ts, drawn at the 1.8 stroke and round joins of the header's other icons. It replaces the sliders of FilterIcon on every zone list header and on the basket's tools row, the real basket filter button included.\nThe build removes the comment on FilterIcon in icons.ts that chose the sliders over a funnel.\nAn active filter keeps today's mark: the glyph in the quiet amber and the count over its corner. The count badge's distance from the funnel is judged on a device after the build."
     },
     {
       "id": "reelunit",
       "x": 1820,
       "y": 6610,
       "w": 460,
-      "text": "THE REEL, FINAL (B).\n52 by 44, the number over its unit: number 15 px bold, unit 11 px, the size of the \"/ kg\" beside the price. The build needs two tokens: --app-quantity-width 52 px and --app-quantity-height 44 px.\nThe pill fills the 44 px tap box the reel already had, so the compact row stays 68 px.\nThe widest figure, \"99,95\", is 38.6 px at 15 px bold; the pill's inside is 46 px, so every value fits. A count has no unit and its number sits centred in the same box; its ceiling, 99 999, prints \"100\" over \"K\".\nWith the reel at 52 px the name and its price share 238 px in the compact row."
+      "text": "THE REEL, FINAL.\n52 by 44, the unit under the number: number 15 px bold, unit 11 px, the size of the \"/ kg\" beside the price. The build needs two tokens: --app-quantity-width 52 px and --app-quantity-height 44 px.\nThe pill fills the 44 px tap box the reel already had, so the compact row stays 68 px.\nThe widest figure, \"99,95\", is 38.6 px at 15 px bold; the pill's inside is 46 px, so every value fits. A count has no unit and its number sits centred in the same box; its ceiling, 99 999, prints \"100\" over \"K\".\nWith the reel at 52 px the name and its price share 238 px in the compact row.\nThe reel takes snap points: 1000, and on the basket row sheet the list's ask. A drag lands exactly on a snap point even when the step would skip it."
     },
     {
       "id": "sheet",
