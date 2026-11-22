@@ -1,10 +1,14 @@
 import {
   BasketKind,
   BasketStatus,
+  LINE_QUANTITY_MAX,
   LineApprovalStatus,
   MembershipStatus,
   ParticipantKind,
+  PURCHASE_SESSION_GAP_MS,
   SettlementOutcome,
+  TripKind,
+  TripRowOutcome,
   ZoneRole,
   ZoneStatus,
   type BasketRowView,
@@ -36,15 +40,20 @@ import { LineChangeRecorder } from '../lists/changes/line-change.recorder';
 import { LineMergeService } from '../lists/line-merge.service';
 import { LineService } from '../lists/line.service';
 import { ListAccessService } from '../lists/list-access.service';
+import { toTripRowView } from '../lists/trips/trips.mappers';
 import {
   BASKET_TRIP_ROWS_SQL,
+  ENDED_TRIPS_SQL,
+  LIVE_TRIPS_SQL,
   type TripLineRow,
+  type TripRow,
 } from '../lists/trips/trips.sql';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { fakeBasketAnnouncer } from './basket-announcer.fake';
 import { fakeCoreConfig } from './basket-config.fake';
 import { BasketCoverageService } from './basket-coverage.service';
 import { BasketDemandService } from './basket-demand.service';
+import { BasketPatchReader } from './basket-patch.reader';
 import { BasketReadService } from './basket-read.service';
 import { BasketRevertService } from './basket-revert.service';
 import { BasketRowResolver } from './basket-row-resolver';
@@ -73,6 +82,7 @@ describeIntegration(
     let settleService: BasketSettleService;
     let revertService: BasketRevertService;
     let demandService: BasketDemandService;
+    let lines: LineService;
 
     const announcer = fakeBasketAnnouncer();
     const zoneIds: string[] = [];
@@ -164,7 +174,7 @@ describeIntegration(
         events,
         new LineChangeRecorder()
       );
-      const lines = new LineService(
+      lines = new LineService(
         dataSource,
         dataSource.getRepository(ListLine),
         dataSource.getRepository(ListLineItem),
@@ -353,6 +363,8 @@ describeIntegration(
 
     async function numbersOf(w: World, lineId: string) {
       const row = await rowOf(w, lineId);
+      // A row of one entry: the entry's own ask is the row's.
+      expect(row.entries.map((entry) => entry.asked)).toEqual([row.asked]);
       return { asked: row.asked, left: row.left, bought: row.bought };
     }
 
@@ -374,10 +386,39 @@ describeIntegration(
     /** The trips read agrees with the basket read about the ask (section 1, 6). */
     async function expectTripAgrees(w: World, lineId: string): Promise<void> {
       const row = await rowOf(w, lineId);
-      const trip = await tripOf(w, lineId);
-      expect(Number(trip.asked)).toBe(row.asked);
-      expect(Number(trip.bought)).toBe(row.bought);
+      const trip = toTripRowView(TripKind.BASKET, await tripOf(w, lineId));
+      expect(trip.asked).toBe(row.asked);
+      expect(trip.bought).toBe(row.bought);
+      expect(trip.left).toBe(row.left);
     }
+
+    /** The trip summary of this basket, live or ended (plan 0122). */
+    async function tripSummaryOf(w: World): Promise<TripRow> {
+      const window = [w.listId, PURCHASE_SESSION_GAP_MS, new Date(0)];
+      const live = await dataSource.query<TripRow[]>(LIVE_TRIPS_SQL, window);
+      const ended = await dataSource.query<TripRow[]>(ENDED_TRIPS_SQL, [
+        ...window,
+        null,
+        null,
+        50,
+      ]);
+      const trip = [...live, ...ended].find((row) => row.id === w.basket.id);
+      if (!trip) {
+        throw new Error(`no trip for ${w.basket.id}`);
+      }
+      return trip;
+    }
+
+    /** What `basket.linesChanged` would carry for these lines now (plan 0204). */
+    const patchesOf = (w: World, lineIds: string[]) =>
+      new BasketPatchReader(
+        dataSource.getRepository(Basket),
+        fakeCoreConfig()
+      ).entriesOf(
+        { basketId: w.basket.id, kind: w.basket.kind },
+        [w.listId],
+        lineIds
+      );
 
     const appliedOf = async (lineId: string) =>
       (
@@ -493,7 +534,12 @@ describeIntegration(
         [first.id, second.id].sort()
       );
 
-      await buy(w, [first.id], 5, 3);
+      const settled = await buy(w, [first.id], 5, 3);
+
+      // The settle's own answer carries each entry's ask beside the row's.
+      expect(
+        settled.entries.find((candidate) => candidate.lineId === first.id)
+      ).toMatchObject({ left: 0, bought: 5, asked: 3 });
 
       const after = await rowOf(w, first.id);
       // 3 and 1, so the row asks 4. Each entry's ask is its `left` plus what its
@@ -501,9 +547,16 @@ describeIntegration(
       expect(after.asked).toBe(4);
       const entry = (lineId: string) =>
         after.entries.find((candidate) => candidate.lineId === lineId);
-      expect(entry(first.id)).toMatchObject({ left: 0, bought: 5 });
-      expect(entry(second.id)).toMatchObject({ left: 1, bought: 0 });
+      expect(entry(first.id)).toMatchObject({ left: 0, bought: 5, asked: 3 });
+      expect(entry(second.id)).toMatchObject({ left: 1, bought: 0, asked: 1 });
       expect(await appliedOf(first.id)).toEqual([{ quantity: 5, applied: 3 }]);
+
+      // The patch of `basket.linesChanged` states the same ask per entry.
+      const patches = await patchesOf(w, [first.id, second.id]);
+      const patch = (lineId: string) =>
+        patches.find((candidate) => candidate.lineId === lineId);
+      expect(patch(first.id)).toMatchObject({ left: 0, bought: 5, asked: 3 });
+      expect(patch(second.id)).toMatchObject({ left: 1, bought: 0, asked: 1 });
 
       // Its two units above the ask go first, so the line gets nothing back.
       await minus(w, [first.id], 2, 5);
@@ -513,7 +566,10 @@ describeIntegration(
       expect(taken.asked).toBe(4);
       expect(
         taken.entries.find((candidate) => candidate.lineId === first.id)
-      ).toMatchObject({ left: 0, bought: 3 });
+      ).toMatchObject({ left: 0, bought: 3, asked: 3 });
+      expect(
+        taken.entries.find((candidate) => candidate.lineId === second.id)
+      ).toMatchObject({ left: 1, bought: 0, asked: 1 });
       expect(await appliedOf(first.id)).toEqual([{ quantity: 3, applied: 3 }]);
     });
 
@@ -615,6 +671,84 @@ describeIntegration(
       expect(await appliedOf(milk.id)).toEqual([{ quantity: 3, applied: 3 }]);
     });
 
+    it('takes an ask above the line ceiling while the line stays under it, and refuses one past it', async () => {
+      // The ask is the line plus what the buys met, so it can pass the ceiling
+      // of a line (plan 0262) by what was bought; the line itself cannot.
+      const w = await world();
+      const milk = await line(w, LINE_QUANTITY_MAX);
+      await buy(w, [milk.id], 1, LINE_QUANTITY_MAX);
+
+      await ask(w, milk.id, LINE_QUANTITY_MAX + 1, LINE_QUANTITY_MAX - 1);
+      expect(await quantityOf(milk.id)).toBe(LINE_QUANTITY_MAX);
+      expect(await numbersOf(w, milk.id)).toEqual({
+        asked: LINE_QUANTITY_MAX + 1,
+        left: LINE_QUANTITY_MAX,
+        bought: 1,
+      });
+
+      await expect(
+        ask(w, milk.id, LINE_QUANTITY_MAX + 2, LINE_QUANTITY_MAX)
+      ).rejects.toMatchObject({ code: 'validation_failed' });
+      expect(await quantityOf(milk.id)).toBe(LINE_QUANTITY_MAX);
+    });
+
+    // --- a raise from the list page after a buy above the ask -----------------
+
+    it('reads a raise after a buy above the ask the same in the basket read and the trips read, open and finished', async () => {
+      // The owner's ruling (2026-11-22): a raise of the line from the list page
+      // takes nothing back from the units bought above the ask. Asks 3, the
+      // basket buys 4 (3 met it, the line goes to 0), the household raises the
+      // line to 2: asked 5, left 2, bought 4, in every read.
+      const w = await world();
+      const milk = await line(w, 3);
+      await buy(w, [milk.id], 4, 3);
+      await lines.addQuantity({
+        userId: w.userId,
+        lineId: milk.id,
+        delta: 2,
+        unit: 'UNIT',
+        expect: 0,
+      });
+      expect(await quantityOf(milk.id)).toBe(2);
+
+      const expectEveryRead = async () => {
+        expect(await numbersOf(w, milk.id)).toEqual({
+          asked: 5,
+          left: 2,
+          bought: 4,
+        });
+        expect((await rowOf(w, milk.id)).state).toBe('PARTLY');
+        const trip = toTripRowView(TripKind.BASKET, await tripOf(w, milk.id));
+        expect(trip).toMatchObject({
+          asked: 5,
+          left: 2,
+          bought: 4,
+          outcome: TripRowOutcome.PARTLY,
+        });
+        // Not counted as a bought line: two are still owed.
+        expect(await tripSummaryOf(w)).toMatchObject({
+          lineCount: 1,
+          boughtLineCount: 0,
+        });
+      };
+
+      await expectEveryRead();
+
+      // What the finish does: the status, then the freeze in one transaction.
+      await dataSource.transaction(async (manager) => {
+        await manager
+          .getRepository(Basket)
+          .update(w.basket.id, { status: BasketStatus.FINISHED });
+        await manager.query(BASKET_TRIP_ROWS_FREEZE_SQL, [w.basket.id]);
+      });
+      const frozen = await dataSource
+        .getRepository(BasketTripRow)
+        .findOneByOrFail({ basketId: w.basket.id, lineId: milk.id });
+      expect(frozen.asked).toBe(5);
+
+      await expectEveryRead();
+    });
+
     // --- 5. the freeze ----------------------------------------------------------
 
     it('freezes the original ask of a line bought above it (spec 5)', async () => {
@@ -671,6 +805,11 @@ describeIntegration(
         quantity: 300,
         from: 500,
       });
+      // An estimate, which the column's default is not: the half that stands
+      // must carry the purchase's own value, not fall back to the default.
+      await dataSource
+        .getRepository(LineSettlement)
+        .update({ lineId: ham.id }, { estimated: true });
 
       await revertService.revert({
         basketId: w.basket.id,
@@ -690,6 +829,7 @@ describeIntegration(
         quantity: 200,
         applied: 200,
         unit: 'GRAM',
+        estimated: true,
       });
       expect(await numbersOf(w, ham.id)).toEqual({
         asked: 500,

@@ -1166,6 +1166,8 @@ describe('what a patch and an entry both state (plan 0204)', () => {
       unit: 'UNIT',
       left: 2,
       bought: 0,
+      // `left` plus what this basket's buys met (plan 0274): no buy, so 2.
+      asked: 2,
       boughtElsewhere: 0,
       state: BasketRowState.WANTED,
       approvalStatus: LineApprovalStatus.APPROVED,
@@ -1174,6 +1176,21 @@ describe('what a patch and an entry both state (plan 0204)', () => {
       act: null,
       tripItemId: null,
     });
+  });
+
+  it('carries the ask of the entry, not bought + left, after a buy above it (plan 0274)', () => {
+    // Asked 3, bought 4: the buy met 3 of it, so the entry still asks 3.
+    const only = entry({
+      quantity: 0,
+      settlements: [bought(4, { applied: 3 })],
+    });
+
+    expect(toEntryPatch(only, NO_FACTS)).toMatchObject({
+      left: 0,
+      bought: 4,
+      asked: 3,
+    });
+    expect(toEntryView(only, OPEN_CONTEXT)).toMatchObject({ asked: 3 });
   });
 
   it('carries the product of the buy in this trip (plan 0201, section 1)', () => {

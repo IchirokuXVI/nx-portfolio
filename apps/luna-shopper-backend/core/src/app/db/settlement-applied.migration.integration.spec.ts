@@ -1,9 +1,12 @@
+import { BasketKind } from '@portfolio/luna-shopper/contracts';
 import {
   describeIntegration,
   requiredEnv,
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { DataSource } from 'typeorm';
-import { CORE_ENTITIES } from '../entities';
+import { fakeCoreConfig } from '../baskets/basket-config.fake';
+import { BasketPatchReader } from '../baskets/basket-patch.reader';
+import { Basket, CORE_ENTITIES } from '../entities';
 import { BASKET_TRIP_ROWS_SQL } from '../lists/trips/trips.sql';
 import { CORE_MIGRATIONS } from './migrations';
 import { SettlementApplied1756004200000 } from './migrations/1756004200000-SettlementApplied';
@@ -124,6 +127,43 @@ describeIntegration('SettlementApplied (real Postgres)', () => {
     return (await probe.query(OLD_ASKED_SQL, [BASKET, LIST])) as Numbers[];
   }
 
+  /** The basket read's numbers of each line, after the migration. */
+  async function basketNumbers(): Promise<Required<Numbers>[]> {
+    const reader = new BasketPatchReader(
+      probe.getRepository(Basket),
+      fakeCoreConfig()
+    );
+    const patches = await reader.entriesOf(
+      { basketId: BASKET, kind: BasketKind.GENERATED },
+      [LIST],
+      [MILK, BREAD]
+    );
+    return [MILK, BREAD].map((lineId) => {
+      const patch = patches.find((candidate) => candidate.lineId === lineId);
+      return {
+        lineId,
+        asked: Number(patch?.asked),
+        left: Number(patch?.left),
+        bought: Number(patch?.bought),
+      };
+    });
+  }
+
+  function expectedFrom(
+    rows: Numbers[],
+    lineIds: string[]
+  ): Required<Numbers>[] {
+    return lineIds.map((lineId) => {
+      const row = rows.find((candidate) => candidate.lineId === lineId);
+      return {
+        lineId,
+        asked: Number(row?.asked),
+        left: Number(row?.left),
+        bought: Number(row?.bought),
+      };
+    });
+  }
+
   async function columnDefault(): Promise<string | null | undefined> {
     const [row] = (await probe.query(
       `SELECT column_default AS "value"
@@ -237,6 +277,18 @@ describeIntegration('SettlementApplied (real Postgres)', () => {
     expect(pick(before, BREAD)).toEqual({ asked: 2, bought: 1 });
   });
 
+  it('changes no ask, left or bought that the basket read gives', async () => {
+    // The basket read's own statements and mappers, narrowed to these lines:
+    // what `basket.linesChanged` carries is the entry a read of the same
+    // instant serves (plan 0204, section 3), and each line here is its own row.
+    expect(await basketNumbers()).toEqual(expectedFrom(before, [MILK, BREAD]));
+    // What the old read gave, so the comparison is not of two empties.
+    expect(expectedFrom(before, [MILK, BREAD])).toEqual([
+      { lineId: MILK, asked: 4, left: 0, bought: 4 },
+      { lineId: BREAD, asked: 2, left: 1, bought: 1 },
+    ]);
+  });
+
   it('leaves no default, so an insert that does not name applied is refused', async () => {
     expect(await columnDefault()).toBeNull();
     await expect(settlement(BREAD, 'BOUGHT', 1)).rejects.toThrow(/applied/);
@@ -272,5 +324,6 @@ describeIntegration('SettlementApplied (real Postgres)', () => {
        WHERE "applied" = "quantity"`
     )) as { n: number }[];
     expect(count.n).toBe(4);
+    expect(await basketNumbers()).toEqual(expectedFrom(before, [MILK, BREAD]));
   });
 });

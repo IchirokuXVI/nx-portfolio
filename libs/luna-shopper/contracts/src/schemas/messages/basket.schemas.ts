@@ -186,6 +186,9 @@ const entryNumbers = {
   version: integer({ minimum: 0 }),
   left: integer({ minimum: 0 }),
   bought: integer({ minimum: 0 }),
+  // `left` plus the units of this basket's buys that met the ask, computed,
+  // never stored (plan 0274). Below `bought + left` after a buy above the ask.
+  asked: integer({ minimum: 0 }),
   // Bought lately through another basket or through none (plan 0188). A
   // count alone: the row never names who bought.
   boughtElsewhere: integer({ minimum: 0 }),
@@ -204,6 +207,7 @@ const entryNumbersRequired = [
   'version',
   'left',
   'bought',
+  'asked',
   'boughtElsewhere',
   'state',
   'approvalStatus',
@@ -772,7 +776,9 @@ const demandRequest = object(
     participantId: nonEmptyString(),
     rowKey: nonEmptyString(),
     lineId: nonEmptyString(),
-    quantity: integer({ minimum: 0, maximum: LINE_QUANTITY_MAX }),
+    // The whole ask, the line plus what this basket's buys met (plan 0274). No
+    // ceiling of its own: core holds the line after the write to the ceiling.
+    quantity: integer({ minimum: 0 }),
     // Required, and checked like a delta's (plan 0246, section 3.4).
     unit: ref(ENUM_IDS.lineUnit),
     from: integer({ minimum: 0 }),

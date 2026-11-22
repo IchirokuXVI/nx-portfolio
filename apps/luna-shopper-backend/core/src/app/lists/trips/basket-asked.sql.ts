@@ -94,7 +94,8 @@ export function basketAskedCte(basketParam: string | null): string {
  *
  * Within one line, and in the unit given (plan 0246, section 3.5): a buy made
  * before the line changed its unit is not added to what it asks. The three
- * arguments are SQL expressions for the basket, the line and that unit.
+ * arguments are SQL expressions for the basket, the line and that unit; the
+ * fourth renames the join where `b` is taken, as it is in the trips read.
  *
  * One fragment for every read that derives an ask (the trips read through
  * {@link basketAskedCte}, the freeze at finish, and the basket read of a
@@ -103,7 +104,8 @@ export function basketAskedCte(basketParam: string | null): string {
 export function basketLineBuys(
   basketExpr: string,
   lineExpr: string,
-  unitExpr: string
+  unitExpr: string,
+  alias = 'b'
 ): string {
   return `LEFT JOIN LATERAL (
     SELECT COALESCE(
@@ -117,7 +119,7 @@ export function basketLineBuys(
       AND s."lineId" = ${lineExpr}
       AND s."unit" = ${unitExpr}
       AND s."revertedAt" IS NULL
-  ) b ON TRUE`;
+  ) ${alias} ON TRUE`;
 }
 
 /**

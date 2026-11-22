@@ -549,6 +549,9 @@ export function toEntryPatch(
     unit: entry.unit,
     left: rule.left,
     bought: rule.bought,
+    // `left` plus what this basket's buys met of the ask (plan 0274), by the
+    // rule the row's own `asked` sums, so a client never has to know `applied`.
+    asked: rowNumbersOf([rule]).asked,
     // Somebody else's units, beside this basket's own and never added to them
     // (plan 0188).
     boughtElsewhere: rule.boughtElsewhere,

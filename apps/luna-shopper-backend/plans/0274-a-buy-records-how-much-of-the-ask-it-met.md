@@ -2,6 +2,9 @@
 
 # 0274: a buy records how much of the ask it met
 
+> Amended on 2026-11-22 after its review: each entry carries `asked` on the wire; the
+> demand's `quantity` is the ask and old clients are cut off by `minClientVersion`.
+>
 > Decided on 2026-11-22. While a basket is open, what a list asks of it is not stored: it
 > is `bought + left`, where `left` is the zone line's `quantity` and `bought` is the sum of
 > this basket's standing buys of the line in this trip (plan 0136; `rowNumbersOf`,
@@ -92,8 +95,13 @@ applied, taking the units above the ask first.
    and the freeze's comment says the same.
 7. Backend `0273`'s new write inserts its settlement with `applied = 0` (the line is made, or
    found, at 0).
-8. No route, request or response shape changes. `openapi.json` changes only if a doc comment
-   the generator reads changed; regenerate and commit it, and the admin wire types, if so.
+8. No route changes. One response field is added: every entry (`BasketRowEntryView` on the
+   basket read and on each write's `BasketRowResult.entries`, and `BasketEntryPatch` on
+   `basket.linesChanged`) carries `asked`, the entry's `left` plus the units of this
+   basket's buys that met the ask, computed, never stored. The demand request keeps its
+   shape, and its `quantity` is the list's whole ask, not what is left; `from` is the
+   entry's `left`. A client that sends what is left is cut off by raising `minClientVersion`
+   with the release. Regenerate and commit `openapi.json` and the admin wire types.
 
 ### Scope
 
