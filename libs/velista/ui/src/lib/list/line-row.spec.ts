@@ -5,6 +5,8 @@ import {
   type LineRowVm,
   type QuantityStep,
 } from '@portfolio/velista/models';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { LineRow } from './line-row';
 
 /**
@@ -715,6 +717,55 @@ describe('LineRow', () => {
       const fixture = await render(vm({ editor: 'Ana' }));
 
       expect(row(fixture).getAttribute('aria-label')).toBe('Sourdough loaf, 1');
+    });
+  });
+
+  /**
+   * Velista 0196. jsdom cannot press an element into `:active`, so the stylesheet is
+   * read: the row turns the browser's tap box off, and draws its own press only when
+   * the press is not inside a control.
+   */
+  describe('the press (velista 0196)', () => {
+    const scss = readFileSync(join(__dirname, 'line-row.scss'), 'utf8');
+
+    /** The body of the first rule whose selector is exactly `selector`. */
+    function ruleBody(selector: string): string | undefined {
+      for (const match of scss.matchAll(/([^{}]*)\{([^{}]*)/g)) {
+        const head = match[1]
+          .replace(/\/\/[^\n]*/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (head === selector) return match[2];
+      }
+      return undefined;
+    }
+
+    it('turns off the tap highlight on the row', () => {
+      expect(ruleBody('.row')).toMatch(
+        /-webkit-tap-highlight-color:\s*transparent;/
+      );
+    });
+
+    it('sinks the row on a press that is not inside the stepper, a button or the picture', () => {
+      const pressed = /([^{}]*\.row:active[^{}]*)\{([^{}]*)\}/.exec(scss);
+      const selector =
+        pressed?.[1]
+          .replace(/\/\/[^\n]*/g, '')
+          .replace(/\s+/g, ' ')
+          .trim() ?? '';
+
+      expect(selector).toMatch(/^\.row:active:not\( ?:has\(/);
+      for (const control of [
+        'lib-quantity-stepper:active',
+        'button:active',
+        'lib-product-picture:active',
+      ]) {
+        expect(selector).toContain(control);
+      }
+      expect(pressed?.[2]).toMatch(
+        /background:\s*var\(--app-surface-sunken\);/
+      );
+      expect(pressed?.[2]).not.toContain('transition');
     });
   });
 

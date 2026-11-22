@@ -18,11 +18,26 @@
   padding: var(--app-space-2) 0;
   text-align: start;
   cursor: pointer;
+  // No blue box from the browser (velista 0196). The row is a `role="button"` with a
+  // click handler, so a phone highlights it for any tap inside it, a tap on the
+  // stepper included. The property is inherited, so the choose buttons and the
+  // picture's zoom button under the row lose their own box as well.
+  -webkit-tap-highlight-color: transparent;
 
   &:focus-visible {
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
     outline-offset: calc(var(--app-focus-ring-width) * -1);
   }
+}
+
+// The row's own press, in place of the browser's box (velista 0196). `:active` holds
+// on every ancestor of the pressed element, so a press inside the stepper, a button or
+// the picture would draw it too; `:has()` leaves those out. No transition: the press
+// shows at once and goes on release.
+.row:active:not(
+    :has(lib-quantity-stepper:active, button:active, lib-product-picture:active)
+  ) {
+  background: var(--app-surface-sunken);
 }
 
 // A reader's row. Still readable, still selectable, and it does not pretend to be a
