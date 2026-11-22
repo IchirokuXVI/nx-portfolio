@@ -1,6 +1,6 @@
 {
   "title": "Velista: the compact view and the reel",
-  "lede": "Plans <code>0202</code>, <code>0203</code> and <code>0204</code>. The row of <code>0191</code> with the button stepper becomes the default view; the compact view is the two line row with the reel of <code>0043</code> restored, stepping by today's rule. A picker in the header of the zone list and of the basket chooses between them. Every frame is drawn Day in Spanish and Night in English, at 390 by 844, from the source on <code>dev</code> at <code>e06813139</code> and the reel as it was deleted at <code>d8daa824c^</code>. The lines and prices are sample data. Photos are the Open Food Facts copies from <code>../typeahead/photos</code>, CC BY-SA 3.0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. The design: icon set B and its header button \"2\"; the picker on the zone list header, and on the basket in the tools row and in the basket's menu; the filter button is a funnel, a new icon, on every zone list header and on the basket's tools row; every reel is 52 by 44 with the unit under the number, in every frame and on the open tape; Due rows say only \"Add\". Approved by the owner on 2026-11-22.",
+  "lede": "Plans <code>0202</code>, <code>0203</code> and <code>0204</code>. The row of <code>0191</code> with the button stepper becomes the default view; the compact view is the two line row with the reel of <code>0043</code> restored, stepping by today's rule. A picker in the header of the zone list and of the basket chooses between them. Every frame is drawn Day in Spanish and Night in English, at 390 by 844, from the source on <code>dev</code> at <code>e06813139</code> and the reel as it was deleted at <code>d8daa824c^</code>. The lines and prices are sample data. Photos are the Open Food Facts copies from <code>../typeahead/photos</code>, CC BY-SA 3.0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. The design: icon set B and its header button \"2\"; the picker on the zone list header, and on the basket in the tools row and in the basket's menu; the filter button is a funnel, a new icon, on every zone list header and on the basket's tools row; every reel is 52 by 44 with the unit under the number, in every frame and on the open tape; Due rows say only \"Add\". Approved by the owner on 2026-11-22. Round 6 adds the question a raised line asks when units were bought above its ask. Not yet approved.",
   "artboards": [
     {
       "file": "Picker.dc.html",
@@ -89,6 +89,14 @@
       "w": 1760,
       "h": 1270,
       "title": "The reel, final: 52 by 44, the unit under the number, the open tape and a whole list"
+    },
+    {
+      "file": "OverBought.dc.html",
+      "x": 0,
+      "y": 7970,
+      "w": 2962,
+      "h": 3086,
+      "title": "Round 6: a raised line asks whether the units bought above its ask count"
     }
   ],
   "annotations": [
@@ -161,6 +169,27 @@
       "y": 5510,
       "w": 440,
       "text": "THE ROW SHEET (0204).\nThe colours of 0201 move onto the reel: the resting number and every number on the tape are green when equal to the list's ask and amber above it. Both pass the contrast floor on the raised surface and on the tape: green 5.5 to 1 and amber 4.9 to 1 on Day, both above 8 to 1 on Night.\nThe label is \"<list> · <ask>\", the list name cut first and the ask never. No menu trigger on a row: plan 0200 dropped it. The lists' heading reads \"What you bought\" / \"Lo que has comprado\" (0201), with the text button \"Lists and amounts\" / \"Listas y cantidades\" on its right, which opens the detailed view (0200). \"Bought for another list\" draws reels too, from 0."
+    },
+    {
+      "id": "ob-words",
+      "x": 3020,
+      "y": 7970,
+      "w": 520,
+      "text": "ROUND 6, THE WORDS PROPOSED (A).\nEN: \"Marta already bought 1 extra. Do you still need 2, or just 1?\" Answers: \"Still need\" 2, \"Count the extra\" 1.\nES: \"Marta ya compró 1 de más. ¿Sigues necesitando 2 o solo 1?\" Answers: \"Sigo necesitando\" 2, \"Contar lo comprado de más\" 1.\nWhen the extra covers it: \"Do you still need 1, or is that enough?\" with \"Still need\" 1 and \"That's enough\"; \"¿Sigues necesitando 1 o con eso basta?\" with \"Sigo necesitando\" 1 and \"Con eso basta\". Nothing says 0.\nThe answer words carry no number: the amount sits on the row's end, as the add choice draws it, so a reader sees what each answer leaves on the line.\n\"de más\" and \"extra\" avoid a noun, so the Spanish needs no gender for \"huevos\" or \"leche\". B's question \"¿Qué debe pedir la lista ahora?\" does the same."
+    },
+    {
+      "id": "ob-frame",
+      "x": 3020,
+      "y": 8560,
+      "w": 520,
+      "text": "ROUND 6, THE FRAME.\nThe choice frame of AnchoredPopover (276 px, rows to the edges, the raised surface, the hairline, the second elevation) with the add choice's inside: a 15 px 600 title and 48 px rows. No icon and no tint, as the existing popovers have none. Above the control, aligned to its end, 8 px off it, so the amount it asks about stays in sight; below when the row is near the top, as the add choice flips.\nFocus starts on the first answer, the amount as set. Escape, a press outside and the back gesture close it like that answer."
+    },
+    {
+      "id": "ob-doubts",
+      "x": 3020,
+      "y": 9060,
+      "w": 560,
+      "text": "ROUND 6, FOR THE OWNER TO DECIDE.\n1. When it opens: at once on the first press of +, or after the quiet beat when the amount is saved. Drawn after the beat (the stepper already shows 2), so a run of presses asks once, about the amount the person stopped on.\n2. Closed without an answer: the amount set stands, as the owner's words suggest. Drawn as the default (board frame 6, left).\n3. The next raise of the same line: proposed to ask again only while an extra remains that nobody counted. Once per line per trip is the other choice. Not drawn.\n4. Several buyers: \"Marta and Luis already bought 2 extra\" for two, \"3 people already bought 3 extra\" for more? Not drawn.\n5. The line page's amount and the line sheet's amount: do they ask too? Drawn for the zone list rows only.\n6. A reel that closes on its value: drawn as asking after it closes (frame 2), never while the tape is up.\n7. A guest's buy names the list's owner. If the owner is the person raising it, \"You already bought 1 extra\"?\n8. How a line covered by the extra draws at rest: drawn as the stepper at 0."
     }
   ]
 }
