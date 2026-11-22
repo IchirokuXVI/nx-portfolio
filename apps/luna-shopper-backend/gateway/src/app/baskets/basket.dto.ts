@@ -280,12 +280,10 @@ export class SetBasketRowDemandDto {
 
   @ApiProperty({
     minimum: 0,
-    maximum: LINE_QUANTITY_MAX,
-    description: 'What that list asks for from now on. Zero is allowed.',
+    description: `The list's whole ask from now on: what the line still holds plus what this basket's buys met of it (the entry's \`asked\`), never what is left after them (plan 0274). Zero is allowed. An ask below what the buys met leaves the line at 0 and turns the difference into units bought above the ask. It has no ceiling of its own, because the ask is the line plus what was bought toward it: core refuses an ask whose line would end above ${LINE_QUANTITY_MAX}.`,
   })
   @IsInt()
   @Min(0)
-  @Max(LINE_QUANTITY_MAX)
   quantity!: number;
 
   @RequiredLineUnit()
@@ -294,7 +292,7 @@ export class SetBasketRowDemandDto {
   @ApiProperty({
     minimum: 0,
     description:
-      'What the line asks for as you drew it. It has no ceiling, because it is what the line holds and not what the demand writes: a line stored above the ceiling is moved down with its own amount here (plan 0262).',
+      "The entry's `left` as you drew it: what the line itself held, not the ask. A write that landed since moves it and the demand is refused with `stale_quantity`. It has no ceiling, because it is what the line holds and not what the demand writes: a line stored above the ceiling is moved down with its own amount here (plan 0262).",
   })
   @IsInt()
   @Min(0)

@@ -777,6 +777,7 @@ describe('contract schemas', () => {
         version: 4,
         left: 0,
         bought: 0,
+        asked: 0,
         boughtElsewhere: 2,
         state: 'DONE',
         approvalStatus: 'APPROVED',
@@ -819,6 +820,7 @@ describe('contract schemas', () => {
         version: 4,
         left: 1,
         bought: 1,
+        asked: 2,
         boughtElsewhere: 0,
         state: 'PARTLY',
         approvalStatus: 'APPROVED',
@@ -1092,6 +1094,7 @@ describe('contract schemas', () => {
         unit: 'GRAM',
         left: 2,
         bought: 1,
+        asked: 3,
         boughtElsewhere: 0,
         state: 'PARTLY',
         approvalStatus: 'APPROVED',
@@ -3413,7 +3416,7 @@ describe('a line holds up to 99 999 of its unit (plan 0262, 2026-11-17)', () => 
     expect(valid(100000)).toBe(false);
   });
 
-  it('a basket demand sets a line to the ceiling and not past it', () => {
+  it('a basket demand names the whole ask, which can pass the ceiling (plan 0274)', () => {
     const demand = {
       basketId: 'b',
       participantId: 'p',
@@ -3425,8 +3428,13 @@ describe('a line holds up to 99 999 of its unit (plan 0262, 2026-11-17)', () => 
     const valid = (quantity: number) =>
       validateSchema(BASKET_SCHEMA_IDS.demandRequest, { ...demand, quantity })
         .valid;
+    // The ask is the line plus what this basket's buys met of it, so a line at
+    // the ceiling with units bought toward it asks more than the ceiling. Core
+    // holds the line after the write to the ceiling; the schema does not guess.
     expect(valid(99999)).toBe(true);
-    expect(valid(100000)).toBe(false);
+    expect(valid(100000)).toBe(true);
+    expect(valid(-1)).toBe(false);
+    expect(valid(1.5)).toBe(false);
   });
 
   it('a line stored above the ceiling is named as it is, so it can be stepped down', () => {
