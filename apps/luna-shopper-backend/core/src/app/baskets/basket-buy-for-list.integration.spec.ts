@@ -77,6 +77,7 @@ describeIntegration('a buy for a list that did not ask (real Postgres)', () => {
   let service: BasketBuyForListService;
   let settleService: BasketSettleService;
   let revertService: BasketRevertService;
+  let readService: BasketReadService;
 
   const announcer = fakeBasketAnnouncer();
   const emitted: string[] = [];
@@ -167,6 +168,7 @@ describeIntegration('a buy for a list that did not ask (real Postgres)', () => {
       ),
       fakeCoreConfig()
     );
+    readService = read;
     const context = new BasketWriteContext(
       baskets,
       coverage,
@@ -628,10 +630,49 @@ describeIntegration('a buy for a list that did not ask (real Postgres)', () => {
     expect(emitted).toEqual([]);
   });
 
-  it('makes an entry with left 0 that settles and reverts by its line (spec 7)', async () => {
+  it('makes an entry asking 0 that settles and reverts by its line (spec 7)', async () => {
     const w = await world();
+
+    /** The row that holds this line, as the basket read serves it. */
+    const rowOf = async (lineId: string) => {
+      const view = await readService.read({
+        basketId: w.basket.id,
+        participantId: w.participantId,
+      });
+      const row = view.rows.find((candidate) =>
+        candidate.entries.some((entry) => entry.lineId === lineId)
+      );
+      if (!row) {
+        throw new Error(`no row holds ${lineId}`);
+      }
+      return row;
+    };
+    /**
+     * The entry's ask, as the read counts it (plan 0274, section 3): its
+     * `left` plus the units of its standing buys that met the ask.
+     */
+    const askedOf = async (lineId: string) => {
+      const row = await rowOf(lineId);
+      const entry = row.entries.find((one) => one.lineId === lineId);
+      const applied = (await standingOf(lineId)).reduce(
+        (sum, settlement) => sum + settlement.applied,
+        0
+      );
+      return (entry?.left ?? Number.NaN) + applied;
+    };
+
     await buy(w);
     const [made] = await linesOf(w.other);
+
+    // The buy met no ask: the line asked for nothing (plan 0273, section 1).
+    expect((await standingOf(made.id)).map((row) => row.applied)).toEqual([0]);
+    const afterBuy = await rowOf(made.id);
+    expect(
+      afterBuy.entries.find((one) => one.lineId === made.id)
+    ).toMatchObject({ left: 0, bought: 2 });
+    expect(await askedOf(made.id)).toBe(0);
+    // The row asks for the first list's 2 alone: the new entry adds nothing.
+    expect(afterBuy).toMatchObject({ asked: w.milk.quantity, bought: 2 });
 
     const settled = await settleService.settle({
       basketId: w.basket.id,
@@ -645,10 +686,8 @@ describeIntegration('a buy for a list that did not ask (real Postgres)', () => {
       itemId: MILK,
     });
     const entry = settled.entries.find((one) => one.lineId === made.id);
-    // `asked` 0 on the new entry holds only once backend plan 0274 records
-    // how much of an ask each buy met; a later round asserts it here, beside
-    // `applied = 0` on the insert.
     expect(entry).toMatchObject({ left: 0, bought: 3 });
+    expect(await askedOf(made.id)).toBe(0);
 
     const reverted = await revertService.revert({
       basketId: w.basket.id,
@@ -663,14 +702,18 @@ describeIntegration('a buy for a list that did not ask (real Postgres)', () => {
       reverted.entries.find((one) => one.lineId === made.id)
     ).toMatchObject({
       bought: 2,
-      // The revert gives the units back to the line as it always does,
-      // whether or not the buy lowered it (`basket-revert.service.ts`), so
-      // the list asks for one again. Not this plan's to change.
-      left: 1,
+      // The revert gives back only units that met an ask (plan 0274, section
+      // 4), and none did, so the list still asks for nothing.
+      left: 0,
     });
     expect(
       (await standingOf(made.id)).reduce((sum, row) => sum + row.quantity, 0)
     ).toBe(2);
+    expect(await askedOf(made.id)).toBe(0);
+    expect(await rowOf(made.id)).toMatchObject({
+      asked: w.milk.quantity,
+      bought: 2,
+    });
   });
 
   /** The caller's manager, whose settlement repository throws on save. */

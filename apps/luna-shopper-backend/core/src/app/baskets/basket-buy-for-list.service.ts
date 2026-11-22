@@ -76,7 +76,7 @@ import { LineClaimService } from './line-claim.service';
  * ## The buy is a settle's
  *
  * One `line_settlements` row, `BOUGHT`, with the price columns and the snapshot
- * a settle writes, and the line's quantity left at zero. The `line.settled`
+ * a settle writes, `applied` at 0, and the line's quantity left at zero. The `line.settled`
  * event and the patch to every covering basket are the settle's too, sent
  * after the commit.
  */
@@ -213,6 +213,9 @@ export class BasketBuyForListService {
           itemId,
           outcome: SettlementOutcome.BOUGHT,
           quantity,
+          // The line asked for nothing, so none of the units met an ask
+          // (backend 0274, section 2): the read keeps the ask at 0.
+          applied: 0,
           unit: line.unit ?? 'UNIT',
           settledByUserId: null,
           settledByParticipantId: opened.participant.id,
