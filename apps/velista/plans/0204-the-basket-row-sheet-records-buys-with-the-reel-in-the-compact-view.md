@@ -7,12 +7,17 @@
 > it, and the colour shows on the tape while the reel moves, so a shopper sees it reached
 > before letting go.
 >
-> **Blocked until the owner approves a mock**: `apps/velista/plans/mocks/compact-reel/`, a
-> frame of the basket row sheet in the compact view with one reel open showing the green and
-> the amber numbers on its tape.
+> Amended on 2026-11-22 after the owner approved the mock: the reels take the list's ask as a
+> second snap point beside 1000, like the buy steppers of velista `0201`, and they are the
+> stacked 52 by 44 reel of velista `0203` (the number over its unit).
 >
-> Depends on velista `0201` (the sheet records buys per list, the `target` colour rule) and
-> velista `0203` (the reel). It can be released once those are released (and with them
+> **The mock is approved**: `apps/velista/plans/mocks/compact-reel/`, published at
+> https://claude.ai/artifact/U74Z1MyvcxEK6PN3CRn8N6. Its board `Sheet.dc.html` draws the
+> basket row sheet in the compact view, green at the ask and amber above it. Take the look
+> and the words from it and its note in `canvas.json`.
+>
+> Depends on velista `0195` (the snap points), velista `0201` (the sheet records buys per
+> list, the `target` colour rule) and velista `0203` (the reel). It can be released once those are released (and with them
 > `0200`, `0202` and backend `0273`); it adds nothing those need.
 >
 > Code anchors, on `dev` at `e06813139`:
@@ -38,14 +43,20 @@ on the tape.
 ### Target state
 
 1. The entries read the view from `ListRowsStore`. In the compact view each buy stepper is a
-   `lib-quantity-reel` with the same value, unit, step, `min` 0 and the list's ask as
-   `target`; in the default view nothing changes.
+   `lib-quantity-reel` with the same value, unit, step, `min` 0, the list's ask as
+   `target`, and the same `snaps` as the stepper of velista `0201` (`[...QUANTITY_SNAP_POINTS,
+   entry.asked]`), so a drag lands exactly on the ask even when the step would skip it. It
+   is the reel of velista `0203`, 52 by 44 with the number over its unit. In the default view
+   nothing changes.
 2. The reel gains the input `target: number | null`. Its resting number and every number of
    its tape are `--app-status-success-fg` when equal to the target and
-   `--app-action-quiet-fg` when above it.
+   `--app-action-quiet-fg` when above it. With a target, the tape's current number below
+   it is the primary text colour, not the quiet amber velista `0203` gives it, so amber
+   means only "more than asked" (the board's stylesheet has that `plain` case).
 3. A reel's step goes through the same run as a press of `0201` and is written at once
    (`flush`), so the same settle or revert is sent.
-4. "Bought for another list" draws reels too, starting at 0.
+4. "Bought for another list" draws reels too, starting at 0, with no `snaps` input (only
+   the default stop at 1000), as its steppers in velista `0201`.
 
 ### Scope
 
@@ -60,7 +71,8 @@ on the tape.
 
 ### Action boundaries
 
-- Stop if the mock is not approved, or if velista `0201` or `0203` is not built.
+- Stop if velista `0195`, `0201` or `0203` is not built.
+- Stop and ask if the mock shows something on the sheet that this plan does not list.
 
 ### Progress evidence
 
@@ -75,6 +87,9 @@ history for one buy of 4.
 2. The reel's number and its tape numbers carry the success colour at the target and amber
    above it.
 3. A reel closed from 0 at 4 sends one settle of 4 for that line.
+4. An entry's reel receives `snaps` `[1000, ask]`: with an ask of 990 g and a step of 25, a
+   drag up from 975 g shows 990 (green) and then 1000 (amber) on its tape. A reel of "Bought
+   for another list" receives no `snaps` input.
 
 ## 2. Acceptance criteria
 

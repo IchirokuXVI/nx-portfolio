@@ -12,19 +12,29 @@
 > Guests never see that section.
 >
 > Revised on 2026-11-22 with velista `0200`: the row sheet has one job, recording buys, and
-> says so in a heading ("What you bought" / "Lo que has comprado", or the mock's words).
-> Changing an ask or a product moved to the detailed view of velista `0200`.
+> says so in a heading ("What you bought" / "Lo que has comprado"). Changing an ask or a
+> product moved to the detailed view of velista `0200`.
+>
+> Amended on 2026-11-22 after the owner approved the mock: colours A, so only the stepper's
+> number takes the colour (green at the ask, amber above it). The buy steppers pass the
+> list's ask as a second snap point beside 1000 (velista `0195`), so stepping lands exactly on
+> the ask even when the step would skip it. The words "What you bought" / "Lo que has
+> comprado", "Lists and amounts" / "Listas y cantidades" and "Bought for another list" /
+> "Comprado para otra lista" are final. A guest sees no "Lists and amounts" and no "Bought
+> for another list".
 >
 > This was the design of the sheet before velista `0139`: the entries pane of velista `0090`
 > had a "got" reel per list (commit `3b8da1e91`, `row-entries.ts`, output `allocated`),
 > removed by `9f74867a1`. Its revert then took units from the whole row; this plan takes
 > them from one line.
 >
-> **Blocked until the owner approves a mock**: the same mock as velista `0200`
-> (`apps/velista/plans/mocks/basket-row-buys/`), with the frames of section 1. Build nothing
-> visible before it is approved.
+> **The mock is approved**: the same mock as velista `0200`
+> (`apps/velista/plans/mocks/basket-row-buys/`), published at
+> https://claude.ai/artifact/BfjSwJoGP4hyuG3DXTEiy6. Take every look and word from its boards
+> (section 1 lists them) and the notes in its `canvas.json`.
 >
-> Depends on velista `0200` (the detailed view), backend `0273` (a buy for a list that did
+> Depends on velista `0195` (the `snaps` input of the stepper), velista `0200` (the detailed
+> view), backend `0273` (a buy for a list that did
 > not ask) and backend `0274` (a buy records how much of the ask it met). **Release `0200`,
 > `0201` and backends `0273` and `0274` together.** Without `0200` the row sheet loses the
 > only place to change an ask; without `0273` the section "Add it to another list" cannot
@@ -79,7 +89,12 @@ it reaches or passes the ask, and make the section "Add it to another list" reco
    `{ rowKey, lineIds: [lineId] }`. A new `buyForList` calls backend `0273`'s route and
    updates the row from its answer as a settle does.
 2. **The stepper's value** is `entry.bought` plus the open run. Minimum 0. The product's
-   step and the row's unit as today.
+   step and the row's unit as today. **Its snap points** are the list's ask beside 1000
+   (`snaps: [...QUANTITY_SNAP_POINTS, entry.asked]`, velista `0195`), so a press lands
+   exactly on the ask even when the step would skip it: with an ask of 990 g and a step of
+   25, up from 975 lands on 990, then on 1000. An ask of 0 adds no point (velista `0195`
+   ignores a point at 0). The ask stepper of velista `0200`'s detailed view passes no
+   `snaps`.
 3. **A run up** (net `to > from`) is a settle of that line: `outcome: 'BOUGHT'`,
    `quantity: to - from`, `from: entry.left`, no `allocations`, with the price scope, the
    shop and the item as `setLeft` sends them. **A run down** is a revert of that line:
@@ -91,20 +106,23 @@ it reaches or passes the ask, and make the section "Add it to another list" reco
 5. **The label.** "<list> · <ask>", the ask in the exact form with its unit ("· 1,5 kg"),
    joined with `" · "` as the rest of the app joins words. The list name is cut first, the
    ask never. The line "zone · line" under it is unchanged.
-6. **The colour.** The stepper gains an input `target: number | null` (null: no colour). With
-   a target, the number is `--app-status-success-fg` when the value equals it and
-   `--app-action-quiet-fg` (amber) when the value is above it; below it, the normal colour.
+6. **The colour.** Only the stepper's number takes the colour (colours A of the mock): no
+   ring, no fill, no colour on the label. The stepper gains an input `target: number | null`
+   (null: no colour). With a target, the number is `--app-status-success-fg` when the value
+   equals it and `--app-action-quiet-fg` (amber) when the value is above it; below it, the
+   normal colour.
    An entry whose ask is 0 and which has a buy is amber. The live region also says it: the
    amount it settles on is followed by "reached" or "more than asked" (keys
    `amount.reached`, `amount.over`).
 7. **"Add it to another list".** Its heading becomes "Bought for another list" /
-   "Comprado para otra lista" (keys of the mock's words). Its steppers start at 0 and a run
-   up calls `buyForList` with the list, its `lineId` from `productLists` (or none) and the
+   "Comprado para otra lista". Its steppers start at 0, take no ask as a snap point (the
+   list asks nothing yet), and a run up calls `buyForList` with the list, its `lineId` from `productLists` (or none) and the
    quantity. After the answer that list is an entry of the row and leaves the section. The
    section is still never drawn for a guest.
 8. **The heading.** The lists of the row sheet sit under a heading that states the sheet's
-   job, "What you bought" / "Lo que has comprado" (the mock's words), with velista `0200`'s
-   "Lists and amounts" button in the same row.
+   job, "What you bought" / "Lo que has comprado", with velista `0200`'s "Lists and amounts"
+   / "Listas y cantidades" button at its right. A guest who can change nothing sees the
+   heading without the button (velista `0200`, target state 2).
 9. **What goes.** `demandRuns` and `raise` leave the row sheet; the ask is changed only in
    velista `0200`'s detailed view. "Got all N", "They had none" and "Not today" are
    unchanged.
@@ -113,6 +131,8 @@ it reaches or passes the ask, and make the section "Add it to another list" reco
 
 - Work in `data-access` (the store), `models` (the request shapes), `feature-shopping-lists`
   (the entries and the settle sheet), `ui` (the stepper's `target` input), the i18n files.
+  Velista `0200` adds the stepper's disabled state and velista `0195` its `snaps` input in
+  the same `quantity-stepper.*` files.
 - Do NOT change the zone list, the product page, the settle actions, or the backend.
 
 ### Constraints
@@ -124,9 +144,10 @@ it reaches or passes the ask, and make the section "Add it to another list" reco
 
 ### Action boundaries
 
-- Stop if the mock is not approved, or if velista `0200` or backends `0273` and `0274` are
-  not built (a stand in for their answers is fine while they are being built, and is
-  removed before this plan is marked ready).
+- Stop if velista `0195`, velista `0200` or backends `0273` and `0274` are not built (a stand
+  in for their answers is fine while they are being built, and is removed before this plan
+  is marked ready).
+- Stop and ask if the mock shows something on a row this plan does not list.
 - Stop and ask if the server refuses a settle or a revert of one line for an entry whose
   list the reader was not served.
 
@@ -138,12 +159,18 @@ see green, to 4 and see amber with the label still "· 3", back to 3 and see gre
 label still "· 3", back to 2; buy 1 for the third list and see "· 0" in amber; read the row
 history.
 
-## 1. Frames the mock must have
+## 1. The mock's boards
 
-1. The row sheet with its "What you bought" heading and three lists: one below its ask, one
-   at it (green), one above it (amber), each with "<list> · <ask>".
-2. "Bought for another list" open, with one list stepped to 1.
-3. A list name long enough to be cut.
+The boards of `apps/velista/plans/mocks/basket-row-buys/` for this plan, each Day in English
+beside Night in Spanish:
+
+1. `RowSheet.dc.html`: the row sheet with its "What you bought" heading, the "Lists and
+   amounts" button and the lists, one at its ask (green) and one above it (amber), each
+   with "<list> · <ask>".
+2. `OtherList.dc.html`: "Bought for another list" open, with one list stepped to 1.
+3. `LongName.dc.html`: a list name long enough to be cut, with an ask by weight.
+4. `Guest.dc.html`: a guest: no "Lists and amounts" and no "Bought for another list".
+5. `Today.dc.html`: the sheet as it is on `dev`, for comparison.
 
 ## 2. Specs
 
@@ -156,10 +183,15 @@ history.
    with a null target.
 5. `buyForList` is called with `lineId` null for a list with no line, and the list leaves
    the section after the answer.
-6. A guest sees no "Bought for another list".
+6. A guest sees no "Bought for another list" and no "Lists and amounts".
 7. With the row's answers as backend `0274` gives them: a list asking 3 stepped to 4 reads
    "· 3" and amber; a minus back to 3 reads "· 3" and green, and the list's ask on the zone
    list is still 3; a list made by a buy of 2 reads "· 0" and amber.
+8. The snap point of the ask: an ask of 990 g with a product step of 25, the stepper at 975
+   g; a plus lands on 990 (green), the next plus on 1000 (amber); from 1010 a minus lands on
+   1000, the next on 990. The stepper of an entry receives `snaps` `[1000, ask]`, and the
+   steppers of "Bought for another list" receive no `snaps` input, so only the default stop
+   at 1000 applies.
 
 ## 3. Acceptance criteria
 
