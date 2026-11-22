@@ -45,6 +45,11 @@
 > both views. The ask stepper of this view takes no second snap point (velista `0195`): it
 > keeps the default stop at 1000 only.
 >
+> Amended on 2026-11-22 a third time: the owner ruled that a popover about one control
+> points at it. The disabled stepper's popover (target state 8) uses the pointer of velista
+> `0206`, so **build velista `0206` before this plan**. `0206` can be released alone and
+> earlier.
+>
 > Code anchors, on `dev` at `1c57f0c9c`:
 > `libs/velista/feature-shopping-lists/src/lib/row-entries/row-entries.html` (the head with
 > "Change for all lists", each entry's swap button and stepper);
@@ -158,7 +163,9 @@ and "Change for all lists" out of the row sheet.
    button.
 8. **An ask the reader may not change.** An entry without `demandEditable` still draws the
    stepper, disabled, showing the ask. A press on it opens an `AnchoredPopover` in its note
-   frame (280 px), which may open above or below the stepper, and says why:
+   frame (280 px), which may open above or below the stepper, and says why. It passes
+   `pointer` true and the entry's row as `keepInSight` (velista `0206`), so its pointer is on
+   the stepper's centre and it covers neither the stepper nor the row:
    - for a list in a group the reader is not in: "This list belongs to a group you are not
      in. Only its members can change what it asks for." / "Esta lista es de un grupo del que
      no formas parte. Solo sus miembros pueden cambiar lo que pide.";
@@ -239,6 +246,7 @@ and "Change for all lists" out of the row sheet.
 - Stop if backend `0274` is not built, or if its route documentation does not say what
   `from` is for a whole ask (a stand in for its answers is fine while it is being built).
 - Stop and ask if a caller of `setDemand` exists that the Scope does not name.
+- Stop if velista `0206` is not built: the disabled stepper's popover needs its pointer.
 
 ### Progress evidence
 
@@ -303,8 +311,11 @@ in Spanish:
 17. The disabled stepper's `aria-describedby` names an element whose text is the popover's
     reason, for a group the reader is not in and for the reader's own group, before any
     press.
-18. The row sheet draws no swap icon and no "Change for all lists".
-19. `routes.spec.ts` still passes: the new route is under the marker.
+18. The disabled stepper's popover has `pointer` true and `keepInSight` the entry's row: its
+    pointer's centre is on the stepper's centre, and neither the popover nor the pointer
+    intersects the row.
+19. The row sheet draws no swap icon and no "Change for all lists".
+20. `routes.spec.ts` still passes: the new route is under the marker.
 
 ## 3. Acceptance criteria
 
