@@ -541,16 +541,45 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(tos(h)).toEqual([3]);
     });
 
-    it('steps nothing for a press released off the button before the first repeat', () => {
+    it.each(['mouse', 'pen'])(
+      'steps nothing for a %s press released off the button before the first repeat',
+      (pointerType) => {
+        const h = render({ value: 2 });
+        placeAt(h.plus);
+        pointer(h.plus, 'pointerdown', {
+          pointerType,
+          clientX: 120,
+          clientY: 220,
+        });
+        jest.advanceTimersByTime(200);
+        pointer(h.plus, 'pointerup', {
+          pointerType,
+          clientX: 120,
+          clientY: 300,
+        });
+        pointerClick(h.plus);
+        expect(h.steps).toEqual([]);
+        // A key click is a new gesture and still steps.
+        keyClick(h.plus);
+        expect(tos(h)).toEqual([3]);
+      }
+    );
+
+    it('steps for a touch tap whose contact lands a few pixels past the button', () => {
       const h = render({ value: 2 });
       placeAt(h.plus);
-      pointer(h.plus, 'pointerdown', { clientX: 120, clientY: 220 });
-      jest.advanceTimersByTime(200);
-      pointer(h.plus, 'pointerup', { clientX: 120, clientY: 300 });
+      pointer(h.plus, 'pointerdown', {
+        pointerType: 'touch',
+        clientX: 146,
+        clientY: 246,
+      });
+      jest.advanceTimersByTime(120);
+      pointer(h.plus, 'pointerup', {
+        pointerType: 'touch',
+        clientX: 152,
+        clientY: 251,
+      });
       pointerClick(h.plus);
-      expect(h.steps).toEqual([]);
-      // A key click is a new gesture and still steps.
-      keyClick(h.plus);
       expect(tos(h)).toEqual([3]);
     });
 
@@ -568,13 +597,105 @@ describe('QuantityStepper (velista 0188)', () => {
     it('steps on the next press after one released off the button', () => {
       const h = render({ value: 2 });
       placeAt(h.plus);
-      pointer(h.plus, 'pointerdown', { clientX: 120, clientY: 220 });
-      pointer(h.plus, 'pointerup', { clientX: 400, clientY: 220 });
+      const mouse = { pointerType: 'mouse', clientY: 220 };
+      pointer(h.plus, 'pointerdown', { ...mouse, clientX: 120 });
+      pointer(h.plus, 'pointerup', { ...mouse, clientX: 400 });
       pointerClick(h.plus);
-      pointer(h.plus, 'pointerdown', { clientX: 120, clientY: 220 });
-      pointer(h.plus, 'pointerup', { clientX: 120, clientY: 220 });
+      pointer(h.plus, 'pointerdown', { ...mouse, clientX: 120 });
+      pointer(h.plus, 'pointerup', { ...mouse, clientX: 120 });
       pointerClick(h.plus);
       expect(tos(h)).toEqual([3]);
+    });
+
+    it('lets a second finger on the other button keep the hold of the first one', () => {
+      const h = render({ value: 5 });
+      placeAt(h.plus);
+      const first = { pointerId: 1, pointerType: 'touch' };
+      const second = { pointerId: 2, pointerType: 'touch', isPrimary: false };
+      pointer(h.plus, 'pointerdown', { ...first, clientX: 120, clientY: 220 });
+      jest.advanceTimersByTime(500);
+      expect(tos(h)).toEqual([6]);
+      pointer(h.minus, 'pointerdown', second);
+      pointer(h.minus, 'pointerup', { ...second, clientX: 20, clientY: 220 });
+      // Chrome captures a touch on its own, so its capture is lost after the lift.
+      pointer(h.minus, 'lostpointercapture', second);
+      pointerClick(h.minus);
+      // As in velista 0188: the second finger stops the repeat and its click adds
+      // nothing. The first finger's touch is still claimed and selects nothing.
+      jest.advanceTimersByTime(2000);
+      expect(tos(h)).toEqual([6]);
+      expect(touchMove(h.plus).defaultPrevented).toBe(true);
+      expect(touchMove(h.minus).defaultPrevented).toBe(false);
+      expect(selectStart(document.body).defaultPrevented).toBe(true);
+      pointer(h.plus, 'pointerup', { ...first, clientX: 120, clientY: 300 });
+      pointerClick(h.plus);
+      expect(tos(h)).toEqual([6]);
+      expect(touchMove(h.plus).defaultPrevented).toBe(false);
+      expect(selectStart(document.body).defaultPrevented).toBe(false);
+    });
+
+    it('steps both taps of two fingers before the first repeat', () => {
+      const h = render({ value: 5 });
+      placeAt(h.plus);
+      // A pen holds plus, so the off box rule applies to the first pointer.
+      const first = { pointerId: 1, pointerType: 'pen' };
+      const second = { pointerId: 2, pointerType: 'touch', isPrimary: false };
+      pointer(h.plus, 'pointerdown', { ...first, clientX: 120, clientY: 220 });
+      jest.advanceTimersByTime(150);
+      // The second finger's lift is far outside the plus box: it is not measured
+      // against it, and it does not end the first finger's hold.
+      pointer(h.minus, 'pointerdown', second);
+      pointer(h.minus, 'pointerup', { ...second, clientX: 20, clientY: 220 });
+      // Chrome captures a touch on its own, so its capture is lost after the lift.
+      pointer(h.minus, 'lostpointercapture', second);
+      pointerClick(h.minus);
+      expect(tos(h)).toEqual([4]);
+      expect(selectStart(document.body).defaultPrevented).toBe(true);
+      pointer(h.plus, 'pointerup', { ...first, clientX: 130, clientY: 230 });
+      pointerClick(h.plus);
+      expect(tos(h)).toEqual([4, 5]);
+    });
+
+    it('listens for touches on the two buttons from the start, not on the document', () => {
+      const h = render({ value: 2 });
+      const added = jest.spyOn(document, 'addEventListener');
+      try {
+        pointer(h.plus, 'pointerdown');
+        jest.advanceTimersByTime(500);
+        expect(
+          added.mock.calls.filter(([type]) => String(type).startsWith('touch'))
+        ).toEqual([]);
+        // A touch that started elsewhere on the page is never cancelled.
+        expect(touchMove(document.body).defaultPrevented).toBe(false);
+        expect(touchMove(h.minus).defaultPrevented).toBe(false);
+        expect(touchMove(h.plus).defaultPrevented).toBe(true);
+      } finally {
+        added.mockRestore();
+      }
+    });
+
+    it('adds its touch listeners non passive on each button, and removes them on destroy', () => {
+      const added = jest.spyOn(HTMLElement.prototype, 'addEventListener');
+      const removed = jest.spyOn(HTMLElement.prototype, 'removeEventListener');
+      try {
+        const h = render({ value: 2 });
+        const touch = (calls: unknown[][]) =>
+          calls.filter(([type]) => String(type).startsWith('touch'));
+        const adds = touch(added.mock.calls);
+        expect(adds.map(([type, , options]) => [type, options])).toEqual([
+          ['touchstart', { passive: false }],
+          ['touchmove', { passive: false }],
+          ['touchstart', { passive: false }],
+          ['touchmove', { passive: false }],
+        ]);
+        h.fixture.destroy();
+        expect(
+          touch(removed.mock.calls).map(([type, fn]) => [type, fn])
+        ).toEqual(adds.map(([type, fn]) => [type, fn]));
+      } finally {
+        added.mockRestore();
+        removed.mockRestore();
+      }
     });
 
     it('prevents a selection during a hold, and not after it ended', () => {
@@ -625,25 +746,23 @@ describe('QuantityStepper (velista 0188)', () => {
       ['destroy', (h: Harness) => h.fixture.destroy()],
     ])('takes its listeners away on %s', (_, end) => {
       const h = render({ value: 2 });
+      const plus = h.plus;
       const added = jest.spyOn(document, 'addEventListener');
       const removed = jest.spyOn(document, 'removeEventListener');
       try {
         pointer(h.plus, 'pointerdown');
         jest.advanceTimersByTime(500);
         const listeners = added.mock.calls
-          .filter(([type]) => type === 'touchmove' || type === 'selectstart')
+          .filter(([type]) => type === 'selectstart')
           .map(([type, listener]) => [type, listener]);
-        expect(listeners.map(([type]) => type).sort()).toEqual([
-          'selectstart',
-          'touchmove',
-        ]);
+        expect(listeners.map(([type]) => type)).toEqual(['selectstart']);
         end(h);
         for (const [type, listener] of listeners) {
           expect(removed).toHaveBeenCalledWith(type, listener, {
             capture: true,
           });
         }
-        expect(touchMove(document.body).defaultPrevented).toBe(false);
+        expect(touchMove(plus).defaultPrevented).toBe(false);
         expect(selectStart(document.body).defaultPrevented).toBe(false);
       } finally {
         added.mockRestore();
