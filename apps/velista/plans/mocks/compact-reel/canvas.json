@@ -95,7 +95,7 @@
       "x": 0,
       "y": 7970,
       "w": 2962,
-      "h": 3086,
+      "h": 4211,
       "title": "Round 6: a raised line asks whether the units bought above its ask count"
     }
   ],
@@ -175,21 +175,35 @@
       "x": 3020,
       "y": 7970,
       "w": 520,
-      "text": "ROUND 6, THE WORDS PROPOSED (A).\nEN: \"Marta already bought 1 extra. Do you still need 2, or just 1?\" Answers: \"Still need\" 2, \"Count the extra\" 1.\nES: \"Marta ya compró 1 de más. ¿Sigues necesitando 2 o solo 1?\" Answers: \"Sigo necesitando\" 2, \"Contar lo comprado de más\" 1.\nWhen the extra covers it: \"Do you still need 1, or is that enough?\" with \"Still need\" 1 and \"That's enough\"; \"¿Sigues necesitando 1 o con eso basta?\" with \"Sigo necesitando\" 1 and \"Con eso basta\". Nothing says 0.\nThe answer words carry no number: the amount sits on the row's end, as the add choice draws it, so a reader sees what each answer leaves on the line.\n\"de más\" and \"extra\" avoid a noun, so the Spanish needs no gender for \"huevos\" or \"leche\". B's question \"¿Qué debe pedir la lista ahora?\" does the same."
+      "text": "ROUND 6, THE WORDS PROPOSED (A). Every amount carries its unit, a count too (the owner).\nES: \"Marta ya compró 1 ud de más. ¿Sigues necesitando 2 uds o solo 1 ud?\" Answers: \"Sigo necesitando\" 2 uds, \"Contar lo comprado de más\" 1 ud.\nEN: \"Marta already bought 1 pc extra. Do you still need 2 pcs, or just 1 pc?\" Answers: \"Still need\" 2 pcs, \"Count the extra\" 1 pc.\nWhen the extra covers it: \"¿Sigues necesitando 1 ud o con eso basta?\" with \"Sigo necesitando\" 1 ud and \"Con eso basta\"; \"Do you still need 1 pc, or is that enough?\" with \"Still need\" 1 pc and \"That's enough\". Nothing says 0.\nA weight: \"Marta ya compró 500 g de más. ¿Sigues necesitando 1,5 kg o solo 1 kg?\"\nTHE COUNT'S WORD. \"uds\" is the app's own, with no period: list.add.size.UNIT prints \"12 uds\". The app has no singular, so \"ud\" is proposed, written the same way. English has only the long \"units\" (\"12 units\"); \"pc\" / \"pcs\" is proposed, as the sample sizes on these boards already write \"12 pcs\". The build adds the four words as keys with a count, so 1 takes the singular.\n\"de más\" and \"extra\" avoid a noun, so the Spanish needs no gender for \"huevos\" or \"leche\". B's question \"¿Qué debe pedir la lista ahora?\" does the same."
     },
     {
       "id": "ob-frame",
       "x": 3020,
-      "y": 8560,
+      "y": 8640,
       "w": 520,
-      "text": "ROUND 6, THE FRAME.\nThe choice frame of AnchoredPopover (276 px, rows to the edges, the raised surface, the hairline, the second elevation) with the add choice's inside: a 15 px 600 title and 48 px rows. No icon and no tint, as the existing popovers have none. Above the control, aligned to its end, 8 px off it, so the amount it asks about stays in sight; below when the row is near the top, as the add choice flips.\nFocus starts on the first answer, the amount as set. Escape, a press outside and the back gesture close it like that answer."
+      "text": "ROUND 6, THE FRAME.\nThe choice frame of AnchoredPopover (276 px, rows to the edges, the raised surface, the hairline, the second elevation) with the add choice's inside: a 15 px 600 title and 48 px rows. No icon and no tint, as the existing popovers have none.\nIt sits wholly above or wholly below the asked row, aligned to the row's end, its pointer's tip 3 to 4 px off the row's edge: below when the row is near the top of the screen (frames 1 and 4), above when it is near the bottom (frames 2, 3 and 5), as AnchoredPopover already flips between its two sides. Measured on this board: none of the 29 popovers, pointer included, overlaps its own row's box or its control, and every pointer's centre is on the control's centre (the stepper's or the reel's).\nFocus starts on the first answer, the amount as set. Escape, a press outside and the back gesture close it like that answer."
+    },
+    {
+      "id": "ob-pointer",
+      "x": 3020,
+      "y": 9180,
+      "w": 520,
+      "text": "A RULE FOR EVERY POPOVER THAT REFERS TO ONE CONTROL (the owner).\nIt has a pointer, a small arrow on its edge aimed at that control, so it cannot be taken for another row's. And it never hides what it points at: not the control, and not the row's name, price and picture.\nThis reaches every such popover, the disabled stepper's popover in ../basket-row-buys included.\nAnchoredPopover (libs/velista/ui/src/lib/list/anchored-popover) has no pointer today: it flips between above and below, and that is all. The build adds one: a 12 px square turned 45 degrees, in the popover's own raised surface with its hairline on the two outer sides, so the pointer and the popover read as one shape. Its centre follows the anchor's centre on the side the popover opened."
+    },
+    {
+      "id": "ob-when",
+      "x": 3020,
+      "y": 9640,
+      "w": 520,
+      "text": "WHEN IT SHOWS (the owner, ruled).\nThe popover opens only after the control's quiet beat has passed AND the save request has answered. A run of presses therefore asks once, about the amount the person stopped on.\nBy then the person may have scrolled on. If the row is no longer in view, the page scrolls to it by itself first (frame 8), placing it where the popover fits, then opens the question.\nTo be noticed, the row and the popover flash (frame 7), proposed in numbers: 3 pulses, each 600 ms (240 ms in, 120 ms held, 240 ms out), 200 ms apart, 2.2 s in all. The accent is the quiet amber at quiet strength: the row takes the quiet amber wash (the fill of the bar's current tab, 10 percent) and a 1.5 px outline, and the popover's border and pointer take the quiet amber text colour. No fill on the popover. Under prefers-reduced-motion nothing pulses: the accent frame holds steady for the same 2.2 s and then goes, and the scroll jumps instead of gliding.\nContrast in the accent frame: the smallest muted text (11 px) is 4.8 to 1 on the Day wash and 6.5 to 1 on the Night wash."
     },
     {
       "id": "ob-doubts",
       "x": 3020,
-      "y": 9060,
+      "y": 10200,
       "w": 560,
-      "text": "ROUND 6, FOR THE OWNER TO DECIDE.\n1. When it opens: at once on the first press of +, or after the quiet beat when the amount is saved. Drawn after the beat (the stepper already shows 2), so a run of presses asks once, about the amount the person stopped on.\n2. Closed without an answer: the amount set stands, as the owner's words suggest. Drawn as the default (board frame 6, left).\n3. The next raise of the same line: proposed to ask again only while an extra remains that nobody counted. Once per line per trip is the other choice. Not drawn.\n4. Several buyers: \"Marta and Luis already bought 2 extra\" for two, \"3 people already bought 3 extra\" for more? Not drawn.\n5. The line page's amount and the line sheet's amount: do they ask too? Drawn for the zone list rows only.\n6. A reel that closes on its value: drawn as asking after it closes (frame 2), never while the tape is up.\n7. A guest's buy names the list's owner. If the owner is the person raising it, \"You already bought 1 extra\"?\n8. How a line covered by the extra draws at rest: drawn as the stepper at 0."
+      "text": "ROUND 6, FOR THE OWNER TO DECIDE.\n1. The person left the page before the answer came. Ask when they come back to the list, or drop the question and keep the amount they set? Not drawn.\n2. Closed without an answer: the amount set stands, as the owner's words suggest. Drawn as the default (board frame 6, left).\n3. The next raise of the same line: proposed to ask again only while an extra remains that nobody counted. Once per line per trip is the other choice. Not drawn.\n4. Several buyers: \"Marta y Luis ya compraron 2 uds de más\" for two, \"3 personas ya compraron 3 uds de más\" for more? Not drawn.\n5. The line page's amount and the line sheet's amount: do they ask too? Drawn for the zone list rows only.\n6. A reel that closes on its value: drawn as asking after it closes (frame 2), never while the tape is up.\n7. A guest's buy names the list's owner. If the owner is the person raising it, \"You already bought 1 pc extra\"?\n8. How a line covered by the extra draws at rest: drawn as the stepper at 0.\n9. The count's word: \"ud\" / \"uds\" as the app writes \"uds\" today, or \"ud.\" / \"uds.\" with the period of the RAE abbreviation? And does the rule \"every amount carries its unit\" reach the stepper and the reel, which print a count bare today (\"2\")? Drawn bare, as built."
     }
   ]
 }
