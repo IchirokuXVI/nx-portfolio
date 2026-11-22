@@ -1437,3 +1437,81 @@ describe('LineRow', () => {
     });
   });
 });
+
+describe('LineRow: a row being cleared (velista 0199)', () => {
+  async function clearing(
+    line: LineRowVm,
+    layout: 'default' | 'compact' = 'default'
+  ): Promise<ComponentFixture<LineRow>> {
+    const fixture = await render(line);
+    fixture.componentRef.setInput('layout', layout);
+    fixture.componentRef.setInput('clearing', true);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it.each(['default', 'compact'] as const)(
+    'draws the lock and the spinner in the %s layout',
+    async (layout) => {
+      const fixture = await clearing(
+        vm({ quantity: 0, product: shown() }),
+        layout
+      );
+
+      expect(row(fixture).classList).toContain('clearing');
+      expect(row(fixture).getAttribute('aria-busy')).toBe('true');
+      expect(row(fixture).getAttribute('aria-disabled')).toBe('true');
+      const lock = query(fixture, '.row > [data-clearing-lock]');
+      expect(lock?.getAttribute('aria-hidden')).toBe('true');
+      expect(lock?.querySelector('lib-spinner-icon')).not.toBeNull();
+    }
+  );
+
+  it('ignores a click on itself, on its stepper and on the choose button', async () => {
+    const fixture = await clearing(
+      vm({ quantity: 0, product: { kind: 'none', canChoose: true } })
+    );
+    const opened: string[] = [];
+    const steps: QuantityStep[] = [];
+    const chosen: string[] = [];
+    fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+    fixture.componentInstance.quantityStepped.subscribe((event) =>
+      steps.push(event.step)
+    );
+    fixture.componentInstance.chooseProduct.subscribe((id) => chosen.push(id));
+
+    row(fixture).click();
+    query(fixture, '.step.plus')?.dispatchEvent(
+      new MouseEvent('click', { bubbles: true })
+    );
+    (query(fixture, '.choose') as HTMLElement).click();
+    row(fixture).dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })
+    );
+
+    expect(opened).toEqual([]);
+    expect(steps).toEqual([]);
+    expect(chosen).toEqual([]);
+  });
+
+  it('answers again once it is no longer clearing', async () => {
+    const fixture = await clearing(vm({ quantity: 1 }));
+    const opened: string[] = [];
+    fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+    fixture.componentRef.setInput('clearing', false);
+    fixture.detectChanges();
+    row(fixture).click();
+
+    expect(opened).toEqual(['ln-1']);
+    expect(query(fixture, '[data-clearing-lock]')).toBeNull();
+    expect(row(fixture).getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it('draws the lock on the sunken surface of a pressed row, from tokens only', () => {
+    const scss = readFileSync(join(__dirname, 'line-row.scss'), 'utf8');
+    const rule = scss.match(/\.row\.clearing\s*\{([^}]*)\}/)?.[1] ?? '';
+
+    expect(rule).toContain('background: var(--app-surface-sunken)');
+  });
+});

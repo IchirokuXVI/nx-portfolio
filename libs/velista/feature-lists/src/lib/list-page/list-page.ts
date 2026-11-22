@@ -910,6 +910,9 @@ export class ListPage {
         this._dueLines.listId() === this.listId()
           ? this._dueLines.lines().map((due) => due.lineId)
           : [],
+      // A row whose trash was pressed stays where it was until its write answers
+      // (velista `0199`).
+      clearingIds: this._clearing(),
     });
   });
 
@@ -1825,10 +1828,41 @@ export class ListPage {
   );
 
   /**
+   * The lines whose trash was pressed and whose write to 0 has not answered yet
+   * (velista `0199`, the owner's ruling of 2026-11-22). Their rows stay drawn where
+   * they were, at 0, and locked, until the answer; then the line leaves this set and
+   * is hidden as any line at 0 is, or drawn again at its stored amount when the write
+   * failed.
+   */
+  private readonly _clearing = signal<ReadonlySet<string>>(new Set());
+
+  readonly clearing = this._clearing.asReadonly();
+
+  /** The line whose run the trash is flushing right now, for `_writeRun` to lock. */
+  private _trashed: string | null = null;
+
+  private _setClearing(lineId: string, on: boolean): void {
+    this._clearing.update((ids) => {
+      if (ids.has(lineId) === on) {
+        return ids;
+      }
+      const next = new Set(ids);
+      if (on) {
+        next.add(lineId);
+      } else {
+        next.delete(lineId);
+      }
+      return next;
+    });
+  }
+
+  /**
    * One run of a row's stepper, written. A run that takes a line To buy draws to 0
-   * hides its row (velista `0192`): the store patches the amount before the request
-   * goes out, so the row is still drawn when this reads where focus is and is gone
-   * when it reads again. A row the search draws stays at 0 and leaves nothing.
+   * hides its row (velista `0192`) once its write answers: the trash's run keeps its
+   * row drawn and locked until then (velista `0199`), so focus is read while the row
+   * is there and moved after it has gone. A run lowered to 0 some other way is hidden
+   * as soon as the store patches it, which is before the request goes out. A row the
+   * search draws stays at 0 and leaves nothing.
    */
   private _writeRun(lineId: string, delta: number): void {
     if (this._teardown.destroying) {
@@ -1843,9 +1877,22 @@ export class ListPage {
       drawn && column !== undefined ? focusAfterLeaving(column, lineId) : null;
     const line = this._lineById().get(lineId);
 
-    const writing = this.changeQuantity({ lineId, delta });
+    // Locked before the store patches the 0, so the row is never hidden for a frame.
+    const trashed = this._trashed === lineId;
+    if (trashed) {
+      this._setClearing(lineId, true);
+    }
+    const written = this.changeQuantity({ lineId, delta });
+    // Unlocked as soon as the write answers, whatever it said, and before anything
+    // below reads whether the row is still drawn.
+    const writing = trashed
+      ? written.finally(() => this._setClearing(lineId, false))
+      : written;
 
     if (!drawn || line === undefined) {
+      if (trashed) {
+        void writing.catch(() => undefined);
+      }
       return;
     }
     if (!this._inToBuy(lineId)) {
@@ -1853,8 +1900,8 @@ export class ListPage {
       return;
     }
     // A step during the line's unit correction waits for it before the store
-    // patches the amount, so the row is still drawn here. Decided again once the
-    // write has settled.
+    // patches the amount, and the trash's row is held until its answer, so the row
+    // is still drawn here. Decided again once the write has settled.
     if (line.quantity + delta <= 0) {
       void writing.then(() => {
         if (!this._teardown.destroying && !this._inToBuy(lineId)) {
@@ -1980,13 +2027,45 @@ export class ListPage {
     );
   }
 
-  /** Every step of a row's stepper, a press or a repeat of a hold (velista `0188`). */
+  /**
+   * Every step of a row's stepper, a press or a repeat of a hold (velista `0188`).
+   *
+   * The trash's press, the one that takes the line from above 0 to 0, does not wait
+   * the quiet beat (velista `0199`): the run is written at once, with every press
+   * before it, and the row is locked until the write answers. A hold never reaches 0,
+   * so a repeat is never the trash.
+   */
   stepQuantity(event: { lineId: string; step: QuantityStep }): void {
-    const page = this.loaded();
-    if (page !== null && !page.abilities.canDecide) {
+    if (!this._step(event.lineId, event.step)) {
       return;
     }
-    this.quantityRuns.step(event.lineId, event.step);
+    const { step } = event;
+    if (step.to === 0 && step.from > 0 && !step.repeat) {
+      this._trashed = event.lineId;
+      try {
+        this.quantityRuns.flush(event.lineId);
+      } finally {
+        this._trashed = null;
+      }
+    }
+  }
+
+  /**
+   * One step into the line's run, unless the reader may not decide or the line is
+   * being cleared. False when the step was dropped.
+   */
+  private _step(lineId: string, step: QuantityStep): boolean {
+    const page = this.loaded();
+    if (page !== null && !page.abilities.canDecide) {
+      return false;
+    }
+    // A locked row hears nothing (velista `0199`); a catalog card of the same line is
+    // held to the same lock.
+    if (this._clearing().has(lineId)) {
+      return false;
+    }
+    this.quantityRuns.step(lineId, step);
+    return true;
   }
 
   /**
@@ -2635,9 +2714,12 @@ export class ListPage {
    * copy (velista `0188`, section 5.1).
    */
   changeHolding(change: SuggestionHoldingChange): void {
-    this.stepQuantity({
-      lineId: change.holding.lineId,
-      step: { from: change.from, to: change.to, repeat: change.repeat },
+    // Through the run and its guard, but not the trash's write at once: a card does
+    // not hide a line at 0, so it waits the quiet beat (velista `0199`, scope).
+    this._step(change.holding.lineId, {
+      from: change.from,
+      to: change.to,
+      repeat: change.repeat,
     });
   }
 

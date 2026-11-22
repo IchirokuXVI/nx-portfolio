@@ -2,6 +2,8 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
+  ElementRef,
   inject,
   input,
   output,
@@ -39,6 +41,9 @@ const STATUS_KEYS: Record<LineStatus, string> = {
   notAvailable: 'line.indicator.notAvailable',
   bought: 'line.indicator.bought',
 };
+
+/** The presses a row being cleared swallows (velista `0199`). */
+const LOCKED_EVENTS = ['click', 'pointerdown', 'keydown'] as const;
 
 /**
  * What the row emits: the three approval decisions drawn under it.
@@ -92,6 +97,11 @@ export type LineRowAction = 'approve' | 'reject' | 'restore';
  * total says it better. The class `in-flight` stays, with no rule, because specs read
  * it as the state.
  *
+ * One write is the exception: the trash's (velista `0199`, the owner's ruling of
+ * 2026-11-22). From its press until the write to 0 answers, the row is `clearing`:
+ * locked, on the sunken surface of a pressed row, with a spinner in the middle. It
+ * is the same in both layouts, because it is drawn over the row element they share.
+ *
  * ## Somebody else editing is drawn, and decides nothing
  *
  * Their initial and a subdued word, from `PresenceStore.editorOfLine` by way of the
@@ -135,6 +145,14 @@ export class LineRow {
    * `0188`, decision H). The page owns the run and writes it after the quiet beat.
    */
   readonly pending = input<number | null>(null);
+
+  /**
+   * Whether the line is being cleared (velista `0199`): its trash was pressed, the
+   * write to 0 went out at once, and the page keeps the row drawn until it answers.
+   * The row is locked meanwhile: a darker background, a spinner in the middle, and no
+   * press inside it reaches anything.
+   */
+  readonly clearing = input(false);
 
   /** What the row's stepper draws: the open run, or the stored amount. */
   protected readonly amount = computed(
@@ -262,6 +280,37 @@ export class LineRow {
   private readonly _translator = inject(RokuTranslatorService);
 
   /**
+   * The lock of a row being cleared (velista `0199`), on the host and in the capture
+   * phase, so a press is stopped before it reaches the stepper, the picture, a choose
+   * button or the row itself, and none of them has to know about the lock. Tab and
+   * Escape pass, so focus can still leave the row.
+   */
+  constructor() {
+    const host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+    const stop = (event: Event) => {
+      if (!this.clearing()) {
+        return;
+      }
+      if (
+        event instanceof KeyboardEvent &&
+        (event.key === 'Tab' || event.key === 'Escape')
+      ) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    for (const type of LOCKED_EVENTS) {
+      host.addEventListener(type, stop, true);
+    }
+    inject(DestroyRef).onDestroy(() => {
+      for (const type of LOCKED_EVENTS) {
+        host.removeEventListener(type, stop, true);
+      }
+    });
+  }
+
+  /**
    * The accessible name (velista `0145`, section 3): the name, the product with its
    * brand and its size when the line is named, the price, and how many.
    *
@@ -355,7 +404,7 @@ export class LineRow {
   }
 
   onRowClick(): void {
-    if (!this.line().interactive) {
+    if (!this.line().interactive || this.clearing()) {
       return;
     }
 

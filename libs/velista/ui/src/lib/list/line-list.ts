@@ -47,6 +47,7 @@ import { LineRow, type LineRowAction } from './line-row';
             (opened)="opened.emit($event)"
             (quantityStepped)="quantityStepped.emit($event)"
             (retry)="retry.emit($event)"
+            [clearing]="clearingIds().has(line.id)"
             [layout]="layout()"
             [line]="line"
             [match]="matchOf(line)"
@@ -91,6 +92,12 @@ export class LineList {
    * the page's `quantityRuns.pending()`. A row not in it draws its stored amount.
    */
   readonly pending = input<ReadonlyMap<string, number>>(new Map());
+
+  /**
+   * The lines whose trash was pressed and whose write to 0 has not answered yet
+   * (velista `0199`): the page's `clearing()`. Their rows are drawn locked.
+   */
+  readonly clearingIds = input<ReadonlySet<string>>(new Set());
 
   /**
    * The search, folded, or the empty string (velista `0082`, section 6).

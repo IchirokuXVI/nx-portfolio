@@ -55,6 +55,12 @@ export interface ListGroupsInput<T extends ListViewLine> {
    * Absent or empty draws no due line.
    */
   readonly dueLineIds?: readonly string[];
+  /**
+   * The lines whose trash was pressed and whose write to 0 has not answered yet
+   * (velista `0199`). Each one stays drawn in To buy, where it was, at 0, until the
+   * page takes it out of this set. Absent reads as empty.
+   */
+  readonly clearingIds?: ReadonlySet<string>;
 }
 
 /** One trip row joined to the line it is about. */
@@ -107,6 +113,8 @@ export type ListGroupsView<T extends ListViewLine> =
  *   `0192`). Nothing deletes it: the search, which is flat, finds it at 0, and a step
  *   above 0 puts it back in To buy. The amount read is the stored one, so a run of
  *   stepper presses that is still open keeps its row (velista `0188`, decision H).
+ *   A line being cleared keeps its row too, among the wanted lines, until its write
+ *   to 0 answers (velista `0199`), and is never a due line meanwhile.
  * - A line at zero with purchases leaves To buy only once a heads read succeeded and
  *   named at least one trip (velista `0095`, section 5). After the heads failed, and
  *   when the list has no trip at all, it stays in To buy, where it can be raised.
@@ -157,8 +165,11 @@ export function composeListGroups<T extends ListViewLine>(
       continue;
     }
 
+    // A line being cleared is drawn where it was until its write answers (velista
+    // `0199`): the store already holds its 0, and that alone would hide it.
     const isWanted =
-      facts.quantity > 0 && !(facts.claimed && heldByLive.has(line.id));
+      input.clearingIds?.has(line.id) === true ||
+      (facts.quantity > 0 && !(facts.claimed && heldByLive.has(line.id)));
     const isUnheld =
       !tripsHold &&
       input.tripsLoading !== true &&
@@ -259,6 +270,7 @@ function dueLinesOf<T extends ListViewLine>(
       line === undefined ||
       facts === null ||
       seen.has(id) ||
+      input.clearingIds?.has(id) === true ||
       facts.quantity > 0 ||
       facts.rejected ||
       facts.claimed

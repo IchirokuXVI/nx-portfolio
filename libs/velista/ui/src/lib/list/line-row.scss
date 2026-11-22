@@ -58,6 +58,39 @@
   background: var(--app-surface-sunken);
 }
 
+// A row being cleared (velista 0199): from the trash press until the write to 0
+// answers. The sunken surface of a pressed row (velista 0196), held, and a spinner in
+// the middle of the row. Every text and mark of the row already clears its floor on
+// that surface (the contrast spec), so nothing else is recoloured. Drawn over the row
+// element both layouts share, so the lock is the same in each. The host stops every
+// press; the cursor says so.
+.row.clearing {
+  position: relative;
+  background: var(--app-surface-sunken);
+  cursor: default;
+}
+
+.lock {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+// A disc of the same surface under the spinner, so it reads over the name it sits
+// on. It turns on a motion token, and stands still under reduced motion.
+.lock-mark {
+  display: flex;
+  padding: var(--app-space-2);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-sunken);
+  color: var(--app-text-secondary);
+  font-size: var(--app-icon-md);
+}
+
 // ------------------------------------------------------------- The picture
 
 .picture {
