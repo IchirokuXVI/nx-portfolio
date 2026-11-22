@@ -90,10 +90,11 @@ $pointer-outset: 7;
   border-top: 1px solid var(--app-border-subtle);
 }
 
-// The caller's flash (velista 0207): only the hairlines take the colour.
+// The caller's flash (velista 0207): only the hairlines take the colour. With no
+// colour set, the popover's own hairline, so an accent alone draws as no accent.
 .pop.accent,
 .pop.accent > .ptr {
-  border-color: var(--anchored-popover-accent);
+  border-color: var(--anchored-popover-accent, var(--app-border-subtle));
 }
 
 @keyframes hint-in {

@@ -3,6 +3,7 @@ import {
   CdkOverlayOrigin,
   type ConnectedOverlayPositionChange,
   type ConnectedPosition,
+  FlexibleConnectedPositionStrategy,
   type FlexibleConnectedPositionStrategyOrigin,
 } from '@angular/cdk/overlay';
 import { DOCUMENT, NgTemplateOutlet } from '@angular/common';
@@ -333,6 +334,10 @@ export class AnchoredPopover {
    * control, so it cannot be taken for another row's. It then opens wholly above or
    * wholly below, never pushed over the anchor, and {@link push} is ignored. Off,
    * it draws, sits and behaves as it always has.
+   *
+   * Since nothing pushes it, a caller whose control sits near the end edge of the
+   * screen uses `align` `end` with {@link keepInSight}, so its end is the row's end;
+   * `start` or `center` there can run past the screen's edge.
    */
   readonly pointer = input(false);
 
@@ -355,6 +360,8 @@ export class AnchoredPopover {
   protected readonly viewportMargin = VIEWPORT_MARGIN;
 
   private readonly document = inject(DOCUMENT);
+
+  private readonly overlay = viewChild(CdkConnectedOverlay);
 
   private readonly popRef = viewChild<ElementRef<HTMLElement>>('pop');
 
@@ -405,8 +412,11 @@ export class AnchoredPopover {
   );
 
   constructor() {
-    // While a popover with a pointer is open, a scroll or a resize places the
-    // pointer again over the anchor's middle.
+    // While a popover with a pointer is open, it follows its row: a scroll of any
+    // container (velista's pages scroll inside one, which the overlay's own scroll
+    // strategy never hears), a resize, or a change of the row's or the anchor's
+    // size measures the places again, moves the overlay and then the pointer.
+    // Without a pointer none of this runs, so those popovers behave as on dev.
     effect((onCleanup) => {
       const view = this.document.defaultView;
       if (!this.open() || !this.pointer() || !view) {
@@ -420,19 +430,45 @@ export class AnchoredPopover {
         frame = view.requestAnimationFrame(() => {
           frame = 0;
           this.layout.update((count) => count + 1);
+          this.reposition();
           this.placePointer();
         });
       };
       view.addEventListener('scroll', again, { capture: true, passive: true });
       view.addEventListener('resize', again, { passive: true });
+      const Observer = (view as Window & typeof globalThis).ResizeObserver;
+      const observer = Observer ? new Observer(again) : null;
+      for (const element of [elementOf(this.origin()), this.keepInSight()]) {
+        if (element) {
+          observer?.observe(element);
+        }
+      }
       onCleanup(() => {
         view.removeEventListener('scroll', again, { capture: true });
         view.removeEventListener('resize', again);
+        observer?.disconnect();
         if (frame) {
           view.cancelAnimationFrame(frame);
         }
       });
     });
+  }
+
+  /**
+   * Hands the overlay the places measured now and has it apply them. The binding
+   * only reaches the overlay on the next change detection, and a new list of places
+   * alone does not move an open overlay.
+   */
+  private reposition(): void {
+    const ref = this.overlay()?.overlayRef;
+    if (!ref?.hasAttached()) {
+      return;
+    }
+    const strategy = ref.getConfig().positionStrategy;
+    if (strategy instanceof FlexibleConnectedPositionStrategy) {
+      strategy.withPositions(this.positions());
+    }
+    ref.updatePosition();
   }
 
   /** The overlay placed it: the pointer turns to face the anchor and moves over it. */

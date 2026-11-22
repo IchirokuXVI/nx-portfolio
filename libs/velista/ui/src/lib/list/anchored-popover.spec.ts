@@ -654,17 +654,152 @@ describe('AnchoredPopover pointer (velista 0206)', () => {
     });
   }
 
-  it('holds the pointer to the straight part of the edge', async () => {
-    // A narrow control at the very start, with the popover lined up past it.
-    await openHost({
-      pointer: true,
-      control: { left: 0, top: 412, width: 4, height: 40 },
+  describe('holds the pointer to the straight part of the edge', () => {
+    // jsdom cannot resolve the radius's var(), so the popover's corner is given
+    // here: the straight part is the edge less this and half the pointer.
+    const RADIUS = 10;
+
+    beforeEach(() => {
+      const original = window.getComputedStyle.bind(window);
+      const spy = jest
+        .spyOn(window, 'getComputedStyle')
+        .mockImplementation((element, pseudo) => {
+          const style = original(element, pseudo);
+          if (element.classList.contains('pop')) {
+            Object.defineProperty(style, 'borderBottomLeftRadius', {
+              configurable: true,
+              value: `${RADIUS}px`,
+            });
+          }
+          return style;
+        });
+      restore.push(() => spy.mockRestore());
     });
 
+    it('at its start, past the corner', async () => {
+      // A narrow control at the very start, with the popover lined up past it.
+      await openHost({
+        pointer: true,
+        control: { left: 0, top: 412, width: 4, height: 40 },
+      });
+
+      const box = popBox();
+      expect(box.left).toBeGreaterThan(2);
+      expect(pointerCentreX()).toBeCloseTo(
+        box.left + RADIUS + POINTER_SIZE / 2,
+        5
+      );
+    });
+
+    it('at its end, before the corner', async () => {
+      // A narrow control at the very end, with the popover's end on its end.
+      await openHost({
+        pointer: true,
+        align: 'end',
+        control: { left: 386, top: 412, width: 4, height: 40 },
+      });
+
+      const box = popBox();
+      expect(box.left + box.width).toBe(390);
+      expect(pointerCentreX()).toBeCloseTo(
+        box.left + box.width - RADIUS - POINTER_SIZE / 2,
+        5
+      );
+    });
+  });
+
+  /** Lets the frame the popover asked for run, then the change detection after it. */
+  async function nextFrame(fixture: ComponentFixture<Host>): Promise<void> {
+    await new Promise<void>((done) => requestAnimationFrame(() => done()));
+    fixture.detectChanges();
+    await fixture.whenStable();
+  }
+
+  it('follows its row when a container inside the page scrolls', async () => {
+    const fixture = await openHost({
+      pointer: true,
+      keepInSight: true,
+      align: 'end',
+      row: { left: 16, top: 400, width: 358, height: 64 },
+      control: { left: 250, top: 412, width: 112, height: 40 },
+    });
+    const ref = overlayOf(fixture).overlayRef;
+    const update = jest.spyOn(ref, 'updatePosition');
+    const before = popBox();
+
+    // The list scrolls inside its own container by 150 px, and the control's
+    // place in its row moved too (a reflow).
+    rects.set(row, { left: 16, top: 250, width: 358, height: 64 });
+    rects.set(control, { left: 210, top: 262, width: 112, height: 40 });
+    const scroller = document.createElement('div');
+    document.body.append(scroller);
+    scroller.dispatchEvent(new Event('scroll'));
+    await nextFrame(fixture);
+    scroller.remove();
+
+    expect(update).toHaveBeenCalled();
     const box = popBox();
-    expect(pointerCentreX()).toBeGreaterThanOrEqual(
-      box.left + POINTER_SIZE / 2
-    );
+    expect(box.top).toBe(before.top - 150);
+    // Still off the row, its end on the row's end, the pointer on the control.
+    const kept = rects.get(row) as Rect;
+    expect(box.left + box.width).toBe(kept.left + kept.width);
+    expect(intersects(box, kept)).toBe(false);
+    expect(intersects(pointerBox(), kept)).toBe(false);
+    expect(Math.abs(pointerCentreX() - (210 + 56))).toBeLessThanOrEqual(1);
+  });
+
+  it('watches the row and the control for a change of size while open, and stops when closed', async () => {
+    const watched: Element[] = [];
+    const disconnect = jest.fn();
+    let notify: () => void = () => undefined;
+    const before = Object.getOwnPropertyDescriptor(window, 'ResizeObserver');
+    Object.defineProperty(window, 'ResizeObserver', {
+      configurable: true,
+      value: class {
+        constructor(callback: () => void) {
+          notify = callback;
+        }
+        observe(element: Element): void {
+          watched.push(element);
+        }
+        disconnect = disconnect;
+      },
+    });
+    restore.push(() => {
+      if (before) {
+        Object.defineProperty(window, 'ResizeObserver', before);
+      } else {
+        delete (window as unknown as Record<string, unknown>)['ResizeObserver'];
+      }
+    });
+
+    const fixture = await openHost({ pointer: true, keepInSight: true });
+    expect(watched).toEqual([control, row]);
+
+    const update = jest.spyOn(overlayOf(fixture).overlayRef, 'updatePosition');
+    rects.set(row, { left: 16, top: 360, width: 358, height: 104 });
+    notify();
+    await nextFrame(fixture);
+    expect(update).toHaveBeenCalled();
+    expect(isAbove()).toBe(true);
+
+    fixture.componentInstance.open.set(false);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(disconnect).toHaveBeenCalled();
+  });
+
+  it('does not listen for scrolls without a pointer', async () => {
+    const fixture = await openHost({ keepInSight: true });
+    const update = jest.spyOn(overlayOf(fixture).overlayRef, 'updatePosition');
+
+    const scroller = document.createElement('div');
+    document.body.append(scroller);
+    scroller.dispatchEvent(new Event('scroll'));
+    await nextFrame(fixture);
+    scroller.remove();
+
+    expect(update).not.toHaveBeenCalled();
   });
 
   for (const side of SIDES) {
@@ -761,10 +896,14 @@ describe('AnchoredPopover pointer (velista 0206)', () => {
     const mark = pointer() as HTMLElement;
     for (const element of [pop(), mark]) {
       // The accent rule is the last to set the hairline's colour, so it wins.
+      // With no colour set, the fallback is the popover's own hairline.
       const rules = declared(element);
-      expect(rules).toContain('border-color: var(--anchored-popover-accent)');
-      expect(rules.lastIndexOf('--anchored-popover-accent')).toBeGreaterThan(
-        rules.lastIndexOf('var(--app-border-subtle)')
+      const accent =
+        'border-color: var(--anchored-popover-accent, var(--app-border-subtle))';
+      expect(rules).toContain(accent);
+      const plain = rules.replace(accent, '');
+      expect(rules.indexOf(accent)).toBeGreaterThan(
+        plain.lastIndexOf('var(--app-border-subtle)')
       );
       expect(getComputedStyle(element).background).toBe(
         'var(--app-surface-raised)'
