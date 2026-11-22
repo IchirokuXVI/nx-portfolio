@@ -22,6 +22,7 @@ body { margin: 0; background: #0a0c14; }
   --ok: #047857; --focus: #2563eb;
   --scrim: rgba(17, 20, 31, 0.42);
   --shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  --e2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.10);
   color-scheme: light;
 }
 .night {
@@ -32,6 +33,7 @@ body { margin: 0; background: #0a0c14; }
   --ok: #34d399; --focus: #60a5fa;
   --scrim: rgba(10, 12, 20, 0.74);
   --shadow: 0 -18px 40px rgba(10, 12, 20, 0.42);
+  --e2: inset 0 1px 0 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(10, 12, 20, 0.55);
   color-scheme: dark;
 }
 .vel { color: var(--t); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
@@ -49,7 +51,8 @@ body { margin: 0; background: #0a0c14; }
 .scrim { position: absolute; inset: 0; background: var(--scrim); }
 
 /* the sheet (sheet-shell, settle-sheet) */
-.sheet { position: absolute; left: 0; right: 0; bottom: 0; box-sizing: border-box; padding: 0 16px 20px; border-radius: 22px 22px 0 0; background: var(--r); box-shadow: var(--shadow); }
+.home { position: absolute; z-index: 3; left: 50%; bottom: 8px; width: 134px; height: 5px; margin-left: -67px; border-radius: 999px; background: var(--t); }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; box-sizing: border-box; padding: 0 16px 54px; border-radius: 22px 22px 0 0; background: var(--r); box-shadow: var(--shadow); }
 .handle { width: 48px; height: 5px; margin: 10px auto 16px; border-radius: 999px; background: var(--b1); }
 .title { margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 1.2; font-weight: 400; color: var(--t); text-wrap: balance; }
 .sub { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
@@ -104,14 +107,48 @@ body { margin: 0; background: #0a0c14; }
 .rnum { flex: none; display: flex; justify-content: flex-end; align-items: center; width: 168px; height: 48px; font-size: 16px; color: var(--t2); font-variant-numeric: tabular-nums; }
 .rnum.wide { width: 191px; }
 
+/* a disabled stepper: the app's own aria-disabled look, both ends at 0.35 (quantity-stepper.scss) */
+.stp.dis .sb { opacity: 0.35; }
+.anchor { position: relative; flex: none; display: flex; }
+
+/* the explanatory popover: anchored-popover's note frame (280 px, raised, hairline, radius 12, elevation 2) */
+.pop { position: absolute; z-index: 5; right: 0; bottom: calc(100% + 8px); box-sizing: border-box; width: 280px; padding: 12px; border: 1px solid var(--b1); border-radius: 12px; background: var(--o); box-shadow: var(--e2); color: var(--t2); font-size: 12px; line-height: 1.4; }
+.pop p { margin: 0; }
+.pop p + p { margin-top: 8px; }
+
+/* a product picture (product-picture.scss): a square with a hairline, a photo on the raised fill */
+.pic { box-sizing: border-box; flex: none; display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; padding: 0; overflow: hidden; border: 1px solid var(--b1); border-radius: 10px; background: var(--o); cursor: zoom-in; }
+.pic img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.pic.none { background: var(--s); color: var(--t3); cursor: default; }
+.pic.none i { width: 24px; height: 24px; display: flex; }
+.pic.sm { width: 28px; height: 28px; border-radius: 8px; }
+.pic.sm.none i { width: 16px; height: 16px; }
+
+/* the product at the top of the detailed view: the product card's compact row (product-row.scss) */
+.prod { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; column-gap: 12px; align-items: start; padding: 12px 0 0; }
+.prod .pic { grid-row: 1 / span 2; }
+.pwhat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pname { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 16px; line-height: 1.3; color: var(--t); }
+.pdet { font-size: 14px; line-height: 1.4; color: var(--t2); }
+.pprice { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding-top: 1px; }
+.amt { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--t); }
+.per { font-size: 12px; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.allp { grid-column: 2 / -1; justify-self: start; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+.prod.noall { padding-bottom: 12px; }
+
 /* the detailed view: one larger row per list */
-.drow { padding: 10px 0 6px; border-bottom: 1px solid var(--b1); }
-.drow.nochg { padding-bottom: 10px; }
-.drow:last-child { border-bottom: 0; padding-bottom: 12px; }
+.drow { position: relative; padding: 10px 0 2px; border-bottom: 1px solid var(--b1); }
+.drow:last-child { border-bottom: 0; }
 .dtop { display: flex; align-items: center; gap: 12px; }
-.askl { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
-.askl > span:first-child { flex: 1; min-width: 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
-.chg { display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+
+/* each list's product, one line: picture, name, and the way to change it where allowed */
+.pl { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 2px 0 2px; }
+.plt { flex: 1; display: flex; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--t2); white-space: nowrap; }
+.pln { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.plb { flex: none; white-space: pre; }
+.pl.diff .plt { color: var(--q); }
+.plc { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 0 0 8px; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+.plv { flex: none; display: flex; width: 20px; height: 20px; color: var(--t2); }
 
 /* the disclosure and the other lists */
 .disc { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0; border: 0; border-bottom: 1px solid var(--b1); background: transparent; font-size: 16px; color: var(--t); text-align: left; }
@@ -137,12 +174,12 @@ body { margin: 0; background: #0a0c14; }
 <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
 <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
 <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
-<div class="scrim"></div><section class="sheet"><div class="handle"></div><h2 class="title">Leche semidesnatada Hacendado 1 L</h2><p class="sub">0,92 € each · 2 to get</p><p class="happened">Got 5 today at 0,92 €, at Mercadona, Gran Vía 12.</p><div class="entries"><div class="head"><h3>What you bought</h3><button class="all" type="button">Lists and amounts</button></div><ul class="rows"><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span><span class="ask"> · 3</span></span><span class="wh">Casa · Leche</span></span><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span><span class="ask"> · 2</span></span><span class="wh">Piso de la playa · Leche</span></span><span class="stp reached"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Cocina</span><span class="ask"> · 1</span></span><span class="wh">Oficina · Leche para el café</span></span><span class="stp over"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></li></ul><button class="disc" type="button" aria-expanded="false"><span>Bought for another list</span><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></i></button></div><div class="actions"><button class="primary" type="button">Got the other 2</button><button class="quiet" type="button">They had none</button><button class="quiet" type="button">Not today</button></div></section></div></div><div class="col"><p class="tag">Night, en español</p><div class="vel night phone">
+<div class="scrim"></div><section class="sheet"><div class="handle"></div><h2 class="title">Leche semidesnatada Hacendado 1 L</h2><p class="sub">0,92 € each · 2 to get</p><p class="happened">Got 5 today at 0,92 €, at Mercadona, Gran Vía 12.</p><div class="entries"><div class="head"><h3>What you bought</h3><button class="all" type="button">Lists and amounts</button></div><ul class="rows"><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span><span class="ask"> · 3</span></span><span class="wh">Casa · Leche</span></span><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span><span class="ask"> · 2</span></span><span class="wh">Piso de la playa · Leche</span></span><span class="stp reached"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Cocina</span><span class="ask"> · 1</span></span><span class="wh">Oficina · Leche para el café</span></span><span class="stp over"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></li></ul><button class="disc" type="button" aria-expanded="false"><span>Bought for another list</span><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></i></button></div><div class="actions"><button class="primary" type="button">Got the other 2</button><button class="quiet" type="button">They had none</button><button class="quiet" type="button">Not today</button></div></section><span class="home"></span></div></div><div class="col"><p class="tag">Night, en español</p><div class="vel night phone">
 <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Lista de la compra</b></header>
 <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
 <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
 <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
-<div class="scrim"></div><section class="sheet"><div class="handle"></div><h2 class="title">Leche semidesnatada Hacendado 1 L</h2><p class="sub">0,92 € la unidad · Faltan 2</p><p class="happened">Hoy se han cogido 5 a 0,92 €, en Mercadona, Gran Vía 12.</p><div class="entries"><div class="head"><h3>Lo que has comprado</h3><button class="all" type="button">Listas y cantidades</button></div><ul class="rows"><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span><span class="ask"> · 3</span></span><span class="wh">Casa · Leche</span></span><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span><span class="ask"> · 2</span></span><span class="wh">Piso de la playa · Leche</span></span><span class="stp reached"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Cocina</span><span class="ask"> · 1</span></span><span class="wh">Oficina · Leche para el café</span></span><span class="stp over"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></li></ul><button class="disc" type="button" aria-expanded="false"><span>Comprado para otra lista</span><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></i></button></div><div class="actions"><button class="primary" type="button">Ya tengo los 2 que faltan</button><button class="quiet" type="button">No había</button><button class="quiet" type="button">Hoy no</button></div></section></div></div></div>
+<div class="scrim"></div><section class="sheet"><div class="handle"></div><h2 class="title">Leche semidesnatada Hacendado 1 L</h2><p class="sub">0,92 € la unidad · Faltan 2</p><p class="happened">Hoy se han cogido 5 a 0,92 €, en Mercadona, Gran Vía 12.</p><div class="entries"><div class="head"><h3>Lo que has comprado</h3><button class="all" type="button">Listas y cantidades</button></div><ul class="rows"><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span><span class="ask"> · 3</span></span><span class="wh">Casa · Leche</span></span><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span><span class="ask"> · 2</span></span><span class="wh">Piso de la playa · Leche</span></span><span class="stp reached"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Cocina</span><span class="ask"> · 1</span></span><span class="wh">Oficina · Leche para el café</span></span><span class="stp over"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></li></ul><button class="disc" type="button" aria-expanded="false"><span>Comprado para otra lista</span><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></i></button></div><div class="actions"><button class="primary" type="button">Ya tengo los 2 que faltan</button><button class="quiet" type="button">No había</button><button class="quiet" type="button">Hoy no</button></div></section><span class="home"></span></div></div></div>
 </x-dc>
 </body>
 </html>

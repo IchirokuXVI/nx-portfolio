@@ -1,17 +1,17 @@
 {
   "title": "Velista: a basket row records buys, and a detailed view of its lists",
-  "lede": "Velista plans <code>0201</code> (the row sheet records what was bought for each list) and <code>0200</code> (a detailed view, <code>rows/:rowKey/lists</code>, holds each list's ask and the change of product), with backend <code>0273</code> behind the first. They ship together, so every frame draws the end state of both. Each board shows Day in English on the left and Night in Spanish on the right; the Spanish words are the proposed <code>es</code> keys. The row sheet gains a heading and one text button where \"Change for all lists\" was; the detailed view is a sheet like the shop picker, with the chevron beside its title. No container, no tint, no banner. Two boards are choices, lettered: the default of each is A. The board marked Today is drawn from the source on <code>dev</code>, because the staging test account no longer signs in. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "lede": "Velista plans <code>0201</code> (the row sheet records what was bought for each list) and <code>0200</code> (a detailed view, <code>rows/:rowKey/lists</code>, holds each list's ask and the change of product), with backend <code>0273</code> behind the first. They ship together, so every frame draws the end state of both. Each board shows Day in English on the left and Night in Spanish on the right; the Spanish words are the proposed <code>es</code> keys. The row sheet gains a heading and one text button where \"Change for all lists\" was; the detailed view is a sheet like the shop picker, with the chevron beside its title. No container, no tint, no banner. <strong>Round 3</strong> applies the owner's review: layout A and colours A are chosen, so their choice boards are gone; the detailed view opens on the product (picture, name, brand and size, price) with \"Change for all lists\" under it; each list shows its own product on one line, in amber when it is not the product at the top; a list whose ask the reader may not change keeps a disabled stepper, and pressing it explains why; the rows' heading says they hold what each list asks for. One board is still a choice, lettered, default A. The board marked Today is drawn from the source on <code>dev</code>. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
   "artboards": [
     { "file": "Today.dc.html", "x": 0, "y": 0, "w": 860, "h": 872, "title": "Today, drawn from source: swap icon, a stepper that asks" },
     { "file": "RowSheet.dc.html", "x": 940, "y": 0, "w": 860, "h": 872, "title": "0201 frame 1, 0200 frame 1: what you bought" },
     { "file": "Guest.dc.html", "x": 1880, "y": 0, "w": 860, "h": 872, "title": "A guest who can change nothing" },
-    { "file": "DetailA.dc.html", "x": 0, "y": 1300, "w": 860, "h": 872, "title": "0200 frame 2, choice A: the ask beside the name" },
-    { "file": "DetailB.dc.html", "x": 940, "y": 1300, "w": 860, "h": 872, "title": "0200 frame 2, choice B: the ask on its own line" },
-    { "file": "DetailAll.dc.html", "x": 1880, "y": 1300, "w": 860, "h": 872, "title": "0200 frame 3: Change for all lists" },
+    { "file": "Detail.dc.html", "x": 0, "y": 1300, "w": 860, "h": 872, "title": "0200 frame 2: one product, one list may change it" },
+    { "file": "DetailAll.dc.html", "x": 940, "y": 1300, "w": 860, "h": 872, "title": "0200 frame 3: Change for all lists, one list on another product" },
+    { "file": "Popover.dc.html", "x": 1880, "y": 1300, "w": 860, "h": 872, "title": "Another list: the disabled stepper, pressed" },
     { "file": "LongName.dc.html", "x": 0, "y": 2600, "w": 860, "h": 872, "title": "0201 frame 3: a long name in the row sheet" },
-    { "file": "LongDetail.dc.html", "x": 940, "y": 2600, "w": 860, "h": 872, "title": "0200 frame 4: a long name in the detailed view" },
+    { "file": "LongDetail.dc.html", "x": 940, "y": 2600, "w": 860, "h": 872, "title": "0200 frame 4: long names in the detailed view" },
     { "file": "OtherList.dc.html", "x": 1880, "y": 2600, "w": 860, "h": 872, "title": "0201 frame 2: bought for another list" },
-    { "file": "Colours.dc.html", "x": 0, "y": 3900, "w": 860, "h": 840, "title": "Choice: how a reached ask shows" }
+    { "file": "ChangeLine.dc.html", "x": 0, "y": 3900, "w": 860, "h": 940, "title": "Choice: the way to change one list's product" }
   ],
   "annotations": [
     {
@@ -26,35 +26,35 @@
       "x": 940,
       "y": -250,
       "w": 420,
-      "text": "0201 TARGET STATES 2, 5, 6, 8; 0200 TARGET STATE 2.\nOne job: the heading says What you bought. Each stepper counts what this basket bought for that list in this trip, and each name carries the list's ask. Compra semanal asks 3, has 1. Básicos asks 2, has 2: green. Cocina asks 1, has 2: amber.\nNo swap icon. Lists and amounts, at the right of the heading, opens the detailed view."
+      "text": "0201 TARGET STATES 2, 5, 6, 8; 0200 TARGET STATE 2. COLOURS A, CHOSEN.\nThe heading says What you bought. Each stepper counts what this basket bought for that list in this trip; each name carries the list's ask. Básicos asks 2, has 2: its number is green. Cocina asks 1, has 2: amber. Only the number takes the colour.\nLists and amounts, at the right of the heading, opens the detailed view."
     },
     {
       "id": "guest",
       "x": 1880,
       "y": -250,
       "w": 420,
-      "text": "0200 SPECS 1; 0201 SPECS 6.\nA guest whose lists allow no change of ask or product sees no Lists and amounts, so no page of numbers it can only read. A guest may still record buys, so the steppers stay. Bought for another list is never drawn for a guest."
+      "text": "0200 SPECS 1; 0201 SPECS 6. OPEN QUESTION.\nDrawn by the plan's rule: a guest whose lists allow no change of ask or product sees no Lists and amounts. Round 3 shows a disabled stepper for a list the reader may not change, so the view could now be shown to a guest too, all disabled. Hide it (as drawn) or show it?"
     },
     {
       "id": "detail",
       "x": 0,
       "y": 1050,
       "w": 420,
-      "text": "0200 TARGET STATES 1, 3. CHOOSE A OR B.\nA sheet over the basket, reached from the row sheet; the chevron goes back to it. One larger row per list: name, zone · line, then Bought 2 of 3 in plain text that cannot be pressed. The ask is the only control. Change product opens the change sheet of that list.\nA: the ask stepper sits where the buy stepper sat in the row sheet, so the eye finds the control at the same place. Básicos may change its ask only; Another list may change neither, so its ask is a plain number in the stepper's column.\nWhich letter?"
-    },
-    {
-      "id": "detailB",
-      "x": 940,
-      "y": 1050,
-      "w": 420,
-      "text": "0200 TARGET STATE 3, CHOICE B.\nThe ask gets its own line with a small Asks for at its start and the wider sheet stepper. It names the number outright, at the cost of a taller row: three lists fill most of the screen.\nBought 2 of 3 stays in the name block in both layouts, so the read only number and the editable one never share a line."
+      "text": "0200 TARGET STATES 1, 3. LAYOUT A.\nThe view opens on the product: picture, name, brand and size, price, as the compact product card draws them. Only Compra semanal may change its product, so no Change for all lists.\nThe rows' heading, What each list asks for, says the steppers are the lists' asks. Bought 2 of 3 is plain text. Each list shows its product on one line; Change sits only where it is allowed.\nEvery picture is a button that opens the picture viewer, as in the app."
     },
     {
       "id": "all",
+      "x": 940,
+      "y": 1050,
+      "w": 420,
+      "text": "0200 TARGET STATE 4.\nTwo lists may change their product, so Change for all lists sits under the product, in the block it changes, not in the heading.\nBásicos takes Puleva: its product line is amber, because it is not the product at the top (the row's product, Hacendado). Open question: is Change at the end of an amber line clear enough? Choice B below avoids two ambers on one line."
+    },
+    {
+      "id": "pop",
       "x": 1880,
       "y": 1050,
       "w": 420,
-      "text": "0200 TARGET STATE 4.\nTwo lists may change their product, so Change for all lists closes the heading's row, as it does in the row sheet today. Drawn with layout A."
+      "text": "RULING 3. WORDS PROPOSED.\nAnother list keeps its stepper, drawn as the app's disabled stepper (both ends at 35%). A press opens the note popover (anchored-popover, 280 px) over the capsule; a press anywhere closes it.\nProposed for a list in a group you are not in: This list belongs to a group you are not in. Only its members can change what it asks for.\nFor a list of your group you may not change (a guest): Only members of Casa can change what this list asks for. / Solo los miembros de Casa pueden cambiar lo que pide esta lista."
     },
     {
       "id": "long",
@@ -68,7 +68,7 @@
       "x": 940,
       "y": 2350,
       "w": 420,
-      "text": "0200 FRAME 4.\nIn the detailed view the name and its zone · line are cut; Bought 0,5 of 1,5 kg and the stepper are not. Drawn with layout A, where the name has the least room."
+      "text": "0200 FRAME 4.\nThe list name and its zone · line are cut; Bought 0,5 of 1,5 kg and the stepper are not. A product name that long wraps to two lines in the block and is cut on a list's line, where its brand never is.\nA product with no photo draws the app's product icon on the sunken fill, and is not a button."
     },
     {
       "id": "other",
@@ -82,7 +82,7 @@
       "x": 0,
       "y": 3650,
       "w": 420,
-      "text": "CHOICE, THE COLOURS.\nA: the number only, as the plans say. B: the number and the ask after the name, in the same colour, so the eye joins them. C, the louder one: the number and the capsule's edge, the same 2 px edge an add already draws.\nGreen is the success colour and amber the quiet action colour, in both themes. Which letter?"
+      "text": "CHOICE, THE WAY TO CHANGE ONE LIST'S PRODUCT. WHICH LETTER?\nThe whole product line is the control where the list may change it (44 px tall); the picture inside it opens the photo.\nA: the word Change at its end, in the app's quiet action amber. B: a chevron, quieter, and no amber beside an amber product name. A list that may not change shows neither."
     }
   ]
 }
