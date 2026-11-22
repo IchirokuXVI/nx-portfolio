@@ -1,6 +1,6 @@
 {
   "title": "Velista: the compact view and the reel",
-  "lede": "Plans <code>0202</code>, <code>0203</code> and <code>0204</code>. The row of <code>0191</code> with the button stepper becomes the default view; the compact view is the two line row with the reel of <code>0043</code> restored, stepping by today's rule. A picker in the header of the zone list and of the basket chooses between them. Every frame is drawn Day in Spanish and Night in English, at 390 by 844, from the source on <code>dev</code> at <code>e06813139</code> and the reel as it was deleted at <code>d8daa824c^</code>. The lines and prices are sample data. Photos are the Open Food Facts copies from <code>../typeahead/photos</code>, CC BY-SA 3.0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "lede": "Plans <code>0202</code>, <code>0203</code> and <code>0204</code>. The row of <code>0191</code> with the button stepper becomes the default view; the compact view is the two line row with the reel of <code>0043</code> restored, stepping by today's rule. A picker in the header of the zone list and of the basket chooses between them. Every frame is drawn Day in Spanish and Night in English, at 390 by 844, from the source on <code>dev</code> at <code>e06813139</code> and the reel as it was deleted at <code>d8daa824c^</code>. The lines and prices are sample data. Photos are the Open Food Facts copies from <code>../typeahead/photos</code>, CC BY-SA 3.0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. Round 3 (after the owner's review): icon set B everywhere; the basket's picker in the tools row and in the basket's menu; every reel one fixed size so the reels line up; Due rows say only \"Add\"; and a new board, ReelUnit, with the unit drawn under the number.",
   "artboards": [
     {
       "file": "Picker.dc.html",
@@ -16,23 +16,23 @@
       "y": 1100,
       "w": 1282,
       "h": 900,
-      "title": "A, B or C: the picker's icon and the two view icons"
+      "title": "B is chosen; which header button was meant"
     },
     {
       "file": "Basket.dc.html",
       "x": 0,
       "y": 2090,
-      "w": 2130,
+      "w": 1260,
       "h": 520,
-      "title": "A, B or C: where the picker sits on the basket page, Day, at 390 and 360"
+      "title": "The basket page: the picker in the tools row and in the menu, Day, 390 and 360"
     },
     {
       "file": "BasketNight.dc.html",
       "x": 0,
       "y": 2700,
-      "w": 2130,
+      "w": 1260,
       "h": 520,
-      "title": "The same three places, Night"
+      "title": "The same, Night"
     },
     {
       "file": "Default.dc.html",
@@ -48,7 +48,7 @@
       "y": 3310,
       "w": 860,
       "h": 1010,
-      "title": "The compact view: the same lines with the reel"
+      "title": "The compact view: the same lines with the reel, one size for every reel"
     },
     {
       "file": "ReelOpen.dc.html",
@@ -64,7 +64,7 @@
       "y": 4410,
       "w": 860,
       "h": 1010,
-      "title": "0203: due rows in the compact view"
+      "title": "0203: due rows in the compact view, the button says only Add"
     },
     {
       "file": "Product.dc.html",
@@ -81,6 +81,14 @@
       "w": 860,
       "h": 1010,
       "title": "0204: the basket row sheet, compact, green at the ask and amber above it"
+    },
+    {
+      "file": "ReelUnit.dc.html",
+      "x": 0,
+      "y": 6610,
+      "w": 2548,
+      "h": 1270,
+      "title": "The unit under the number: A, B or C, the stacked tape, and B on a whole list"
     }
   ],
   "annotations": [
@@ -96,14 +104,14 @@
       "x": 560,
       "y": -330,
       "w": 520,
-      "text": "MEASURED ON THESE FRAMES.\nThe control: the stepper is 155 by 48, the reel 52 by 40 at rest. A weight widens the pill a little (\"1,5 kg\" about 60 px).\nRoom for words at 390: in the compact row the name and its price share 238 px; the same two line row with the stepper left them 135 px.\nRows: the default row is 99 px, the compact row 68 px. Between the search field and the bar there are 629 px, now that the group line sits in the header (velista 0205): six rows and a third of the seventh in the default view, nine and a quarter in the compact one. About 45 percent more rows on a screen."
+      "text": "MEASURED ON THESE FRAMES.\nThe control: the stepper is 155 by 48. The reel has one fixed size in every frame (round 3): 72 by 40 with the unit beside the number, 52 by 44 with the unit under it (board ReelUnit, B).\nRoom for words at 390: in the compact row the name and its price share 218 px with the 72 px reel and 238 px with the 52 px one; the same two line row with the stepper left them 135 px.\nRows: the default row is 99 px, the compact row 68 px. Between the search field and the bar there are 629 px, now that the group line sits in the header (velista 0205): six rows and a third of the seventh in the default view, nine and a quarter in the compact one. About 45 percent more rows on a screen."
     },
     {
       "id": "choose",
       "x": 1120,
       "y": -330,
       "w": 560,
-      "text": "WHAT THE OWNER IS ASKED TO CHOOSE.\n1. The icons (board Icons): A rectangles, B rows with a picture, C plain lines with the existing list icon as the button.\n2. Where the basket's picker sits (boards Basket): A in the tools row beside the filter, B a fourth header action, C a row of the basket's menu. B cuts the title at 390 px already, and plan 0202 says to stop and ask if there is no room at 360.\n3. Whether the reel is viable: boards Compact, Reel open and Sheet.\n4. The words. Proposed: \"Normal\" for Default in Spanish, and Compact drawn as a name with \"More rows on the screen\" under it rather than one line with a colon, because one line wraps at 276 px."
+      "text": "ROUND 3: DECIDED, AND STILL OPEN.\nDecided by the owner: icon set B; the basket's picker in the tools row and in the basket's menu (the fourth header action is dropped); one size for every reel; Due rows say only \"Add\".\nStill open:\n1. Which header button \"the icon in the header is fine\" meant: 1 (A's two rows, drawn before) or 2 (B's, drawn now). Board Icons.\n2. The unit under the number: A, B or C on board ReelUnit. B is recommended. Until then the other frames keep the unit beside the number in a 72 px reel.\n3. The words. Proposed: \"Normal\" for Default in Spanish, and Compact drawn as a name with \"More rows on the screen\" under it rather than one line with a colon, because one line wraps at 276 px."
     },
     {
       "id": "staging",
@@ -131,7 +139,28 @@
       "x": 2260,
       "y": 4840,
       "w": 420,
-      "text": "ONE SMALL CHANGE TO THE OLD PILL.\nThe restored pill had no inline padding, so \"1,5 kg\" touched its border. These frames give it 6 px on each side; that is one token when 0203 restores it. Everything else is the old stylesheet: 52 by 40, the subtle border, 12 px radius, the zero style with no fill."
+      "text": "TWO CHANGES TO THE OLD PILL.\nThe restored pill had a minimum width of 52 and grew with its words, so \"1,5 kg\" made a wider reel than \"6\" and the column broke. Round 3 fixes the width: 72 with the unit beside the number, 52 with it under the number. The pill keeps 4 px of padding on each side. Everything else is the old stylesheet: the subtle border, 12 px radius, the zero style with no fill."
+    },
+    {
+      "id": "compactWidth",
+      "x": 1820,
+      "y": 3310,
+      "w": 440,
+      "text": "A PROBLEM: ONE LINE DOES NOT FIT 52 PX.\nMeasured at today's 16 px semibold: \"950 g\" is 40.7 px of text, \"1,5 kg\" 43.8, \"12,5 kg\" 52.7, and the widest value the app can print, \"99,95 kg\" (any weight from 99 945 g), 61.5. With the 1 px border and 4 px of padding a side, a fixed reel needs 54 px for \"1,5 kg\", 63 for \"12,5 kg\" and 72 for \"99,95 kg\".\nSo the one line frames draw every reel at 72 by 40, the smallest fixed width that fits every value. It costs the name 20 px against a 52 px reel.\nThe stacked layout on board ReelUnit solves it: the widest figure, \"99,95\", is 38.6 px at 15 px bold, so every value fits 52 px.\nA count never needs more: its ceiling 99 999 prints as \"100 K\" (\"100 k\" in English), 40.8 px on one line."
+    },
+    {
+      "id": "iconsWhich",
+      "x": 1340,
+      "y": 1100,
+      "w": 440,
+      "text": "PLEASE CONFIRM WITH ONE WORD.\nIf \"the icon in the header is fine\" meant the header button drawn before this round (1: A's two rows) rather than B's button (2), say so. Every frame now draws 2, B's button, because set B was chosen. Answer \"1\" or \"2\"."
+    },
+    {
+      "id": "reelunit",
+      "x": 2600,
+      "y": 6610,
+      "w": 460,
+      "text": "THE UNIT UNDER THE NUMBER: B IS RECOMMENDED.\nA, 52 by 40: no growth, but the unit drops to 10 px, below the 11 px floor every other text in the app keeps.\nB, 52 by 44: 4 px more, inside the 44 px tap box the reel already had. Number 15 px (a bit smaller than today's 16), unit 11 px, the size of the \"/ kg\" beside the price. It reads at a glance on Day and Night.\nC, 52 by 48: keeps today's 16 px number, but the pill stands 4 px taller than the 44 px picture beside it and the row looks heavier.\nIn all three the compact row stays 68 px tall: its content is 60 px, the tallest reel 48.\nThe widest stacked figure, \"99,95\", is 38.6 px at 15 px and 41.2 at 16; the pill's inside is 46 px, so 52 holds every value."
     },
     {
       "id": "sheet",

@@ -85,8 +85,35 @@
     .cprice { flex: none; margin-left: auto; font-size: 14px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
     .line2 { font-size: 12px; color: var(--t3); min-height: 16px; }
     .line2 span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .reel { position: relative; flex: none; display: flex; align-items: center; justify-content: center; min-width: 52px; min-height: 44px; }
-    .pill { display: flex; align-items: center; justify-content: center; min-width: 52px; height: 40px; padding: 0 6px; border: 1px solid var(--b); border-radius: 12px; background: var(--r); font-size: 16px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--t); }
+    /* Round 3: every reel has one fixed size, so the reels of a list line up in one column.
+       One line (the unit beside the number): 72 by 40, the narrowest box that holds the widest
+       value the app can print, "99,95 kg" (61.5 px of text at 16 px) with 4 px each side. */
+    .reel { position: relative; flex: none; display: flex; align-items: center; justify-content: center; width: 72px; min-height: 44px; }
+    .pill { display: flex; align-items: center; justify-content: center; width: 100%; height: 40px; padding: 0 4px; border: 1px solid var(--b); border-radius: 12px; background: var(--r); font-size: 16px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--t); }
+    /* Stacked (board ReelUnit): the number over its unit, 52 px wide. A 40, B 44, C 48 tall. */
+    .reel.sA, .reel.sB, .reel.sC { width: 52px; }
+    .reel.sC { min-height: 48px; }
+    .sB .pill { height: 44px; }
+    .sC .pill { height: 48px; }
+    .pill.st { flex-direction: column; padding: 0 2px; }
+    .pill.st b { font-size: 15px; line-height: 17px; font-weight: 700; }
+    .pill.st i { font-style: normal; font-size: 11px; line-height: 13px; font-weight: 500; color: var(--t2); }
+    .sA .pill.st i { font-size: 10px; line-height: 11px; }
+    .sC .pill.st b { font-size: 16px; line-height: 19px; }
+    .pill.st.ok i, .pill.st.over i { color: inherit; }
+    .pill.st.zero i { color: var(--t3); }
+    .tape.st { gap: 16px; }
+    .tape.st .nb, .tape.st .cur { display: flex; flex-direction: column; align-items: center; line-height: 1; }
+    .tape.st .nb b { font-size: 14px; line-height: 17px; font-weight: 500; }
+    .tape.st .nb i { font-style: normal; font-size: 10px; line-height: 12px; }
+    .tape.st .cur b { font-size: 19px; line-height: 22px; font-weight: 700; }
+    .tape.st .cur i { font-style: normal; font-size: 11px; line-height: 13px; font-weight: 600; }
+    .chosen { display: inline-flex; align-items: center; height: 22px; margin-left: 6px; padding: 0 8px; border-radius: 999px; border: 1px solid #047857; color: #047857; font-size: 12px; font-weight: 600; vertical-align: 1px; }
+    .small-gl { display: flex; gap: 14px; align-items: flex-end; padding: 10px 14px; }
+    .small-gl figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: var(--t3); }
+    .small-gl .ic { width: 24px; height: 24px; color: var(--t2); }
+    .tag { display: flex; align-items: center; gap: 8px; padding: 10px 16px 0; font-size: 13px; color: var(--t2); }
+    .tag b { color: var(--t); }
     .pill.zero { background: transparent; color: var(--t3); }
     .pill.ok { color: var(--ok); }
     .pill.over { color: var(--q); }
