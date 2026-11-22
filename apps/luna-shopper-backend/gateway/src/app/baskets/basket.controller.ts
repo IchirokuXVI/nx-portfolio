@@ -532,6 +532,14 @@ export class BasketController {
    * The name is catalog's, in the reader's language or else any it holds, and
    * is what a line made here is called. The unit is checked as the basket's
    * add checks it, because the write can make a line.
+   *
+   * A line that must be made needs that name, so two answers are kept apart
+   * (plan 0273, amended again on 2026-11-22): a product catalog names in no
+   * language answers 409 `basket_product_has_no_name`, and a catalog that did
+   * not answer, by its budget or by a failure, answers 503
+   * `catalog_unavailable`, which the client answers by trying again. Neither
+   * writes anything. A buy on a line the list already holds needs no name and
+   * goes on without catalog.
    */
   @Post(':id/rows/:rowKey/buy-for-list')
   @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
@@ -588,6 +596,12 @@ export class BasketController {
       quantity: dto.quantity,
       unit: dto.unit,
       ...(content ? { content } : {}),
+      // Core turns this into 503 `catalog_unavailable` when it must make the
+      // line, and into nothing when the list already holds one. A scope core
+      // could not give left catalog unasked, which is no answer either.
+      ...(scope === null || chosen.unanswered
+        ? { catalogUnanswered: true }
+        : {}),
       paid: chosen.paid ?? undefined,
       ...(chosen.itemSnapshot ? { itemSnapshot: chosen.itemSnapshot } : {}),
     };

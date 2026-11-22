@@ -1038,13 +1038,22 @@ export interface BuyForListBasketRequest {
    * holds, which a line made here carries with `named: false`. Written by the
    * gateway from catalog, never by a client. Absent when catalog named it in
    * no language or did not answer: a line that has to be made then answers
-   * 409 `basket_product_has_no_name`.
+   * 409 `basket_product_has_no_name`, or 503 `catalog_unavailable` when
+   * {@link catalogUnanswered} says catalog did not answer.
    *
    * There is no product field (plan 0273, amended on 2026-11-22): the product
    * is the row's, which core reads from {@link rowKey}, and a row with no
    * product answers 409 `basket_row_has_no_product`.
    */
   content?: string;
+  /**
+   * True when catalog did not answer for the product's name, by its budget
+   * or by a failure (plan 0273, amended on 2026-11-22). Written by the
+   * gateway. A line that has to be made then answers 503
+   * `catalog_unavailable` and nothing is written; a line the list already
+   * holds is bought on as before, since it needs no name.
+   */
+  catalogUnanswered?: boolean;
   /** As {@link SettleBasketRowRequest.paid}: written by the gateway. */
   paid?: SettlementPaid;
   /** As {@link SettleBasketRowRequest.itemSnapshot}: written by the gateway. */

@@ -10936,6 +10936,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "`catalog_unavailable` — We could not reach the product catalog just now. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         },
         "tags": [
@@ -49309,6 +49319,7 @@
               "basket_line_already_in_row",
               "basket_row_has_no_product",
               "basket_product_has_no_name",
+              "catalog_unavailable",
               "stale_quantity",
               "account_locked",
               "postal_code_unknown",

@@ -17,6 +17,7 @@ import {
   BasketLineAlreadyInRowException,
   BasketProductHasNoNameException,
   BasketRowHasNoProductException,
+  CatalogUnavailableException,
 } from '@portfolio/luna-shopper/platform';
 import {
   describeIntegration,
@@ -496,6 +497,38 @@ describeIntegration('a buy for a list that did not ask (real Postgres)', () => {
     expect(emitted).toEqual([]);
   });
 
+  it('answers catalog_unavailable and writes nothing when catalog did not answer for the name (spec 8)', async () => {
+    const w = await world();
+
+    await expect(
+      buy(w, {
+        content: undefined,
+        itemSnapshot: null,
+        paid: undefined,
+        catalogUnanswered: true,
+      })
+    ).rejects.toBeInstanceOf(CatalogUnavailableException);
+    expect(await linesOf(w.other)).toHaveLength(0);
+    expect(await settlementsOnList(w.other)).toBe(0);
+    expect(emitted).toEqual([]);
+  });
+
+  it('buys on the line the list already holds when catalog did not answer, which needs no name (spec 8)', async () => {
+    const w = await world();
+    const held = await line(w.other, w.userId, 0);
+
+    await buy(w, {
+      lineId: held.id,
+      content: undefined,
+      itemSnapshot: null,
+      paid: undefined,
+      catalogUnanswered: true,
+    });
+
+    expect(await linesOf(w.other)).toHaveLength(1);
+    expect(await standingOf(held.id)).toHaveLength(1);
+  });
+
   it('answers basket_row_has_no_product for a row of free text and writes nothing (spec 8)', async () => {
     const w = await world();
     const free = await line(w.asking, w.userId, 1, [], 'Bread', true);
@@ -647,29 +680,26 @@ describeIntegration('a buy for a list that did not ask (real Postgres)', () => {
       }
       return row;
     };
-    /**
-     * The entry's ask, as the read counts it (plan 0274, section 3): its
-     * `left` plus the units of its standing buys that met the ask.
-     */
-    const askedOf = async (lineId: string) => {
-      const row = await rowOf(lineId);
-      const entry = row.entries.find((one) => one.lineId === lineId);
-      const applied = (await standingOf(lineId)).reduce(
-        (sum, settlement) => sum + settlement.applied,
-        0
-      );
-      return (entry?.left ?? Number.NaN) + applied;
-    };
+    /** The entry's ask on the wire, as the read serves it (plan 0274). */
+    const askedOf = async (lineId: string) =>
+      (await rowOf(lineId)).entries.find((one) => one.lineId === lineId)?.asked;
 
-    await buy(w);
+    const answer = await buy(w);
     const [made] = await linesOf(w.other);
 
     // The buy met no ask: the line asked for nothing (plan 0273, section 1).
     expect((await standingOf(made.id)).map((row) => row.applied)).toEqual([0]);
+    // The buy's own answer carries the new entry's ask, through the builder
+    // every entry is made by (plan 0274).
+    expect(answer.entries.find((one) => one.lineId === made.id)).toMatchObject({
+      asked: 0,
+      left: 0,
+      bought: 2,
+    });
     const afterBuy = await rowOf(made.id);
     expect(
       afterBuy.entries.find((one) => one.lineId === made.id)
-    ).toMatchObject({ left: 0, bought: 2 });
+    ).toMatchObject({ asked: 0, left: 0, bought: 2 });
     expect(await askedOf(made.id)).toBe(0);
     // The row asks for the first list's 2 alone: the new entry adds nothing.
     expect(afterBuy).toMatchObject({ asked: w.milk.quantity, bought: 2 });
@@ -686,7 +716,7 @@ describeIntegration('a buy for a list that did not ask (real Postgres)', () => {
       itemId: MILK,
     });
     const entry = settled.entries.find((one) => one.lineId === made.id);
-    expect(entry).toMatchObject({ left: 0, bought: 3 });
+    expect(entry).toMatchObject({ asked: 0, left: 0, bought: 3 });
     expect(await askedOf(made.id)).toBe(0);
 
     const reverted = await revertService.revert({
@@ -701,6 +731,7 @@ describeIntegration('a buy for a list that did not ask (real Postgres)', () => {
     expect(
       reverted.entries.find((one) => one.lineId === made.id)
     ).toMatchObject({
+      asked: 0,
       bought: 2,
       // The revert gives back only units that met an ask (plan 0274, section
       // 4), and none did, so the list still asks for nothing.

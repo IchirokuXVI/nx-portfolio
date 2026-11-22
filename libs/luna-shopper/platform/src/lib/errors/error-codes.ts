@@ -104,6 +104,18 @@ export const ERROR_CODES = {
    */
   BASKET_PRODUCT_HAS_NO_NAME: 'basket_product_has_no_name',
   /**
+   * A write needed something only catalog can say, and catalog did not answer
+   * in time or failed (plan 0273, amended on 2026-11-22). The first case is a
+   * buy for a list that does not ask, which had to make the list's line and
+   * so needed the product's name.
+   *
+   * Its own code and not {@link BASKET_PRODUCT_HAS_NO_NAME}, because the two
+   * ask different things of the client: a product with no name stays so, and
+   * a catalog that did not answer is answered by sending the same request
+   * again. Nothing was written.
+   */
+  CATALOG_UNAVAILABLE: 'catalog_unavailable',
+  /**
    * The number this write was moving is not where the caller believed it started
    * (plan 0057, section 5; plan 0056, section 3.2).
    *
@@ -720,6 +732,10 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // by what catalog holds of the product (plan 0273).
   [ERROR_CODES.BASKET_ROW_HAS_NO_PRODUCT]: HttpStatus.CONFLICT,
   [ERROR_CODES.BASKET_PRODUCT_HAS_NO_NAME]: HttpStatus.CONFLICT,
+  // 503, which is "try again later": the request was well formed and nothing
+  // about the state refuses it, and what failed is a service this one depends
+  // on. Never 409, which would say the state is at fault (plan 0273).
+  [ERROR_CODES.CATALOG_UNAVAILABLE]: HttpStatus.SERVICE_UNAVAILABLE,
   // 409 for the same reason and apart from it by code: the request was well
   // formed, and what it conflicts with is state that moved underneath it.
   [ERROR_CODES.STALE_QUANTITY]: HttpStatus.CONFLICT,

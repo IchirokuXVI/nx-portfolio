@@ -181,7 +181,7 @@ describe('the buy for a list route (plan 0273)', () => {
   });
 
   it('carries the lineId it was given and no name when catalog did not answer', async () => {
-    const w = build({ paid: null, itemSnapshot: null });
+    const w = build({ paid: null, itemSnapshot: null, unanswered: true });
     const lineId = '9a1d73b4-e2c6-4a81-b37d-95f80b2c6e4f';
 
     await w.controller.buyForList(
@@ -191,9 +191,43 @@ describe('the buy for a list route (plan 0273)', () => {
       body({ lineId })
     );
 
-    expect(w.message()).toMatchObject({ lineId });
+    // Core buys on the named line, which needs no name, so the flag refuses
+    // nothing there.
+    expect(w.message()).toMatchObject({ lineId, catalogUnanswered: true });
     expect(w.message()).not.toHaveProperty('content');
     expect(w.message()).not.toHaveProperty('itemSnapshot');
+  });
+
+  it('tells core catalog did not answer, so a line that must be made is a try again (amended 2026-11-22)', async () => {
+    const w = build({ paid: null, itemSnapshot: null, unanswered: true });
+
+    await w.controller.buyForList(
+      actor(ParticipantKind.REGISTERED, 'u-actor'),
+      BASKET,
+      ROW,
+      body()
+    );
+
+    expect(w.message()).toMatchObject({ catalogUnanswered: true });
+    expect(w.message()).not.toHaveProperty('content');
+  });
+
+  it('does not say catalog was silent when it answered a product with no name (amended 2026-11-22)', async () => {
+    const w = build({
+      paid: null,
+      itemSnapshot: { ...SNAPSHOT, name: {} as never },
+    });
+
+    await w.controller.buyForList(
+      actor(ParticipantKind.REGISTERED, 'u-actor'),
+      BASKET,
+      ROW,
+      body()
+    );
+
+    // Core answers 409 `basket_product_has_no_name` for this one.
+    expect(w.message()).not.toHaveProperty('content');
+    expect(w.message()).not.toHaveProperty('catalogUnanswered');
   });
 
   it('refuses a guest before catalog or core is asked', async () => {

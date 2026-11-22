@@ -96,6 +96,12 @@ export const ERROR_CATALOG: Record<
     en: 'This product has no name yet, so it cannot be added to that list.',
     es: 'Este producto aún no tiene nombre, así que no se puede añadir a esa lista.',
   },
+  // Says what to do, because the person did nothing wrong and the same tap a
+  // moment later is the fix (plan 0273, amended on 2026-11-22).
+  [ERROR_CODES.CATALOG_UNAVAILABLE]: {
+    en: 'We could not reach the product catalog just now. Please try again.',
+    es: 'Ahora mismo no hemos podido consultar el catálogo de productos. Inténtalo de nuevo.',
+  },
   // It carries its number in the message rather than only in a code, because
   // the client's job is to say it: "somebody else moved this, it is 3 now" is
   // actionable and "that failed" is not (plan 0057, section 5).

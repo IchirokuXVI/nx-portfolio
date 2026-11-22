@@ -15,6 +15,7 @@
 > ask of the line it makes reads 0 only once backend `0274` records how much of an ask each
 > buy met, so spec 7 needs `0274`; the two can be built side by side. It needs nothing else
 > of this round.
+> Amended again on 2026-11-22: a catalog that does not answer gets its own try again error.
 >
 > What already works and is not changed (read on `dev` at `e06813139`):
 > - A buy for one line of a row: `POST /v1/baskets/:id/rows/:rowKey/settle` with
@@ -91,7 +92,11 @@ a participant with an account who may write to that list.
      request's language, else in any language the product has. It is never the text of the
      row's line or of another list's line: one household may have typed it, and it must not
      reach another household's list. A product with no name in any language answers 409
-     `basket_product_has_no_name` and writes nothing.
+     `basket_product_has_no_name` and writes nothing. A catalog that does not answer (its
+     budget runs out, it fails, or no reply comes) is not a product with no name: when a line
+     must be made, the route answers 503 `catalog_unavailable`, which tells the client to try
+     again, and writes nothing. A buy on a line the list already holds needs no name and goes
+     on without catalog.
    - Insert one `line_settlements` row, `BOUGHT`, with the quantity, `applied = 0` (backend
      `0274`), the price columns and the snapshot exactly as a settle writes them, and leave
      the line's quantity at 0.
@@ -148,6 +153,9 @@ luna slot run of section 2.
 8. A row with no product answers 409 `basket_row_has_no_product`; a product with no name in
    any language answers 409 `basket_product_has_no_name`; the new line's text is the
    product's name, never the row's line text.
+9. When a line must be made and catalog does not answer, the route answers 503
+   `catalog_unavailable` and writes nothing; with the line of the list already there the buy
+   is recorded on it.
 
 ## 2. Slot check
 

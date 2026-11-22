@@ -201,6 +201,22 @@ describe('a buy for a list that did not ask (plan 0273)', () => {
     // The row line's text is not a fallback (plan 0273, amended on
     // 2026-11-22). `lineAtZeroWithin` refuses a null name with
     // `basket_product_has_no_name`, which the integration spec pins.
-    expect(prepared).toEqual([expect.objectContaining({ content: null })]);
+    expect(prepared).toEqual([
+      expect.objectContaining({ content: null, catalogUnanswered: false }),
+    ]);
+  });
+
+  it('hands on that catalog did not answer, so a line that must be made is a try again (amended again on 2026-11-22)', async () => {
+    const { service, prepared } = build();
+
+    await service
+      .buyForList(request({ content: undefined, catalogUnanswered: true }))
+      .catch(() => undefined);
+
+    // `lineAtZeroWithin` refuses it with 503 `catalog_unavailable` when it
+    // must make the line, which the integration spec pins.
+    expect(prepared).toEqual([
+      expect.objectContaining({ content: null, catalogUnanswered: true }),
+    ]);
   });
 });

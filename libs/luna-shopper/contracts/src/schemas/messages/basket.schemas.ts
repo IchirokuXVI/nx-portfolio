@@ -765,6 +765,8 @@ const buyForListRequest = object(
     quantity: integer({ minimum: 1, maximum: LINE_QUANTITY_MAX }),
     unit: ref(ENUM_IDS.lineUnit),
     content: nonEmptyString(),
+    // Written by the gateway: catalog did not answer for the name.
+    catalogUnanswered: boolean(),
     paid: ref(LIST_SCHEMA_IDS.settlementPaid),
     itemSnapshot: nullableItemSnapshot(),
   },

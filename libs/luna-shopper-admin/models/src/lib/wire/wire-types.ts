@@ -710,6 +710,7 @@ export type ProblemDetails = {
     | 'basket_line_already_in_row'
     | 'basket_row_has_no_product'
     | 'basket_product_has_no_name'
+    | 'catalog_unavailable'
     | 'stale_quantity'
     | 'account_locked'
     | 'postal_code_unknown'

@@ -152,6 +152,7 @@ export class BasketBuyForListService {
             itemId,
             unit,
             content: nameOf(req),
+            catalogUnanswered: req.catalogUnanswered === true,
             via: opened.via(),
           })
         : null;
@@ -328,7 +329,8 @@ export class BasketBuyForListService {
  * amended on 2026-11-22): one household may have typed it, and it must not
  * reach another household's list. Null when catalog named the product in no
  * language, and then a line that has to be made answers
- * `basket_product_has_no_name`.
+ * `basket_product_has_no_name`; null too when catalog did not answer, and
+ * then it answers `catalog_unavailable` (amended again on 2026-11-22).
  */
 function nameOf(req: BuyForListBasketRequest): string | null {
   const sent = typeof req.content === 'string' ? req.content.trim() : '';

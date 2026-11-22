@@ -175,7 +175,8 @@ export class SettleBasketRowDto {
  * `basket_row_has_no_product`. The gateway reads the price and the name as it
  * does for a settle, and the name is what a line made here is called: a
  * product catalog names in no language answers 409
- * `basket_product_has_no_name` when a line would have to be made.
+ * `basket_product_has_no_name` when a line would have to be made, and a
+ * catalog that does not answer then answers 503 `catalog_unavailable`.
  */
 export class BuyForListBasketRowDto {
   @ApiProperty({

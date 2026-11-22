@@ -41,6 +41,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   BasketProductHasNoNameException,
+  CatalogUnavailableException,
   clampPageSize,
   decodeCursor,
   encodeCursor,
@@ -200,6 +201,11 @@ export interface LineAtZeroRequest {
    * in no language.
    */
   content: string | null;
+  /**
+   * Catalog did not answer for the name, so a null {@link content} says
+   * nothing about the product (plan 0273, amended again on 2026-11-22).
+   */
+  catalogUnanswered?: boolean;
   /** The basket the buy is made through, for the change row. */
   via: LineWriteVia;
 }
@@ -211,6 +217,7 @@ export interface PreparedLineAtZero {
   itemId: string;
   unit: LineUnit;
   content: string | null;
+  catalogUnanswered: boolean;
   approval: { decides: boolean; autoApproves: boolean };
   actor: LineChangeActor;
 }
@@ -1489,6 +1496,7 @@ export class LineService {
       itemId,
       unit: this.validateUnit(req.unit) ?? 'UNIT',
       content: req.content?.trim() || null,
+      catalogUnanswered: req.catalogUnanswered === true,
       approval: {
         decides: permissions.has(ListPermission.DECIDE),
         autoApproves: list.autoApproveLines,
@@ -1536,6 +1544,13 @@ export class LineService {
       if (line !== null) {
         return { line, created: false };
       }
+    }
+    if (prepared.content === null && prepared.catalogUnanswered) {
+      // No name because catalog did not answer, which a moment later it may
+      // (plan 0273, amended again on 2026-11-22). The transaction rolls back.
+      throw new CatalogUnavailableException(
+        'The catalog did not answer, so no line was made. Try again'
+      );
     }
     if (prepared.content === null) {
       // The name of a line that is not named is the product's, which the

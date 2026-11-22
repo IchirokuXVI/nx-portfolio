@@ -79,7 +79,9 @@ export interface ProblemResponseOptions {
   /**
    * The route buys the row's product for a list that does not ask, so a row
    * with no product and a product with no name each answer 409 with a code
-   * of their own (plan 0273).
+   * of their own (plan 0273). A line it must make needs the product's name,
+   * so a catalog that does not answer is a 503 `catalog_unavailable`, which
+   * the client answers by trying again.
    */
   rowProduct?: boolean;
   /**
@@ -302,7 +304,8 @@ export function ApiProblemResponses(
   if (options.rowProduct) {
     codes.push(
       ERROR_CODES.BASKET_ROW_HAS_NO_PRODUCT,
-      ERROR_CODES.BASKET_PRODUCT_HAS_NO_NAME
+      ERROR_CODES.BASKET_PRODUCT_HAS_NO_NAME,
+      ERROR_CODES.CATALOG_UNAVAILABLE
     );
   }
   if (options.lineMerge) {

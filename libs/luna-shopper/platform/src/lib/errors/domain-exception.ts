@@ -184,6 +184,15 @@ export class BasketProductHasNoNameException extends DomainException {
 }
 
 /**
+ * A write needed an answer of catalog, and catalog did not give one in time
+ * or failed (plan 0273, amended on 2026-11-22). Renders as 503, nothing is
+ * written, and the client sends the same request again.
+ */
+export class CatalogUnavailableException extends DomainException {
+  readonly code = ERROR_CODES.CATALOG_UNAVAILABLE;
+}
+
+/**
  * The number being moved is not where the caller believed it started (plan 0057,
  * section 5).
  *
