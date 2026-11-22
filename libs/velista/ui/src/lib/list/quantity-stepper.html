@@ -21,7 +21,7 @@
       (click)="press(-1, $event)"
       (contextmenu)="$event.preventDefault()"
       (lostpointercapture)="endHold()"
-      (pointercancel)="endHold()"
+      (pointercancel)="endHold($event)"
       (pointerdown)="startHold(-1, $event)"
       (pointerup)="endHold($event)"
       [attr.aria-disabled]="disabled() || minusAtEnd() ? 'true' : null"
@@ -30,6 +30,7 @@
       "
       [class.at-end]="minusAtEnd()"
       [class.is-clear]="minusClears()"
+      #step
       class="step minus"
       type="button"
     >
@@ -82,7 +83,7 @@
       (click)="press(1, $event)"
       (contextmenu)="$event.preventDefault()"
       (lostpointercapture)="endHold()"
-      (pointercancel)="endHold()"
+      (pointercancel)="endHold($event)"
       (pointerdown)="startHold(1, $event)"
       (pointerup)="endHold($event)"
       [attr.aria-disabled]="disabled() || plusAtEnd() ? 'true' : null"
@@ -90,6 +91,7 @@
         'amount.more' | rokuT: { step: moreStep(), name: name() }
       "
       [class.at-end]="plusAtEnd()"
+      #step
       class="step plus"
       type="button"
     >
