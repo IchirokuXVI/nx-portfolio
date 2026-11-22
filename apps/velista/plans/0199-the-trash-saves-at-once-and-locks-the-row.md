@@ -1,3 +1,5 @@
+> **PR:** [#1075](https://github.com/IchirokuXVI/nx-portfolio/pull/1075)
+
 # 0199: the trash saves at once and locks the row
 
 > Decided on 2026-11-22. On a zone list row, the minus of the stepper draws a red trash
