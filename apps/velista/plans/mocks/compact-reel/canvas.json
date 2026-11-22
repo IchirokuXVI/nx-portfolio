@@ -1,0 +1,144 @@
+{
+  "title": "Velista: the compact view and the reel",
+  "lede": "Plans <code>0202</code>, <code>0203</code> and <code>0204</code>. The row of <code>0191</code> with the button stepper becomes the default view; the compact view is the two line row with the reel of <code>0043</code> restored, stepping by today's rule. A picker in the header of the zone list and of the basket chooses between them. Every frame is drawn Day in Spanish and Night in English, at 390 by 844, from the source on <code>dev</code> at <code>e06813139</code> and the reel as it was deleted at <code>d8daa824c^</code>. The lines and prices are sample data. Photos are the Open Food Facts copies from <code>../typeahead/photos</code>, CC BY-SA 3.0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    {
+      "file": "Picker.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1704,
+      "h": 1010,
+      "title": "0202: the picker on the zone list, closed and open"
+    },
+    {
+      "file": "Icons.dc.html",
+      "x": 0,
+      "y": 1100,
+      "w": 1282,
+      "h": 900,
+      "title": "A, B or C: the picker's icon and the two view icons"
+    },
+    {
+      "file": "Basket.dc.html",
+      "x": 0,
+      "y": 2090,
+      "w": 2130,
+      "h": 520,
+      "title": "A, B or C: where the picker sits on the basket page, Day, at 390 and 360"
+    },
+    {
+      "file": "BasketNight.dc.html",
+      "x": 0,
+      "y": 2700,
+      "w": 2130,
+      "h": 520,
+      "title": "The same three places, Night"
+    },
+    {
+      "file": "Default.dc.html",
+      "x": 0,
+      "y": 3310,
+      "w": 860,
+      "h": 1010,
+      "title": "The default view: the row of 0191 and the stepper"
+    },
+    {
+      "file": "Compact.dc.html",
+      "x": 920,
+      "y": 3310,
+      "w": 860,
+      "h": 1010,
+      "title": "The compact view: the same lines with the reel"
+    },
+    {
+      "file": "ReelOpen.dc.html",
+      "x": 0,
+      "y": 4410,
+      "w": 1282,
+      "h": 1010,
+      "title": "0203: a reel open mid drag, and the step rule on its tape"
+    },
+    {
+      "file": "Due.dc.html",
+      "x": 1340,
+      "y": 4410,
+      "w": 860,
+      "h": 1010,
+      "title": "0203: due rows in the compact view"
+    },
+    {
+      "file": "Product.dc.html",
+      "x": 0,
+      "y": 5510,
+      "w": 860,
+      "h": 1010,
+      "title": "0203: the product page's table of lists, compact"
+    },
+    {
+      "file": "Sheet.dc.html",
+      "x": 920,
+      "y": 5510,
+      "w": 860,
+      "h": 1010,
+      "title": "0204: the basket row sheet, compact, green at the ask and amber above it"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "plans",
+      "x": 0,
+      "y": -330,
+      "w": 520,
+      "text": "WHICH PLAN EACH FRAME ANSWERS.\nPicker, Icons and Basket: velista 0202, section 1, frames 1 and 2.\nDefault and Compact: 0202 frame 3, and 0203 frames 1 and 5. The two boards draw the same ten lines, so the rows can be counted side by side.\nReel open: 0203 frame 2 and spec 2.\nDue rows: 0203 frame 3. Product page: 0203 frame 4.\nRow sheet: 0204, the one frame it asks for."
+    },
+    {
+      "id": "measure",
+      "x": 560,
+      "y": -330,
+      "w": 520,
+      "text": "MEASURED ON THESE FRAMES.\nThe control: the stepper is 155 by 48, the reel 52 by 40 at rest. A weight widens the pill a little (\"1,5 kg\" about 60 px).\nRoom for words at 390: in the compact row the name and its price share 238 px; the same two line row with the stepper left them 135 px.\nRows: the default row is 99 px, the compact row 68 px. Between the head block and the bar there are about 590 px: six rows and a slice of the seventh in the default view, eight and most of the ninth in the compact one. About 45 percent more rows on a screen."
+    },
+    {
+      "id": "choose",
+      "x": 1120,
+      "y": -330,
+      "w": 560,
+      "text": "WHAT THE OWNER IS ASKED TO CHOOSE.\n1. The icons (board Icons): A rectangles, B rows with a picture, C plain lines with the existing list icon as the button.\n2. Where the basket's picker sits (boards Basket): A in the tools row beside the filter, B a fourth header action, C a row of the basket's menu. B cuts the title at 390 px already, and plan 0202 says to stop and ask if there is no room at 360.\n3. Whether the reel is viable: boards Compact, Reel open and Sheet.\n4. The words. Proposed: \"Normal\" for Default in Spanish, and Compact drawn as a name with \"More rows on the screen\" under it rather than one line with a colon, because one line wraps at 276 px."
+    },
+    {
+      "id": "staging",
+      "x": 1760,
+      "y": 0,
+      "w": 420,
+      "text": "NO SCREENSHOTS OF TODAY.\nThe staging test account in tmp/velista-user-staging no longer signs in: staging refused it on 2026-11-22 with \"that email and password do not match\". The production copy onto staging of 2026-11-19 probably replaced it. So every frame is drawn from source, and the default view board stands in for today's row."
+    },
+    {
+      "id": "picker",
+      "x": 1760,
+      "y": 330,
+      "w": 420,
+      "text": "THE PICKER.\nThe first header action on the zone list, before the filter, as plan 0202 asks (beside the filter). Its name is \"View\" / \"Vista\". The popover is the choice frame of AnchoredPopover: 276 px, rows to its edges, the raised surface, the hairline and the second elevation. The current row carries the tick in the quiet amber and the heavier weight; that is the only accent."
+    },
+    {
+      "id": "tape",
+      "x": 2260,
+      "y": 4410,
+      "w": 520,
+      "text": "THE TAPE RUNS SIDEWAYS.\nAs the reel of 0043 did: previous, current and next in a row, 56 px tall, growing left from the reel. It covers its own row's name and price; on a 68 px row it stays inside the row and only its shadow reaches the rows above and below. Plan 0203 frame 2 says \"over the next row\"; this is that overlay as it was built. A tape that runs down over the next row would be a new gesture, not a restore.\nA weight writes its words on the tape: 975 g, 1 kg, 1,05 kg. The spec's 925, 950, 975, 1000, 1050 are the same steps in grams."
+    },
+    {
+      "id": "pill",
+      "x": 2260,
+      "y": 4840,
+      "w": 420,
+      "text": "ONE SMALL CHANGE TO THE OLD PILL.\nThe restored pill had no inline padding, so \"1,5 kg\" touched its border. These frames give it 6 px on each side; that is one token when 0203 restores it. Everything else is the old stylesheet: 52 by 40, the subtle border, 12 px radius, the zero style with no fill."
+    },
+    {
+      "id": "sheet",
+      "x": 1840,
+      "y": 5510,
+      "w": 440,
+      "text": "THE ROW SHEET (0204).\nThe colours of 0201 move onto the reel: the resting number and every number on the tape are green when equal to the list's ask and amber above it. Both pass the contrast floor on the raised surface and on the tape: green 5.5 to 1 and amber 4.9 to 1 on Day, both above 8 to 1 on Night.\nThe label is \"<list> · <ask>\", the list name cut first and the ask never. The menu trigger of 0200 stays before each reel. \"Bought for another list\" draws reels too, from 0."
+    }
+  ]
+}
