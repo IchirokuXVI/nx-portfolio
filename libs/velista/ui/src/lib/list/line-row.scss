@@ -46,12 +46,6 @@
   cursor: default;
 }
 
-// A write is in flight. 70%, and **still tappable**: blocking it would make the app
-// feel slow on exactly the connection it was designed for (section 3.3).
-.row.in-flight {
-  opacity: 0.7;
-}
-
 // The violet edge on the leading side of a line nobody has decided on yet. It stays
 // on the flat row (section 4), with room between it and the picture.
 .row.awaiting {
