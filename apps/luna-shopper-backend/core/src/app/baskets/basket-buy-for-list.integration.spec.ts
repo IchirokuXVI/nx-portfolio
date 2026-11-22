@@ -430,6 +430,15 @@ describeIntegration('a buy for a list that did not ask (real Postgres)', () => {
     );
   });
 
+  it('names the line after the row’s own line when catalog gave no name', async () => {
+    const w = await world();
+
+    await buy(w, { content: undefined, itemSnapshot: null });
+
+    const [made] = await linesOf(w.other);
+    expect(made).toMatchObject({ content: 'Whole milk', quantity: 0 });
+  });
+
   it('records the buy on the lineId given and makes no line (spec 2)', async () => {
     const w = await world();
     const kept = await line(w.other, w.userId, 0);
@@ -540,7 +549,13 @@ describeIntegration('a buy for a list that did not ask (real Postgres)', () => {
     });
     expect(
       reverted.entries.find((one) => one.lineId === made.id)
-    ).toMatchObject({ left: 0, bought: 2 });
+    ).toMatchObject({
+      bought: 2,
+      // The revert gives the units back to the line as it always does,
+      // whether or not the buy lowered it (`basket-revert.service.ts`), so
+      // the list asks for one again. Not this plan's to change.
+      left: 1,
+    });
     expect(
       (await standingOf(made.id)).reduce((sum, row) => sum + row.quantity, 0)
     ).toBe(2);

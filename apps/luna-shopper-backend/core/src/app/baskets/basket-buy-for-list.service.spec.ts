@@ -51,7 +51,7 @@ function build(opened: { status?: BasketStatus; userId?: string | null } = {}) {
       }),
       row: async () => {
         touched.push('row');
-        return { entries: [] };
+        return { anchor: { content: 'Milk', itemIds: [MILK] }, entries: [] };
       },
     }),
   } as unknown as BasketWriteContext;

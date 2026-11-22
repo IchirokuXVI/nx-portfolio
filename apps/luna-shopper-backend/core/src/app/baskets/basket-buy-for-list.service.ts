@@ -129,7 +129,7 @@ export class BasketBuyForListService {
     }
     // The row the client drew, which must still be one: the answer is read
     // for it, beside the line this writes on.
-    await opened.row(req.rowKey, [req.rowKey]);
+    const row = await opened.row(req.rowKey, [req.rowKey]);
 
     const paid = paidColumns(req.paid, SettlementOutcome.BOUGHT);
     const itemSnapshot = itemSnapshotColumn(req.itemSnapshot);
@@ -143,7 +143,7 @@ export class BasketBuyForListService {
             listId: req.targetListId,
             itemId: req.itemId,
             unit,
-            content: req.content ?? null,
+            content: nameOf(req, row.anchor),
             via: opened.via(),
           })
         : null;
@@ -299,6 +299,23 @@ export class BasketBuyForListService {
     }
     return line;
   }
+}
+
+/**
+ * What a line made here is called: the product's name in the actor's language,
+ * as the gateway read it from catalog. When catalog did not answer, the name
+ * the row's own line carries, if that line holds the product, so a slow
+ * catalog does not stop a buy. Null when neither is known.
+ */
+function nameOf(
+  req: BuyForListBasketRequest,
+  anchor: { content: string; itemIds: readonly string[] }
+): string | null {
+  const sent = typeof req.content === 'string' ? req.content.trim() : '';
+  if (sent) {
+    return sent;
+  }
+  return anchor.itemIds.includes(req.itemId) ? anchor.content : null;
 }
 
 /** A whole number of units from 1 to {@link LINE_QUANTITY_MAX}. */
