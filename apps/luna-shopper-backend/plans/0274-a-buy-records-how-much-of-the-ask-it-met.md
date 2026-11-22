@@ -1,3 +1,5 @@
+> **PR:** [#1066](https://github.com/IchirokuXVI/nx-portfolio/pull/1066)
+
 # 0274: a buy records how much of the ask it met
 
 > Decided on 2026-11-22. While a basket is open, what a list asks of it is not stored: it
