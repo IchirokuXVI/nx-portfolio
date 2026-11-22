@@ -83,4 +83,5 @@ history for one buy of 4.
 
 ## Not in this plan
 
-- The menu and the ask sheet (velista `0200`), which are the same in both views.
+- The detailed view of velista `0200`, which has typing and so keeps the button stepper in
+  both views.
