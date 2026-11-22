@@ -71,6 +71,12 @@ export interface ProblemResponseOptions {
    */
   shopLocked?: boolean;
   /**
+   * The route buys for a list that does not ask, so a line that is already an
+   * entry of the row answers 409 with a code of its own (plan 0273). The
+   * client buys on that line with the settle instead.
+   */
+  lineInRow?: boolean;
+  /**
    * The route renames a line, so a name the list already holds can answer 409
    * with one of the three merge codes (plan 0112, section 7), each told apart
    * from a plain conflict because the client asks, explains, or explains with a
@@ -283,6 +289,9 @@ export function ApiProblemResponses(
   }
   if (options.shopLocked) {
     codes.push(ERROR_CODES.BASKET_SHOP_LOCKED);
+  }
+  if (options.lineInRow) {
+    codes.push(ERROR_CODES.BASKET_LINE_ALREADY_IN_ROW);
   }
   if (options.lineMerge) {
     codes.push(

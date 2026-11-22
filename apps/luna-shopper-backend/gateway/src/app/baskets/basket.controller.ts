@@ -13,8 +13,10 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import {
+  BASKET_LIMITS,
   BASKET_PATTERNS,
   BASKET_SCHEMA_IDS,
+  CONTENT_LOCALES,
   type AcknowledgeBasketChangesRequest,
   type AddBasketLineRequest,
   type BasketChangePage,
@@ -28,11 +30,14 @@ import {
   type BasketSearchScopeRequest,
   type BasketSummaryView,
   type BasketView,
+  type BuyForListBasketRequest,
   type CatalogSuggestResponse,
   type ChangeBasketLinesProductRequest,
   type GetBasketMarksRequest,
   type GetBasketProductListsRequest,
   type GetLiveBasketRequest,
+  type ItemSnapshot,
+  type LineUnit,
   type ListBasketChangesRequest,
   type RenameBasketRowRequest,
   type RevertBasketRowRequest,
@@ -43,6 +48,8 @@ import {
 import {
   BasketShopLockedException,
   ForbiddenException,
+  getRequestContext,
+  toSupportedLocale,
   UuidParam,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
@@ -71,6 +78,7 @@ import {
   AddBasketLineDto,
   BasketChangesQueryDto,
   BasketReadQueryDto,
+  BuyForListBasketRowDto,
   ChangeBasketLinesProductDto,
   RenameBasketRowDto,
   RevertBasketRowDto,
@@ -435,7 +443,7 @@ export class BasketController {
   private async chosenFor(
     basketId: string,
     participant: BasketParticipantContext,
-    dto: SettleBasketRowDto
+    dto: SettleChoiceInput
   ): Promise<SettleChoice> {
     const req: BasketSearchScopeRequest = {
       basketId,
@@ -472,6 +480,79 @@ export class BasketController {
       // The price of one of the row's unit (plan 0246 M7).
       unit: dto.unit,
     });
+  }
+
+  /**
+   * Record a buy of the row's product for a covered list that does not ask
+   * for it (plan 0273).
+   *
+   * What the section "Add it to another list" of the basket's line sheet
+   * sends. Core makes the list's line at quantity 0 when it has none and
+   * records the buy on it in one transaction, so a failure leaves no line
+   * behind. Afterwards the line is an entry of the row, and every plus and
+   * minus on it is the settle and the revert with `lineIds: [lineId]`.
+   *
+   * **Account participants only**, who hold `WRITE` on the list themselves.
+   * A guest is refused here, before catalog or core is asked.
+   *
+   * The price and the name are read as for a settle, as the basket's owner,
+   * and the name in the reader's language is what a line made here is
+   * called. The unit is checked as the basket's add checks it, because the
+   * write can make a line.
+   */
+  @Post(':id/rows/:rowKey/buy-for-list')
+  @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
+  @UseGuards(ParticipantThrottlerGuard)
+  @ApiContractResponse(BASKET_PATTERNS.rowBuyForList, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({
+    auth: true,
+    participant: true,
+    body: true,
+    membership: true,
+    conflict: true,
+    finishedBasket: true,
+    shopLocked: true,
+    lineInRow: true,
+    lineUnitMismatch: true,
+    lineUnitDiffers: true,
+    lineUnitNotOffered: true,
+  })
+  async buyForList(
+    @Participant() participant: BasketParticipantContext,
+    @UuidParam('id') id: string,
+    @Param('rowKey') rowKey: string,
+    @Body() dto: BuyForListBasketRowDto
+  ): Promise<BasketRowResult> {
+    const userId = requireAccount(participant);
+    // Beside each other and under one budget each, as on a settle.
+    const [chosen] = await Promise.all([
+      this.chosenFor(id, participant, dto),
+      this.prices.refuseUnknownItem(dto.itemId),
+      // The basket's add checks the unit of a line it can make, and so does
+      // this when it names no line. A named line keeps its own unit, which
+      // core holds the buy to.
+      dto.lineId
+        ? undefined
+        : this.units.assertOffered([{ unit: dto.unit, itemIds: [dto.itemId] }]),
+    ]);
+    const content = nameIn(chosen.itemSnapshot);
+    const req: BuyForListBasketRequest = {
+      basketId: id,
+      participantId: participant.participantId,
+      userId,
+      rowKey,
+      targetListId: dto.targetListId,
+      ...(dto.lineId ? { lineId: dto.lineId } : {}),
+      quantity: dto.quantity,
+      unit: dto.unit,
+      itemId: dto.itemId,
+      ...(content ? { content } : {}),
+      paid: chosen.paid ?? undefined,
+      ...(chosen.itemSnapshot ? { itemSnapshot: chosen.itemSnapshot } : {}),
+    };
+    return this.nats.send<BasketRowResult>(BASKET_PATTERNS.rowBuyForList, req);
   }
 
   /**
@@ -950,6 +1031,39 @@ export class BasketController {
  * them**, so a guest is refused here rather than in core: they present a
  * session secret and hold no `WRITE` on anything.
  */
+/** What {@link BasketController.chosenFor} reads of a settle or a buy for a list. */
+interface SettleChoiceInput {
+  itemId?: string;
+  lineIds?: string[];
+  supermarketLocationId?: string;
+  unit: LineUnit;
+}
+
+/**
+ * The product's name in the reader's language, the name a line that is not
+ * named carries (plan 0214; plan 0273), or null when catalog did not answer.
+ * A name catalog does not hold in that language falls back to another it does.
+ */
+function nameIn(snapshot: ItemSnapshot | null): string | null {
+  if (!snapshot) {
+    return null;
+  }
+  const locale = toSupportedLocale(getRequestContext()?.locale);
+  const names = snapshot.name as Partial<Record<string, string>>;
+  const order = [
+    ...(locale ? [locale] : []),
+    ...CONTENT_LOCALES,
+    ...Object.keys(names),
+  ];
+  for (const key of order) {
+    const name = names[key]?.trim();
+    if (name) {
+      return name.slice(0, BASKET_LIMITS.contentMaxLength);
+    }
+  }
+  return null;
+}
+
 function requireAccount(participant: BasketParticipantContext): string {
   if (!participant.userId) {
     throw new ForbiddenException(

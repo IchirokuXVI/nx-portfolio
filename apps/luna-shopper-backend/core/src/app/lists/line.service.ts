@@ -32,6 +32,7 @@ import {
   type LineUnitBasisRequest,
   type LineUnitDiffersDetails,
   type LineView,
+  type LineWriteVia,
   type ListLinesRequest,
   type ReorderLinesRequest,
   type SetLineApprovalRequest,
@@ -40,6 +41,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   clampPageSize,
+  ConflictException,
   decodeCursor,
   encodeCursor,
   ForbiddenException,
@@ -180,6 +182,36 @@ export interface ListRenameOutcome {
   absorbedLineIds: string[];
   /** Every line the rename wrote that still stands, as a read answers it. */
   written: WrittenLine[];
+}
+
+/**
+ * The line a basket buy for a list that does not ask for a product stands on
+ * (plan 0273): the list, the product and what the line would be called.
+ */
+export interface LineAtZeroRequest {
+  /** The actor's own account, which must hold `WRITE` on the list. */
+  userId: string;
+  listId: string;
+  itemId: string;
+  unit: LineUnit;
+  /**
+   * The product's name in the actor's language, which a line that is not
+   * named carries. Null when the gateway could not read it.
+   */
+  content: string | null;
+  /** The basket the buy is made through, for the change row. */
+  via: LineWriteVia;
+}
+
+/** {@link LineAtZeroRequest} with its access answered, before the transaction. */
+export interface PreparedLineAtZero {
+  list: ShoppingList;
+  userId: string;
+  itemId: string;
+  unit: LineUnit;
+  content: string | null;
+  approval: { decides: boolean; autoApproves: boolean };
+  actor: LineChangeActor;
 }
 
 /** A line as the fold of a basket rename sees it (plan 0113, section 4). */
@@ -1180,63 +1212,16 @@ export class LineService {
 
         // The flag the new line would carry, so an add that is not named meets
         // a line that is not named by its products alone (plan 0214, section 1).
-        const identities = lineIdentities({
+        const matches = await this.matchesOfAdd(manager, {
+          listId: req.listId,
           content: req.content,
-          named: namedOnAdd(req.named, itemIds.length > 0),
-          itemSetHash: itemSetHash(itemIds),
+          named: req.named,
+          itemIds,
           productGroupId,
+          unit,
+          freeText,
+          newLine: choice.newLine,
         });
-        const targets = await this.findAddTarget(
-          manager,
-          req.listId,
-          identities
-        );
-        const linesUnder = (keys: readonly string[]): ListLine[] =>
-          keys
-            .map((key) => targets.get(key))
-            .filter((line): line is ListLine => line !== undefined);
-
-        // The matches of the add (the owner, 2026-11-16): every line it could
-        // land on, wanted and kept alike, once each and in position order.
-        let matches: ListLine[];
-        if (freeText) {
-          // The free text line of the name, of any unit (R4), and the lines
-          // that hold a product under the name (plan 0228, target 1.4), unless
-          // the person already chose a new line. The free text line of the
-          // name meets even a `newLine` answer (plan 0228, target 1.2).
-          const own = linesUnder(identities);
-          matches = choice.newLine
-            ? inPositionOrder(own)
-            : inPositionOrder([
-                ...own,
-                ...(await this.findNamedProductLines(
-                  manager,
-                  req.listId,
-                  req.content
-                )),
-              ]);
-        } else {
-          // The identity line of the add's unit (plan 0246 M5) and every line
-          // of its unit that holds every product of the add (R5). Only when
-          // no line of its unit holds the product does a line of another unit
-          // answer, and then as the refusal (plan 0260 U2; the owner,
-          // 2026-11-12: "only").
-          const held = await this.findLinesHolding(
-            manager,
-            req.listId,
-            itemIds
-          );
-          matches = inPositionOrder([
-            ...linesUnder(identities.map((identity) => inUnit(identity, unit))),
-            ...held.filter((line) => unitOf(line) === unit),
-          ]);
-          if (matches.length === 0) {
-            const refused = earliestLine([...linesUnder(identities), ...held]);
-            if (refused !== undefined) {
-              throw lineUnitDiffers(refused, unit, null);
-            }
-          }
-        }
 
         // The person chose a line (plan 0228, target 1.1): one of the add's
         // matches, a product add's included (the owner, 2026-11-16). It is
@@ -1284,26 +1269,16 @@ export class LineService {
           }
         }
 
-        const repo = manager.getRepository(ListLine);
-        const position = (await this.maxPosition(repo, req.listId)) + 1;
-        const line = await repo.save(
-          repo.create(
-            this.newLine(
-              { ...req, quantity, unit },
-              req.listId,
-              req.userId,
-              position,
-              approval,
-              productGroupId
-            )
-          )
-        );
-        if (itemIds.length > 0) {
-          await this.writeItemSet(manager, line.id, itemIds, source);
-        }
-        // Inside the add's own transaction, so a line and the record of it
-        // arriving cannot exist apart.
-        await this.changes.added(manager, this.listRef(list), line, actor);
+        const line = await this.createAddedLine(manager, {
+          item: { ...req, quantity, unit },
+          list,
+          userId: req.userId,
+          approval,
+          productGroupId,
+          itemIds,
+          source,
+          actor,
+        });
         return { kind: 'CREATED', line };
       }
     );
@@ -1357,6 +1332,257 @@ export class LineService {
       outcome: 'CREATED',
       alreadyOnList: [],
     };
+  }
+
+  /**
+   * The lines an add could land on (the owner, 2026-11-16): every match,
+   * wanted and kept alike, once each and in position order. A product add
+   * that meets only lines of another unit is refused here with
+   * `line_unit_differs` (plan 0260 U2).
+   *
+   * Read under the list lock the caller already holds. {@link add} asks it,
+   * and so does {@link lineAtZeroWithin}, so the two cannot disagree on which
+   * line a product already has (plan 0273).
+   */
+  private async matchesOfAdd(
+    manager: EntityManager,
+    add: {
+      listId: string;
+      content: string;
+      named: boolean | undefined;
+      itemIds: readonly string[];
+      productGroupId: string | null;
+      unit: LineUnit;
+      freeText: boolean;
+      newLine: boolean;
+    }
+  ): Promise<ListLine[]> {
+    // The flag the new line would carry, so an add that is not named meets
+    // a line that is not named by its products alone (plan 0214, section 1).
+    const identities = lineIdentities({
+      content: add.content,
+      named: namedOnAdd(add.named, add.itemIds.length > 0),
+      itemSetHash: itemSetHash([...add.itemIds]),
+      productGroupId: add.productGroupId,
+    });
+    const targets = await this.findAddTarget(manager, add.listId, identities);
+    const linesUnder = (keys: readonly string[]): ListLine[] =>
+      keys
+        .map((key) => targets.get(key))
+        .filter((line): line is ListLine => line !== undefined);
+
+    if (add.freeText) {
+      // The free text line of the name, of any unit (R4), and the lines
+      // that hold a product under the name (plan 0228, target 1.4), unless
+      // the person already chose a new line. The free text line of the
+      // name meets even a `newLine` answer (plan 0228, target 1.2).
+      const own = linesUnder(identities);
+      return add.newLine
+        ? inPositionOrder(own)
+        : inPositionOrder([
+            ...own,
+            ...(await this.findNamedProductLines(
+              manager,
+              add.listId,
+              add.content
+            )),
+          ]);
+    }
+    // The identity line of the add's unit (plan 0246 M5) and every line
+    // of its unit that holds every product of the add (R5). Only when
+    // no line of its unit holds the product does a line of another unit
+    // answer, and then as the refusal (plan 0260 U2; the owner,
+    // 2026-11-12: "only").
+    const held = await this.findLinesHolding(manager, add.listId, add.itemIds);
+    const matches = inPositionOrder([
+      ...linesUnder(identities.map((identity) => inUnit(identity, add.unit))),
+      ...held.filter((line) => unitOf(line) === add.unit),
+    ]);
+    if (matches.length === 0) {
+      const refused = earliestLine([...linesUnder(identities), ...held]);
+      if (refused !== undefined) {
+        throw lineUnitDiffers(refused, add.unit, null);
+      }
+    }
+    return matches;
+  }
+
+  /**
+   * Write a line an add creates, its products and the record of it arriving,
+   * in the caller's transaction (plan 0138). The position is the list's next.
+   *
+   * {@link add} and {@link lineAtZeroWithin} both create through it, so a line
+   * a buy made has the order and the change row of any added line (plan 0273).
+   */
+  private async createAddedLine(
+    manager: EntityManager,
+    created: {
+      item: AddLinesItem;
+      list: ShoppingList;
+      userId: string;
+      approval: { decides: boolean; autoApproves: boolean };
+      productGroupId: string | null;
+      itemIds: readonly string[];
+      source: LineItemSource;
+      actor: LineChangeActor;
+    }
+  ): Promise<ListLine> {
+    const repo = manager.getRepository(ListLine);
+    const position = (await this.maxPosition(repo, created.list.id)) + 1;
+    const line = await repo.save(
+      repo.create(
+        this.newLine(
+          created.item,
+          created.list.id,
+          created.userId,
+          position,
+          created.approval,
+          created.productGroupId
+        )
+      )
+    );
+    if (created.itemIds.length > 0) {
+      await this.writeItemSet(
+        manager,
+        line.id,
+        [...created.itemIds],
+        created.source
+      );
+    }
+    // Inside the add's own transaction, so a line and the record of it
+    // arriving cannot exist apart.
+    await this.changes.added(
+      manager,
+      this.listRef(created.list),
+      line,
+      created.actor
+    );
+    return line;
+  }
+
+  /**
+   * What a basket buy for a list that does not ask for the product needs
+   * from the list before its transaction opens (plan 0273).
+   *
+   * `WRITE` on the list, asked of the actor's own account as the list's add
+   * asks it, and outside any transaction for the reason
+   * {@link ListAccessService} reads draw their own connection. The quantity
+   * is zero and is not a question: the line asks for nothing, and the buy is
+   * a settlement beside it.
+   */
+  async prepareLineAtZero(req: LineAtZeroRequest): Promise<PreparedLineAtZero> {
+    const { list, permissions } = await this.listAccess.requireAccess(
+      req.listId,
+      req.userId,
+      ListPermission.WRITE
+    );
+    const [itemId] = this.validateItemIds([req.itemId]);
+    if (itemId === undefined) {
+      throw new ValidationException('itemId must name one product', {
+        messageArgs: { field: 'itemId' },
+      });
+    }
+    return {
+      list,
+      userId: req.userId,
+      itemId,
+      unit: this.validateUnit(req.unit) ?? 'UNIT',
+      content: req.content?.trim() || null,
+      approval: {
+        decides: permissions.has(ListPermission.DECIDE),
+        autoApproves: list.autoApproveLines,
+      },
+      actor: actorOf(req),
+    };
+  }
+
+  /**
+   * The line of the product on the list, or a new one at zero, inside the
+   * caller's transaction and under the list lock (plan 0273).
+   *
+   * The list's own add asked as an add of the product at zero with `named:
+   * false` would ask it: the same matches, so a list that holds the product
+   * already, at zero or not, gets no second line. Where the add would meet
+   * one line or ask between several, this takes the earliest by position and
+   * creates nothing; a line deleted since the read is no match. A line of
+   * another unit alone refuses with `line_unit_differs`, as the add does.
+   *
+   * With no match the line is created at zero through the add's own create,
+   * so it gets the list's next position and an `ADDED` change row. It is
+   * announced by {@link announceLineAtZero} once the caller commits.
+   */
+  async lineAtZeroWithin(
+    manager: EntityManager,
+    prepared: PreparedLineAtZero
+  ): Promise<{ line: ListLine; created: boolean }> {
+    await this.lockList(manager, prepared.list.id);
+    const matches = await this.matchesOfAdd(manager, {
+      listId: prepared.list.id,
+      content: prepared.content ?? '',
+      named: false,
+      itemIds: [prepared.itemId],
+      productGroupId: null,
+      unit: prepared.unit,
+      freeText: false,
+      newLine: false,
+    });
+    for (const match of matches) {
+      const line = await this.lockCandidateLine(
+        manager,
+        prepared.list.id,
+        match.id
+      );
+      if (line !== null) {
+        return { line, created: false };
+      }
+    }
+    if (prepared.content === null) {
+      // The name of a line that is not named is the product's, which the
+      // gateway reads from catalog. A catalog that did not answer leaves
+      // nothing to call the line, and a line with no name is not written.
+      throw new ConflictException(
+        'The product could not be named just now, so no line was made for it'
+      );
+    }
+    const line = await this.createAddedLine(manager, {
+      item: {
+        content: prepared.content,
+        quantity: 0,
+        unit: prepared.unit,
+        itemIds: [prepared.itemId],
+        named: false,
+      },
+      list: prepared.list,
+      userId: prepared.userId,
+      approval: prepared.approval,
+      productGroupId: null,
+      itemIds: [prepared.itemId],
+      source: LineItemSource.USER,
+      actor: prepared.actor,
+    });
+    return { line, created: true };
+  }
+
+  /**
+   * Announce a line {@link lineAtZeroWithin} created, after the caller's
+   * transaction committed: the `line.added` every added line sends, born with
+   * no settlements and with its claim, and the nudge to every basket that
+   * covers the list (plan 0273).
+   */
+  async announceLineAtZero(
+    prepared: PreparedLineAtZero,
+    line: ListLine
+  ): Promise<void> {
+    const items: LineItemSet = { itemIds: [prepared.itemId], groupItemIds: [] };
+    const claim = await this.claims.claimOf(line.id);
+    this.emit(
+      RealtimeEvent.LineAdded,
+      prepared.list.zoneId,
+      line,
+      items,
+      NO_LINE_SETTLEMENTS,
+      claim
+    );
   }
 
   /**

@@ -971,6 +971,54 @@ export interface AddBasketLineRequest {
 }
 
 /**
+ * Record a buy of the row's product for a covered list that does not ask for
+ * it, making that list's line at zero when it has none (plan 0273).
+ *
+ * One transaction: the line, when one is made, and one `BOUGHT` settlement of
+ * {@link quantity} on it, written as a settle writes one. The line's quantity
+ * stays at zero. Any failure writes nothing. Afterwards the line is an entry of
+ * the row, and a plus or a minus on it is the plain settle and revert with
+ * `lineIds: [lineId]`.
+ *
+ * Account participants only, who hold `WRITE` on {@link targetListId}
+ * themselves; a list the basket does not cover answers 404.
+ */
+export interface BuyForListBasketRequest {
+  basketId: string;
+  participantId: string;
+  /** The actor's own account. A guest reaches the route and is refused. */
+  userId: string;
+  /** A line of the row as the client drew it, which the answer is read for. */
+  rowKey: string;
+  /** The covered list the buy is for. */
+  targetListId: string;
+  /**
+   * That list's line of the product, from `basket.productLists`, when it has
+   * one. It must be on {@link targetListId}, hold {@link itemId}, and not be an
+   * entry of the row, which answers 409 `basket_line_already_in_row`. Absent,
+   * the list's line of the product is found as the list's add finds it, and
+   * made at zero when there is none.
+   */
+  lineId?: string;
+  /** Units bought, a whole number from 1 to `LINE_QUANTITY_MAX`. */
+  quantity: number;
+  /** What {@link quantity} counts, the row's. */
+  unit: LineUnit;
+  /** The product bought, the row's. The gateway refuses one catalog does not know. */
+  itemId: string;
+  /**
+   * The product's name in the actor's language, which a line made here
+   * carries with `named: false`. Written by the gateway from catalog, never by
+   * a client. Absent when catalog did not answer, and then no line can be made.
+   */
+  content?: string;
+  /** As {@link SettleBasketRowRequest.paid}: written by the gateway. */
+  paid?: SettlementPaid;
+  /** As {@link SettleBasketRowRequest.itemSnapshot}: written by the gateway. */
+  itemSnapshot?: ItemSnapshot | null;
+}
+
+/**
  * Put a row off for now, or take that back (plan 0137, section 5).
  *
  * One shape for both directions, because they are one gesture aimed twice: the
@@ -1141,6 +1189,8 @@ export const BASKET_PATTERNS = {
   /** The covered lists that can still take a product (plan 0201, section 5). */
   productLists: 'basket.productLists',
   rowSettle: 'basket.row.settle',
+  /** A buy for a list that does not ask, in one write with its line (plan 0273). */
+  rowBuyForList: 'basket.row.buyForList',
   rowRevert: 'basket.row.revert',
   rowDemand: 'basket.row.demand',
   rowRename: 'basket.row.rename',

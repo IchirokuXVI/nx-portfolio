@@ -157,6 +157,16 @@ export class BasketShopLockedException extends DomainException {
 }
 
 /**
+ * A buy for a list that does not ask named a line the row already holds (plan
+ * 0273).
+ *
+ * Renders as 409. The client buys on that line with the plain settle instead.
+ */
+export class BasketLineAlreadyInRowException extends DomainException {
+  readonly code = ERROR_CODES.BASKET_LINE_ALREADY_IN_ROW;
+}
+
+/**
  * The number being moved is not where the caller believed it started (plan 0057,
  * section 5).
  *

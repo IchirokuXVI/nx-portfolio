@@ -260,6 +260,19 @@ export type BasketSourceDto = {
 };
 
 /**
+ * `BuyForListBasketRowDto` in the gateway's OpenAPI document.
+ */
+export type BuyForListBasketRowDto = {
+  targetListId: string;
+  lineId?: string;
+  quantity: number;
+  unit: 'UNIT' | 'GRAM' | 'MILLILITER';
+  itemId: string;
+  priceScopeId?: string;
+  supermarketLocationId?: string;
+};
+
+/**
  * `ChangeBasketLinesProductDto` in the gateway's OpenAPI document.
  */
 export type ChangeBasketLinesProductDto = {
@@ -695,6 +708,7 @@ export type ProblemDetails = {
     | 'client_too_old'
     | 'basket_finished'
     | 'basket_shop_locked'
+    | 'basket_line_already_in_row'
     | 'stale_quantity'
     | 'account_locked'
     | 'postal_code_unknown'

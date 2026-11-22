@@ -80,6 +80,12 @@ export const ERROR_CATALOG: Record<
     en: 'This basket was started at a shop, and that shop cannot be changed.',
     es: 'Esta cesta se empezó en una tienda, y esa tienda no se puede cambiar.',
   },
+  // A fact about the row, so the client knows the buy belongs on the line the
+  // row already shows (plan 0273).
+  [ERROR_CODES.BASKET_LINE_ALREADY_IN_ROW]: {
+    en: 'That list already has this product in the basket.',
+    es: 'Esa lista ya tiene este producto en la cesta.',
+  },
   // It carries its number in the message rather than only in a code, because
   // the client's job is to say it: "somebody else moved this, it is 3 now" is
   // actionable and "that failed" is not (plan 0057, section 5).

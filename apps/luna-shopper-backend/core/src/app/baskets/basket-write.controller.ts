@@ -6,6 +6,7 @@ import {
   type BasketRowResult,
   type BasketSearchScope,
   type BasketSearchScopeRequest,
+  type BuyForListBasketRequest,
   type ChangeBasketLinesProductRequest,
   type RenameBasketRowRequest,
   type RevertBasketRowRequest,
@@ -13,6 +14,7 @@ import {
   type SettleBasketRowRequest,
   type SkipBasketRowRequest,
 } from '@portfolio/luna-shopper/contracts';
+import { BasketBuyForListService } from './basket-buy-for-list.service';
 import { BasketDemandService } from './basket-demand.service';
 import { BasketLineAddService } from './basket-line-add.service';
 import { BasketProductChangeService } from './basket-product-change.service';
@@ -41,12 +43,23 @@ export class BasketWriteController {
     private readonly addService: BasketLineAddService,
     private readonly renameService: BasketRowRenameService,
     private readonly skipService: BasketSkipService,
-    private readonly productChangeService: BasketProductChangeService
+    private readonly productChangeService: BasketProductChangeService,
+    // A buy for a list that does not ask (plan 0273). Last, so no positional
+    // construction has to shift an argument.
+    private readonly buyForListService: BasketBuyForListService
   ) {}
 
   @MessagePattern(BASKET_PATTERNS.rowSettle)
   settle(@Payload() req: SettleBasketRowRequest): Promise<BasketRowResult> {
     return this.settleService.settle(req);
+  }
+
+  /** A buy for a list that does not ask, with its line at zero (plan 0273). */
+  @MessagePattern(BASKET_PATTERNS.rowBuyForList)
+  buyForList(
+    @Payload() req: BuyForListBasketRequest
+  ): Promise<BasketRowResult> {
+    return this.buyForListService.buyForList(req);
   }
 
   @MessagePattern(BASKET_PATTERNS.rowRevert)
