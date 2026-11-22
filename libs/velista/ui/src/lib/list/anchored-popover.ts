@@ -171,11 +171,11 @@ function boxOf(origin: Origin): Box {
 /**
  * The two places of a popover with a pointer (velista `0206`): wholly above or
  * wholly below, `POINTER_GAP` off the element it keeps in sight, or off the anchor
- * when there is none. When there is a row to keep in sight, the places are held
- * against the row, so the gap is measured from its edge, and the anchor's position
- * inside the row becomes a horizontal offset: `start` keeps the inset of `START`
- * from the anchor's start edge, `center` sits over the anchor's middle, and `end`
- * lines up with the row's end, as the board draws it.
+ * when there is none. The places stay held against the anchor, so the popover is
+ * still inserted right after it and the keyboard reaches it next. A row to keep in
+ * sight turns into offsets: the distance from the anchor's edge to the row's edge
+ * is added to the gap, and `end` lines up with the row's end, as the board draws
+ * it. `start` and `center` keep their meaning against the anchor.
  */
 function pointedPositions(
   align: AnchoredPopoverAlign,
@@ -183,39 +183,31 @@ function pointedPositions(
   anchor: Box,
   row: Box | null
 ): ConnectedPosition[] {
-  const inset = START[0].offsetX ?? 0;
-  let x: Pick<ConnectedPosition, 'originX' | 'overlayX' | 'offsetX'>;
-  if (align === 'end') {
-    x = { originX: 'end', overlayX: 'end' };
-  } else if (row === null) {
-    x =
-      align === 'center'
+  const x: Pick<ConnectedPosition, 'originX' | 'overlayX' | 'offsetX'> =
+    align === 'end'
+      ? {
+          originX: 'end',
+          overlayX: 'end',
+          offsetX: row
+            ? row.left + row.width - (anchor.left + anchor.width)
+            : 0,
+        }
+      : align === 'center'
         ? { originX: 'center', overlayX: 'center' }
-        : { originX: 'start', overlayX: 'start', offsetX: inset };
-  } else if (align === 'center') {
-    x = {
-      originX: 'start',
-      overlayX: 'center',
-      offsetX: anchor.left + anchor.width / 2 - row.left,
-    };
-  } else {
-    x = {
-      originX: 'start',
-      overlayX: 'start',
-      offsetX: anchor.left - row.left + inset,
-    };
-  }
+        : { originX: 'start', overlayX: 'start', offsetX: START[0].offsetX };
+  const over = row ? anchor.top - row.top : 0;
+  const under = row ? row.top + row.height - (anchor.top + anchor.height) : 0;
   const above: ConnectedPosition = {
     ...x,
     originY: 'top',
     overlayY: 'bottom',
-    offsetY: -POINTER_GAP,
+    offsetY: -(over + POINTER_GAP),
   };
   const below: ConnectedPosition = {
     ...x,
     originY: 'bottom',
     overlayY: 'top',
-    offsetY: POINTER_GAP,
+    offsetY: under + POINTER_GAP,
   };
   return side === 'below' ? [below, above] : [above, below];
 }
@@ -253,7 +245,7 @@ function samePositions(
       (overlayOutsideClick)="closed.emit('outside')"
       (positionChange)="onPosition($event)"
       [cdkConnectedOverlayOpen]="open()"
-      [cdkConnectedOverlayOrigin]="overlayOrigin()"
+      [cdkConnectedOverlayOrigin]="origin()"
       [cdkConnectedOverlayPositions]="positions()"
       [cdkConnectedOverlayPush]="push() && !pointer()"
       [cdkConnectedOverlayUsePopover]="'inline'"
@@ -384,11 +376,6 @@ export class AnchoredPopover {
   /** The pointer's start edge inside the popover's border, in pixels. */
   protected readonly pointerLeft = signal(0);
 
-  protected readonly overlayOrigin = computed<Origin>(() => {
-    const row = this.pointer() ? this.keepInSight() : null;
-    return row ?? this.origin();
-  });
-
   private readonly plainPositions = computed(() => {
     const align = this.align();
     const positions =
@@ -399,7 +386,7 @@ export class AnchoredPopover {
   private readonly pointedPositions = computed(
     () => {
       // Measured when it opens and after a scroll or a resize: the anchor's place
-      // inside its row is what the horizontal offset is made of.
+      // inside its row is what the offsets are made of.
       this.open();
       this.layout();
       const row = this.keepInSight();

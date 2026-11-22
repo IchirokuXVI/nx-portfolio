@@ -689,8 +689,14 @@ describe('AnchoredPopover pointer (velista 0206)', () => {
   }
 
   it('lines its end up with the row’s end when asked for the end', async () => {
-    await openHost({ pointer: true, keepInSight: true, align: 'end' });
+    const fixture = await openHost({
+      pointer: true,
+      keepInSight: true,
+      align: 'end',
+    });
 
+    // Still held against the control, so it is inserted right after it.
+    expect(overlayOf(fixture).origin).toBe(control);
     const box = popBox();
     const kept = rects.get(row) as Rect;
     expect(box.left + box.width).toBe(kept.left + kept.width);
