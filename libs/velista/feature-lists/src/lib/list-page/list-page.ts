@@ -2112,6 +2112,20 @@ export class ListPage {
   }
 
   /**
+   * The one step of a row's reel, in the compact view (velista `0203`), written at
+   * once. The reel's own idle close already is the quiet beat, so the step joins the
+   * line's run and the run is written in the same task: the run and the row's saving
+   * behave as for a press. A reel at 0 is not the trash (velista `0199` does not
+   * apply to it): the row is not locked, and the line is hidden as soon as the store
+   * patches the 0, as any run lowered to 0 is.
+   */
+  reelQuantity(event: { lineId: string; step: QuantityStep }): void {
+    if (this._step(event.lineId, event.step)) {
+      this.quantityRuns.flush(event.lineId);
+    }
+  }
+
+  /**
    * One step into the line's run, unless the reader may not decide or the line is
    * being cleared. False when the step was dropped.
    */

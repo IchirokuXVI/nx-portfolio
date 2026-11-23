@@ -401,20 +401,36 @@
   }
 
   <!--
-    **The quantity, on every row, zero included** (velista 0043, section 3.2).
+    **The quantity, on every row, zero included** (velista 0043, section 3.2): the
+    reel in the compact view (velista 0203), the stepper in the default one.
   -->
-  <lib-quantity-stepper
-    (click)="$event.stopPropagation()"
-    (pointerdown)="$event.stopPropagation()"
-    (stepped)="quantityStepped.emit({ lineId: line().id, step: $event })"
-    [name]="line().content"
-    [readonly]="!line().adjustable"
-    [step]="line().step ?? null"
-    [took]="took()"
-    [unit]="line().unit"
-    [value]="amount()"
-    variant="row"
-  />
+  @if (compact()) {
+    <lib-quantity-reel
+      (autoClosed)="onReelAutoClosed()"
+      (click)="$event.stopPropagation()"
+      (pointerdown)="$event.stopPropagation()"
+      (stepped)="onReeled($event)"
+      [label]="'amount.group' | rokuT: { name: line().content }"
+      [readonly]="!line().adjustable"
+      [step]="line().step ?? null"
+      [took]="took()"
+      [unit]="line().unit"
+      [value]="amount()"
+    />
+  } @else {
+    <lib-quantity-stepper
+      (click)="$event.stopPropagation()"
+      (pointerdown)="$event.stopPropagation()"
+      (stepped)="quantityStepped.emit({ lineId: line().id, step: $event })"
+      [name]="line().content"
+      [readonly]="!line().adjustable"
+      [step]="line().step ?? null"
+      [took]="took()"
+      [unit]="line().unit"
+      [value]="amount()"
+      variant="row"
+    />
+  }
 
   <!--
     The lock of a row being cleared (velista 0199): a spinner in the middle of the

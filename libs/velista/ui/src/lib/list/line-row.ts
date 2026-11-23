@@ -7,6 +7,7 @@ import {
   inject,
   input,
   output,
+  viewChild,
 } from '@angular/core';
 import {
   RokuTranslatorPipe,
@@ -16,6 +17,7 @@ import {
   lineRowFacts,
   lineStatuses,
   priceWordsText,
+  QUANTITY_REEL_CLICK_SHIELD_MS,
   type LineRowFacts,
   type LineRowShownProduct,
   type LineRowVm,
@@ -31,6 +33,7 @@ import {
   StarFilledIcon,
 } from '../icons/icons';
 import { ProductPicture } from './product-picture';
+import { QuantityReel } from './quantity-reel';
 import { QuantityStepper } from './quantity-stepper';
 
 /** The words of section 4, by status. */
@@ -80,9 +83,24 @@ export type LineRowAction = 'approve' | 'reject' | 'restore';
  *
  * The stepper (velista `0188`) is two buttons and an amount in one capsule of 155 by
  * 48, and it stops the pointer and the click from reaching the row underneath, so a
- * press on minus or plus never opens the sheet. It has no overlay, so nothing of the
- * row has to be made deaf around it: the reel's capture listeners and its deaf beat
- * went with the reel.
+ * press on minus or plus never opens the sheet. It is the control of the default
+ * view.
+ *
+ * ## In the compact view the control is the reel, and an open reel makes the line deaf
+ *
+ * The compact view draws the reel of velista `0043` in place of the stepper (velista
+ * `0203`), 52 by 44. Its overlay runs sideways over the row it belongs to, so the tap
+ * that dismisses it lands on the row underneath. That tap **closes the reel and does
+ * nothing else**: it was aimed at the thing on top. The same holds for
+ * {@link QUANTITY_REEL_CLICK_SHIELD_MS} after the overlay times out on its own, since
+ * a finger already falling does not stop when what it was falling towards vanishes.
+ *
+ * It is decided at `pointerdown` and enforced at `click`, both in the capture phase.
+ * The state has to be read at the press because focus leaves the reel between the
+ * press and the click, which closes it, so by click time there is nothing left to
+ * notice. The reel has no hold and no trash, so the lock of velista `0199` is the
+ * stepper's alone; a row locked in the default view stays locked when the view
+ * changes, because the lock is on the host and the layer over both layouts.
  *
  * ## A row with a write in flight stays live
  *
@@ -117,6 +135,7 @@ export type LineRowAction = 'approve' | 'reject' | 'restore';
     CommentIcon,
     PlusIcon,
     ProductPicture,
+    QuantityReel,
     QuantityStepper,
     SpinnerIcon,
     StarFilledIcon,
@@ -196,6 +215,13 @@ export class LineRow {
    * The row saves nothing: the page gathers the steps into one write.
    */
   readonly quantityStepped = output<{ lineId: string; step: QuantityStep }>();
+
+  /**
+   * The reel of the compact view closed on a new amount (velista `0203`): one step
+   * from the amount it opened on. Its own output, because the page writes it at once
+   * rather than waiting a quiet beat, and because a reel at 0 is not the trash.
+   */
+  readonly quantityReeled = output<{ lineId: string; step: QuantityStep }>();
 
   /** Anything from the decision buttons. */
   readonly act = output<{ action: LineRowAction; lineId: string }>();
@@ -280,6 +306,14 @@ export class LineRow {
   }
 
   private readonly _translator = inject(RokuTranslatorService);
+  private readonly _reel = viewChild(QuantityReel);
+  private readonly _reelEl = viewChild(QuantityReel, { read: ElementRef });
+
+  /** Until when a tap on this line is swallowed, after the reel closed by itself. */
+  private _deafUntil = 0;
+
+  /** Whether the click this press will produce belongs to the reel rather than the row. */
+  private _swallowClick = false;
 
   /**
    * The lock of a row being cleared (velista `0199`), on the host and in the capture
@@ -314,11 +348,76 @@ export class LineRow {
     for (const type of LOCKED_EVENTS) {
       host.addEventListener(type, stop, true);
     }
+
+    // The deaf rule of the reel (velista `0203`), after the lock, so a locked row
+    // stops the press before the reel's rule reads it. Native listeners rather than
+    // host bindings, because both have to run in the capture phase.
+    const onPress = (event: Event) => this._notePress(event);
+    const onClick = (event: Event) => this._swallowReelDismissal(event);
+    host.addEventListener('pointerdown', onPress, true);
+    host.addEventListener('click', onClick, true);
+
     inject(DestroyRef).onDestroy(() => {
       for (const type of LOCKED_EVENTS) {
         host.removeEventListener(type, stop, true);
       }
+      host.removeEventListener('pointerdown', onPress, true);
+      host.removeEventListener('click', onClick, true);
     });
+  }
+
+  /**
+   * At the press, work out whether this tap is really about the reel: it is while the
+   * reel is open, and for the click shield after it closed by itself. Read here and
+   * not at the click because the press moves focus, the reel commits and closes on
+   * losing it, and by the time the click arrives the overlay is gone.
+   */
+  private _notePress(event: Event): void {
+    if (this._withinReel(event.target)) {
+      this._swallowClick = false;
+      return;
+    }
+
+    const reel = this._reel();
+    const open = reel?.open() ?? false;
+    this._swallowClick = open || Date.now() < this._deafUntil;
+
+    // Closed here rather than left to the blur. A tap on a span that cannot take focus
+    // moves focus nowhere, which is the ordinary case on a touch screen, and the reel
+    // would sit there until its own timer ran out.
+    if (open) {
+      reel?.close();
+    }
+  }
+
+  private _swallowReelDismissal(event: Event): void {
+    if (!this._swallowClick || this._withinReel(event.target)) {
+      return;
+    }
+
+    this._swallowClick = false;
+    event.stopPropagation();
+    event.preventDefault();
+  }
+
+  private _withinReel(target: EventTarget | null): boolean {
+    const reel = this._reelEl()?.nativeElement as HTMLElement | undefined;
+    return (
+      target !== null && reel !== undefined && reel.contains(target as Node)
+    );
+  }
+
+  /**
+   * The reel timed out and closed on its own, which starts the deaf beat. Only this
+   * path: a reel closed by a tap elsewhere on the line has already cost that tap.
+   */
+  protected onReelAutoClosed(): void {
+    this._deafUntil = Date.now() + QUANTITY_REEL_CLICK_SHIELD_MS;
+  }
+
+  /** The reel's one step, as the page's own output. */
+  protected onReeled(step: QuantityStep): void {
+    this.quantityReeled.emit({ lineId: this.line().id, step });
   }
 
   /**

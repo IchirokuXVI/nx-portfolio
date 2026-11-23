@@ -1207,7 +1207,7 @@
       "period": "Every {{days}} days · last bought {{when}}",
       "periodOne": "Every day · last bought {{when}}",
       "staple": "In {{with}} of your last {{seen}} shopping lists",
-      "add": "Add {{count}}",
+      "add": "Add",
       "addLabel": "Add {{count}} of {{name}} to the list",
       "more": "Show more suggestions",
       "added": "{{name}} added to the list"

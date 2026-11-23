@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   input,
   output,
 } from '@angular/core';
@@ -9,17 +10,29 @@ import {
   isUnsavedLine,
   type HoldingRow,
   type LineUnit,
+  type ListRowLayout,
   type ProductListGroup,
   type ProductListRow,
   type QuantityStep,
 } from '@portfolio/velista/models';
+import { QuantityReel } from '../list/quantity-reel';
 import { QuantityStepper } from '../list/quantity-stepper';
 
-/** A step of the stepper of one line, as the stepper drew it. */
+/** A step of the stepper or the reel of one line, as the control drew it. */
 export interface ListsTableStep {
   readonly listId: string;
   readonly lineId: string;
   readonly step: QuantityStep;
+}
+
+/**
+ * A list with no line under the product's name, to make that line on (velista
+ * `0203`). `quantity` is the amount a reel closed on, or null for a press of the
+ * stepper's plus, which adds one step of the product as it always has.
+ */
+export interface ListsTableAdd {
+  readonly listId: string;
+  readonly quantity: number | null;
 }
 
 /**
@@ -54,7 +67,7 @@ export interface ListsTableStep {
  */
 @Component({
   selector: 'lib-lists-table',
-  imports: [QuantityStepper, RokuTranslatorPipe],
+  imports: [QuantityReel, QuantityStepper, RokuTranslatorPipe],
   template: `
     @for (group of groups(); track group.zoneId) {
       <h3 class="group">{{ group.zoneName }}</h3>
@@ -85,19 +98,37 @@ export interface ListsTableStep {
                 }
               </span>
               @if (ownStepper(list)) {
-                <lib-quantity-stepper
-                  (stepped)="stepMain(list, $event)"
-                  [disabled]="unsaved(list)"
-                  [name]="
-                    'amount.inList'
-                      | rokuT: { name: product(), list: list.name }
-                  "
-                  [readonly]="readOnly(list)"
-                  [step]="stepOf(list.main)"
-                  [unit]="list.main?.unit ?? unit()"
-                  [value]="quantityOf(list)"
-                  variant="row"
-                />
+                @if (compact()) {
+                  <!--
+                    The compact view's reel (velista 0203): a line still being added
+                    is not editable yet, so its reel reads and does not move.
+                  -->
+                  <lib-quantity-reel
+                    (stepped)="reelMain(list, $event)"
+                    [label]="
+                      'amount.inList'
+                        | rokuT: { name: product(), list: list.name }
+                    "
+                    [readonly]="readOnly(list) || unsaved(list)"
+                    [step]="stepOf(list.main)"
+                    [unit]="list.main?.unit ?? unit()"
+                    [value]="quantityOf(list)"
+                  />
+                } @else {
+                  <lib-quantity-stepper
+                    (stepped)="stepMain(list, $event)"
+                    [disabled]="unsaved(list)"
+                    [name]="
+                      'amount.inList'
+                        | rokuT: { name: product(), list: list.name }
+                    "
+                    [readonly]="readOnly(list)"
+                    [step]="stepOf(list.main)"
+                    [unit]="list.main?.unit ?? unit()"
+                    [value]="quantityOf(list)"
+                    variant="row"
+                  />
+                }
               }
             </div>
             @for (line of list.others; track line.lineId) {
@@ -111,24 +142,44 @@ export interface ListsTableStep {
                     ) | rokuT
                   }}</span>
                 </span>
-                <lib-quantity-stepper
-                  (stepped)="
-                    lineStepped.emit({
-                      listId: list.listId,
-                      lineId: line.lineId,
-                      step: $event,
-                    })
-                  "
-                  [disabled]="!line.editable"
-                  [name]="
-                    'amount.inList'
-                      | rokuT: { name: line.name, list: list.name }
-                  "
-                  [step]="stepOf(line)"
-                  [unit]="line.unit"
-                  [value]="line.quantity"
-                  variant="row"
-                />
+                @if (compact()) {
+                  <lib-quantity-reel
+                    (stepped)="
+                      lineStepped.emit({
+                        listId: list.listId,
+                        lineId: line.lineId,
+                        step: $event,
+                      })
+                    "
+                    [label]="
+                      'amount.inList'
+                        | rokuT: { name: line.name, list: list.name }
+                    "
+                    [readonly]="!line.editable"
+                    [step]="stepOf(line)"
+                    [unit]="line.unit"
+                    [value]="line.quantity"
+                  />
+                } @else {
+                  <lib-quantity-stepper
+                    (stepped)="
+                      lineStepped.emit({
+                        listId: list.listId,
+                        lineId: line.lineId,
+                        step: $event,
+                      })
+                    "
+                    [disabled]="!line.editable"
+                    [name]="
+                      'amount.inList'
+                        | rokuT: { name: line.name, list: list.name }
+                    "
+                    [step]="stepOf(line)"
+                    [unit]="line.unit"
+                    [value]="line.quantity"
+                    variant="row"
+                  />
+                }
               </div>
             }
           </li>
@@ -162,8 +213,19 @@ export class ListsTable {
    */
   readonly step = input<number | null>(null);
 
-  /** The plus of a list with no line under the product's name: make that line. */
-  readonly added = output<string>();
+  /**
+   * How the zone lists draw their rows on this device (velista `0202`): the stepper
+   * in the default view, the reel in the compact one (velista `0203`).
+   */
+  readonly layout = input<ListRowLayout>('default');
+
+  protected readonly compact = computed(() => this.layout() === 'compact');
+
+  /**
+   * The plus of a list with no line under the product's name, or its reel closed
+   * above 0: make that line, at the reel's amount when a reel made it.
+   */
+  readonly added = output<ListsTableAdd>();
 
   /** A step of the stepper of a line that exists. */
   readonly lineStepped = output<ListsTableStep>();
@@ -240,7 +302,29 @@ export class ListsTable {
       list.canAdd &&
       list.others.length === 0
     ) {
-      this.added.emit(list.listId);
+      this.added.emit({ listId: list.listId, quantity: null });
+    }
+  }
+
+  /**
+   * The one step of a list's own reel, in the compact view (velista `0203`). On a
+   * line it steps the line as a press does. On a list with no line, a reel closed
+   * above 0 makes the line at the reel's amount.
+   */
+  protected reelMain(list: ProductListRow, step: QuantityStep): void {
+    const main = list.main;
+    if (main !== null) {
+      if (main.editable) {
+        this.lineStepped.emit({
+          listId: list.listId,
+          lineId: main.lineId,
+          step,
+        });
+      }
+      return;
+    }
+    if (step.to > 0 && list.canAdd && list.others.length === 0) {
+      this.added.emit({ listId: list.listId, quantity: step.to });
     }
   }
 }

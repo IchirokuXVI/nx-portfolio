@@ -855,6 +855,17 @@ describe('CatalogAddStore', () => {
       expect(drawn('weekly', 'bananas')).toEqual([25]);
     });
 
+    it('adds the amount a reel closed on, drawn and recorded (velista 0203)', async () => {
+      const { store, calls, drawn } = setup(HOME);
+      await store.ensure();
+
+      await store.add({ ...BANANAS, quantity: 1100 });
+
+      expect(calls).toContain('add:weekly:Plátanos:1100:bananas');
+      expect(store.visit()[0]?.quantity).toBe(1100);
+      expect(drawn('weekly', 'bananas')).toEqual([1100]);
+    });
+
     it('steps by the unit, in the line’s unit', async () => {
       const { store, calls, units } = setup(HOME);
       await store.ensure();

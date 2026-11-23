@@ -83,6 +83,7 @@ import type {
 import {
   DEFAULT_LIST_VIEW_STATE,
   QUANTITY_CLEAR_LOCK_MAX_MS,
+  QUANTITY_REEL_PX_PER_UNIT,
   QUANTITY_STEP_QUIET_MS,
 } from '@portfolio/velista/models';
 import {
@@ -97,6 +98,7 @@ import {
   DueLineRow,
   LineComposer,
   LineList,
+  LineRow,
   ListHeader,
   TOOK_DURATION_MS,
   TripGroup,
@@ -1220,6 +1222,60 @@ describe('ListPage', () => {
 
         expect(writes(lines.calls)).toEqual([
           { kind: 'quantity', lineId: 'ln-1', delta: 2 },
+        ]);
+      });
+
+      it('writes a reel step at once, in one write (velista 0203)', async () => {
+        const { fixture, lines } = await render({
+          lines: [line('ln-1', { quantity: 950, unit: 'GRAM' })],
+        });
+        jest.useFakeTimers();
+
+        fixture.componentInstance.reelQuantity({
+          lineId: 'ln-1',
+          step: { from: 950, to: 1100, repeat: false },
+        });
+
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-1', delta: 150 },
+        ]);
+        expect(fixture.componentInstance.quantityRuns.pending().size).toBe(0);
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        expect(writes(lines.calls)).toHaveLength(1);
+      });
+
+      it('does not lock a row a reel took to 0: the reel has no trash (velista 0203)', async () => {
+        const { fixture, lines } = await render({
+          lines: [line('ln-1', { quantity: 3 })],
+        });
+        jest.useFakeTimers();
+
+        fixture.componentInstance.reelQuantity({
+          lineId: 'ln-1',
+          step: { from: 3, to: 0, repeat: false },
+        });
+
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-1', delta: -3 },
+        ]);
+        expect(fixture.componentInstance.clearing().size).toBe(0);
+      });
+
+      it('passes the reel of a compact row up to the page', async () => {
+        const { fixture, lines } = await render({
+          lines: [line('ln-1', { quantity: 2 })],
+        });
+        jest.useFakeTimers();
+        const row = fixture.debugElement.query(By.directive(LineRow))
+          .componentInstance as LineRow;
+
+        row.quantityReeled.emit({
+          lineId: 'ln-1',
+          step: { from: 2, to: 5, repeat: false },
+        });
+
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-1', delta: 3 },
         ]);
       });
 
@@ -5958,5 +6014,46 @@ describe('ListPage: the two views (velista 0191, 0202)', () => {
     expect(
       lineRows(fixture).some((row) => row.classList.contains('compact'))
     ).toBe(false);
+  });
+
+  /**
+   * Velista `0203`, the review of PR #1086: a reel left open after a drag sends its
+   * step only when it closes, and leaving the page closes it by tearing it down. The
+   * step has to reach the page's runs then, or the number the person watched move is
+   * never written.
+   */
+  it('writes the step of a reel still open after a drag when the page is left', async () => {
+    const { fixture, lines } = await render({
+      lines: [line('ln-milk', { content: 'Leche', quantity: 2 })],
+      storage: new Map(COMPACT),
+    });
+    const writes = (calls: readonly unknown[]) =>
+      calls.filter((call) => (call as { kind?: string }).kind === 'quantity');
+    jest.useFakeTimers();
+    const pointer = (type: string, clientX: number): Event => {
+      const event = new MouseEvent(type, { bubbles: true, clientX });
+      Object.defineProperty(event, 'pointerId', { value: 1 });
+      Object.defineProperty(event, 'isPrimary', { value: true });
+      Object.defineProperty(event, 'buttons', {
+        value: type === 'pointerup' ? 0 : 1,
+      });
+      return event;
+    };
+    const reel = (fixture.nativeElement as HTMLElement).querySelector(
+      'lib-line-row lib-quantity-reel'
+    ) as HTMLElement;
+
+    reel.dispatchEvent(pointer('pointerdown', 0));
+    reel.dispatchEvent(pointer('pointermove', -2 * QUANTITY_REEL_PX_PER_UNIT));
+    reel.dispatchEvent(pointer('pointerup', -2 * QUANTITY_REEL_PX_PER_UNIT));
+    fixture.detectChanges();
+    expect(writes(lines.calls)).toEqual([]);
+
+    fixture.destroy();
+
+    expect(writes(lines.calls)).toEqual([
+      { kind: 'quantity', lineId: 'ln-milk', delta: 2 },
+    ]);
+    jest.useRealTimers();
   });
 });

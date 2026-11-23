@@ -237,7 +237,7 @@ test.describe('the default and the compact view (velista 0191, 0202)', () => {
 
     await test.step('a pack at two draws its price, then the exact total of two', async () => {
       const facts = lineRow(page, LONG_LABEL).locator('.facts > .fact');
-      await expect(facts.nth(1)).toHaveText('€0.99');
+      await expect(facts.nth(1)).toHaveText('€0.99 / u');
       await expect(facts.nth(2)).toHaveText('€1.98');
     });
 
@@ -289,6 +289,50 @@ test.describe('the default and the compact view (velista 0191, 0202)', () => {
       await page.reload();
       await expect(lineRow(page)).toBeVisible();
       await expectCompactRow(lineRow(page));
+    });
+
+    await test.step('the compact view draws a reel of 52 by 44 on every row, in one column (velista 0203)', async () => {
+      const rows = [lineRow(page), lineRow(page, LONG_LABEL)];
+      const boxes = [];
+      for (const row of rows) {
+        await expect(row.locator('lib-quantity-stepper')).toHaveCount(0);
+        const pill = await row.locator('lib-quantity-reel .pill').boundingBox();
+        if (pill === null) throw new Error('the reel has no box');
+        expect(Math.round(pill.width)).toBe(52);
+        expect(Math.round(pill.height)).toBe(44);
+        boxes.push(pill);
+      }
+      expect(Math.abs(boxes[0].x - boxes[1].x)).toBeLessThanOrEqual(TOLERANCE);
+      // A weight over its unit, a count alone.
+      await expect(lineRow(page).locator('lib-quantity-reel .pill')).toHaveText(
+        /775\s*g/
+      );
+      await expect(
+        lineRow(page, LONG_LABEL).locator('lib-quantity-reel .symbol')
+      ).toHaveCount(0);
+    });
+
+    await test.step('a sideways drag on the reel steps the line, written when the reel closes', async () => {
+      const reel = lineRow(page).locator('lib-quantity-reel');
+      const box = await reel.boundingBox();
+      if (box === null) throw new Error('the reel has no box');
+      const y = box.y + box.height / 2;
+      const x = box.x + box.width / 2;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      // Two steps of 40 px, leftwards is more: 775 g, 800 g, 825 g.
+      for (const dx of [10, 40, 80]) {
+        await page.mouse.move(x - dx, y);
+      }
+      await page.mouse.up();
+      await expect(reel.locator('.overlay .current')).toHaveText(/825\s*g/);
+      await expect(reel.locator('.overlay')).toHaveCount(0);
+      await expect(reel).toHaveAttribute('data-value', '825');
+      await page.reload();
+      await expect(lineRow(page).locator('lib-quantity-reel')).toHaveAttribute(
+        'data-value',
+        '825'
+      );
     });
 
     await test.step("the basket's tools row picker says Compact", async () => {

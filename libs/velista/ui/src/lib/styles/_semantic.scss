@@ -350,12 +350,29 @@ $app-landing-short: 700px;
   // the thing the line says, so it gets geometry of its own rather than borrowing a
   // chip's.
   //
-  // The pill was the resting state of the reel. Since the reel went (velista 0188) it
-  // sizes the read only amounts that sit where a stepper would, such as a trip row's
-  // tally, and it has to stay the same width from "0" to "12" or a column of them
-  // ripples as the numbers move.
+  // The pill is the resting state of the reel of the compact view (velista 0203), and
+  // it sizes the read only amounts that sit where a stepper would, such as a trip
+  // row's tally. One box for every amount, the number over its unit, so a column of
+  // them stays one column from "6" to "99,95 kg" and fills the reel's 44px tap box.
   --app-quantity-width: 52px;
-  --app-quantity-height: 40px;
+  --app-quantity-height: 44px;
+  // The reel's open tape (velista 0043, back in 0203): previous, current and next in
+  // a row, each number over its unit. Each number keeps the digit width whether or
+  // not it has anything in it, so the current one does not slide as a neighbour goes.
+  --app-reel-height: 56px;
+  --app-reel-radius: 14px;
+  --app-reel-digit-width: 28px;
+  --app-reel-gap: var(--app-space-5);
+  // The pill's number and unit (the mock's ReelUnit board): 15px over 11px.
+  --app-reel-figure: 15px;
+  --app-reel-figure-leading: 17px;
+  --app-reel-unit: var(--app-text-2xs);
+  --app-reel-unit-leading: 13px;
+  // The tape's current number, 19px, and each neighbour, 14px, over the same unit.
+  --app-reel-current: 19px;
+  --app-reel-current-leading: 22px;
+  --app-reel-neighbour: var(--app-text-sm);
+  --app-reel-neighbour-leading: 17px;
 
   // The two drawn choices of velista `0140`: a radio ring that closes to a dot, and
   // the owner's "more stylized and a bit smaller" checkbox, an 18px box ticked in a
