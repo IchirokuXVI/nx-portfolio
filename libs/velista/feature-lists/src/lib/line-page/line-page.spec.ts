@@ -44,6 +44,8 @@ import {
   type Line,
   type ListPermission,
   type MyZone,
+  QUANTITY_HOLD_DELAY_MS,
+  QUANTITY_HOLD_FIRST_MS,
   QUANTITY_STEP_QUIET_MS,
   type ShoppingListSummary,
 } from '@portfolio/velista/models';
@@ -457,8 +459,9 @@ describe('LinePage', () => {
       jest.useFakeTimers();
 
       fewer.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-      // The repeats land at 400 and 700 ms; the next one would reach 0 and stops.
-      jest.advanceTimersByTime(700);
+      // The repeats land at 500 and 800 ms (velista 0194); the next one would reach
+      // 0 and stops.
+      jest.advanceTimersByTime(QUANTITY_HOLD_DELAY_MS + QUANTITY_HOLD_FIRST_MS);
       fixture.detectChanges();
       jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS - 1);
       fixture.detectChanges();

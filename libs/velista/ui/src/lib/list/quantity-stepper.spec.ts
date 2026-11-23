@@ -258,14 +258,14 @@ describe('QuantityStepper (velista 0188)', () => {
   });
 
   describe('the hold (section 3.3)', () => {
-    it('repeats after 400 ms, then every 300, 255, 217, 184, 157, 133, 113 and 100 ms', () => {
+    it('repeats after 500 ms, then every 300, 244, 198, 161, 131, 106, 86, 70 and 60 ms (velista 0194)', () => {
       const h = render({ value: 0 });
       fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(399);
+      jest.advanceTimersByTime(499);
       expect(h.steps).toEqual([]);
       jest.advanceTimersByTime(1);
       expect(tos(h)).toEqual([1]);
-      const intervals = [300, 255, 217, 184, 157, 133, 113, 100, 100];
+      const intervals = [300, 244, 198, 161, 131, 106, 86, 70, 60, 60, 60];
       for (const [index, interval] of intervals.entries()) {
         jest.advanceTimersByTime(interval - 1);
         expect(h.steps).toHaveLength(index + 1);
@@ -275,10 +275,10 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(h.steps.every((step) => step.repeat)).toBe(true);
     });
 
-    it('is an ordinary press when released before 400 ms', () => {
+    it('is an ordinary press when released before 500 ms', () => {
       const h = render({ value: 2 });
       fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(300);
+      jest.advanceTimersByTime(499);
       fire(h.plus, 'pointerup');
       h.plus.click();
       jest.advanceTimersByTime(2000);
@@ -288,7 +288,7 @@ describe('QuantityStepper (velista 0188)', () => {
     it('adds nothing on the click that ends a hold that repeated', () => {
       const h = render({ value: 2 });
       fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(400);
+      jest.advanceTimersByTime(500);
       fire(h.plus, 'pointerup');
       pointerClick(h.plus);
       expect(tos(h)).toEqual([3]);
@@ -297,7 +297,7 @@ describe('QuantityStepper (velista 0188)', () => {
     it('swallows the click of a hold that a touch browser sends in a later task', () => {
       const h = render({ value: 2 });
       fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(400);
+      jest.advanceTimersByTime(500);
       fire(h.plus, 'pointerup');
       jest.advanceTimersByTime(50);
       pointerClick(h.plus);
@@ -307,7 +307,7 @@ describe('QuantityStepper (velista 0188)', () => {
     it('swallows the release after the finger slid off and back on', () => {
       const h = render({ value: 2 });
       fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(400);
+      jest.advanceTimersByTime(500);
       fire(h.plus, 'pointerleave');
       jest.advanceTimersByTime(200);
       fire(h.plus, 'pointerup');
@@ -318,7 +318,7 @@ describe('QuantityStepper (velista 0188)', () => {
     it('still steps on a keyboard click right after a hold', () => {
       const h = render({ value: 2 });
       fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(400);
+      jest.advanceTimersByTime(500);
       fire(h.plus, 'pointerup');
       keyClick(h.plus);
       expect(tos(h)).toEqual([3, 4]);
@@ -328,7 +328,7 @@ describe('QuantityStepper (velista 0188)', () => {
     it('steps once on a fresh press after a hold', () => {
       const h = render({ value: 2 });
       fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(400);
+      jest.advanceTimersByTime(500);
       fire(h.plus, 'pointerup');
       pointerClick(h.plus);
       fire(h.plus, 'pointerdown');
@@ -342,7 +342,7 @@ describe('QuantityStepper (velista 0188)', () => {
       (type) => {
         const h = render({ value: 2 });
         fire(h.plus, 'pointerdown');
-        jest.advanceTimersByTime(700);
+        jest.advanceTimersByTime(500 + 300);
         fire(h.plus, type);
         jest.advanceTimersByTime(3000);
         expect(tos(h)).toEqual([3, 4]);
@@ -352,7 +352,7 @@ describe('QuantityStepper (velista 0188)', () => {
     it('stops when the page scrolls, and the release after it adds nothing', () => {
       const h = render({ value: 2 });
       fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(400);
+      jest.advanceTimersByTime(500);
       window.dispatchEvent(new Event('scroll'));
       jest.advanceTimersByTime(3000);
       fire(h.plus, 'pointerup');
@@ -363,7 +363,7 @@ describe('QuantityStepper (velista 0188)', () => {
     it('stops when disabled turns true', () => {
       const h = render({ value: 2 });
       fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(400);
+      jest.advanceTimersByTime(500);
       h.set('disabled', true);
       jest.advanceTimersByTime(3000);
       expect(tos(h)).toEqual([3]);
@@ -372,7 +372,7 @@ describe('QuantityStepper (velista 0188)', () => {
     it('stops on destroy', () => {
       const h = render({ value: 2 });
       fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(400);
+      jest.advanceTimersByTime(500);
       h.fixture.destroy();
       jest.advanceTimersByTime(3000);
       expect(tos(h)).toEqual([3]);
@@ -418,7 +418,7 @@ describe('QuantityStepper (velista 0188)', () => {
     ])('keeps the swallow of a stopped hold when %s goes down', (_, extra) => {
       const h = render({ value: 3 });
       fire(h.minus, 'pointerdown');
-      jest.advanceTimersByTime(400 + 300 + 255 + 1000);
+      jest.advanceTimersByTime(500 + 300 + 244 + 1000);
       expect(tos(h)).toEqual([2, 1]);
       const other = new Event('pointerdown', { bubbles: true });
       Object.assign(other, extra);
@@ -485,9 +485,9 @@ describe('QuantityStepper (velista 0188)', () => {
     it('keeps repeating after a pointerleave, and pointerup ends it', () => {
       const h = render({ value: 2 });
       pointer(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(400);
+      jest.advanceTimersByTime(500);
       pointer(h.plus, 'pointerleave');
-      jest.advanceTimersByTime(300 + 255);
+      jest.advanceTimersByTime(300 + 244);
       expect(tos(h)).toEqual([3, 4, 5]);
       pointer(h.plus, 'pointerup', { clientX: 0, clientY: 0 });
       pointerClick(h.plus);
@@ -498,7 +498,7 @@ describe('QuantityStepper (velista 0188)', () => {
     it('cancels a touch move once the hold repeated, and not before', () => {
       const h = render({ value: 2 });
       pointer(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(399);
+      jest.advanceTimersByTime(499);
       expect(touchMove(h.plus).defaultPrevented).toBe(false);
       jest.advanceTimersByTime(1);
       expect(touchMove(h.plus).defaultPrevented).toBe(true);
@@ -537,7 +537,7 @@ describe('QuantityStepper (velista 0188)', () => {
         throw new DOMException('gone', 'NotFoundError');
       };
       pointer(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(400);
+      jest.advanceTimersByTime(500);
       expect(tos(h)).toEqual([3]);
     });
 
@@ -613,7 +613,7 @@ describe('QuantityStepper (velista 0188)', () => {
       const first = { pointerId: 1, pointerType: 'touch' };
       const second = { pointerId: 2, pointerType: 'touch', isPrimary: false };
       pointer(h.plus, 'pointerdown', { ...first, clientX: 120, clientY: 220 });
-      jest.advanceTimersByTime(400);
+      jest.advanceTimersByTime(500);
       expect(tos(h)).toEqual([6]);
       pointer(h.minus, 'pointerdown', second);
       pointer(h.minus, 'pointerup', { ...second, clientX: 20, clientY: 220 });
@@ -661,7 +661,7 @@ describe('QuantityStepper (velista 0188)', () => {
       const added = jest.spyOn(document, 'addEventListener');
       try {
         pointer(h.plus, 'pointerdown');
-        jest.advanceTimersByTime(400);
+        jest.advanceTimersByTime(500);
         expect(
           added.mock.calls.filter(([type]) => String(type).startsWith('touch'))
         ).toEqual([]);
@@ -723,7 +723,7 @@ describe('QuantityStepper (velista 0188)', () => {
       try {
         pointer(h.plus, 'pointerdown');
         selectText();
-        jest.advanceTimersByTime(400);
+        jest.advanceTimersByTime(500);
         expect(document.getSelection()?.isCollapsed ?? true).toBe(true);
         selectText();
         pointer(h.plus, 'pointerup');
@@ -731,7 +731,7 @@ describe('QuantityStepper (velista 0188)', () => {
 
         selectText();
         pointer(h.plus, 'pointerdown');
-        jest.advanceTimersByTime(400);
+        jest.advanceTimersByTime(500);
         pointer(h.plus, 'pointerup');
         expect(document.getSelection()?.toString()).toBe('Plátano de Canarias');
       } finally {
@@ -751,7 +751,7 @@ describe('QuantityStepper (velista 0188)', () => {
       const removed = jest.spyOn(document, 'removeEventListener');
       try {
         pointer(h.plus, 'pointerdown');
-        jest.advanceTimersByTime(400);
+        jest.advanceTimersByTime(500);
         const listeners = added.mock.calls
           .filter(([type]) => type === 'selectstart')
           .map(([type, listener]) => [type, listener]);
@@ -1534,7 +1534,7 @@ describe('QuantityStepper (velista 0188)', () => {
       const h = render({ value: 1000, unit: 'GRAM', step: 100 });
       h.minus.click();
       fire(h.minus, 'pointerdown');
-      jest.advanceTimersByTime(400);
+      jest.advanceTimersByTime(500);
       fire(h.minus, 'pointerup');
       pointerClick(h.minus);
       expect(h.steps).toEqual([
@@ -1767,7 +1767,7 @@ describe('QuantityStepper (velista 0188)', () => {
     it('takes a separate press to 0 after a hold ends on it', () => {
       const h = render({ value: 3 });
       fire(h.minus, 'pointerdown');
-      jest.advanceTimersByTime(400 + 300 + 255 + 1000);
+      jest.advanceTimersByTime(500 + 300 + 244 + 1000);
       fire(h.minus, 'pointerup');
       pointerClick(h.minus);
       expect(tos(h)).toEqual([2, 1]);
@@ -1850,7 +1850,7 @@ describe('QuantityStepper (velista 0188)', () => {
     it('builds each repeat of a hold on the one before', () => {
       const h = render({ value: 2 }, { follow: false });
       fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(400 + 300 + 255);
+      jest.advanceTimersByTime(500 + 300 + 244);
       expect(h.steps).toEqual([
         { from: 2, to: 3, repeat: true },
         { from: 3, to: 4, repeat: true },
