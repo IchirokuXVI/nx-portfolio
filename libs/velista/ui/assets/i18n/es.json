@@ -1329,10 +1329,6 @@
     },
     "tour": {
       "again": "Enséñamela otra vez"
-    },
-    "listRows": {
-      "label": "Filas compactas",
-      "hint": "Las listas muestran el tamaño, el precio y el total en cada fila. Solo en este dispositivo."
     }
   },
   "install": {
@@ -2944,5 +2940,11 @@
       "fullPage": "Abrir la página completa",
       "close": "Cerrar"
     }
+  },
+  "view": {
+    "title": "Vista",
+    "default": "Normal",
+    "compact": "Compacta",
+    "compactHint": "Más filas en la pantalla"
   }
 }

@@ -140,6 +140,7 @@ import {
   SuggestionList,
   TOOK_DURATION_MS,
   TripGroup,
+  ViewPicker,
 } from '@portfolio/velista/ui';
 import { LineSheetEvents } from '../line-detail-sheet/line-sheet-events';
 import {
@@ -279,6 +280,7 @@ function listReturnKey(listId: string): string {
     SuggestionList,
     TourAnchor,
     TripGroup,
+    ViewPicker,
   ],
   templateUrl: './list-page.html',
   styleUrl: './list-page.scss',
@@ -335,9 +337,10 @@ export class ListPage {
   private readonly _itemNames = inject(ItemNames);
 
   /**
-   * How the rows are drawn, the row of today or the compact row, as this device
-   * chose in the account page (velista `0191`). Every line list of the page reads it,
-   * the search results included (decision G).
+   * How the rows are drawn, the default view or the compact one, as this device chose
+   * from the view picker of this page's header or of the basket (velista `0202`).
+   * Every line list of the page reads it, the search results included (velista
+   * `0191`, decision G).
    */
   protected readonly listRows = inject(ListRowsStore);
 

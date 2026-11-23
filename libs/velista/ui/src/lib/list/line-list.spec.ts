@@ -99,7 +99,7 @@ describe('LineList layout (velista 0191)', () => {
     );
   }
 
-  it('draws the row of today by default', () => {
+  it('draws the row of the default view by default (velista 0202)', () => {
     const drawnRows = drawn();
 
     expect(drawnRows).toHaveLength(LINES.length);

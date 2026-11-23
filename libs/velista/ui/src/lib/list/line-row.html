@@ -18,6 +18,7 @@
   [class.awaiting]="line().approvalStatus === 'PENDING'"
   [class.clearing]="clearing()"
   [class.compact]="compact()"
+  [class.facts-row]="!compact()"
   [class.in-flight]="line().write === 'pending'"
   [class.inert]="!line().interactive"
   [class.settled]="line().settled"
@@ -26,13 +27,13 @@
   role="button"
 >
   <!--
-    **The compact row** (velista 0191): the picture as tall as the text, the label and
-    the brand on line 1, and under them three fact lines beside the stepper. Every fact
-    is decided by `lineRowFacts` and the builder; this branch only draws. The row
-    element above, the stepper below and everything under the row are shared with
-    the row of today.
+    **The row of the default view** (velista 0191, the default since velista 0202):
+    the picture as tall as the text, the label and the brand on line 1, and under
+    them three fact lines beside the stepper. Every fact is decided by `lineRowFacts`
+    and the builder; this branch only draws. The row element above, the stepper below
+    and everything under the row are shared with the two line row of the compact view.
   -->
-  @if (compact()) {
+  @if (!compact()) {
     @switch (line().product?.kind) {
       @case ('shown') {
         @if (shown(); as product) {
@@ -73,7 +74,7 @@
       Line 1: the label, then the brand, then the marks of decision F. The label
       gives way first, then the brand; the marks never do.
     -->
-    <span class="compact-line-1">
+    <span class="facts-line-1">
       <span class="content label">
         @if (highlighted(); as parts) {
           <span>{{ parts.before }}</span
@@ -187,7 +188,7 @@
               (click)="onChoose($event)"
               (keydown)="$event.stopPropagation()"
               (pointerdown)="$event.stopPropagation()"
-              class="compact-choose"
+              class="facts-choose"
               type="button"
             >
               {{ 'list.row.choose' | rokuT }}
@@ -211,7 +212,7 @@
       }
     }
 
-    <!-- Every word that applies, for a screen reader, as the row of today has them. -->
+    <!-- Every word that applies, for a screen reader, as the two line row has them. -->
     @if (statuses().length > 0) {
       <span [id]="'st-' + line().id" class="visually-hidden">
         @for (word of statuses(); track word; let last = $last) {

@@ -485,6 +485,13 @@ $app-landing-short: 700px;
   --app-add-choice-title: 15px;
   --app-add-choice-name: 14.5px;
   --app-add-choice-rows-max: 45svh;
+  // The view picker (velista 0202), in the same frame, as the board
+  // `compact-reel/Picker.dc.html` draws it: rows of 52 px, a name of 15 px with its
+  // 13 px line under it, and glyphs of 22 px.
+  --app-view-choice-row-height: 52px;
+  --app-view-choice-name: 15px;
+  --app-view-choice-hint: 13px;
+  --app-view-choice-glyph: 22px;
   // The edge on the quantity of a row an add raised (velista 0170, target 4), in the
   // amber of a held stepper's border, for 2.5 s.
   --app-took-edge-width: 1.5px;

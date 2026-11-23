@@ -2,9 +2,9 @@
   <h2 class="title" id="more-title">{{ 'basket.more.title' | rokuT }}</h2>
 
   <!--
-    One row per thing this reader may do, in the order the plan fixes: people, the
-    history, a new shopping list, finish. A row that is not allowed is absent, so the
-    list holds only rows that work.
+    One row per thing this reader may do, in the order the plan fixes: the view
+    (velista 0202), people, the history, a new shopping list, finish. A row that is
+    not allowed is absent, so the list holds only rows that work.
 
     Each is a real button with its word as its name. The glyph is decoration beside
     the word, which is why the icon needs no label of its own.
@@ -13,6 +13,35 @@
     @for (entry of entries(); track entry) {
       <li class="item">
         @switch (entry) {
+          @case ('view') {
+            <!--
+              The view (velista 0202): the current one named at the row's end. It
+              opens the same choices as the tools row's button, held against this
+              row, and the sheet stays open under them.
+            -->
+            <button
+              (click)="viewOpen.set(!viewOpen())"
+              [attr.aria-expanded]="viewOpen()"
+              #viewRow
+              aria-haspopup="menu"
+              class="row"
+              type="button"
+              data-entry="view"
+            >
+              <lib-view-icon class="glyph" />
+              <span class="word">{{ 'view.title' | rokuT }}</span>
+              <span class="value">{{
+                'view.' + listRows.layout() | rokuT
+              }}</span>
+            </button>
+            <lib-view-choices
+              (chosen)="chooseView($event)"
+              (closed)="viewOpen.set(false)"
+              [layout]="listRows.layout()"
+              [open]="viewOpen()"
+              [origin]="viewRow"
+            />
+          }
           @case ('people') {
             <button
               (click)="openPeople()"

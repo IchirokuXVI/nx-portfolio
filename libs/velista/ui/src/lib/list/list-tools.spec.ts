@@ -2,6 +2,8 @@ import { Component, signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { ListTools } from './list-tools';
 
 /** A page that projects every slot, as the basket does. */
@@ -110,5 +112,37 @@ describe('ListTools', () => {
 
     filter().click();
     expect(fixture.componentInstance.filters).toBe(1);
+  });
+
+  /** Velista `0202`: the filter is a funnel, amber with its badge while one is on. */
+  it('draws the funnel, with the active class and the badge while a filter is on', async () => {
+    const fixture = await render();
+    const filter = () => query(fixture, '.tool') as HTMLElement;
+
+    expect(filter().querySelector('lib-filter-icon')).not.toBeNull();
+    expect(filter().classList).not.toContain('is-on');
+
+    fixture.componentInstance.active.set(1);
+    fixture.detectChanges();
+
+    expect(filter().classList).toContain('is-on');
+    expect(filter().querySelector('.tool-badge')?.textContent?.trim()).toBe(
+      '1'
+    );
+  });
+});
+
+/** Velista `0202`: no filter button draws the sliders any more. */
+describe('FilterIcon artwork', () => {
+  it('is the outline funnel at the header stroke, with no knobs', () => {
+    const svg = readFileSync(
+      join(__dirname, '../icons/filter-icon.svg'),
+      'utf8'
+    );
+
+    expect(svg).toContain('d="M4 5h16l-6.2 7.3v6.2l-3.6-1.8v-4.4z"');
+    expect(svg).toContain('stroke-width="1.8"');
+    expect(svg).toContain('stroke-linejoin="round"');
+    expect(svg).not.toContain('<circle');
   });
 });

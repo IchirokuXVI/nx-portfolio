@@ -65,8 +65,8 @@ export class LineList {
   readonly lines = input.required<readonly LineRowVm[]>();
 
   /**
-   * How every row is drawn, as the device chose (velista `0191`): the row of today or
-   * the compact row.
+   * How every row is drawn, as the device chose (velista `0202`): the default view or
+   * the compact view.
    */
   readonly layout = input<ListRowLayout>('default');
 

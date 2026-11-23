@@ -93,7 +93,7 @@ export type LineRowAction = 'approve' | 'reject' | 'restore';
  * It is not dimmed (velista `0197`, the owner's ruling of 2026-11-22). It was drawn at
  * 70%, and on the night theme that let the dark page show through the stepper and the
  * photo, so the row darkened and lightened again a beat after every step. Most people
- * never learned what the dimming meant; the compact row's spinner in place of the
+ * never learned what the dimming meant; the default row's spinner in place of the
  * total says it better. The class `in-flight` stays, with no rule, because specs read
  * it as the state.
  *
@@ -129,12 +129,14 @@ export class LineRow {
   readonly line = input.required<LineRowVm>();
 
   /**
-   * How the row is drawn (velista `0191`): the row of today, or the compact row with
-   * the label and the brand on one line and three fact lines beside the stepper. One
-   * component either way, so every row feature exists once and both layouts draw it.
+   * How the row is drawn (velista `0202`): the default view, the row of velista
+   * `0191` with the label and the brand on one line and three fact lines beside the
+   * stepper, or the compact view, the two line row. One component either way, so
+   * every row feature exists once and both layouts draw it.
    */
   readonly layout = input<ListRowLayout>('default');
 
+  /** Whether this is the two line row of the compact view (velista `0202`). */
   protected readonly compact = computed(() => this.layout() === 'compact');
 
   /** Whether an add just raised this line, which marks its quantity (velista `0170`). */
@@ -223,7 +225,7 @@ export class LineRow {
   });
 
   /**
-   * The compact row's three facts, or null while it shows no product (velista
+   * The default row's three facts, or null while it shows no product (velista
    * `0191`, section 2.2). Decided by `lineRowFacts` over what the builder set; the
    * total is of the stored quantity, which is the one the builder counted.
    */
@@ -233,7 +235,7 @@ export class LineRow {
   });
 
   /**
-   * Whether the compact row's third fact draws the saving mark in place of the total
+   * Whether the default row's third fact draws the saving mark in place of the total
    * (velista `0191`, the owner's decision of 2026-11-12): while the line has an open
    * run of presses, or its write is in flight. The total follows the stored amount,
    * so during a run it would still say what the old amount cost.
@@ -342,8 +344,8 @@ export class LineRow {
     this._translator.locale();
     this._translator.loaded();
     const parts: (string | null | undefined)[] = [line.content];
-    if (this.compact() && shown !== null) {
-      parts.push(...this._compactNameParts(shown));
+    if (!this.compact() && shown !== null) {
+      parts.push(...this._factsNameParts(shown));
     } else if (line.product === undefined) {
       parts.push(line.detail);
     } else if (shown !== null) {
@@ -372,13 +374,13 @@ export class LineRow {
   }
 
   /**
-   * The product's part of a compact row's name (velista `0191`, section 5): what the
+   * The product's part of a default row's name (velista `0191`, section 5): what the
    * row draws, in its order. The favourite, the brand, the size, the unit price, the
    * total ("about 1,88 €" for an estimate), and "+N". A named line's product name is
    * not drawn, so it is not read (decision E). While the saving mark stands in for
    * the total, the total is left out: it would state the old cost.
    */
-  private _compactNameParts(shown: LineRowShownProduct): (string | null)[] {
+  private _factsNameParts(shown: LineRowShownProduct): (string | null)[] {
     const facts = lineRowFacts(shown);
     const total = this.saving() ? null : facts.total;
     return [

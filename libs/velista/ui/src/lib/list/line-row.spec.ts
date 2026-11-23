@@ -65,6 +65,9 @@ async function render(
 
   const fixture = TestBed.createComponent(LineRow);
   fixture.componentRef.setInput('line', line);
+  // The two line row, which is the compact view since velista 0202. The row of the
+  // default view has its own `describe` below.
+  fixture.componentRef.setInput('layout', 'compact');
   if (inputs.pending !== undefined) {
     fixture.componentRef.setInput('pending', inputs.pending);
   }
@@ -904,12 +907,13 @@ describe('LineRow', () => {
     });
   });
   /**
-   * Velista `0191`: the compact row. The same component and view model as the row of
-   * today, drawn in its own branch, so every case here is about what the branch draws
-   * and what it still shares (section 8).
+   * Velista `0191`: the row with three facts, the default view since velista `0202`.
+   * The same component and view model as the two line row of the compact view, drawn
+   * in its own branch, so every case here is about what the branch draws and what it
+   * still shares (section 8).
    */
-  describe('compact layout (velista 0191)', () => {
-    async function compact(
+  describe('the default view (velista 0191, 0202)', () => {
+    async function defaultView(
       line: LineRowVm,
       inputs: { pending?: number | null } = {}
     ): Promise<ComponentFixture<LineRow>> {
@@ -919,7 +923,7 @@ describe('LineRow', () => {
       }).compileComponents();
       const fixture = TestBed.createComponent(LineRow);
       fixture.componentRef.setInput('line', line);
-      fixture.componentRef.setInput('layout', 'compact');
+      fixture.componentRef.setInput('layout', 'default');
       if (inputs.pending !== undefined) {
         fixture.componentRef.setInput('pending', inputs.pending);
       }
@@ -963,8 +967,8 @@ describe('LineRow', () => {
       ).map((fact) => fact.textContent?.trim() ?? '');
     }
 
-    it("steps by the product's step the row carries, as the row of today does (velista 0186)", async () => {
-      const fixture = await compact(
+    it("steps by the product's step the row carries, as the two line row does (velista 0186)", async () => {
+      const fixture = await defaultView(
         vm({ quantity: 1000, unit: 'GRAM', step: 100, product: loose() })
       );
       const steps: QuantityStep[] = [];
@@ -974,20 +978,33 @@ describe('LineRow', () => {
 
       plus(fixture).click();
 
-      expect(row(fixture).classList).toContain('compact');
+      expect(row(fixture).classList).toContain('facts-row');
       expect(steps).toEqual([{ from: 1000, to: 1100, repeat: false }]);
     });
 
-    it('carries .compact and draws none of the row of today', async () => {
-      const fixture = await compact(vm({ product: pack() }));
+    it('carries .facts-row and draws none of the two line row', async () => {
+      const fixture = await defaultView(vm({ product: pack() }));
 
-      expect(row(fixture).classList).toContain('compact');
+      expect(row(fixture).classList).toContain('facts-row');
+      expect(row(fixture).classList).not.toContain('compact');
       expect(query(fixture, '.body')).toBeNull();
       expect(query(fixture, '.line-2')).toBeNull();
     });
 
+    it('draws the three facts in the default view and the two lines in the compact one (velista 0202)', async () => {
+      const facts = await defaultView(vm({ product: pack() }));
+      expect(query(facts, '.facts')).not.toBeNull();
+      expect(query(facts, '.line-2')).toBeNull();
+
+      const twoLines = await render(vm({ product: pack() }));
+      expect(row(twoLines).classList).toContain('compact');
+      expect(row(twoLines).classList).not.toContain('facts-row');
+      expect(query(twoLines, '.line-2')).not.toBeNull();
+      expect(query(twoLines, '.facts')).toBeNull();
+    });
+
     it('draws line 1 as the label, then the brand, then the marks', async () => {
-      const fixture = await compact(
+      const fixture = await defaultView(
         vm({
           content: 'Leche',
           named: true,
@@ -997,7 +1014,7 @@ describe('LineRow', () => {
           indicators: ['bought'],
         })
       );
-      const line1 = query(fixture, '.compact-line-1') as HTMLElement;
+      const line1 = query(fixture, '.facts-line-1') as HTMLElement;
       const children = Array.from(line1.children).map((child) =>
         child.className.split(' ').filter((name) => name !== '')
       );
@@ -1005,8 +1022,8 @@ describe('LineRow', () => {
       expect(children[0]).toEqual(expect.arrayContaining(['content', 'label']));
       expect(children[1]).toEqual(['brand']);
       expect(children[2]).toEqual(['marks']);
-      expect(text(fixture, '.compact-line-1 .label')).toBe('Leche');
-      expect(text(fixture, '.compact-line-1 .brand')).toBe('Hacendado');
+      expect(text(fixture, '.facts-line-1 .label')).toBe('Leche');
+      expect(text(fixture, '.facts-line-1 .brand')).toBe('Hacendado');
       // The editor's initial with no word, the comment count, then the status word.
       expect(text(fixture, '.marks .editor-avatar')).toBe('A');
       expect(query(fixture, '.editor-label')).toBeNull();
@@ -1019,14 +1036,14 @@ describe('LineRow', () => {
     });
 
     it('draws a pack of two as its size, its price, and the total of two with no mark', async () => {
-      const fixture = await compact(vm({ quantity: 2, product: pack() }));
+      const fixture = await defaultView(vm({ quantity: 2, product: pack() }));
 
       expect(facts(fixture)).toEqual(['1 L', '0,99 €', '1,98 €']);
       expect(query(fixture, '.fact.price')?.textContent).not.toContain('≈');
     });
 
     it('draws both lines for a pack of one, though they say one number', async () => {
-      const fixture = await compact(
+      const fixture = await defaultView(
         vm({
           quantity: 1,
           product: pack({ total: { amount: '0,99 €', estimated: false } }),
@@ -1037,7 +1054,7 @@ describe('LineRow', () => {
     });
 
     it('draws a kilo piece as its weight, its piece price and the estimated total', async () => {
-      const fixture = await compact(
+      const fixture = await defaultView(
         vm({
           quantity: 3,
           product: pack({
@@ -1053,13 +1070,13 @@ describe('LineRow', () => {
     });
 
     it('draws a product with no brand without a brand', async () => {
-      const fixture = await compact(vm({ product: pack({ brand: null }) }));
+      const fixture = await defaultView(vm({ product: pack({ brand: null }) }));
 
       expect(query(fixture, '.brand')).toBeNull();
     });
 
     it('marks the total of 750 g of a loose product, under its price per kilo', async () => {
-      const fixture = await compact(
+      const fixture = await defaultView(
         vm({ quantity: 750, unit: 'GRAM', product: loose() })
       );
 
@@ -1067,7 +1084,7 @@ describe('LineRow', () => {
     });
 
     it('leaves the third line empty at zero, for a loose product and a pack', async () => {
-      const fixture = await compact(
+      const fixture = await defaultView(
         vm({
           quantity: 0,
           unit: 'GRAM',
@@ -1078,14 +1095,14 @@ describe('LineRow', () => {
       expect(facts(fixture)).toEqual(['', '2,50 € / kg', '']);
       expect(query(fixture, '.fact.price.none')).toBeNull();
 
-      const packAtZero = await compact(
+      const packAtZero = await defaultView(
         vm({ quantity: 0, product: pack({ total: null }) })
       );
       expect(facts(packAtZero)).toEqual(['1 L', '0,99 €', '']);
     });
 
     it('says No price on the third line, and leaves the second empty, for a product with none', async () => {
-      const fixture = await compact(
+      const fixture = await defaultView(
         vm({ product: pack({ price: null, total: null }) })
       );
 
@@ -1094,7 +1111,7 @@ describe('LineRow', () => {
     });
 
     it('draws a line of several products as the star, the brand and +2 in the brand', async () => {
-      const fixture = await compact(
+      const fixture = await defaultView(
         vm({
           product: pack({
             brand: 'Quesería Artesana de Villalón',
@@ -1103,7 +1120,7 @@ describe('LineRow', () => {
           }),
         })
       );
-      const brand = query(fixture, '.compact-line-1 .brand.multi');
+      const brand = query(fixture, '.facts-line-1 .brand.multi');
 
       expect(brand?.querySelector('.favorite')).not.toBeNull();
       expect(brand?.querySelector('.brand-text')?.textContent).toBe(
@@ -1113,7 +1130,7 @@ describe('LineRow', () => {
     });
 
     it('draws a free text line as the dashed square and Choose a product, two buttons that choose', async () => {
-      const fixture = await compact(
+      const fixture = await defaultView(
         vm({
           content: 'Pan de molde',
           product: { kind: 'none', canChoose: true },
@@ -1127,10 +1144,7 @@ describe('LineRow', () => {
       fixture.componentInstance.opened.subscribe((id) => opened.push(id));
 
       const square = query(fixture, 'button.picture.choose') as HTMLElement;
-      const words = query(
-        fixture,
-        '.facts button.compact-choose'
-      ) as HTMLElement;
+      const words = query(fixture, '.facts button.facts-choose') as HTMLElement;
       expect(square.getAttribute('aria-label')).toBe('list.row.chooseFor');
       expect(words.textContent?.trim()).toBe('list.row.choose');
       tap(square);
@@ -1142,7 +1156,7 @@ describe('LineRow', () => {
     });
 
     it('says No product to a reader who may not choose', async () => {
-      const fixture = await compact(
+      const fixture = await defaultView(
         vm({ product: { kind: 'none', canChoose: false } })
       );
 
@@ -1152,21 +1166,21 @@ describe('LineRow', () => {
     });
 
     it('draws the four bones and the real label while the product loads', async () => {
-      const fixture = await compact(
+      const fixture = await defaultView(
         vm({ content: 'Leche', product: { kind: 'loading' } })
       );
 
       expect(query(fixture, '.picture.bone')).not.toBeNull();
-      expect(query(fixture, '.compact-line-1 .brand-bone')).not.toBeNull();
+      expect(query(fixture, '.facts-line-1 .brand-bone')).not.toBeNull();
       expect(
         fixture.nativeElement.querySelectorAll('.facts > .fact-bone')
       ).toHaveLength(3);
-      expect(text(fixture, '.compact-line-1 .label')).toBe('Leche');
+      expect(text(fixture, '.facts-line-1 .label')).toBe('Leche');
       expect(stepper(fixture)).not.toBeNull();
     });
 
     it('draws a failed product as the label, the plain picture and three empty lines', async () => {
-      const fixture = await compact(
+      const fixture = await defaultView(
         vm({ content: 'Leche', product: { kind: 'unread' } })
       );
 
@@ -1177,7 +1191,7 @@ describe('LineRow', () => {
 
     describe('the accessible name (section 5)', () => {
       it('says the label, the brand, the size, the unit price, the total and the quantity of a pack', async () => {
-        const fixture = await compact(
+        const fixture = await defaultView(
           vm({ content: 'Leche', named: true, quantity: 2, product: pack() })
         );
 
@@ -1187,7 +1201,7 @@ describe('LineRow', () => {
       });
 
       it('says no total at zero', async () => {
-        const fixture = await compact(
+        const fixture = await defaultView(
           vm({ content: 'Leche', quantity: 0, product: pack({ total: null }) })
         );
 
@@ -1197,7 +1211,7 @@ describe('LineRow', () => {
       });
 
       it('says an estimate as about its amount, for a loose product', async () => {
-        const fixture = await compact(
+        const fixture = await defaultView(
           vm({
             content: 'Plátano de Canarias IGP',
             named: false,
@@ -1215,7 +1229,7 @@ describe('LineRow', () => {
       });
 
       it('says the favourite and +N, as the row draws them', async () => {
-        const fixture = await compact(
+        const fixture = await defaultView(
           vm({
             content: 'Queso',
             product: pack({ favorite: true, others: 2 }),
@@ -1228,7 +1242,7 @@ describe('LineRow', () => {
       });
 
       it('says the label and the quantity of a free text line', async () => {
-        const fixture = await compact(
+        const fixture = await defaultView(
           vm({
             content: 'Pan de molde',
             quantity: 2,
@@ -1240,8 +1254,8 @@ describe('LineRow', () => {
       });
     });
 
-    it('draws the decisions and both notices under a compact row', async () => {
-      const decided = await compact(
+    it('draws the decisions and both notices under a default row', async () => {
+      const decided = await defaultView(
         vm({ approvalStatus: 'PENDING', decidable: true, product: pack() })
       );
       expect(
@@ -1249,10 +1263,12 @@ describe('LineRow', () => {
       ).toHaveLength(2);
       expect(row(decided).classList).toContain('awaiting');
 
-      const failed = await compact(vm({ write: 'failed', product: pack() }));
+      const failed = await defaultView(
+        vm({ write: 'failed', product: pack() })
+      );
       expect(text(failed, '.notice.failed')).toBe('list.line.failed');
 
-      const overwritten = await compact(
+      const overwritten = await defaultView(
         vm({ write: 'overwritten', overwrittenBy: 'Ana', product: pack() })
       );
       expect(text(overwritten, '.notice.overwritten')).toBe(
@@ -1260,8 +1276,8 @@ describe('LineRow', () => {
       );
     });
 
-    it('keeps the status words for a screen reader, as the row of today does', async () => {
-      const fixture = await compact(
+    it('keeps the status words for a screen reader, as the two line row does', async () => {
+      const fixture = await defaultView(
         vm({ indicators: ['bought', 'notAvailable'], product: pack() })
       );
       const described = row(fixture).getAttribute('aria-describedby');
@@ -1273,7 +1289,7 @@ describe('LineRow', () => {
     });
 
     it('draws the row stepper bound as in the default layout', async () => {
-      const fixture = await compact(vm({ quantity: 3, product: pack() }), {
+      const fixture = await defaultView(vm({ quantity: 3, product: pack() }), {
         pending: 5,
       });
       const steps: Array<{ lineId: string; step: QuantityStep }> = [];
@@ -1292,12 +1308,14 @@ describe('LineRow', () => {
       ]);
       expect(opened).toEqual([]);
 
-      const reader = await compact(vm({ adjustable: false, product: pack() }));
+      const reader = await defaultView(
+        vm({ adjustable: false, product: pack() })
+      );
       expect(stepper(reader)?.classList).toContain('is-readonly');
     });
 
-    it('opens the line on a tap, as the row of today does', async () => {
-      const fixture = await compact(vm({ product: pack() }));
+    it('opens the line on a tap, as the two line row does', async () => {
+      const fixture = await defaultView(vm({ product: pack() }));
       const opened: string[] = [];
       fixture.componentInstance.opened.subscribe((id) => opened.push(id));
 
@@ -1317,7 +1335,7 @@ describe('LineRow', () => {
       }
 
       it('stands in for the total during an open run, and keeps the price per kilo', async () => {
-        const fixture = await compact(
+        const fixture = await defaultView(
           vm({ quantity: 750, unit: 'GRAM', product: loose() }),
           { pending: 1000 }
         );
@@ -1331,7 +1349,7 @@ describe('LineRow', () => {
       });
 
       it('stands in for the total while the write is in flight', async () => {
-        const fixture = await compact(
+        const fixture = await defaultView(
           vm({
             quantity: 1000,
             unit: 'GRAM',
@@ -1348,7 +1366,7 @@ describe('LineRow', () => {
       });
 
       it('draws the total of the new amount once the write has landed', async () => {
-        const fixture = await compact(
+        const fixture = await defaultView(
           vm({ quantity: 750, unit: 'GRAM', product: loose() }),
           { pending: 1000 }
         );
@@ -1373,7 +1391,7 @@ describe('LineRow', () => {
       it('never draws the old total between the run and its write', async () => {
         // `quantityRuns` clears `pending` and the line store marks the write
         // pending in one task, so both inputs change before the next render.
-        const fixture = await compact(
+        const fixture = await defaultView(
           vm({ quantity: 750, unit: 'GRAM', product: loose() }),
           { pending: 1000 }
         );
@@ -1395,9 +1413,12 @@ describe('LineRow', () => {
       });
 
       it("replaces a pack's total too, and keeps its price", async () => {
-        const fixture = await compact(vm({ quantity: 2, product: pack() }), {
-          pending: 3,
-        });
+        const fixture = await defaultView(
+          vm({ quantity: 2, product: pack() }),
+          {
+            pending: 3,
+          }
+        );
 
         expect(mark(fixture)).not.toBeNull();
         expect(facts(fixture)).toEqual(['1 L', '0,99 €', '']);
@@ -1405,7 +1426,7 @@ describe('LineRow', () => {
       });
 
       it('replaces No price too, while the amount is saved', async () => {
-        const fixture = await compact(
+        const fixture = await defaultView(
           vm({ quantity: 2, product: pack({ price: null, total: null }) }),
           { pending: 3 }
         );
@@ -1415,7 +1436,7 @@ describe('LineRow', () => {
       });
 
       it('leaves the total out of the name while the mark shows', async () => {
-        const fixture = await compact(
+        const fixture = await defaultView(
           vm({
             content: 'Plátano de Canarias IGP',
             quantity: 750,
@@ -1431,22 +1452,27 @@ describe('LineRow', () => {
       });
 
       it('draws no mark on a free text line or a row with no product', async () => {
-        const free = await compact(
+        const free = await defaultView(
           vm({ product: { kind: 'none', canChoose: true }, write: 'pending' }),
           { pending: 3 }
         );
         expect(query(free, '.saving')).toBeNull();
 
-        const loading = await compact(vm({ product: { kind: 'loading' } }), {
-          pending: 3,
-        });
+        const loading = await defaultView(
+          vm({ product: { kind: 'loading' } }),
+          {
+            pending: 3,
+          }
+        );
         expect(query(loading, '.saving')).toBeNull();
 
-        const bare = await compact(vm({ write: 'pending' }), { pending: 3 });
+        const bare = await defaultView(vm({ write: 'pending' }), {
+          pending: 3,
+        });
         expect(query(bare, '.saving')).toBeNull();
       });
 
-      it('draws nothing of it on the row of today', async () => {
+      it('draws nothing of it on the two line row', async () => {
         const fixture = await render(
           vm({ write: 'pending', product: shown() }),
           { pending: 3 }
@@ -1462,7 +1488,7 @@ describe('LineRow', () => {
 describe('LineRow: a row being cleared (velista 0199)', () => {
   async function clearing(
     line: LineRowVm,
-    layout: 'default' | 'compact' = 'default'
+    layout: 'default' | 'compact' = 'compact'
   ): Promise<ComponentFixture<LineRow>> {
     const fixture = await render(line);
     fixture.componentRef.setInput('layout', layout);
