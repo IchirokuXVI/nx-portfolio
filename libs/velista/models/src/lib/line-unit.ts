@@ -1,4 +1,5 @@
 import type { ProductOffer } from './domain';
+import { LINE_QUANTITY_MAX } from './limits';
 import { soldAs, soldAsOf, type SoldAs } from './sold-as';
 
 /**
@@ -115,7 +116,7 @@ export function defaultQuantity(unit: LineUnit): number {
  * default since backend `0260`, so an add that states it and one that does not
  * make the same line.
  *
- * Not the stepper's step: a count steps by ten from a thousand, which a first
+ * Not the stepper's step: a count steps by fifty from a thousand, which a first
  * add never reaches.
  *
  * `step` is the product's own step (velista `0186`, the owner's ruling 43 of
@@ -138,11 +139,29 @@ export function isMeasured(unit: LineUnit | undefined): boolean {
 /**
  * Where the words of an amount move up one name: grams to kilos, millilitres to
  * litres, a count to thousands (backend `0096`, section 4; velista `0188`, S4).
- * It is no longer where the step changes for a weight or a volume: from here the
- * short form reads hundredths of the top name, so {@link stepAt} keeps a count's
- * step at one of those hundredths.
+ * From here every step is at least {@link QUANTITY_COARSE_STEP} (velista `0195`),
+ * so a kilo steps by 50 g and a count at 1000 steps to 1050. It is also the snap
+ * point every stepper uses by default ({@link QUANTITY_SNAP_POINTS}): a press that
+ * would cross it lands on it.
  */
 export const QUANTITY_COARSE_FROM = 1000;
+
+/**
+ * The least step from {@link QUANTITY_COARSE_FROM} on, for every unit (the owner,
+ * 2026-11-22, velista `0195`): 5% of 1000.
+ */
+export const QUANTITY_COARSE_STEP = 50;
+
+/**
+ * The amounts a press lands on rather than pass, by default (the owner,
+ * 2026-11-22, velista `0195`): a press that would cross 1000 in either direction
+ * stops on 1000 first. A typed 1025 g goes down to 1000 g, not to 975 g, and a
+ * typed 990 g goes up to 1000 g, not to 1015 g. A caller that passes its own list
+ * to {@link stepFrom} replaces this one, so a list that keeps the stop at 1000
+ * names 1000 too (`[...QUANTITY_SNAP_POINTS, ask]`). Only an empty list turns
+ * snapping off.
+ */
+export const QUANTITY_SNAP_POINTS: readonly number[] = [QUANTITY_COARSE_FROM];
 
 /** The base step of each unit (the owner, 2026-11-11): 25 g, 25 ml, one piece. */
 export const QUANTITY_STEP: Readonly<Record<LineUnit, number>> = {
@@ -199,14 +218,16 @@ export function shortHundredths(quantity: number): number {
 }
 
 /**
- * How far plus moves an amount at `value` (velista `0188`, S7b): the base step, but
- * never less than one hundredth of the name the short form shows there, so a press
- * always changes what a row reads. A count: 1 below 1000, 10 from 1000. A weight or
- * a volume: 25 everywhere, already more than the 10 that "1,25 kg" needs.
+ * How far plus moves an amount at `value` (velista `0188`, S7b; velista `0195`): the
+ * base step below {@link QUANTITY_COARSE_FROM}, and never less than
+ * {@link QUANTITY_COARSE_STEP} from it, for every unit. A count: 1 below 1000, 50
+ * from 1000, so 1000 goes to 1050. A weight or a volume: 25 below 1000 and 50 from
+ * it, so 1000 g goes to 1050 g.
  *
  * `step` is the product's step (velista `0186`): it replaces the base for a weight
- * or a volume, and the hundredth rule still holds over it (decision F), so a step of
- * 1 or 5 is used below 1000 and becomes 10 from 1000.
+ * or a volume, and the least step from 1000 still holds over it (decision F), so a
+ * step of 1, 5 or 25 is used below 1000 and becomes 50 from 1000, and a step of 100
+ * stays 100.
  */
 export function stepAt(
   value: number,
@@ -214,42 +235,92 @@ export function stepAt(
   step?: number | null
 ): number {
   const base = baseStep(unit, step);
-  return value >= QUANTITY_COARSE_FROM ? Math.max(base, 10) : base;
+  return value >= QUANTITY_COARSE_FROM
+    ? Math.max(base, QUANTITY_COARSE_STEP)
+    : base;
 }
 
 /**
- * One press from `value` (velista `0188`, S7b and decision B). Up adds the step at
- * `value`. Down takes away the step that plus uses one base step lower, so 1000
- * minus is 999 for a count and plus then minus always returns. No grid and no
- * snapping: a typed 1010 g goes to 1035 and back to 1010, and on a product step of
- * 100 a 975 goes to 1075 and to 875 (velista `0186`, decision D). Never under 0.
+ * The snap points a control with a floor of `min` and a ceiling of `max` can land
+ * on (velista `0195`, target state 5): the points above `min` and at or below
+ * `max`. A point at the floor or under it is dropped, so a press never lands on an
+ * amount outside the control's range. Every control calls this before
+ * {@link stepFrom}, so no caller writes its own filter.
+ */
+export function snapPointsWithin(
+  snaps: readonly number[],
+  min: number,
+  max: number
+): readonly number[] {
+  return snaps.filter((point) => point > min && point <= max);
+}
+
+/**
+ * One press from `value` (velista `0188`, S7b and decision B; velista `0195`). Up
+ * adds the step at `value`. Down takes away the step that plus uses one base step
+ * lower, so 1000 minus is 999 for a count and plus then minus returns. Never under 0.
+ *
+ * **A press does not pass a snap point** (`snaps`, {@link QUANTITY_SNAP_POINTS} when
+ * left out): it lands on the nearest point it would pass in the direction of travel.
+ * 990 g goes up to 1000 g and 1025 g down to 1000 g; with points 990 and 1000, 975
+ * goes up to 990 and then to 1000. A point equal to `value` is not passed, so the
+ * press moves on from it. A point at or below 0, or above `LINE_QUANTITY_MAX`, is
+ * ignored.
+ *
+ * **A typed amount has no grid, a snap point does.** A typed 1010 g goes to 1060 g
+ * and back to 1010 g. From a snap point that is off the grid of the direction (the
+ * multiples of the step the press uses), the press goes to the next grid value
+ * instead: with an ask of 990 g, 990 goes down to 975, and with an ask of 1030 g,
+ * 1030 goes up to 1050. So plus then minus returns across a snap point, and the rule
+ * reads `value` alone, never the amount before it.
  */
 export function stepFrom(
   value: number,
   unit: LineUnit,
   direction: 1 | -1,
-  step?: number | null
+  step?: number | null,
+  snaps: readonly number[] = QUANTITY_SNAP_POINTS
 ): number {
+  const points = snaps.filter(
+    (point) => point > 0 && point <= LINE_QUANTITY_MAX
+  );
+  const onPoint = points.includes(value);
   if (direction === 1) {
-    return value + stepAt(value, unit, step);
+    const size = stepAt(value, unit, step);
+    const next =
+      onPoint && value % size !== 0
+        ? Math.ceil(value / size) * size
+        : value + size;
+    const passed = points.filter((point) => point > value && point <= next);
+    return passed.length > 0 ? Math.min(...passed) : next;
   }
   const base = baseStep(unit, step);
-  return Math.max(0, value - stepAt(Math.max(0, value - base), unit, step));
+  const size = stepAt(Math.max(0, value - base), unit, step);
+  const next = Math.max(
+    0,
+    onPoint && value % size !== 0
+      ? Math.floor(value / size) * size
+      : value - size
+  );
+  const passed = points.filter((point) => point < value && point >= next);
+  return passed.length > 0 ? Math.max(...passed) : next;
 }
 
 /**
  * Whether a plus at `value` stays within `max` and changes the short reading
  * (velista `0188`, S8). A plus that would pass the most is off and never clamps to
  * it; a count's plus is also off where the reading would not move (999 985 to
- * 999 989 read "999,99" before and after).
+ * 999 989 read "999,99" before and after). `snaps` is the list {@link stepFrom}
+ * reads, so the answer is about the press that would happen.
  */
 export function canStepUp(
   value: number,
   unit: LineUnit,
   max: number,
-  step?: number | null
+  step?: number | null,
+  snaps: readonly number[] = QUANTITY_SNAP_POINTS
 ): boolean {
-  const next = stepFrom(value, unit, 1, step);
+  const next = stepFrom(value, unit, 1, step, snaps);
   if (next > max) {
     return false;
   }

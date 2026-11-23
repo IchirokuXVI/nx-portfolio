@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lists and amounts: a long list name and a long product name are cut, the numbers never</title>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+<style>
+/* Day and Night roles copied from libs/velista/ui/src/lib/styles (_themes, _primitives, _semantic). */
+body { margin: 0; background: #0a0c14; }
+.pair { display: flex; gap: 80px; align-items: flex-start; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+.col { flex: none; width: 390px; }
+.tag { height: 28px; margin: 0; font-size: 12px; line-height: 16px; color: #98a0bb; }
+.day {
+  --g: #f7f8fc; --r: #ffffff; --o: #ffffff; --s: #eef0f7;
+  --t: #11141f; --t2: #525a78; --t3: #616a8a;
+  --b1: #dde1ed; --b2: #6f7899;
+  --act: #ffb454; --on-act: #0a0c14; --q: #8a5a12;
+  --ok: #047857; --focus: #2563eb;
+  --scrim: rgba(17, 20, 31, 0.42);
+  --shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  --e2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.10);
+  color-scheme: light;
+}
+.night {
+  --g: #0a0c14; --r: #161a28; --o: #1a1e2e; --s: #11141f;
+  --t: #f7f8fc; --t2: #c2c8db; --t3: #98a0bb;
+  --b1: rgba(255, 255, 255, 0.08); --b2: rgba(255, 255, 255, 0.35);
+  --act: #ffb454; --on-act: #0a0c14; --q: #ffb454;
+  --ok: #34d399; --focus: #60a5fa;
+  --scrim: rgba(10, 12, 20, 0.74);
+  --shadow: 0 -18px 40px rgba(10, 12, 20, 0.42);
+  --e2: inset 0 1px 0 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(10, 12, 20, 0.55);
+  color-scheme: dark;
+}
+.vel { color: var(--t); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+.vel button { font-family: inherit; cursor: pointer; }
+.phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; background: var(--g); }
+
+/* the basket page under the sheet */
+.ph { height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid var(--b1); }
+.ph i { width: 24px; height: 24px; display: flex; color: var(--t); }
+.ph b { font-family: Marcellus, Georgia, serif; font-size: 20px; font-weight: 400; letter-spacing: 0.05em; }
+.prow { display: flex; align-items: center; gap: 12px; height: 60px; box-sizing: border-box; padding: 0 16px; border-bottom: 1px solid var(--b1); }
+.prow .dot { width: 26px; height: 26px; flex: none; box-sizing: border-box; border: 1.5px solid var(--b2); border-radius: 999px; }
+.prow span { flex: 1; font-size: 16px; }
+.prow em { font-style: normal; font-size: 16px; font-weight: 600; }
+.scrim { position: absolute; inset: 0; background: var(--scrim); }
+
+/* the sheet (sheet-shell, settle-sheet) */
+.home { position: absolute; z-index: 3; left: 50%; bottom: 8px; width: 134px; height: 5px; margin-left: -67px; border-radius: 999px; background: var(--t); }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; box-sizing: border-box; padding: 0 16px 54px; border-radius: 22px 22px 0 0; background: var(--r); box-shadow: var(--shadow); }
+.handle { width: 48px; height: 5px; margin: 10px auto 16px; border-radius: 999px; background: var(--b1); }
+.title { margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 1.2; font-weight: 400; color: var(--t); text-wrap: balance; }
+.sub { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+.happened { margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+
+/* a sheet reached from another sheet: the chevron beside the title (shop-picker-sheet) */
+.shead { display: flex; align-items: center; gap: 4px; margin-left: -10px; }
+.back { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; background: transparent; color: var(--t2); }
+.back i { width: 24px; height: 24px; display: flex; }
+.shead .title { flex: 1; min-width: 0; }
+.shead + .sub { margin-top: 0; }
+
+/* row entries */
+.entries { margin-top: 8px; }
+.head { display: flex; align-items: center; gap: 8px; min-height: 44px; border-bottom: 1px solid var(--b1); }
+.head h3 { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 600; color: var(--t2); }
+.all { flex: none; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); white-space: nowrap; }
+.rows { margin: 0; padding: 0; list-style: none; }
+.row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 4px 0; border-bottom: 1px solid var(--b1); }
+.lbl { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.nm { display: flex; min-width: 0; font-size: 16px; line-height: 1.5; color: var(--t); white-space: nowrap; }
+.nmt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ask { flex: none; white-space: pre; color: var(--t2); font-variant-numeric: tabular-nums; }
+.wh { overflow: hidden; font-size: 12px; line-height: 1.5; color: var(--t2); text-overflow: ellipsis; white-space: nowrap; }
+.got { font-size: 14px; line-height: 1.5; color: var(--t2); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* today's Change: the swap icon in a bordered square */
+.change { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--b1); border-radius: 12px; background: var(--r); color: var(--t); }
+.change i { width: 20px; height: 20px; display: flex; }
+
+/* the stepper (quantity-stepper, the owner's D3 Outline) */
+.stp { flex: none; display: inline-grid; grid-template-columns: 48px 72px 48px; height: 48px; border-radius: 999px; background: var(--r); box-shadow: inset 0 0 0 1px var(--b2); }
+.stp.wide { grid-template-columns: 48px 95px 48px; }
+.sb { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; color: var(--t); }
+.sb.end { opacity: 0.35; }
+.g { position: relative; display: block; width: 14px; height: 14px; }
+.g::before { content: ''; position: absolute; left: 0; top: 6px; width: 14px; height: 2px; border-radius: 1px; background: currentColor; }
+.plus .g::after { content: ''; position: absolute; left: 6px; top: 0; width: 2px; height: 14px; border-radius: 1px; background: currentColor; }
+.cell { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 0; padding: 0 4px; overflow: hidden; white-space: nowrap; }
+.fig { font-size: 18px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--t); }
+.fig.unit { font-size: 16px; }
+.sym { font-size: 12px; line-height: 1; color: var(--t2); }
+.stp.zero .fig { color: var(--t2); }
+.stp.reached .fig { color: var(--ok); }
+.stp.over .fig { color: var(--q); }
+.stp.ring-ok { box-shadow: inset 0 0 0 2px var(--ok); }
+.stp.ring-over { box-shadow: inset 0 0 0 2px var(--q); }
+.ask.reached { color: var(--ok); }
+.ask.over { color: var(--q); }
+
+/* the number where a stepper would be (row-entries .row-number, decision I) */
+.rnum { flex: none; display: flex; justify-content: flex-end; align-items: center; width: 168px; height: 48px; font-size: 16px; color: var(--t2); font-variant-numeric: tabular-nums; }
+.rnum.wide { width: 191px; }
+
+/* a disabled stepper, round 4: the whole capsule is disabled, not only its ends.
+   No raised fill and the hairline (border-subtle) for the strong border; the number in muted
+   text (text-muted: Day neutral-550, Night neutral-400), still at its weight and size;
+   both glyphs in muted text at 60%. quantity-stepper.scss today fades the ends only. */
+.stp.dis { background: transparent; box-shadow: inset 0 0 0 1px var(--b1); }
+.stp.dis .sb { color: var(--t3); opacity: 0.6; }
+.stp.dis .fig { color: var(--t3); }
+.stp.dis .sym { color: var(--t3); }
+
+/* the description under the title of the detailed view: the sheets' secondary text, no box */
+.desc { margin: 0; font-size: 14px; line-height: 1.5; color: var(--t2); text-wrap: pretty; }
+.anchor { position: relative; flex: none; display: flex; }
+
+/* the explanatory popover: anchored-popover's note frame (280 px, raised, hairline, radius 12, elevation 2) */
+.pop { position: absolute; z-index: 5; right: 0; bottom: calc(100% + 8px); box-sizing: border-box; width: 280px; padding: 12px; border: 1px solid var(--b1); border-radius: 12px; background: var(--o); box-shadow: var(--e2); color: var(--t2); font-size: 12px; line-height: 1.4; }
+.pop p { margin: 0; }
+.pop p + p { margin-top: 8px; }
+
+/* a product picture (product-picture.scss): a square with a hairline, a photo on the raised fill */
+.pic { box-sizing: border-box; flex: none; display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; padding: 0; overflow: hidden; border: 1px solid var(--b1); border-radius: 10px; background: var(--o); cursor: zoom-in; }
+.pic img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.pic.none { background: var(--s); color: var(--t3); cursor: default; }
+.pic.none i { width: 24px; height: 24px; display: flex; }
+.pic.sm { width: 28px; height: 28px; border-radius: 8px; }
+.pic.sm.none i { width: 16px; height: 16px; }
+
+/* the product at the top of the detailed view: the product card's compact row (product-row.scss) */
+.prod { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; column-gap: 12px; align-items: start; padding: 12px 0 0; }
+.prod .pic { grid-row: 1 / span 2; }
+.pwhat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pname { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 16px; line-height: 1.3; color: var(--t); }
+.pdet { font-size: 14px; line-height: 1.4; color: var(--t2); }
+.pprice { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding-top: 1px; }
+.amt { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--t); }
+.per { font-size: 12px; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.allp { grid-column: 2 / -1; justify-self: start; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+.prod.noall { padding-bottom: 12px; }
+
+/* the detailed view: one larger row per list */
+.drow { position: relative; padding: 10px 0 2px; border-bottom: 1px solid var(--b1); }
+.drow:last-child { border-bottom: 0; }
+.dtop { display: flex; align-items: center; gap: 12px; }
+
+/* each list's product, one line: picture, name, and the way to change it where allowed */
+.pl { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 2px 0 2px; }
+.plt { flex: 1; display: flex; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--t2); white-space: nowrap; }
+.pln { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.plb { flex: none; white-space: pre; }
+.pl.diff .plt { color: var(--q); }
+.plc { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 0 0 8px; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+
+/* the disclosure and the other lists */
+.disc { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0; border: 0; border-bottom: 1px solid var(--b1); background: transparent; font-size: 16px; color: var(--t); text-align: left; }
+.disc span { flex: 1; }
+.disc i { flex: none; width: 20px; height: 20px; display: flex; color: var(--t2); }
+.disc.open i { transform: rotate(180deg); }
+
+/* actions */
+.actions { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; }
+.primary { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; padding: 8px 12px; border: 0; border-radius: 12px; background: var(--act); color: var(--on-act); font-size: 16px; font-weight: 600; }
+.quiet { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; padding: 4px; border: 0; background: transparent; font-size: 14px; color: var(--t3); }
+</style>
+</helmet>
+<div class="pair"><div class="col"><p class="tag">Day, in English</p><div class="vel day phone">
+<header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Shopping list</b></header>
+<div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
+<div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
+<div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
+<div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Lists and amounts</h2></div><p class="desc">Here you change the amount and the product of each list. What you bought goes on the previous screen.</p><div class="prod noall"><span class="pic none"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></i></span><span class="pwhat"><span class="pname">Tomate pera de Almería en rama, categoría primera</span><span class="pdet">Granel</span></span><span class="pprice"><span class="amt">2,49 € / kg</span></span></div><div class="entries"><div class="head"><h3>What each list asks for</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal de la casa de la playa</span></span><span class="wh">Piso de la playa de Cullera · Tomate pera para ensalada</span><span class="got">Bought 0,5 of 1,5 kg</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">1,5</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><span class="pic none sm"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></i></span><span class="plt"><span class="pln">Tomate pera de Almería en rama, categoría primera</span><span class="plb"> · Granel</span></span><button class="plc" type="button">Change</button></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Casa · Tomates</span><span class="got">Bought 1 of 1 kg</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">1</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><span class="pic none sm"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></i></span><span class="plt"><span class="pln">Tomate pera de Almería en rama, categoría primera</span><span class="plb"> · Granel</span></span></div></li></ul></div></section><span class="home"></span></div></div><div class="col"><p class="tag">Night, en español</p><div class="vel night phone">
+<header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Lista de la compra</b></header>
+<div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
+<div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
+<div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
+<div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Listas y cantidades</h2></div><p class="desc">Aquí cambias la cantidad y el producto de cada lista. Lo que has comprado se apunta en la pantalla anterior.</p><div class="prod noall"><span class="pic none"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></i></span><span class="pwhat"><span class="pname">Tomate pera de Almería en rama, categoría primera</span><span class="pdet">Granel</span></span><span class="pprice"><span class="amt">2,49 € / kg</span></span></div><div class="entries"><div class="head"><h3>Lo que pide cada lista</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal de la casa de la playa</span></span><span class="wh">Piso de la playa de Cullera · Tomate pera para ensalada</span><span class="got">Comprado 0,5 de 1,5 kg</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">1,5</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><span class="pic none sm"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></i></span><span class="plt"><span class="pln">Tomate pera de Almería en rama, categoría primera</span><span class="plb"> · Granel</span></span><button class="plc" type="button">Cambiar</button></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Casa · Tomates</span><span class="got">Comprado 1 de 1 kg</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">1</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><span class="pic none sm"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></i></span><span class="plt"><span class="pln">Tomate pera de Almería en rama, categoría primera</span><span class="plb"> · Granel</span></span></div></li></ul></div></section><span class="home"></span></div></div></div>
+</x-dc>
+</body>
+</html>

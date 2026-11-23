@@ -39,6 +39,13 @@
   color: inherit;
   text-align: start;
   cursor: pointer;
+  // No blue box from the browser (velista 0196, target state 5); the press is drawn
+  // below instead. No transition: it shows at once and goes on release.
+  -webkit-tap-highlight-color: transparent;
+
+  &:active {
+    background: var(--app-surface-sunken);
+  }
 
   &:focus-visible {
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
@@ -84,6 +91,8 @@
   color: var(--app-text-on-action);
   white-space: nowrap;
   cursor: pointer;
+  // Its own pressed colour below stands in for the browser's box (velista 0196).
+  -webkit-tap-highlight-color: transparent;
 
   &:hover {
     background: var(--app-action-bg-hover);

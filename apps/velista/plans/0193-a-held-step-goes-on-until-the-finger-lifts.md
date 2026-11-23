@@ -1,3 +1,5 @@
+> **PR:** [#1069](https://github.com/IchirokuXVI/nx-portfolio/pull/1069)
+
 # 0193: a held step goes on until the finger lifts
 
 > Decided on 2026-11-22. The owner tried the stepper of velista `0188` on staging with a
