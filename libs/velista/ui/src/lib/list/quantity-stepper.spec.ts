@@ -257,6 +257,94 @@ describe('QuantityStepper (velista 0188)', () => {
     });
   });
 
+  describe('disabled as a whole (velista 0200)', () => {
+    /** Every press the host was told of while the stepper was disabled. */
+    function disabled(variant: 'row' | 'sheet' | 'sheet-narrow' = 'sheet') {
+      const h = render({ value: 3, disabled: true, variant });
+      const pressed: void[] = [];
+      const values: number[] = [];
+      h.fixture.componentInstance.disabledPress.subscribe(() =>
+        pressed.push(undefined)
+      );
+      h.fixture.componentInstance.valueChange.subscribe((value) =>
+        values.push(value)
+      );
+      return { h, pressed, values };
+    }
+
+    it('carries the whole disabled state on the host, and a press steps nothing', () => {
+      const { h, values } = disabled();
+      expect(h.el.classList.contains('is-disabled')).toBe(true);
+      pointerClick(h.plus);
+      pointerClick(h.minus);
+      fire(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(2000);
+      fire(h.plus, 'pointerup');
+      expect(h.steps).toEqual([]);
+      expect(values).toEqual([]);
+    });
+
+    it('draws no disabled attribute, says aria-disabled and stays in the tab order', () => {
+      const { h } = disabled();
+      for (const control of [h.minus, h.plus, field(h)]) {
+        expect(control.hasAttribute('disabled')).toBe(false);
+        expect(control.getAttribute('aria-disabled')).toBe('true');
+        expect(control.tabIndex).toBe(0);
+      }
+      expect(h.el.querySelector('[disabled]')).toBeNull();
+    });
+
+    it('marks the group itself in the row variant', () => {
+      const { h } = disabled('row');
+      expect(
+        h.el.querySelector('[role="group"]')?.getAttribute('aria-disabled')
+      ).toBe('true');
+    });
+
+    it('tells a click, Enter and Space once each, with no step and no value', () => {
+      const { h, pressed, values } = disabled();
+      pointerClick(h.plus);
+      expect(pressed).toHaveLength(1);
+      // Enter and Space on a button reach the button as its own click.
+      keyClick(h.minus);
+      expect(pressed).toHaveLength(2);
+      // The field takes no click from a key, so its keys are told on keydown.
+      const enter = key(h, 'Enter');
+      expect(pressed).toHaveLength(3);
+      expect(enter.defaultPrevented).toBe(true);
+      key(h, ' ');
+      expect(pressed).toHaveLength(4);
+      pointerClick(field(h));
+      expect(pressed).toHaveLength(5);
+      expect(h.steps).toEqual([]);
+      expect(values).toEqual([]);
+    });
+
+    it('tells nothing while it is enabled', () => {
+      const h = render({ value: 3, variant: 'sheet' });
+      const pressed: void[] = [];
+      h.fixture.componentInstance.disabledPress.subscribe(() =>
+        pressed.push(undefined)
+      );
+      pointerClick(h.plus);
+      key(h, 'Enter');
+      expect(pressed).toEqual([]);
+      expect(tos(h)).toEqual([4]);
+    });
+
+    it('names the reason element in aria-describedby on every control', () => {
+      const h = render({
+        value: 3,
+        disabled: true,
+        variant: 'sheet',
+        describedBy: 'why-1',
+      });
+      for (const control of [h.minus, h.plus, field(h)]) {
+        expect(control.getAttribute('aria-describedby')).toBe('why-1');
+      }
+    });
+  });
+
   describe('the hold (section 3.3)', () => {
     it('repeats after 500 ms, then every 300, 244, 198, 161, 131, 106, 86, 70 and 60 ms (velista 0194)', () => {
       const h = render({ value: 0 });

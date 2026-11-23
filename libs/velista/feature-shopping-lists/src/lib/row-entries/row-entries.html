@@ -1,9 +1,9 @@
 <!--
   The lists that ask (velista 0139, section 3). A small heading in the secondary
   colour on a hairline, then one row per list: the list, then "zone · line" under
-  it, Change (velista 0140, section 1) as the swap icon, then what it asks for
-  in the stepper of velista 0188 (velista 0190). "Change for all lists" closes
-  the heading's row when two lists or more can change.
+  it, then what it asks for in the stepper of velista 0188 (velista 0190). "Lists
+  and amounts" closes the heading's row and opens the detailed view (velista
+  0200), where a list's product is changed.
 
   Not a live region: the stepper changes its value on every step, and it says
   the amount once by itself when the presses stop.
@@ -11,14 +11,14 @@
 <section class="entries">
   <div class="head">
     <h3 class="heading">{{ heading() }}</h3>
-    @if (changesAll()) {
+    @if (opensLists()) {
       <button
-        (click)="changedAll.emit()"
+        (click)="listsOpened.emit()"
         [disabled]="busy()"
-        class="change-all"
+        class="lists-open"
         type="button"
       >
-        {{ 'basket.change.all' | rokuT }}
+        {{ 'basket.lists.open' | rokuT }}
       </button>
     }
   </div>
@@ -32,18 +32,6 @@
             <span class="row-where">{{ where }}</span>
           }
         </span>
-
-        @if (entry.changeable) {
-          <button
-            (click)="changed.emit(entry.lineId)"
-            [attr.aria-label]="entry.changeLabel"
-            [disabled]="busy()"
-            class="change"
-            type="button"
-          >
-            <lib-swap-icon class="change-glyph" />
-          </button>
-        }
 
         @if (entry.editable) {
           <lib-quantity-stepper

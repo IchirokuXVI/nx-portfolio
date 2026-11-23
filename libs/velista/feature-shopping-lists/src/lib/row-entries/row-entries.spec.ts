@@ -233,71 +233,67 @@ describe('RowEntries: the lists that ask', () => {
   });
 });
 
-describe('RowEntries: Change (velista 0140, section 1)', () => {
+describe('RowEntries: Lists and amounts (velista 0200)', () => {
   const two = () =>
     row([
       entry(),
       entry({ lineId: 'zl-2', listId: 'l-basics', content: 'Leche' }),
     ]);
 
-  it('draws Change before the quantity on the entries the sheet allows', async () => {
-    const fixture = await render(two(), { changeable: new Set(['zl-2']) });
-
-    const rows = [...html(fixture).querySelectorAll('.entries > .rows .row')];
-    expect(rows.map((held) => held.querySelector('.change') !== null)).toEqual([
-      false,
-      true,
-    ]);
-    // The list, Change, the amount.
-    const change = rows[1].querySelector('.change');
-    expect(change?.nextElementSibling?.classList.contains('ask-amount')).toBe(
-      true
-    );
-    // The swap icon and no word, named after the list (velista 0190).
-    expect(change?.tagName).toBe('BUTTON');
-    expect(change?.querySelector('lib-swap-icon')).not.toBeNull();
-    expect(change?.textContent?.trim()).toBe('');
-    expect(change?.getAttribute('aria-label')).toBe('basket.change.oneLabel');
-  });
-
-  it('says which line was pressed', async () => {
-    const fixture = await render(two(), { changeable: new Set(['zl-1']) });
-    const changed: string[] = [];
-    fixture.componentInstance.changed.subscribe((lineId) =>
-      changed.push(lineId)
-    );
-
-    html(fixture).querySelector<HTMLButtonElement>('.change')?.click();
-
-    expect(changed).toEqual(['zl-1']);
-  });
-
-  it('draws no "Change for all lists" with one such entry', async () => {
-    const fixture = await render(two(), { changeable: new Set(['zl-1']) });
-
-    expect(html(fixture).querySelector('.change-all')).toBeNull();
-  });
-
-  it('draws "Change for all lists" in the heading row with two such entries', async () => {
+  it('draws no swap icon and no "Change for all lists"', async () => {
     const fixture = await render(two(), {
       changeable: new Set(['zl-1', 'zl-2']),
     });
-    let all = 0;
-    fixture.componentInstance.changedAll.subscribe(() => (all += 1));
 
-    const button =
-      html(fixture).querySelector<HTMLButtonElement>('.head .change-all');
-    button?.click();
-
-    expect(button?.textContent).toContain('basket.change.all');
-    expect(all).toBe(1);
+    expect(html(fixture).querySelector('lib-swap-icon')).toBeNull();
+    expect(html(fixture).querySelector('.change')).toBeNull();
+    expect(html(fixture).textContent).not.toContain('basket.change.all');
   });
 
-  it('draws no Change at all when the sheet allows none', async () => {
+  it('draws the button in the heading row when one entry is changeable', async () => {
+    const fixture = await render(
+      row([
+        entry({ demandEditable: false }),
+        entry({
+          lineId: 'zl-2',
+          listId: 'l-basics',
+          demandEditable: false,
+        }),
+      ]),
+      { changeable: new Set(['zl-2']) }
+    );
+    let opened = 0;
+    fixture.componentInstance.listsOpened.subscribe(() => (opened += 1));
+
+    const button =
+      html(fixture).querySelector<HTMLButtonElement>('.head .lists-open');
+    button?.click();
+
+    expect(button?.textContent).toContain('basket.lists.open');
+    expect(opened).toBe(1);
+  });
+
+  it('draws the button when one entry has an ask the reader may change', async () => {
     const fixture = await render(two());
 
-    expect(html(fixture).querySelector('.change')).toBeNull();
-    expect(html(fixture).querySelector('.change-all')).toBeNull();
+    expect(html(fixture).querySelector('.head .lists-open')).not.toBeNull();
+  });
+
+  it('draws no button for a guest who can change neither', async () => {
+    const fixture = await render(
+      row([
+        entry({ listId: null, canWrite: false, demandEditable: false }),
+        entry({
+          lineId: 'zl-2',
+          listId: null,
+          canWrite: false,
+          demandEditable: false,
+        }),
+      ]),
+      { lists: new Map() }
+    );
+
+    expect(html(fixture).querySelector('.lists-open')).toBeNull();
   });
 });
 

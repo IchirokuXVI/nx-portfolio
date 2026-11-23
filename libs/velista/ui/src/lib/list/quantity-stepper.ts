@@ -191,8 +191,19 @@ export class QuantityStepper {
    */
   readonly typedMin = input<number | null>(null);
   readonly max = input(LINE_QUANTITY_MAX);
-  /** A write is in flight: both buttons and the field ignore input, and say so. */
+  /**
+   * The amount may not change: a write is in flight, or the reader may not change
+   * it (velista `0200`). Both buttons and the field ignore input and say so with
+   * `aria-disabled`, never the `disabled` attribute, so the stepper stays in the
+   * tab order. The whole capsule is drawn disabled, and a press, Enter or Space on
+   * it is told through {@link disabledPress}, so a host can say why.
+   */
   readonly disabled = input(false);
+  /**
+   * The id of an element that says why the amount may not change, for the
+   * controls' `aria-describedby` (velista `0200`), or null.
+   */
+  readonly describedBy = input<string | null>(null);
   /** A reader: the amount alone, no buttons and no outline (decision I). */
   readonly readonly = input(false);
   /** An add just raised this amount (velista `0170`, decision J). */
@@ -202,6 +213,11 @@ export class QuantityStepper {
   readonly valueChange = output<number>();
   /** The same change with where it came from and whether the hold made it. */
   readonly stepped = output<QuantityStep>();
+  /**
+   * A press, Enter or Space on the stepper while it is {@link disabled} (velista
+   * `0200`): once per gesture, with no {@link stepped} and no {@link valueChange}.
+   */
+  readonly disabledPress = output<void>();
 
   private readonly _localeStore = inject(RokuLocaleStore, { optional: true });
   private readonly _document = inject(DOCUMENT);
@@ -435,6 +451,11 @@ export class QuantityStepper {
    */
   press(direction: 1 | -1, event?: MouseEvent): void {
     const pointer = (event?.detail ?? 1) !== 0;
+    if (this.disabled()) {
+      // A press, Enter or Space on a disabled stepper steps nothing and is told.
+      this.disabledPress.emit();
+      return;
+    }
     if (!pointer) {
       // A key press of a button; a pointer's press cleared it on pointerdown, before
       // the blur that may have said why a typed count was held.
@@ -550,6 +571,12 @@ export class QuantityStepper {
 
   /** Arrow keys, Home and End on the sheet's field (the APG spinbutton pattern). */
   onFieldKey(event: KeyboardEvent): void {
+    if (this.disabled() && (event.key === 'Enter' || event.key === ' ')) {
+      // The field takes no click from a key, so the press is told here.
+      event.preventDefault();
+      this.disabledPress.emit();
+      return;
+    }
     if (event.key === 'Escape' && this._refusal() !== null) {
       // The popover goes, and the Escape goes no further: the sheet stays open.
       event.preventDefault();
@@ -597,6 +624,13 @@ export class QuantityStepper {
           (event.target as HTMLInputElement).value = this.words().figure;
         }
         return;
+    }
+  }
+
+  /** A press on the sheet's field while {@link disabled} is told once. */
+  onFieldClick(): void {
+    if (this.disabled()) {
+      this.disabledPress.emit();
     }
   }
 

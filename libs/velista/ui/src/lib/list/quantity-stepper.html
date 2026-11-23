@@ -10,6 +10,7 @@
   </span>
 } @else {
   <span
+    [attr.aria-disabled]="!typed() && disabled() ? 'true' : null"
     [attr.aria-label]="
       typed() ? null : ('amount.group' | rokuT: { name: name() })
     "
@@ -24,6 +25,7 @@
       (pointercancel)="endHold($event)"
       (pointerdown)="startHold(-1, $event)"
       (pointerup)="endHold($event)"
+      [attr.aria-describedby]="describedBy()"
       [attr.aria-disabled]="disabled() || minusAtEnd() ? 'true' : null"
       [attr.aria-label]="
         'amount.less' | rokuT: { step: lessStep(), name: name() }
@@ -46,9 +48,11 @@
         <span [attr.data-text]="fieldText()" class="field">
           <input
             (blur)="onFieldBlur($event)"
+            (click)="onFieldClick()"
             (focus)="onFieldFocus($event)"
             (input)="onFieldInput($event)"
             (keydown)="onFieldKey($event)"
+            [attr.aria-describedby]="describedBy()"
             [attr.aria-disabled]="disabled() ? 'true' : null"
             [attr.aria-label]="
               fieldName() ?? ('amount.group' | rokuT: { name: name() })
@@ -86,6 +90,7 @@
       (pointercancel)="endHold($event)"
       (pointerdown)="startHold(1, $event)"
       (pointerup)="endHold($event)"
+      [attr.aria-describedby]="describedBy()"
       [attr.aria-disabled]="disabled() || plusAtEnd() ? 'true' : null"
       [attr.aria-label]="
         'amount.more' | rokuT: { step: moreStep(), name: name() }

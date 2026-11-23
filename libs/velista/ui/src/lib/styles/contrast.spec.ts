@@ -193,6 +193,18 @@ describe('contrast', () => {
       }
     );
 
+    // Velista `0200`: on the sheet, a list's product line in the quiet amber where it
+    // is not the row's product, and the number of a disabled stepper in muted text.
+    // Named, so a later change to either colour names the detailed view when it fails.
+    it.each(['--app-action-quiet-fg', '--app-text-muted'])(
+      `the detailed view's %s reaches ${TEXT}:1 on the sheet`,
+      (text) => {
+        expect(
+          ratio(text, '--app-surface-raised', theme)
+        ).toBeGreaterThanOrEqual(TEXT);
+      }
+    );
+
     // Rule T2: never place white or light text on an action fill. `--app-action-fg`
     // exists so this cannot be gotten wrong by accident, and this is what proves
     // it across every state of the button, not just its resting one.

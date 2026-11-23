@@ -2481,8 +2481,8 @@ export class BasketPage {
    * 5), because the same product reaches the basket from several lists.
    *
    * The words are the line's own, and the list above them is named only where
-   * this reader was served that list. How many is the
-   * entry's `left`, and the stepper moves only where the server says that entry's
+   * this reader was served that list. How many is the entry's whole ask,
+   * `asked` (velista `0200`), and the stepper moves only where the server says that entry's
    * demand may change. While a write to its row is in flight the stepper is
    * disabled, as the row's own is, because the demand write is not optimistic and
    * a second press would resend the same step. A group is held by nothing here: a basket row names products,
@@ -2513,7 +2513,7 @@ export class BasketPage {
             // its write until that answers (velista `0188`).
             quantity: this._holdingRuns.shown(
               entry.lineId,
-              this._sending().get(entry.lineId)?.to ?? entry.left
+              this._sending().get(entry.lineId)?.to ?? entry.asked
             ),
             unit: entry.unit,
             // The line's step over every product it holds, as its list steps
@@ -2581,10 +2581,11 @@ export class BasketPage {
 
   /**
    * One run of a card's stepper, as one list's demand (velista `0101`, section 2):
-   * the write the settle sheet makes, `POST rows/{lineId}/demand`, with the run's
-   * `from` and its last `to`, and the same sentences after it. It is sent under the
-   * line itself (backend `0201`), because a row's key can change under the panel
-   * while somebody else adds or settles.
+   * `POST rows/{lineId}/demand` with the run's last `to` as the list's new whole
+   * ask, and the entry's `left` the run started from as `from` (backend `0274`,
+   * velista `0200`), and the same sentences after it. It is sent under the line
+   * itself (backend `0201`), because a row's key can change under the panel while
+   * somebody else adds or settles.
    */
   private async _sendHolding(
     holding: SuggestionHolding,
@@ -2596,8 +2597,15 @@ export class BasketPage {
     const sending = { to: run.to };
     const lineId = holding.lineId;
     this._sending.update((all) => new Map(all).set(lineId, sending));
+    // The run started from an ask; the route checks the line's `left`, which is
+    // that ask less what this basket's buys met of it.
+    const entry = this._store
+      .rowFor(lineId)
+      ?.entries.find((held) => held.lineId === lineId);
+    const met = entry === undefined ? 0 : entry.asked - entry.left;
+    const from = Math.max(0, run.from - met);
     const result = await this._store
-      .setDemand({ lineId, quantity: run.to, from: run.from })
+      .setDemand({ lineId, quantity: run.to, from })
       .finally(() =>
         this._sending.update((all) => {
           if (all.get(lineId) !== sending) {

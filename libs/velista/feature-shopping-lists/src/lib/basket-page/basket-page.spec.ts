@@ -4455,6 +4455,50 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
     });
   });
 
+  it('shows the whole ask and sends the new whole ask, never what is left (velista 0200)', async () => {
+    const { fixture } = await render({
+      lines: [
+        line('Milk', {
+          productId: 'item-milk',
+          entries: [entry('l-groceries', 'zl-1', 1, { bought: 2, asked: 3 })],
+        }),
+      ],
+      served: SERVED,
+    });
+    const page = fixture.componentInstance as unknown as CardSurface;
+    const store = TestBed.inject(BasketStore) as unknown as {
+      setDemand: jest.Mock;
+    };
+
+    // Asks 3 with 2 bought, so 1 is left: the card shows 3.
+    expect(
+      page
+        .holdingsOf()(MILK)
+        .map((held) => held.quantity)
+    ).toEqual([3]);
+
+    jest.useFakeTimers();
+    try {
+      page.changeHolding({
+        holding: { lineId: 'zl-1' },
+        from: 3,
+        to: 4,
+        repeat: false,
+      });
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+    } finally {
+      jest.useRealTimers();
+    }
+
+    // One plus sends the whole ask 4, never 2, with the left the run started from.
+    expect(store.setDemand).toHaveBeenCalledTimes(1);
+    expect(store.setDemand).toHaveBeenCalledWith({
+      lineId: 'zl-1',
+      quantity: 4,
+      from: 1,
+    });
+  });
+
   it('keeps drawing the run’s amount until its demand write answers', async () => {
     const { fixture } = await render({ lines: [milk()], served: SERVED });
     const page = fixture.componentInstance as unknown as CardSurface;

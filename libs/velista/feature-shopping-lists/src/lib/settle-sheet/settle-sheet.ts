@@ -75,12 +75,10 @@ import {
 } from '../basket-labels';
 import { basketLineStep } from '../basket-line-step';
 import { basketPath, settleSheetPath, shopAskPath } from '../basket-paths';
-import {
-  changeableLineIds,
-  changeSheetPath,
-} from '../change-sheet/change-targets';
+import { changeableLineIds } from '../change-sheet/change-targets';
 import { HeldBuy } from '../held-buy';
 import { RowEntries, type OtherListsState } from '../row-entries/row-entries';
+import { rowListsPath } from '../row-lists-sheet/row-lists-path';
 
 /**
  * Which pane of the sheet is showing.
@@ -859,9 +857,11 @@ export class SettleSheet {
   }
 
   /**
-   * The lines Change is drawn on (velista `0140`, section 1): those the reader
-   * may edit, on lists they were served, of a row with a product that is not
-   * crossed out. None for a guest or once the trip is over.
+   * The lines whose product the reader may change (velista `0140`, section 1):
+   * those the reader may edit, on lists they were served, of a row with a
+   * product that is not crossed out. None for a guest or once the trip is over.
+   * The detailed view changes them; here they decide whether "Lists and amounts"
+   * is drawn (velista `0200`).
    */
   protected readonly changeable = computed<ReadonlySet<string>>(() => {
     const row = this.row();
@@ -876,29 +876,17 @@ export class SettleSheet {
     );
   });
 
-  /** Change on one list: the change sheet, pushed over this one. */
-  protected changeLine(lineId: string): void {
-    this._openChange(lineId);
-  }
-
-  /** "Change for all lists". */
-  protected changeAll(): void {
-    this._openChange(null);
-  }
-
-  private _openChange(lineId: string | null): void {
+  /**
+   * "Lists and amounts": the detailed view of the row's lists, pushed over this
+   * sheet, so its back pops onto this one (velista `0200`, target state 1).
+   */
+  protected openLists(): void {
     const row = this.row();
     if (row === null) {
       return;
     }
     void this._router.navigateByUrl(
-      changeSheetPath(
-        this._locale(),
-        this._basePath,
-        this._address(),
-        row.rowKey,
-        lineId
-      )
+      rowListsPath(this._locale(), this._basePath, this._address(), row.rowKey)
     );
   }
 

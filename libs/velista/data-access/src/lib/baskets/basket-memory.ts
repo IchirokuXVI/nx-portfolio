@@ -1419,6 +1419,10 @@ export class BasketMemory implements BasketServiceI {
    * basket**: it is absent from the answer. And a line at zero that the basket
    * does not draw is raised here (backend `0201`, "What the build decided", point
    * 2), which is how "Add it to another list" asks a list for a product it holds.
+   *
+   * `quantity` is the list's **whole** ask, and `from` the entry's `left`
+   * (backend `0274`): the line keeps what the ask is above this basket's buys of
+   * it, and an ask below them leaves the line at 0.
    */
   async setDemand(
     _basketId: string,
@@ -1449,7 +1453,7 @@ export class BasketMemory implements BasketServiceI {
     }
     this._requireFrom(body.from, entry.left);
 
-    line.quantity = body.quantity;
+    line.quantity = Math.max(0, body.quantity - entry.bought);
     this._moved(line.id);
     this._announce([line.id], true);
     return this._result([line.id]);

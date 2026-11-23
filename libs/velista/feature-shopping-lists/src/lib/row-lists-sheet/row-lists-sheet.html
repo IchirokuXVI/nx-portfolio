@@ -1,0 +1,161 @@
+<lib-sheet-shell (dismiss)="close()" labelledBy="row-lists-title">
+  <!--
+    The chevron beside the title (velista 0200, the mock's boards Detail and
+    DetailAll), as the shop picker draws it: this sheet is reached from the row's
+    sheet, so the way back is a control here. It pops onto that sheet.
+  -->
+  <div class="head">
+    <button
+      (click)="close()"
+      [attr.aria-label]="'basket.lists.back' | rokuT"
+      class="back"
+      type="button"
+    >
+      <lib-chevron-left-icon class="back-glyph" />
+    </button>
+    <h2 class="title" id="row-lists-title">
+      {{ 'basket.lists.title' | rokuT }}
+    </h2>
+  </div>
+
+  <!-- What the view is for, on every visit, in the sheets' secondary text. -->
+  <p class="description">{{ 'basket.lists.description' | rokuT }}</p>
+
+  <!--
+    The row's product, as the product card's compact row draws it, with "Change
+    for all lists" under it when two lists or more may change.
+  -->
+  @if (product(); as top) {
+    <div [class.has-all]="changesAll()" class="product">
+      <lib-product-picture
+        [imageUrl]="top.imageUrl"
+        [zoom]="top.name"
+        class="product-picture"
+        loading="eager"
+      />
+      <span class="product-what">
+        <span class="product-name">{{ top.name }}</span>
+        @if (top.detail; as detail) {
+          <span class="product-detail">{{ detail }}</span>
+        }
+      </span>
+      @if (top.price; as price) {
+        <span class="product-price">
+          <span class="product-amount">{{ price }}</span>
+          @if (top.perKilo; as perKilo) {
+            <span class="product-per">{{ perKilo }}</span>
+          }
+        </span>
+      }
+      @if (changesAll()) {
+        <button (click)="change(null)" class="change-all" type="button">
+          {{ 'basket.change.all' | rokuT }}
+        </button>
+      }
+    </div>
+  }
+
+  <section class="entries">
+    <div class="rows-head">
+      <h3 class="heading">{{ 'basket.lists.heading' | rokuT }}</h3>
+    </div>
+
+    <ul class="rows">
+      @for (list of lists(); track list.lineId) {
+        <li #rowElement class="row">
+          <div class="row-top">
+            <span class="row-label">
+              <span class="row-name">{{ list.list }}</span>
+              @if (list.where; as where) {
+                <span class="row-where">{{ where }}</span>
+              }
+              <span class="row-bought">{{ list.bought }}</span>
+            </span>
+
+            <!--
+              What the list asks for, as a whole. Disabled where the reader may not
+              change it: still in the tab order, and a press says why.
+            -->
+            <span #anchor class="anchor">
+              <lib-quantity-stepper
+                (disabledPress)="explain(list)"
+                (stepped)="stepAsk(list.lineId, $event)"
+                [describedBy]="list.reason === null ? null : list.reasonId"
+                [disabled]="!list.editable"
+                [fieldName]="list.label"
+                [min]="0"
+                [name]="list.name"
+                [step]="list.step"
+                [unit]="unit()"
+                [value]="list.shown"
+                [variant]="unit() === 'UNIT' ? 'sheet-narrow' : 'sheet'"
+                class="ask"
+              />
+            </span>
+            @if (list.reason; as reason) {
+              <span [id]="list.reasonId" class="visually-hidden">{{
+                reason
+              }}</span>
+              @if (explained() === list.lineId) {
+                <lib-anchored-popover
+                  (closed)="unexplain(list.lineId)"
+                  [keepInSight]="rowElement"
+                  [open]="true"
+                  [origin]="anchor"
+                  [pointer]="true"
+                  [role]="null"
+                  align="end"
+                  frame="note"
+                >
+                  <p class="why">{{ reason }}</p>
+                </lib-anchored-popover>
+              }
+            }
+          </div>
+
+          <!--
+            The list's product on one line: its picture, its name, then its brand
+            and size, which are never cut. In the quiet amber when it is not the
+            row's product. The line is not a control; "Change" is.
+          -->
+          @if (list.product; as held) {
+            <div [class.differs]="held.differs" class="line-product">
+              <lib-product-picture
+                [imageUrl]="held.imageUrl"
+                [zoom]="held.name"
+                class="line-picture"
+              />
+              <span class="line-text">
+                <span class="line-name">{{ held.name }}</span>
+                @if (held.brandSize; as brandSize) {
+                  <span class="line-brand">{{ brandSize }}</span>
+                }
+              </span>
+              @if (list.changeable) {
+                <button
+                  (click)="change(list.lineId)"
+                  [attr.aria-label]="list.changeLabel"
+                  class="change"
+                  type="button"
+                >
+                  {{ 'basket.lists.change' | rokuT }}
+                </button>
+              }
+            </div>
+          }
+        </li>
+      }
+    </ul>
+  </section>
+
+  @if (failure(); as failed) {
+    <p aria-live="assertive" class="failed" role="alert">
+      {{ failed.key | rokuT: { count: failed.count } }}
+      @if (failed.correlationId; as reference) {
+        <span class="reference">
+          {{ 'basket.error.reference' | rokuT: { correlationId: reference } }}
+        </span>
+      }
+    </p>
+  }
+</lib-sheet-shell>

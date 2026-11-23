@@ -355,8 +355,18 @@ function basketSheetRoutes(options: { finish: boolean }): Route[] {
           (m) => m.SettleSheet
         ),
     }),
+    // The detailed view of a row's lists (velista `0200`): what each list
+    // asks for, and the change of its product. The settle sheet opens it, and
+    // its back pops onto the settle sheet.
+    sheet({
+      path: 'rows/:rowKey/lists',
+      loadComponent: () =>
+        import('@portfolio/velista/feature-shopping-lists').then(
+          (m) => m.RowListsSheet
+        ),
+    }),
     // Take another product for one list of a row, or for every list the reader
-    // may change (velista `0140`, section 2). The settle sheet opens both, and the
+    // may change (velista `0140`, section 2). The detailed view opens both, and the
     // cheaper mark of a row the second. Which lines it may change is the sheet's
     // to decide, from the reader and the row, so neither carries a guard.
     sheet({

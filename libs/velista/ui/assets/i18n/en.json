@@ -2148,6 +2148,17 @@
       "gotAtShopAmount": "Got {{amount}} today at {{- price}}, at {{- shop}}.",
       "gotAllAmount": "Got all {{amount}}",
       "gotOtherAmount": "Got the other {{amount}}"
+    },
+    "lists": {
+      "open": "Lists and amounts",
+      "title": "Lists and amounts",
+      "back": "Back",
+      "description": "Here you change the amount and the product of each list. What you bought goes on the previous screen.",
+      "heading": "What each list asks for",
+      "bought": "Bought {{bought}} of {{asked}}",
+      "change": "Change",
+      "notInGroup": "This list belongs to a group you are not in. Only its members can change what it asks for.",
+      "ownGroup": "Only members of {{- group}} can change what this list asks for."
     }
   },
   "getList": {
