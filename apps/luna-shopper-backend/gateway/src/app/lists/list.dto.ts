@@ -34,6 +34,7 @@ import {
   MinLength,
   NotEquals,
   registerDecorator,
+  ValidateIf,
   ValidateNested,
   type ValidationArguments,
 } from 'class-validator';
@@ -389,6 +390,20 @@ export class AddLineQuantityDto {
 
   @RequiredLineUnit()
   unit!: LineUnit;
+
+  @ApiPropertyOptional({
+    description:
+      "Count the units bought above the ask in open shopping lists toward this raise. Only the zone list's rows send it.",
+  })
+  // Absent is allowed and null is not: `@IsOptional` would let a null through
+  // to core, whose schema refuses it with an error that is not this route's
+  // 400. Only a JSON true or false passes.
+  @ValidateIf((_, value) => value !== undefined)
+  // As the body spelled it: the pipe's implicit conversion reads the string
+  // "false" as true, and only a JSON boolean counts (plan 0275).
+  @Transform(({ obj }: { obj: Record<string, unknown> }) => obj?.['countExtra'])
+  @IsBoolean()
+  countExtra?: boolean;
 }
 
 export class UpdateLineDto {

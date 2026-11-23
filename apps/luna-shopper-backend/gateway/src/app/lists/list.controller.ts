@@ -30,6 +30,7 @@ import {
   COMMENT_PATTERNS,
   LINE_PATTERNS,
   LIST_PATTERNS,
+  type AddLineQuantityResult,
   type AddLineResult,
   type CommentAudioView,
   type CommentPage,
@@ -614,6 +615,11 @@ export class LinesController {
    * five now" is available from the response plus what the caller already had; a
    * bespoke envelope on one route out of ten would be a cost paid by every reader
    * of the API for a subtraction.
+   *
+   * With `countExtra: true` (plan 0275), the zone list's raise counts the
+   * units bought above the ask in open shopping lists first, and the answer
+   * carries `extra`: how many were above the ask, how many it counted, and
+   * who bought them, as user ids.
    */
   @Post(':id/quantity')
   @ApiContractResponse(LINE_PATTERNS.addQuantity, {
@@ -624,13 +630,15 @@ export class LinesController {
     @AuthUser() user: CurrentUser,
     @UuidParam('id') id: string,
     @Body() dto: AddLineQuantityDto
-  ): Promise<LineView> {
-    return this.nats.send<LineView>(LINE_PATTERNS.addQuantity, {
+  ): Promise<AddLineQuantityResult> {
+    return this.nats.send<AddLineQuantityResult>(LINE_PATTERNS.addQuantity, {
       userId: user.userId,
       lineId: id,
       delta: dto.delta,
       // Required (plan 0246 M8), and checked against the line by core.
       unit: dto.unit,
+      // Optional (plan 0275): absent is the plain delta.
+      countExtra: dto.countExtra,
     });
   }
 

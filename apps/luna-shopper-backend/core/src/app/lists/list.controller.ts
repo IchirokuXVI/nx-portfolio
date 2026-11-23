@@ -6,6 +6,7 @@ import {
   LIST_PATTERNS,
   type AddCommentRequest,
   type AddLineQuantityRequest,
+  type AddLineQuantityResult,
   type AddLineRequest,
   type AddLineResult,
   type AddLinesRequest,
@@ -126,7 +127,9 @@ export class ListController {
   }
 
   @MessagePattern(LINE_PATTERNS.addQuantity)
-  addLineQuantity(@Payload() req: AddLineQuantityRequest): Promise<LineView> {
+  addLineQuantity(
+    @Payload() req: AddLineQuantityRequest
+  ): Promise<AddLineQuantityResult> {
     return this.lines.addQuantity(req);
   }
 

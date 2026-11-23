@@ -3341,6 +3341,92 @@ describe('a line counts in a unit (plan 0246)', () => {
     expect(validateMessageRequest('line.settle', settle).valid).toBe(false);
   });
 
+  describe('a raise that counts the extra (plan 0275)', () => {
+    const delta = { userId: 'u', lineId: 'l', delta: 2, unit: 'UNIT' };
+    const line = {
+      id: 'l',
+      listId: 'li',
+      content: 'Milk',
+      quantity: 1,
+      unit: 'UNIT',
+      itemIds: [],
+      itemSetHash: null,
+      productGroupId: null,
+      groupItemIds: [],
+      favoriteItemId: null,
+      preferredSupermarketId: null,
+      named: true,
+      position: 1,
+      approvalStatus: 'APPROVED',
+      createdByUserId: 'u',
+      approvedByUserId: 'u',
+      version: 2,
+      boughtCount: 4,
+      lastSettlementOutcome: 'BOUGHT',
+      claimed: false,
+      claimedByUserId: null,
+      commentCount: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    it('accepts countExtra as a boolean and nothing else', () => {
+      for (const countExtra of [true, false]) {
+        expect(
+          validateMessageRequest('line.addQuantity', { ...delta, countExtra })
+            .valid
+        ).toBe(true);
+      }
+      expect(
+        validateMessageRequest('line.addQuantity', {
+          ...delta,
+          countExtra: 'true',
+        }).valid
+      ).toBe(false);
+    });
+
+    it('answers the line with and without extra', () => {
+      expect(validateMessageResponse('line.addQuantity', line).valid).toBe(
+        true
+      );
+      expect(
+        validateMessageResponse('line.addQuantity', {
+          ...line,
+          extra: {
+            above: 3,
+            counted: 2,
+            buyers: [{ userId: 'u' }, { userId: null }],
+          },
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageResponse('line.addQuantity', {
+          ...line,
+          extra: { above: 0, counted: 0, buyers: [] },
+        }).valid
+      ).toBe(true);
+    });
+
+    it('refuses an extra that names a participant or misses a field', () => {
+      expect(
+        validateMessageResponse('line.addQuantity', {
+          ...line,
+          extra: {
+            above: 1,
+            counted: 1,
+            buyers: [{ userId: 'u', participantId: 'p' }],
+          },
+        }).valid
+      ).toBe(false);
+      expect(
+        validateMessageResponse('line.addQuantity', {
+          ...line,
+          extra: { above: 1, buyers: [] },
+        }).valid
+      ).toBe(false);
+    });
+  });
+
   it('a purchase entry states what it bought per unit and whether its spend is an estimate', () => {
     const entry = {
       id: 'e',

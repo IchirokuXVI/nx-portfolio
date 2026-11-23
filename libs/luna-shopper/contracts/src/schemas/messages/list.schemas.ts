@@ -33,6 +33,9 @@ export const LIST_SCHEMA_IDS = {
   listAccessView: schemaId('list/ListAccessView'),
   lineView: schemaId('list/LineView'),
   updateLineResult: schemaId('list/UpdateLineResult'),
+  countedExtraBuyer: schemaId('list/CountedExtraBuyer'),
+  countedExtra: schemaId('list/CountedExtra'),
+  addLineQuantityResult: schemaId('list/AddLineQuantityResult'),
   addLineResult: schemaId('list/AddLineResult'),
   addLineResultList: schemaId('list/AddLineResultList'),
   lineClaimRef: schemaId('list/LineClaimRef'),
@@ -254,6 +257,33 @@ const lineView = object(
 const updateLineResult = object(
   LIST_SCHEMA_IDS.updateLineResult,
   { ...lineViewProperties, absorbedLineId: nonEmptyString() },
+  lineViewRequired
+);
+
+// What a raise with `countExtra` counted (plan 0275, section 8): the units
+// above the ask before the write, the units it moved into the ask, and who
+// bought them, as user ids. Core serves no name, no participant and no basket
+// here; a guest's buy is the owner of the basket the guest bought through.
+const countedExtraBuyer = object(
+  LIST_SCHEMA_IDS.countedExtraBuyer,
+  { userId: nullableString() },
+  ['userId']
+);
+const countedExtra = object(
+  LIST_SCHEMA_IDS.countedExtra,
+  {
+    above: integer({ minimum: 0 }),
+    counted: integer({ minimum: 0 }),
+    buyers: array(ref(LIST_SCHEMA_IDS.countedExtraBuyer)),
+  },
+  ['above', 'counted', 'buyers']
+);
+// What a delta answers: the line as it now stands, and `extra` only when the
+// request carried `countExtra: true` (plan 0275). Optional, so every other
+// caller reads the line view it always read.
+const addLineQuantityResult = object(
+  LIST_SCHEMA_IDS.addLineQuantityResult,
+  { ...lineViewProperties, extra: ref(LIST_SCHEMA_IDS.countedExtra) },
   lineViewRequired
 );
 
@@ -643,6 +673,9 @@ const addLineQuantityRequest = object(
     // What the line holds, and not a write, so it has no ceiling: a line stored
     // above the ceiling is still stepped down (plan 0262, 2026-11-17).
     expect: integer({ minimum: 0 }),
+    // Optional (plan 0275): the zone list's raise counts the units bought
+    // above the ask first. A JSON boolean only.
+    countExtra: boolean(),
   },
   ['userId', 'lineId', 'delta', 'unit']
 );
@@ -1088,6 +1121,9 @@ export const listSchemas: JsonSchema[] = [
   listAccessView,
   lineView,
   updateLineResult,
+  countedExtraBuyer,
+  countedExtra,
+  addLineQuantityResult,
   addLineResult,
   addLineResultList,
   lineClaimRef,
@@ -1211,7 +1247,7 @@ export const listMessageContracts: Record<
   },
   [LINE_PATTERNS.addQuantity]: {
     request: LIST_SCHEMA_IDS.addLineQuantityRequest,
-    response: LIST_SCHEMA_IDS.lineView,
+    response: LIST_SCHEMA_IDS.addLineQuantityResult,
   },
   [LINE_PATTERNS.setApproval]: {
     request: LIST_SCHEMA_IDS.setApprovalRequest,
