@@ -337,14 +337,17 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(tos(h)).toEqual([3, 4]);
     });
 
-    it.each(['pointerleave', 'pointercancel'])('stops on %s', (type) => {
-      const h = render({ value: 2 });
-      fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(700);
-      fire(h.plus, type);
-      jest.advanceTimersByTime(3000);
-      expect(tos(h)).toEqual([3, 4]);
-    });
+    it.each(['pointerup', 'pointercancel', 'lostpointercapture'])(
+      'stops on %s',
+      (type) => {
+        const h = render({ value: 2 });
+        fire(h.plus, 'pointerdown');
+        jest.advanceTimersByTime(700);
+        fire(h.plus, type);
+        jest.advanceTimersByTime(3000);
+        expect(tos(h)).toEqual([3, 4]);
+      }
+    );
 
     it('stops when the page scrolls, and the release after it adds nothing', () => {
       const h = render({ value: 2 });
@@ -431,6 +434,340 @@ describe('QuantityStepper (velista 0188)', () => {
       fire(h.minus, 'pointerdown');
       jest.advanceTimersByTime(2000);
       expect(h.steps).toEqual([]);
+    });
+  });
+
+  describe('a held step goes on until the finger lifts (velista 0193)', () => {
+    /** A pointer event with the fields the stepper reads. */
+    const pointer = (
+      target: EventTarget,
+      type: string,
+      fields: Record<string, unknown> = {}
+    ) => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.assign(event, { pointerId: 7, isPrimary: true, button: 0 });
+      Object.assign(event, fields);
+      target.dispatchEvent(event);
+      return event;
+    };
+
+    /** A touch move on the button, as the browser sends it while the finger moves. */
+    const touchMove = (target: EventTarget) => {
+      const event = new Event('touchmove', { bubbles: true, cancelable: true });
+      target.dispatchEvent(event);
+      return event;
+    };
+
+    const selectStart = (target: EventTarget) => {
+      const event = new Event('selectstart', {
+        bubbles: true,
+        cancelable: true,
+      });
+      target.dispatchEvent(event);
+      return event;
+    };
+
+    /** The button's box on the page, which jsdom does not lay out. */
+    const placeAt = (button: HTMLElement) => {
+      button.getBoundingClientRect = () =>
+        ({
+          left: 100,
+          right: 148,
+          top: 200,
+          bottom: 248,
+          width: 48,
+          height: 48,
+          x: 100,
+          y: 200,
+        }) as DOMRect;
+    };
+
+    it('keeps repeating after a pointerleave, and pointerup ends it', () => {
+      const h = render({ value: 2 });
+      pointer(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(400);
+      pointer(h.plus, 'pointerleave');
+      jest.advanceTimersByTime(300 + 255);
+      expect(tos(h)).toEqual([3, 4, 5]);
+      pointer(h.plus, 'pointerup', { clientX: 0, clientY: 0 });
+      pointerClick(h.plus);
+      jest.advanceTimersByTime(3000);
+      expect(tos(h)).toEqual([3, 4, 5]);
+    });
+
+    it('cancels a touch move once the hold repeated, and not before', () => {
+      const h = render({ value: 2 });
+      pointer(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(399);
+      expect(touchMove(h.plus).defaultPrevented).toBe(false);
+      jest.advanceTimersByTime(1);
+      expect(touchMove(h.plus).defaultPrevented).toBe(true);
+      // Also once the repeat stopped on its own: the finger is still down.
+      h.set('disabled', true);
+      jest.advanceTimersByTime(3000);
+      expect(touchMove(h.plus).defaultPrevented).toBe(true);
+    });
+
+    it('lets a swipe before the first repeat scroll, and its cancel steps nothing', () => {
+      const h = render({ value: 2 });
+      pointer(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(150);
+      expect(touchMove(h.plus).defaultPrevented).toBe(false);
+      pointer(h.plus, 'pointercancel');
+      jest.advanceTimersByTime(3000);
+      expect(h.steps).toEqual([]);
+    });
+
+    it('captures the pointer on pointerdown of a button that is not at an end', () => {
+      const h = render({ value: 2 });
+      const capture = jest.fn();
+      h.plus.setPointerCapture = capture;
+      pointer(h.plus, 'pointerdown');
+      expect(capture).toHaveBeenCalledWith(7);
+      const atEnd = jest.fn();
+      h.set('value', 0);
+      h.minus.setPointerCapture = atEnd;
+      pointer(h.minus, 'pointerdown');
+      expect(atEnd).not.toHaveBeenCalled();
+    });
+
+    it('holds on when the capture throws for a pointer that is gone', () => {
+      const h = render({ value: 2 });
+      h.plus.setPointerCapture = () => {
+        throw new DOMException('gone', 'NotFoundError');
+      };
+      pointer(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(400);
+      expect(tos(h)).toEqual([3]);
+    });
+
+    it.each(['mouse', 'pen'])(
+      'steps nothing for a %s press released off the button before the first repeat',
+      (pointerType) => {
+        const h = render({ value: 2 });
+        placeAt(h.plus);
+        pointer(h.plus, 'pointerdown', {
+          pointerType,
+          clientX: 120,
+          clientY: 220,
+        });
+        jest.advanceTimersByTime(200);
+        pointer(h.plus, 'pointerup', {
+          pointerType,
+          clientX: 120,
+          clientY: 300,
+        });
+        pointerClick(h.plus);
+        expect(h.steps).toEqual([]);
+        // A key click is a new gesture and still steps.
+        keyClick(h.plus);
+        expect(tos(h)).toEqual([3]);
+      }
+    );
+
+    it('steps for a touch tap whose contact lands a few pixels past the button', () => {
+      const h = render({ value: 2 });
+      placeAt(h.plus);
+      pointer(h.plus, 'pointerdown', {
+        pointerType: 'touch',
+        clientX: 146,
+        clientY: 246,
+      });
+      jest.advanceTimersByTime(120);
+      pointer(h.plus, 'pointerup', {
+        pointerType: 'touch',
+        clientX: 152,
+        clientY: 251,
+      });
+      pointerClick(h.plus);
+      expect(tos(h)).toEqual([3]);
+    });
+
+    it('steps once for a press that wandered and came back onto the button', () => {
+      const h = render({ value: 2 });
+      placeAt(h.plus);
+      pointer(h.plus, 'pointerdown', { clientX: 120, clientY: 220 });
+      pointer(h.plus, 'pointerleave', { clientX: 120, clientY: 300 });
+      jest.advanceTimersByTime(200);
+      pointer(h.plus, 'pointerup', { clientX: 140, clientY: 240 });
+      pointerClick(h.plus);
+      expect(tos(h)).toEqual([3]);
+    });
+
+    it('steps on the next press after one released off the button', () => {
+      const h = render({ value: 2 });
+      placeAt(h.plus);
+      const mouse = { pointerType: 'mouse', clientY: 220 };
+      pointer(h.plus, 'pointerdown', { ...mouse, clientX: 120 });
+      pointer(h.plus, 'pointerup', { ...mouse, clientX: 400 });
+      pointerClick(h.plus);
+      pointer(h.plus, 'pointerdown', { ...mouse, clientX: 120 });
+      pointer(h.plus, 'pointerup', { ...mouse, clientX: 120 });
+      pointerClick(h.plus);
+      expect(tos(h)).toEqual([3]);
+    });
+
+    it('lets a second finger on the other button keep the hold of the first one', () => {
+      const h = render({ value: 5 });
+      placeAt(h.plus);
+      const first = { pointerId: 1, pointerType: 'touch' };
+      const second = { pointerId: 2, pointerType: 'touch', isPrimary: false };
+      pointer(h.plus, 'pointerdown', { ...first, clientX: 120, clientY: 220 });
+      jest.advanceTimersByTime(400);
+      expect(tos(h)).toEqual([6]);
+      pointer(h.minus, 'pointerdown', second);
+      pointer(h.minus, 'pointerup', { ...second, clientX: 20, clientY: 220 });
+      // Chrome captures a touch on its own, so its capture is lost after the lift.
+      pointer(h.minus, 'lostpointercapture', second);
+      pointerClick(h.minus);
+      // As in velista 0188: the second finger stops the repeat and its click adds
+      // nothing. The first finger's touch is still claimed and selects nothing.
+      jest.advanceTimersByTime(2000);
+      expect(tos(h)).toEqual([6]);
+      expect(touchMove(h.plus).defaultPrevented).toBe(true);
+      expect(touchMove(h.minus).defaultPrevented).toBe(false);
+      expect(selectStart(document.body).defaultPrevented).toBe(true);
+      pointer(h.plus, 'pointerup', { ...first, clientX: 120, clientY: 300 });
+      pointerClick(h.plus);
+      expect(tos(h)).toEqual([6]);
+      expect(touchMove(h.plus).defaultPrevented).toBe(false);
+      expect(selectStart(document.body).defaultPrevented).toBe(false);
+    });
+
+    it('steps both taps of two fingers before the first repeat', () => {
+      const h = render({ value: 5 });
+      placeAt(h.plus);
+      // A pen holds plus, so the off box rule applies to the first pointer.
+      const first = { pointerId: 1, pointerType: 'pen' };
+      const second = { pointerId: 2, pointerType: 'touch', isPrimary: false };
+      pointer(h.plus, 'pointerdown', { ...first, clientX: 120, clientY: 220 });
+      jest.advanceTimersByTime(150);
+      // The second finger's lift is far outside the plus box: it is not measured
+      // against it, and it does not end the first finger's hold.
+      pointer(h.minus, 'pointerdown', second);
+      pointer(h.minus, 'pointerup', { ...second, clientX: 20, clientY: 220 });
+      // Chrome captures a touch on its own, so its capture is lost after the lift.
+      pointer(h.minus, 'lostpointercapture', second);
+      pointerClick(h.minus);
+      expect(tos(h)).toEqual([4]);
+      expect(selectStart(document.body).defaultPrevented).toBe(true);
+      pointer(h.plus, 'pointerup', { ...first, clientX: 130, clientY: 230 });
+      pointerClick(h.plus);
+      expect(tos(h)).toEqual([4, 5]);
+    });
+
+    it('listens for touches on the two buttons from the start, not on the document', () => {
+      const h = render({ value: 2 });
+      const added = jest.spyOn(document, 'addEventListener');
+      try {
+        pointer(h.plus, 'pointerdown');
+        jest.advanceTimersByTime(400);
+        expect(
+          added.mock.calls.filter(([type]) => String(type).startsWith('touch'))
+        ).toEqual([]);
+        // A touch that started elsewhere on the page is never cancelled.
+        expect(touchMove(document.body).defaultPrevented).toBe(false);
+        expect(touchMove(h.minus).defaultPrevented).toBe(false);
+        expect(touchMove(h.plus).defaultPrevented).toBe(true);
+      } finally {
+        added.mockRestore();
+      }
+    });
+
+    it('adds its touch listeners non passive on each button, and removes them on destroy', () => {
+      const added = jest.spyOn(HTMLElement.prototype, 'addEventListener');
+      const removed = jest.spyOn(HTMLElement.prototype, 'removeEventListener');
+      try {
+        const h = render({ value: 2 });
+        const touch = (calls: unknown[][]) =>
+          calls.filter(([type]) => String(type).startsWith('touch'));
+        const adds = touch(added.mock.calls);
+        expect(adds.map(([type, , options]) => [type, options])).toEqual([
+          ['touchstart', { passive: false }],
+          ['touchmove', { passive: false }],
+          ['touchstart', { passive: false }],
+          ['touchmove', { passive: false }],
+        ]);
+        h.fixture.destroy();
+        expect(
+          touch(removed.mock.calls).map(([type, fn]) => [type, fn])
+        ).toEqual(adds.map(([type, fn]) => [type, fn]));
+      } finally {
+        added.mockRestore();
+        removed.mockRestore();
+      }
+    });
+
+    it('prevents a selection during a hold, and not after it ended', () => {
+      const h = render({ value: 2 });
+      expect(selectStart(h.el).defaultPrevented).toBe(false);
+      pointer(h.plus, 'pointerdown');
+      expect(selectStart(document.body).defaultPrevented).toBe(true);
+      jest.advanceTimersByTime(1000);
+      expect(selectStart(h.el).defaultPrevented).toBe(true);
+      pointer(h.plus, 'pointerup');
+      expect(selectStart(h.el).defaultPrevented).toBe(false);
+    });
+
+    it('clears a selection that started during the hold, and keeps one from before', () => {
+      const h = render({ value: 2 });
+      const text = document.createElement('p');
+      text.textContent = 'Plátano de Canarias';
+      document.body.appendChild(text);
+      const selectText = () => {
+        const range = document.createRange();
+        range.selectNodeContents(text);
+        document.getSelection()?.removeAllRanges();
+        document.getSelection()?.addRange(range);
+      };
+      try {
+        pointer(h.plus, 'pointerdown');
+        selectText();
+        jest.advanceTimersByTime(400);
+        expect(document.getSelection()?.isCollapsed ?? true).toBe(true);
+        selectText();
+        pointer(h.plus, 'pointerup');
+        expect(document.getSelection()?.isCollapsed ?? true).toBe(true);
+
+        selectText();
+        pointer(h.plus, 'pointerdown');
+        jest.advanceTimersByTime(400);
+        pointer(h.plus, 'pointerup');
+        expect(document.getSelection()?.toString()).toBe('Plátano de Canarias');
+      } finally {
+        document.getSelection()?.removeAllRanges();
+        text.remove();
+      }
+    });
+
+    it.each([
+      ['pointerup', (h: Harness) => pointer(h.plus, 'pointerup')],
+      ['pointercancel', (h: Harness) => pointer(h.plus, 'pointercancel')],
+      ['destroy', (h: Harness) => h.fixture.destroy()],
+    ])('takes its listeners away on %s', (_, end) => {
+      const h = render({ value: 2 });
+      const plus = h.plus;
+      const added = jest.spyOn(document, 'addEventListener');
+      const removed = jest.spyOn(document, 'removeEventListener');
+      try {
+        pointer(h.plus, 'pointerdown');
+        jest.advanceTimersByTime(400);
+        const listeners = added.mock.calls
+          .filter(([type]) => type === 'selectstart')
+          .map(([type, listener]) => [type, listener]);
+        expect(listeners.map(([type]) => type)).toEqual(['selectstart']);
+        end(h);
+        for (const [type, listener] of listeners) {
+          expect(removed).toHaveBeenCalledWith(type, listener, {
+            capture: true,
+          });
+        }
+        expect(touchMove(plus).defaultPrevented).toBe(false);
+        expect(selectStart(document.body).defaultPrevented).toBe(false);
+      } finally {
+        added.mockRestore();
+        removed.mockRestore();
+      }
     });
   });
 
