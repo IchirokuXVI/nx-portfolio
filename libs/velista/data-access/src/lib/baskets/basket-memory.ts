@@ -1742,8 +1742,8 @@ export class BasketMemory implements BasketServiceI {
    *
    * The list's line of the product is the one named, else the one it holds, else
    * one made at quantity 0. The buy is recorded on it with `applied` 0, so the
-   * line keeps asking for nothing. The refusals are the server's: a guest and a
-   * list the reader may not write are 403, a row with no product and a line that
+   * line keeps asking for nothing. The refusals are the server's: a guest is 403,
+   * a list the basket does not cover is 404, a row with no product and a line that
    * is already an entry of the row are 409. A made line takes the row's words,
    * where the server takes the catalog's name: this fake names products in one
    * language only.
@@ -1758,7 +1758,8 @@ export class BasketMemory implements BasketServiceI {
       throw this._refuse('forbidden', 403, 'Guests cannot add to a list');
     }
     if (!LISTS.some((ref) => ref.listId === body.targetListId)) {
-      throw this._refuse('forbidden', 403, 'You cannot write that list');
+      // A list the basket does not cover is not found, as the server answers.
+      throw this._refuse('not_found', 404, 'List not found');
     }
     const row = this._rows().find((held) =>
       held.entries.some((entry) => entry.lineId === rowKey)

@@ -106,8 +106,8 @@ export type OtherListsState =
  * green at the list's ask and amber above it (colours A, the `target` input), and
  * the ask is a snap point beside 1000, so a press lands on it even when the step
  * would skip it. Every step is emitted; the sheet gathers them into one settle or
- * one revert of that line once the presses stop. While the sheet cannot settle
- * (the row or the trip is finished) the number is drawn without a control.
+ * one revert of that line once the presses stop. On a finished trip the number is
+ * drawn without a control; a row with nothing left keeps its steppers.
  *
  * ## Lists and amounts
  *
@@ -170,8 +170,8 @@ export class RowEntries {
   readonly finished = input(false);
 
   /**
-   * The sheet can still settle (velista `0201`, target state 4): neither the row
-   * nor the trip is finished. Without it each list draws its number only.
+   * The sheet can still record buys (velista `0201`, target state 4): the trip is
+   * open, whatever the row has left. Without it each list draws its number only.
    */
   readonly buying = input(true);
 

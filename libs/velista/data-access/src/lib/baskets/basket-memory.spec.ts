@@ -1638,4 +1638,20 @@ describe('BasketMemory: a buy keeps the ask it met (backend 0274, velista 0201)'
       )
     ).toBe('basket_line_already_in_row');
   });
+
+  it('answers not found for a list the basket does not cover, as the server does', async () => {
+    const memory = new BasketMemory();
+    const eggs = rowOf(await rowsOf(memory), 'Eggs');
+
+    expect(
+      await codeOf(
+        memory.buyForList(BASKET, eggs.rowKey, {
+          targetListId: 'list-nobody-covers',
+          lineId: null,
+          quantity: 1,
+          unit: 'UNIT',
+        })
+      )
+    ).toBe('not_found');
+  });
 });

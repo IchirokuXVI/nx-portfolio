@@ -31,6 +31,9 @@
 > raises `minClientVersion`, because the demand route's `quantity` changes meaning with it
 > (velista `0200`).
 >
+> Amended on 2026-11-23 after its review: the steppers stay live on a row with nothing left,
+> until the shopping list is finished.
+>
 > This was the design of the sheet before velista `0139`: the entries pane of velista `0090`
 > had a "got" reel per list (commit `3b8da1e91`, `row-entries.ts`, output `allocated`),
 > removed by `9f74867a1`. Its revert then took units from the whole row; this plan takes
@@ -133,9 +136,11 @@ it reaches or passes the ask, and make the section "Add it to another list" reco
    shop and the item as `setLeft` sends them. **A run down** is a revert of that line:
    `target: 'UNITS'`, `units: from - to`, `from: entry.bought`. A run back to its start
    sends nothing.
-4. **Who gets a stepper.** Every entry while the sheet `canSettle`, a list the reader was not
-   served included ("Another list"): a buy is the basket's act, not a write to the list. A
-   finished basket draws the number only, as today.
+4. **Who gets a stepper.** Every entry while the shopping list is not finished, whatever the
+   row has left, a list the reader was not served included ("Another list"): a buy is the
+   basket's act, not a write to the list. A row stepped to its ask keeps its steppers, so a
+   shopper can buy above the ask or take back a mistap; only "Got all N", "They had none"
+   and "Not today" follow `canSettle`. A finished basket draws the number only, as today.
 5. **The label.** "<list> · <ask>", the ask in the exact form with its unit ("· 1,5 kg"),
    joined with `" · "` as the rest of the app joins words. The list name is cut first, the
    ask never. The line "zone · line" under it is unchanged.

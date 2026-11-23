@@ -1293,8 +1293,63 @@ describe('SettleSheet: the buttons, and what each list bought (velista 0201)', (
     ]);
   });
 
-  it('draws the numbers and no stepper on a row with nothing left (target state 4)', async () => {
+  /** A one list row asking 3, with `bought` of it, as an answer says. */
+  function oneList(bought: number): BasketRow {
+    const left = Math.max(0, 3 - bought);
+    const state = left === 0 ? 'DONE' : bought > 0 ? 'PARTLY' : 'WANTED';
+    return line({
+      left,
+      bought,
+      asked: 3,
+      state,
+      entries: [entry('l1', 'zl1', left, { bought, asked: 3, state })],
+    });
+  }
+
+  it('keeps the steppers on a row with nothing left, without its row actions (target state 4, amended)', async () => {
+    const { fixture, store } = await render({ lines: [oneList(3)] });
+    const answer = (bought: number) => async () => {
+      const row = oneList(bought);
+      store.rows.set([row]);
+      return { entries: row.entries, skippedCount: 0 };
+    };
+    store.settle.mockImplementation(answer(4));
+    store.revert.mockImplementation(answer(2));
+
+    // At the ask: still a stepper, green, and no "Got all".
+    expect(steppers(fixture)).toHaveLength(1);
+    expect(steppers(fixture)[0].value()).toBe(3);
+    expect(steppers(fixture)[0].reach()).toBe('reached');
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.actions .primary')
+    ).toBeNull();
+
+    // Above it: amber, the label still the ask.
+    await commitAmount(fixture, '', { from: 3, to: 4 });
+    expect(store.settle).toHaveBeenCalledWith(
+      LINE_ID,
+      expect.objectContaining({ outcome: 'BOUGHT', quantity: 1, from: 0 }),
+      'zl1'
+    );
+    expect(steppers(fixture)[0].value()).toBe(4);
+    expect(steppers(fixture)[0].reach()).toBe('over');
+    expect(asks(fixture)).toEqual(['· 3']);
+
+    // Back to 2: a revert of that line, and the stepper is still there.
+    await commitAmount(fixture, '', { from: 4, to: 2 });
+    expect(store.revert).toHaveBeenCalledWith(
+      LINE_ID,
+      { target: 'UNITS', units: 2, from: 4 },
+      'zl1'
+    );
+    expect(steppers(fixture)).toHaveLength(1);
+    expect(steppers(fixture)[0].value()).toBe(2);
+    expect(steppers(fixture)[0].reach()).toBeNull();
+  });
+
+  it('draws the numbers and no stepper on a finished basket (target state 4)', async () => {
     const { fixture } = await render({
+      basketFinished: true,
       lines: [
         line({
           left: 0,
@@ -2768,6 +2823,58 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
         quantity: 1,
       });
       expect(disclosure(fixture)).toBeNull();
+    });
+
+    it('reads the lists again when a list made by a buy gives its last buy back, so it is back at 0', async () => {
+      const { fixture, store } = await render({
+        lines: [milkRow()],
+        products,
+        productLists: [BREAKFAST],
+        served: [
+          ref('l1', 'Weekly shop'),
+          ref('l2', 'Flat'),
+          ref('l-breakfast', 'Breakfast'),
+        ],
+      });
+      const made = entry('l-breakfast', 'zl10', 0, { bought: 1, asked: 0 });
+      store.buyForList.mockImplementation(async () => {
+        store.rows.set([milkRow({ entries: [...milkRow().entries, made] })]);
+        return { entries: [made], skippedCount: 0 };
+      });
+      store.revert.mockImplementation(async () => {
+        // Its line asks 0 and has no buy in this trip now, so it leaves the row.
+        store.rows.set([milkRow()]);
+        return { entries: milkRow().entries, skippedCount: 0 };
+      });
+      await openOthers(fixture);
+      await raise(fixture, 1);
+      expect(disclosure(fixture)).toBeNull();
+      expect(store.productLists).toHaveBeenCalledTimes(1);
+
+      // The server now holds the list's line at an ask of 0.
+      store.productLists.mockResolvedValue([{ ...BREAKFAST, lineId: 'zl10' }]);
+      await commitAmount(fixture, '', { from: 1, to: 0 }, 2);
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(store.revert).toHaveBeenCalledWith(
+        LINE_ID,
+        { target: 'UNITS', units: 1, from: 1 },
+        'zl10'
+      );
+      expect(store.productLists).toHaveBeenCalledTimes(2);
+      if (disclosure(fixture)?.getAttribute('aria-expanded') !== 'true') {
+        await openOthers(fixture);
+      }
+      expect(
+        [...el(fixture).querySelectorAll('.others .row-name')].map((node) =>
+          node.textContent?.trim()
+        )
+      ).toEqual(['Breakfast']);
+      const stepper = fixture.debugElement.query(
+        By.css('.others lib-quantity-stepper')
+      ).componentInstance as QuantityStepper;
+      expect(stepper.value()).toBe(0);
     });
 
     it('starts each stepper at 0, even for a list whose line asks in another row', async () => {

@@ -485,11 +485,14 @@ export class SettleSheet {
    *
    * A finished row is still tappable, deliberately: `0043` section 3.2 keeps it in
    * place so somebody can look at what they bought. So this sheet opens on one, and
-   * every settle target on it would be a control that could not work: the server
-   * refuses a settle on a row with nothing outstanding.
+   * its row actions have nothing to act on: "Got all N" would buy nothing, and "They
+   * had none" and "Not today" would close what is already closed. A `BOUGHT` settle
+   * of one line is a different act: the server records it above the ask too, and
+   * takes it back by a revert, so the lists' steppers stay live on such a row
+   * ({@link canBuy}).
    *
    * **A control you may not use is not drawn** (`0030`), so this is what the settle
-   * pane branches its targets on rather than a disabled state.
+   * pane branches its row actions on rather than a disabled state.
    */
   protected readonly finished = computed(
     () => this.row() !== null && this.outstanding() === 0
@@ -516,6 +519,18 @@ export class SettleSheet {
    */
   protected readonly canSettle = computed(
     () => !this.finished() && !this.basketFinished()
+  );
+
+  /**
+   * Whether each list's stepper records buys (velista `0201`, target state 4, as
+   * amended after its review): while the trip is open, whatever the row has left.
+   * A row stepped to its ask keeps its stepper, so a shopper can buy above the ask
+   * (amber) or take back a mistap. A finished trip draws the numbers only, and so
+   * does a row bought outside this shopping list, whose buys are not this
+   * basket's to take back.
+   */
+  protected readonly canBuy = computed(
+    () => !this.basketFinished() && !this.boughtElsewhere()
   );
 
   /**
@@ -843,8 +858,52 @@ export class SettleSheet {
     });
   });
 
-  private async _loadOthers(itemId: string): Promise<void> {
-    this._others.set({ itemId, state: { state: 'loading' } });
+  /** The lists the row's entries named when {@link _rereadOthers} last ran. */
+  private _entryLists: ReadonlySet<string> | null = null;
+
+  /**
+   * A list that leaves the row is read again into "Bought for another list"
+   * (velista `0201`, after its review). A list made by a buy for it asks 0, so
+   * once its buys go back to 0 its line is no longer in this trip and the entry
+   * goes; {@link buyOther} took it out of the read, which ran once for the
+   * product, so without a new read the list would be in neither section. Read
+   * again rather than put back, because the line it holds now is a fact only the
+   * server knows. A list that joins the row needs nothing: {@link others} leaves
+   * out every list the row draws.
+   */
+  private readonly _rereadOthers = effect(() => {
+    const row = this.row();
+    if (row === null) {
+      return;
+    }
+    const now = new Set(
+      row.entries.flatMap((held) => (held.listId === null ? [] : [held.listId]))
+    );
+    const before = this._entryLists;
+    this._entryLists = now;
+    const itemId = row.productId;
+    if (
+      before === null ||
+      itemId === null ||
+      ![...before].some((listId) => !now.has(listId))
+    ) {
+      return;
+    }
+    untracked(() => {
+      if (this._others() !== null && this.others() !== null) {
+        void this._loadOthers(itemId, true);
+      }
+    });
+  });
+
+  /**
+   * Read the lists of the product. A quiet read keeps what is drawn until the
+   * answer, so an open section does not flash its loading row.
+   */
+  private async _loadOthers(itemId: string, quiet = false): Promise<void> {
+    if (!quiet || this._others()?.itemId !== itemId) {
+      this._others.set({ itemId, state: { state: 'loading' } });
+    }
     const lists = await this._store.productLists(itemId);
     if (this._others()?.itemId !== itemId) {
       return;
