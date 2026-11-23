@@ -567,6 +567,8 @@ describeIntegration(
       it('case 5: another control raises without the flag, as before (spec 7)', async () => {
         const { w, milk } = await askedThreeBoughtFour();
         const changes = await changesOf(milk.id);
+        announcer.reset();
+        emitted.length = 0;
 
         const answer = await raise(w, milk.id, 2);
 
