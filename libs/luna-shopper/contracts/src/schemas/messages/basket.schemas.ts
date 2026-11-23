@@ -93,6 +93,8 @@ export const BASKET_SCHEMA_IDS = {
   searchScopeRequest: schemaId('msg/basket.searchScope/request'),
   liveRequest: schemaId('msg/basket.live/request'),
   settleRequest: schemaId('msg/basket.row.settle/request'),
+  // A buy for a list that does not ask, with its line (plan 0273).
+  buyForListRequest: schemaId('msg/basket.row.buyForList/request'),
   revertRequest: schemaId('msg/basket.row.revert/request'),
   demandRequest: schemaId('msg/basket.row.demand/request'),
   renameRequest: schemaId('msg/basket.row.rename/request'),
@@ -748,6 +750,38 @@ const settleRequest = object(
 );
 
 /**
+ * A buy for a covered list that does not ask for the product (plan 0273). The
+ * price, the name and the snapshot are the gateway's, as on a settle.
+ */
+const buyForListRequest = object(
+  BASKET_SCHEMA_IDS.buyForListRequest,
+  {
+    basketId: nonEmptyString(),
+    participantId: nonEmptyString(),
+    userId: nonEmptyString(),
+    rowKey: nonEmptyString(),
+    targetListId: nonEmptyString(),
+    lineId: nonEmptyString(),
+    quantity: integer({ minimum: 1, maximum: LINE_QUANTITY_MAX }),
+    unit: ref(ENUM_IDS.lineUnit),
+    content: nonEmptyString(),
+    // Written by the gateway: catalog did not answer for the name.
+    catalogUnanswered: boolean(),
+    paid: ref(LIST_SCHEMA_IDS.settlementPaid),
+    itemSnapshot: nullableItemSnapshot(),
+  },
+  [
+    'basketId',
+    'participantId',
+    'userId',
+    'rowKey',
+    'targetListId',
+    'quantity',
+    'unit',
+  ]
+);
+
+/**
  * The two targets of a revert, as one schema with a discriminating `target`.
  *
  * A `oneOf` over the two members would be the faithful rendering, and it renders
@@ -1076,6 +1110,7 @@ export const basketSchemas: JsonSchema[] = [
   searchScopeRequest,
   liveRequest,
   settleRequest,
+  buyForListRequest,
   revertRequest,
   demandRequest,
   renameRequest,
@@ -1136,6 +1171,10 @@ export const basketMessageContracts: Record<
   },
   [BASKET_PATTERNS.rowSettle]: {
     request: BASKET_SCHEMA_IDS.settleRequest,
+    response: BASKET_SCHEMA_IDS.rowResult,
+  },
+  [BASKET_PATTERNS.rowBuyForList]: {
+    request: BASKET_SCHEMA_IDS.buyForListRequest,
     response: BASKET_SCHEMA_IDS.rowResult,
   },
   [BASKET_PATTERNS.rowRevert]: {
