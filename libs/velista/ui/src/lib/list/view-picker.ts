@@ -34,7 +34,8 @@ let choicesCount = 0;
 /**
  * The two views as a popover held against the control that opened it (velista
  * `0202`, target 4), in the choice frame of {@link AnchoredPopover}: under the
- * control and lined up with its end.
+ * control and lined up with its end, and pushed back onto the screen where the
+ * control sits too far from the edge for its 276 px (the zone list header at 360).
  *
  * One `menuitemradio` row for each view, its glyph and its words, and the compact
  * one says what it is for on a second line. The current row carries the tick in the
@@ -61,6 +62,7 @@ let choicesCount = 0;
         (closed)="close($event)"
         [open]="true"
         [origin]="origin()"
+        [push]="true"
         [role]="null"
         align="end"
         frame="choice"
