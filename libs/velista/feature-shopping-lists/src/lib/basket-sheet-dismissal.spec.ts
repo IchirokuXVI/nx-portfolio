@@ -13,6 +13,7 @@ import {
   ContactStore,
   fakeZoneStore,
   LINE_SERVICE,
+  ListRowsStore,
   provideFakeCategoryStore,
   provideFakeItemNames,
   provideFakeShopSectionsStore,
@@ -211,6 +212,8 @@ async function render(
       // the store above, and the filter sheet reads five of them, so a double here
       // would be a second implementation of the thing under test's whole input.
       BasketViewStore,
+      // The view the settle sheet's entries draw by (velista `0204`).
+      ListRowsStore,
       provideFakeCategoryStore(),
       provideFakeItemNames(),
       provideFakeShopSectionsStore(),

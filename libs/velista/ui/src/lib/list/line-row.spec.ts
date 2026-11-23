@@ -706,6 +706,25 @@ describe('LineRow', () => {
       fixture.detectChanges();
     }
 
+    it('says when its tape goes up and comes down, for the question that waits for it (velista 0207)', async () => {
+      const fixture = await render(vm({ quantity: 2 }));
+      const said: { lineId: string; open: boolean }[] = [];
+      fixture.componentInstance.reelOpened.subscribe((event) =>
+        said.push(event)
+      );
+
+      drag(fixture, 1);
+      fixture.detectChanges();
+      expect(said).toEqual([{ lineId: 'ln-1', open: true }]);
+
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      fixture.detectChanges();
+      expect(said).toEqual([
+        { lineId: 'ln-1', open: true },
+        { lineId: 'ln-1', open: false },
+      ]);
+    });
+
     it('spec 4: draws the reel and no stepper in the compact view, the reverse in the default one', async () => {
       const compact = await render(vm({ quantity: 2 }));
       expect(query(compact, 'lib-quantity-reel')).not.toBeNull();
@@ -1817,5 +1836,68 @@ describe('LineRow: a row being cleared (velista 0199)', () => {
     );
 
     expect(rule?.body).toMatch(/background:\s*var\(--app-surface-sunken\);/);
+  });
+});
+
+/**
+ * Velista `0207`: what the row exposes for the page's question about the extra
+ * already bought. Its amount control is marked as the popover's anchor in both
+ * views, the row itself as what the popover keeps in sight, and the flash is the
+ * row's own layer.
+ */
+describe('LineRow: the question about the extra already bought (velista 0207)', () => {
+  it('marks its amount control in both views, and the row', async () => {
+    const compact = await render(vm({ quantity: 2 }));
+    expect(query(compact, '[data-amount-control]')?.tagName.toLowerCase()).toBe(
+      'lib-quantity-reel'
+    );
+    expect(row(compact).hasAttribute('data-line-row')).toBe(true);
+
+    const normal = await render(vm({ quantity: 2 }), { layout: 'default' });
+    expect(query(normal, '[data-amount-control]')?.tagName.toLowerCase()).toBe(
+      'lib-quantity-stepper'
+    );
+  });
+
+  it('draws the layer while asked, and lights it while flashing', async () => {
+    const fixture = await render(vm({ quantity: 2 }), { layout: 'default' });
+    expect(row(fixture).classList).not.toContain('asked');
+
+    fixture.componentRef.setInput('asked', true);
+    fixture.detectChanges();
+    expect(row(fixture).classList).toContain('asked');
+    expect(row(fixture).classList).not.toContain('flash');
+
+    fixture.componentRef.setInput('flashing', true);
+    fixture.detectChanges();
+    expect(row(fixture).classList).toContain('flash');
+  });
+
+  it('pulses three times in 2.2 s, and holds still under reduced motion (spec 12)', () => {
+    const rules = compiledRules('line-row.scss');
+    const body = (selector: string) =>
+      rules.filter((one) => one.selector === selector).map((one) => one.body);
+
+    expect(body('.row.asked::before').join('')).toMatch(
+      /background:\s*var\(--app-action-quiet-bg\);/
+    );
+    expect(body('.row.asked::before').join('')).toMatch(
+      /box-shadow:\s*inset 0 0 0 var\(--app-took-edge-width\) var\(--app-action-quiet-fg\);/
+    );
+    const wash = body('.row.asked.flash::before');
+    expect(wash[0]).toMatch(/animation:\s*ask-wash 2200ms linear both;/);
+    // Reduced motion: no animation, the wash held.
+    expect(wash[1]).toMatch(/animation:\s*none;/);
+    expect(wash[1]).toMatch(/opacity:\s*1;/);
+    // The popover's hairline is no longer the row's: the popover sits beside it.
+    expect(body('.row.asked.flash')).toEqual([]);
+
+    // Three peaks in the keyframes: each pulse in, held and out.
+    const peaks = rules.find((one) =>
+      one.selector.startsWith(
+        '10.909%, 16.364%, 47.273%, 52.727%, 83.636%, 89.091%'
+      )
+    );
+    expect(peaks?.body).toMatch(/opacity:\s*1;/);
   });
 });

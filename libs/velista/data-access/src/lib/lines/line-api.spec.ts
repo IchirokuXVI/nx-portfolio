@@ -260,6 +260,54 @@ describe('LineApi, the unit on every write (velista 0182)', () => {
     expect((await done).unit).toBe('GRAM');
   });
 
+  describe('a raise that counts the extra already bought (velista 0207)', () => {
+    const EXTRA = {
+      above: 1,
+      counted: 1,
+      buyers: [{ userId: 'u-marta' }, { userId: null }],
+    };
+
+    it('sends the flag with the delta and the unit, and the plain raise does not', async () => {
+      const raised = api.raiseCountingExtra('ln-1', 2, 'UNIT');
+      const req = next();
+      expect(req.request.url).toBe(`${GATEWAY}/v1/lines/ln-1/quantity`);
+      expect(req.request.body).toEqual({
+        delta: 2,
+        unit: 'UNIT',
+        countExtra: true,
+      });
+      req.flush({ ...LINE, quantity: 1, unit: 'UNIT', extra: EXTRA });
+      const answer = await raised;
+      expect(answer.line.quantity).toBe(1);
+      expect(answer.extra).toEqual(EXTRA);
+
+      const plain = api.addQuantity('ln-1', 2, 'UNIT');
+      const second = next();
+      expect('countExtra' in second.request.body).toBe(false);
+      second.flush(LINE);
+      await plain;
+    });
+
+    it.each([
+      ['no extra', undefined],
+      ['an extra that is not an object', 'one'],
+      ['a negative count', { ...EXTRA, above: -1 }],
+      ['a count that is not whole', { ...EXTRA, counted: 0.5 }],
+      ['a count as a string', { ...EXTRA, counted: '1' }],
+      ['more counted than was above', { ...EXTRA, above: 1, counted: 2 }],
+      ['buyers that are not a list', { ...EXTRA, buyers: 'u-marta' }],
+      ['a buyer with no id field', { ...EXTRA, buyers: [{}] }],
+      ['a buyer whose id is a number', { ...EXTRA, buyers: [{ userId: 7 }] }],
+      ['a buyer that is a string', { ...EXTRA, buyers: ['u-marta'] }],
+    ])('maps %s to no question', async (_, extra) => {
+      const raised = api.raiseCountingExtra('ln-1', 2, 'UNIT');
+      next().flush({ ...LINE, unit: 'UNIT', extra });
+      const answer = await raised;
+      expect(answer.extra).toBeNull();
+      expect(answer.line.id).toBe('ln-1');
+    });
+  });
+
   it('sends the unit on a settle, with a quantity in it', async () => {
     const done = api.settle('ln-1', 'BOUGHT', { quantity: 250, unit: 'GRAM' });
     const req = next();

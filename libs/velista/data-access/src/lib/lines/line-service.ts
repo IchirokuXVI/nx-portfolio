@@ -4,6 +4,7 @@ import type {
   AddLineOptions,
   AddOutcome,
   AlsoOnVm,
+  CountedExtra,
   ItemLists,
   Line,
   LineApprovalStatus,
@@ -183,6 +184,20 @@ export interface LineServiceI {
    * refused with `line_unit_mismatch` and changes nothing.
    */
   addQuantity(lineId: string, delta: number, unit: LineUnit): Promise<Line>;
+
+  /**
+   * {@link addQuantity} with `countExtra: true` (backend `0275`, velista `0207`): the
+   * units bought above the ask in open shopping lists count toward the raise first,
+   * and the line moves only by the rest. The zone list's rows are its one caller.
+   *
+   * `extra` is what the answer says was counted, or null when the answer carried no
+   * `extra` this build can read, which asks nothing.
+   */
+  raiseCountingExtra(
+    lineId: string,
+    delta: number,
+    unit: LineUnit
+  ): Promise<{ readonly line: Line; readonly extra: CountedExtra | null }>;
 
   /**
    * Say what happened to a line on a trip (`POST /v1/lines/:id/settle`).

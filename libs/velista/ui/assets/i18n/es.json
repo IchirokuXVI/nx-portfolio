@@ -1233,6 +1233,25 @@
       },
       "resend": "Enviarlo otra vez",
       "dismiss": "Descartar"
+    },
+    "extra": {
+      "boughtBy": "{{name}} ya compró {{amount}} de más.",
+      "boughtByYou": "Ya compraste {{amount}} de más.",
+      "boughtByTwo": "{{first}} y {{second}} ya compraron {{amount}} de más.",
+      "boughtByYouAndOne": "Tú y {{name}} ya comprasteis {{amount}} de más.",
+      "boughtByOneAndSomeone": "{{name}} y otra persona ya compraron {{amount}} de más.",
+      "boughtByYouAndSomeone": "Tú y otra persona ya comprasteis {{amount}} de más.",
+      "boughtByMany": "{{count}} personas ya compraron {{amount}} de más.",
+      "boughtBySomeone": "Alguien ya compró {{amount}} de más.",
+      "ask": "¿Sigues necesitando {{asked}} o solo {{left}}?",
+      "askEnough": "¿Sigues necesitando {{asked}} o con eso basta?",
+      "stillNeed": "Sigo necesitando",
+      "count": "Contar lo comprado de más",
+      "enough": "Con eso basta",
+      "units_one": "{{count}} ud",
+      "units_other": "{{count}} uds",
+      "boughtByNamedAndOthers": "{{names}} y otras personas ya compraron {{amount}} de más.",
+      "announce": "{{question}} Hay dos respuestas junto a la cantidad de la línea: {{stillNeed}}, o {{keep}}."
     }
   },
   "account": {

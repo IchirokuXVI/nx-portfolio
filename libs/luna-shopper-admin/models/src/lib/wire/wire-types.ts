@@ -109,6 +109,7 @@ export type AddLineDto = {
 export type AddLineQuantityDto = {
   delta: number;
   unit: 'UNIT' | 'GRAM' | 'MILLILITER';
+  countExtra?: boolean;
 };
 
 /**
@@ -5540,6 +5541,37 @@ export type ImpersonationStartImpersonationView = {
 };
 
 /**
+ * `list.AddLineQuantityResult` in the gateway's OpenAPI document.
+ */
+export type ListAddLineQuantityResult = {
+  id: string;
+  listId: string;
+  content: string;
+  quantity: number;
+  unit: EnumsLineUnit;
+  itemIds: string[];
+  itemSetHash: string | null;
+  productGroupId: string | null;
+  groupItemIds: string[];
+  favoriteItemId: string | null;
+  preferredSupermarketId: string | null;
+  named: boolean;
+  position: number;
+  approvalStatus: EnumsLineApprovalStatus;
+  createdByUserId: string;
+  approvedByUserId: string | null;
+  version: number;
+  boughtCount: number;
+  lastSettlementOutcome: EnumsSettlementOutcome | null;
+  claimed: boolean;
+  claimedByUserId: string | null;
+  commentCount: number | null;
+  createdAt: string;
+  updatedAt: string;
+  extra?: ListCountedExtra;
+};
+
+/**
  * `list.AddLineResult` in the gateway's OpenAPI document.
  */
 export type ListAddLineResult = {
@@ -5584,6 +5616,22 @@ export type ListCommentView = {
   recording: ListCommentRecording | null;
   transcription: EnumsCommentTranscription | null;
   createdAt: string;
+};
+
+/**
+ * `list.CountedExtra` in the gateway's OpenAPI document.
+ */
+export type ListCountedExtra = {
+  above: number;
+  counted: number;
+  buyers: ListCountedExtraBuyer[];
+};
+
+/**
+ * `list.CountedExtraBuyer` in the gateway's OpenAPI document.
+ */
+export type ListCountedExtraBuyer = {
+  userId: string | null;
 };
 
 /**

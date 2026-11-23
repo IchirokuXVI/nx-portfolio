@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
   isOpenBasket,
-  SettlementOutcome,
   type BasketRowResult,
   type SetBasketRowDemandRequest,
 } from '@portfolio/luna-shopper/contracts';
@@ -12,19 +11,15 @@ import {
   StaleQuantityException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import {
-  DataSource,
-  IsNull,
-  MoreThanOrEqual,
-  type EntityManager,
-} from 'typeorm';
+import { DataSource, type EntityManager } from 'typeorm';
 import { LineSettlement, ListLine } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { assertLineUnit, requireLineUnit } from '../lists/line-unit-rules';
 import { LineService } from '../lists/line.service';
 import { ListAccessService } from '../lists/list-access.service';
 import { canChangeDemand } from '../lists/list-acts';
-import { basketScopeOf, type BasketScope } from './basket-line-facts';
+import { buysOf, rebalanceApplied } from './basket-applied';
+import { basketScopeOf } from './basket-line-facts';
 import {
   BasketWriteContext,
   type OpenBasketWrite,
@@ -277,104 +272,10 @@ export class BasketDemandService {
   }
 }
 
-/** One standing buy of a line through a basket, as {@link rebalanceApplied} reads it. */
-export interface DemandBuy {
-  id: string;
-  quantity: number;
-  applied: number;
-}
-
-/** What setting an ask writes: the line's new `left`, and each `applied` that moves. */
-export interface DemandPlan {
-  left: number;
-  /** New `applied` by settlement id, only for the ones that change. */
-  changes: Map<string, number>;
-}
-
-/**
- * The split of an ask of `asked` between the line and this basket's buys
- * (plan 0274, section 5). `buys` are oldest first.
- *
- * The buys meet as much of the ask as they can: their `applied` adds up to the
- * smaller of `asked` and what they bought, and the line holds the rest. When
- * that sum goes down, `applied` is taken off the newest buys first, so the
- * units above the ask sit on the buys a minus reaches first. When it goes up,
- * units above the ask are given to it from the oldest buys first, for the same
- * reason.
- *
- * With no units above the ask and an ask at or above what was bought, nothing
- * moves on the buys and the line holds `asked - bought`.
- */
-export function rebalanceApplied(
-  buys: readonly DemandBuy[],
-  asked: number
-): DemandPlan {
-  const bought = buys.reduce((sum, buy) => sum + buy.quantity, 0);
-  const held = buys.reduce((sum, buy) => sum + buy.applied, 0);
-  const target = Math.min(asked, bought);
-  const changes = new Map<string, number>();
-
-  if (target < held) {
-    let cut = held - target;
-    for (const buy of [...buys].reverse()) {
-      if (cut <= 0) {
-        break;
-      }
-      const take = Math.min(cut, buy.applied);
-      if (take > 0) {
-        changes.set(buy.id, buy.applied - take);
-        cut -= take;
-      }
-    }
-  } else if (target > held) {
-    let give = target - held;
-    for (const buy of buys) {
-      if (give <= 0) {
-        break;
-      }
-      const room = Math.min(give, buy.quantity - buy.applied);
-      if (room > 0) {
-        changes.set(buy.id, buy.applied + room);
-        give -= room;
-      }
-    }
-  }
-
-  return { left: asked - target, changes };
-}
-
-/**
- * This basket's standing buys of one line in this trip, in the line's unit,
- * oldest first: the purchases the read counts the line's ask from (plan 0274,
- * section 3). The scope is the read's, so a `LIVE` basket counts its current
- * session alone.
- */
-async function buysOf(
-  manager: EntityManager,
-  basketId: string,
-  line: Pick<ListLine, 'id' | 'unit'>,
-  scope: BasketScope
-): Promise<DemandBuy[]> {
-  if (!scope.enabled) {
-    return [];
-  }
-  const rows = await manager.getRepository(LineSettlement).find({
-    select: { id: true, quantity: true, applied: true },
-    where: {
-      basketId,
-      lineId: line.id,
-      outcome: SettlementOutcome.BOUGHT,
-      unit: line.unit ?? 'UNIT',
-      revertedAt: IsNull(),
-      ...(scope.startedAt
-        ? { settledAt: MoreThanOrEqual(scope.startedAt) }
-        : {}),
-    },
-    order: { settledAt: 'ASC', id: 'ASC' },
-  });
-  return rows.map((row) => ({
-    id: row.id,
-    quantity: row.quantity,
-    applied: row.applied,
-  }));
-}
+// The arithmetic moved beside the count of plan 0275, which `LineService`
+// imports; named here still for the readers that know it from here.
+export {
+  rebalanceApplied,
+  type DemandBuy,
+  type DemandPlan,
+} from './basket-applied';

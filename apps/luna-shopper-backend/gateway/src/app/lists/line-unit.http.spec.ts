@@ -286,6 +286,48 @@ describe('the unit of a line over HTTP (plan 0246)', () => {
 
       expect(response.status).toBe(400);
     });
+
+    // Plan 0275, spec 10: the zone list's raise asks core to count the extra.
+    it.each([true, false])(
+      'passes countExtra %s to core',
+      async (countExtra) => {
+        const response = await send('POST', `lines/${LINE}/quantity`, {
+          delta: 2,
+          unit: 'GRAM',
+          countExtra,
+        });
+
+        expect(response.status).toBe(201);
+        expect(coreWrites()).toEqual([
+          {
+            subject: LINE_PATTERNS.addQuantity,
+            payload: {
+              userId: 'user-1',
+              lineId: LINE,
+              delta: 2,
+              unit: 'GRAM',
+              countExtra,
+            },
+          },
+        ]);
+      }
+    );
+
+    // Null too: it is not a JSON boolean, and passing it on would reach core,
+    // whose schema refuses it with an error that is not this 400.
+    it.each([1, '1', 'true', null])(
+      'answers 400 for countExtra %p, and core hears nothing',
+      async (countExtra) => {
+        const response = await send('POST', `lines/${LINE}/quantity`, {
+          delta: 2,
+          unit: 'GRAM',
+          countExtra,
+        });
+
+        expect(response.status).toBe(400);
+        expect(coreWrites()).toEqual([]);
+      }
+    );
   });
 
   describe('POST /v1/lists/:id/lines', () => {
