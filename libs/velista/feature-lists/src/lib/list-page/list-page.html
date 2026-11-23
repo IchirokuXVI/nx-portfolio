@@ -32,10 +32,10 @@
     }
 
     <!--
-      The filter (velista 0082, section 2). A funnel since velista 0202. The badge is how many settings are on, and
-      the **name carries it too**, because a count that only exists as a dot over a
-      glyph is a count a screen reader never hears. Absent while the composer's field
-      holds words, and on an empty list.
+      The filter (velista 0082, section 2). A funnel since velista 0202. The badge is
+      how many settings are on, and the **name carries it too**, because a count that
+      only exists as a dot over a glyph is a count a screen reader never hears. Absent
+      while the composer's field holds words, and on an empty list.
     -->
     @if (current.kind === 'loaded' && !typing() && !current.empty) {
       <button

@@ -178,6 +178,22 @@ describe('ViewPicker (velista 0202)', () => {
     expect(document.activeElement).toBe(option('compact'));
   });
 
+  it('goes to the last row on End and the first on Home', async () => {
+    await render();
+    await open();
+
+    option('default').dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'End', bubbles: true })
+    );
+    expect(document.activeElement).toBe(option('compact'));
+
+    option('compact').dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Home', bubbles: true })
+    );
+    expect(document.activeElement).toBe(option('default'));
+    expect(menu()).not.toBeNull();
+  });
+
   it('closes on a second press of the button', async () => {
     await render();
     await open();

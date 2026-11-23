@@ -451,6 +451,16 @@ function queryOnRoute(initial: Params) {
   };
 }
 
+/** The names of the header's actions, in the order they are drawn. */
+function headerActions(fixture: ComponentFixture<BasketPage>): string[] {
+  return Array.from(
+    (fixture.nativeElement as HTMLElement).querySelectorAll(
+      'lib-page-header button[libPageHeaderAction]'
+    ),
+    (button) => button.getAttribute('aria-label') ?? ''
+  );
+}
+
 async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<BasketPage>;
   store: FakeStore;
@@ -1146,11 +1156,12 @@ describe('the basket header, live', () => {
         participants: [me],
       });
 
-      expect(
-        (fixture.nativeElement as HTMLElement).querySelectorAll(
-          'lib-page-header button[libPageHeaderAction]'
-        ).length
-      ).toBeLessThanOrEqual(3);
+      // Share and the menu; the map is the third, on a shop with one (the aisles
+      // spec below). A header that gains or loses an action fails here.
+      expect(headerActions(fixture)).toEqual([
+        'basket.share.open',
+        'basket.more.open',
+      ]);
       expect(query(fixture, 'lib-page-header lib-view-picker')).toBeNull();
       expect(query(fixture, 'lib-page-header lib-view-icon')).toBeNull();
     });
@@ -5461,6 +5472,16 @@ describe('BasketPage: the map of the shop you are in', () => {
     const { shopDetails } = await atElJamon({ hasMap: false });
 
     expect(shopDetails.ensured()).toContain('loc-jamon');
+  });
+
+  it('holds exactly share, the map and the menu in the header (velista 0202)', async () => {
+    const { fixture } = await atElJamon({ hasMap: true });
+
+    expect(headerActions(fixture)).toEqual([
+      'basket.share.open',
+      'basket.map.openLabel',
+      'basket.more.open',
+    ]);
   });
 
   it('offers the map in the header when that shop has one', async () => {

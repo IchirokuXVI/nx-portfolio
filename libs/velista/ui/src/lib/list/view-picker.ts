@@ -169,15 +169,26 @@ export class ViewChoices {
   }
 
   /**
-   * The arrow keys move between the rows, as they do in any menu. Escape closes it
-   * here and goes no further, so a sheet the popover is opened from (the basket's
-   * menu) stays open under it.
+   * The arrow keys move between the rows, as they do in any menu, and Home and End
+   * go to the first and the last. Escape closes it here and goes no further, so a
+   * sheet the popover is opened from (the basket's menu) stays open under it.
    */
   protected onKey(event: KeyboardEvent): void {
     if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
       this.close('escape');
+      return;
+    }
+    const end =
+      event.key === 'Home'
+        ? VIEWS[0]
+        : event.key === 'End'
+          ? VIEWS[VIEWS.length - 1]
+          : undefined;
+    if (end !== undefined) {
+      event.preventDefault();
+      this._focus(end);
       return;
     }
     const step =
