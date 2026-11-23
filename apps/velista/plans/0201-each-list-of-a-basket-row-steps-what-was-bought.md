@@ -1,3 +1,5 @@
+> **PR:** [#1085](https://github.com/IchirokuXVI/nx-portfolio/pull/1085)
+
 # 0201: each list of a basket row steps what was bought
 
 > Decided on 2026-11-22. In the basket's row sheet each list draws a stepper that changes
