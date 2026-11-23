@@ -1,0 +1,222 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    .cr { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; padding: 24px; display: flex; gap: 32px; align-items: flex-start; background: #e9ebf3; }
+    .cr.dark { background: #0d1019; }
+    .col { display: flex; flex-direction: column; gap: 10px; flex: none; }
+    .cap { font-size: 14px; color: #525a78; line-height: 1.45; width: 390px; height: 104px; overflow: hidden; }
+    .cr.dark .cap { color: #98a0bb; }
+    .cap b { color: #11141f; }
+    .cr.dark .cap b { color: #f7f8fc; }
+    .letter { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-right: 6px; border-radius: 999px; background: #11141f; color: #f7f8fc; font-size: 12px; font-weight: 700; vertical-align: 1px; }
+    .cr.dark .letter { background: #f7f8fc; color: #11141f; }
+    .day { --g: #f7f8fc; --r: #ffffff; --o: #ffffff; --s: #eef0f7; --t: #11141f; --t2: #525a78; --t3: #616a8a; --b: #dde1ed; --bs: #6f7899; --q: #8a5a12; --qbg: rgba(255, 180, 84, 0.10); --act: #ffb454; --ok: #047857; --att: #6d28d9; --attbg: rgba(124, 58, 237, 0.10); --e2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.10); --sh: 0 -12px 32px rgba(17, 20, 31, 0.16), 0 6px 18px rgba(17, 20, 31, 0.10); --ring: #2563eb; }
+    .night { --g: #0a0c14; --r: #161a28; --o: #1a1e2e; --s: #11141f; --t: #f7f8fc; --t2: #c2c8db; --t3: #98a0bb; --b: rgba(255, 255, 255, 0.08); --bs: rgba(255, 255, 255, 0.35); --q: #ffb454; --qbg: rgba(255, 180, 84, 0.10); --act: #ffb454; --ok: #34d399; --att: #a78bfa; --attbg: rgba(167, 139, 250, 0.10); --e2: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(10, 12, 20, 0.55); --sh: 0 -18px 40px rgba(10, 12, 20, 0.42), 0 8px 24px rgba(10, 12, 20, 0.55); --ring: #60a5fa; }
+    .phone { position: relative; width: 390px; height: 844px; overflow: hidden; display: flex; flex-direction: column; border-radius: 22px; background: var(--g); color: var(--t); border: 1px solid #c9cedd; }
+    .phone.night { border-color: #2a2f40; }
+    .phone.crop { height: auto; }
+    .phone.w360 { width: 360px; }
+    .ic { display: inline-flex; width: 20px; height: 20px; flex: none; }
+    .ic svg { width: 100%; height: 100%; display: block; }
+    .hdr { display: flex; align-items: center; gap: 8px; height: 64px; padding: 0 16px; border-bottom: 1px solid var(--b); background: var(--g); flex: none; }
+    .lead { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin-left: -12px; color: var(--t2); flex: none; }
+    .hicon { display: flex; margin-right: 8px; color: var(--t); flex: none; }
+    .hicon .ic { width: 24px; height: 24px; }
+    .title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 1.4; letter-spacing: 0.05em; color: var(--t); }
+    /* velista 0205: an optional subtitle under the title, inside the same 64 px block. */
+    .htext { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+    .htext .title { flex: none; }
+    .hsub { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.4; color: var(--t3); }
+    .acts { display: flex; align-items: center; margin-right: -8px; flex: none; }
+    .act { position: relative; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 999px; color: var(--t2); flex: none; }
+    .act.is-open { background: var(--s); color: var(--t); }
+    .act.mark::after { content: ''; position: absolute; inset: 2px; border-radius: 999px; box-shadow: 0 0 0 2px var(--ring); }
+    .top { padding: 8px 16px 12px; display: flex; flex-direction: column; gap: 8px; background: var(--g); flex: none; }
+    .field { display: flex; align-items: center; height: 48px; padding: 0 6px 0 14px; border: 1px solid var(--bs); border-radius: 12px; background: var(--r); font-size: 16px; color: var(--t3); }
+    .field > span:first-child { flex: 1; white-space: nowrap; }
+    .field .ic { width: 44px; height: 44px; padding: 12px; color: var(--t2); }
+    .scroll { flex: 1 1 auto; min-height: 0; overflow: hidden; padding: 0 16px; position: relative; }
+    .rows-top { border-top: 1px solid var(--b); }
+    .nav { flex: none; display: flex; gap: 4px; padding: 8px 8px 20px; border-top: 1px solid var(--b); background: var(--g); }
+    .tab { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 52px; border-radius: 16px; color: var(--t2); font-size: 12px; font-weight: 600; min-width: 0; }
+    .tab .ic { width: 24px; height: 24px; }
+    .tab.on { background: var(--qbg); color: var(--q); font-weight: 700; }
+    .tab span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+    /* The default view: the row of velista 0191 with the button stepper. 99 px. */
+    .drow { display: grid; grid-template-columns: 74px minmax(0, 1fr) auto; grid-template-rows: 22px 52px; grid-template-areas: 'pic l1 l1' 'pic facts st'; column-gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--b); }
+    .pic { grid-area: pic; width: 74px; height: 74px; border-radius: 12px; border: 1px solid var(--b); background: var(--r); overflow: hidden; display: flex; align-items: center; justify-content: center; color: var(--t3); }
+    .pic img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .pic.none { background: var(--s); }
+    .pic.none .ic { width: 30px; height: 30px; }
+    .l1 { grid-area: l1; display: flex; align-items: baseline; gap: 8px; min-width: 0; overflow: hidden; white-space: nowrap; line-height: 22px; }
+    .l1 .label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 16px; font-weight: 600; }
+    .l1 .brand { flex: 0 1 auto; max-width: 96px; overflow: hidden; text-overflow: ellipsis; font-size: 14px; color: var(--t2); }
+    .facts { grid-area: facts; display: grid; grid-template-rows: 16px 16px 20px; min-width: 0; }
+    .fact { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 16px; color: var(--t2); font-variant-numeric: tabular-nums; }
+    .fact.price { font-size: 16px; line-height: 20px; font-weight: 600; color: var(--t); }
+    .per { margin-left: 2px; color: var(--t3); font-size: 11px; font-weight: 400; word-spacing: -2px; }
+    .stepper { grid-area: st; align-self: center; display: inline-grid; grid-template-columns: 48px 59px 48px; height: 48px; border-radius: 999px; background: var(--r); box-shadow: inset 0 0 0 1px var(--bs); color: var(--t); }
+    .sb { display: flex; align-items: center; justify-content: center; }
+    .glyph { position: relative; width: 14px; height: 14px; }
+    .glyph::before { content: ''; position: absolute; left: 0; top: 6px; width: 14px; height: 2px; border-radius: 1px; background: currentColor; }
+    .glyph.plus::after { content: ''; position: absolute; left: 6px; top: 0; width: 2px; height: 14px; border-radius: 1px; background: currentColor; }
+    .cell { display: flex; align-items: baseline; justify-content: center; gap: 2px; padding: 0 4px; line-height: 48px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .cell b { font-size: 17px; font-weight: 700; }
+    .cell b.count { font-size: 18px; }
+    .cell i { font-style: normal; font-size: 12px; color: var(--t2); }
+
+    /* The compact view: the two line row with the reel. 68 px. */
+    .crow { position: relative; display: flex; align-items: center; gap: 12px; min-height: 68px; padding: 4px 0; border-bottom: 1px solid var(--b); }
+    .crow .pic { width: 44px; height: 44px; border-radius: 10px; flex: none; }
+    .crow .pic.none .ic { width: 20px; height: 20px; }
+    .body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+    .line1, .line2 { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+    .content { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
+    .cprice { flex: none; margin-left: auto; font-size: 14px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .line2 { font-size: 12px; color: var(--t3); min-height: 16px; }
+    .line2 span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* Round 4: one reel, final. The number over its unit in a fixed 52 by 44 box
+       (--app-quantity-width, --app-quantity-height), so every reel stands in one column.
+       Number 15 px bold, unit 11 px; a count has no unit and its number sits centred. */
+    .reel { position: relative; flex: none; display: flex; align-items: center; justify-content: center; width: 52px; min-height: 44px; }
+    .pill { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 44px; padding: 0 2px; border: 1px solid var(--b); border-radius: 12px; background: var(--r); white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--t); }
+    .pill b { font-size: 15px; line-height: 17px; font-weight: 700; }
+    .pill i { font-style: normal; font-size: 11px; line-height: 13px; font-weight: 500; color: var(--t2); }
+    .pill.ok i, .pill.over i { color: inherit; }
+    .pill.zero i { color: var(--t3); }
+    .tape.st { gap: 16px; }
+    .tape.st .nb, .tape.st .cur { display: flex; flex-direction: column; align-items: center; line-height: 1; }
+    .tape.st .nb b { font-size: 14px; line-height: 17px; font-weight: 500; }
+    .tape.st .nb i { font-style: normal; font-size: 11px; line-height: 13px; }
+    /* The active filter, as the real button draws it: the glyph in the quiet amber and the
+       count over its trailing corner, punched out of the glyph by a ring of the ground. */
+    .act.on, .tool.on { position: relative; color: var(--q); }
+    .badge { position: absolute; top: 4px; right: 4px; display: flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 4px; border: 2px solid var(--g); border-radius: 999px; background: var(--q); color: var(--g); font-size: 11px; font-weight: 700; box-sizing: border-box; font-variant-numeric: tabular-nums; }
+    .tape.st .cur b { font-size: 19px; line-height: 22px; font-weight: 700; }
+    .tape.st .cur i { font-style: normal; font-size: 11px; line-height: 13px; font-weight: 600; }
+    .chosen { display: inline-flex; align-items: center; height: 22px; margin-left: 6px; padding: 0 8px; border-radius: 999px; border: 1px solid #047857; color: #047857; font-size: 12px; font-weight: 600; vertical-align: 1px; }
+    .small-gl { display: flex; gap: 14px; align-items: flex-end; padding: 10px 14px; }
+    .small-gl figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: var(--t3); }
+    .small-gl .ic { width: 24px; height: 24px; color: var(--t2); }
+    .tag { display: flex; align-items: center; gap: 8px; padding: 10px 16px 0; font-size: 13px; color: var(--t2); }
+    .tag b { color: var(--t); }
+    .pill.zero { background: transparent; color: var(--t3); }
+    .pill.ok { color: var(--ok); }
+    .pill.over { color: var(--q); }
+    .pill.hidden { opacity: 0; }
+    .tape { position: absolute; top: 50%; right: 0; transform: translateY(-50%); z-index: 3; display: flex; align-items: center; gap: 20px; height: 56px; min-width: 100%; padding: 0 16px; border: 1px solid var(--bs); border-radius: 14px; background: var(--o); box-shadow: var(--sh); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .tape .nb { min-width: 28px; text-align: center; font-size: 14px; color: var(--t3); }
+    .tape .cur { min-width: 28px; text-align: center; font-size: 20px; font-weight: 700; color: var(--q); }
+    .tape .ok { color: var(--ok); }
+    .tape .over { color: var(--q); }
+    .tape .cur.plain { color: var(--t); }
+    .tape .nb.ok, .tape .nb.over { font-weight: 600; }
+    .thumb { position: absolute; z-index: 4; width: 46px; height: 46px; border-radius: 999px; border: 2px solid rgba(120, 128, 160, 0.55); background: rgba(120, 128, 160, 0.16); pointer-events: none; }
+    .static { position: relative; display: inline-flex; height: 64px; align-items: center; }
+    .static .tape { position: relative; top: auto; right: auto; transform: none; }
+
+    /* Due rows (velista 0089) in the compact view. */
+    .due { display: flex; flex-direction: column; gap: 4px; padding: 12px 0 8px; }
+    .due-label { margin: 0 0 0 2px; font-size: 11px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--att); }
+    .duerow { display: flex; align-items: center; gap: 8px; min-height: 68px; padding: 4px 12px; background: var(--attbg); border-bottom: 1px solid var(--b); }
+    .duebody { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+    .duebody .nm { font-size: 16px; }
+    .duebody .why { font-size: 11px; color: var(--t2); }
+    .add { display: inline-flex; align-items: center; justify-content: center; min-width: 77px; height: 44px; padding: 0 12px; border-radius: 999px; background: var(--act); color: #0a0c14; font-size: 14px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; flex: none; }
+
+    /* The popover of the picker: the choice frame of AnchoredPopover. */
+    .pop { position: absolute; z-index: 6; width: 276px; padding: 8px 0 4px; border: 1px solid var(--b); border-radius: 12px; background: var(--r); box-shadow: var(--e2); }
+    .pop.inline { position: relative; }
+    .opt { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 0 16px; font-size: 15px; color: var(--t); }
+    .opt + .opt { border-top: 1px solid var(--b); }
+    .opt .ic { color: var(--t2); width: 22px; height: 22px; }
+    .opt .words { flex: 1; min-width: 0; line-height: 1.3; }
+    .opt .words small { display: block; font-size: 13px; color: var(--t2); }
+    .opt .tick { width: 22px; height: 22px; color: var(--q); }
+    .opt.on { font-weight: 600; }
+    .opt.on .ic.v { color: var(--t); }
+
+    /* The basket tools row (plan 0074). */
+    .tools { display: flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 12px 0 16px; background: var(--g); }
+    .faces { display: flex; align-items: center; padding-left: 4px; margin-right: 4px; flex: none; }
+    .face { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-left: -4px; border: 1px solid var(--b); border-radius: 999px; background: var(--r); box-shadow: 0 0 0 2px var(--g); font-size: 11px; font-weight: 600; color: var(--t2); }
+    .progress { flex: 1; min-width: 0; margin: 0; font-size: 14px; color: var(--t3); }
+    .total { display: inline-flex; align-items: center; min-height: 44px; padding: 0 8px; font-size: 14px; font-weight: 600; color: var(--t2); white-space: nowrap; flex: none; font-variant-numeric: tabular-nums; }
+    .tool { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 999px; color: var(--t2); flex: none; }
+    .tool.is-open { background: var(--s); color: var(--t); }
+    .brow { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 4px 16px; border-bottom: 1px solid var(--b); }
+    .circ { width: 28px; height: 28px; border-radius: 999px; border: 1.5px solid var(--bs); flex: none; }
+    .menu { position: absolute; z-index: 6; min-width: 220px; padding: 4px; border: 1px solid var(--bs); border-radius: 12px; background: var(--o); box-shadow: var(--e2); }
+    .menu .it { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 8px; border-radius: 8px; font-size: 14px; color: var(--t); white-space: nowrap; }
+    .menu .it .ic { color: var(--t2); }
+    .menu .it small { margin-left: auto; padding-left: 12px; color: var(--t3); font-size: 13px; }
+    .menu .sep { height: 1px; margin: 4px 8px; background: var(--b); }
+
+    /* The product page (velista 0134) and its table of lists. */
+    .prod { display: flex; gap: 14px; padding: 16px 0 8px; }
+    .prod .pic { width: 96px; height: 96px; border-radius: 16px; }
+    .prod h3 { margin: 4px 0 4px; font-size: 18px; font-weight: 600; line-height: 1.3; }
+    .prod p { margin: 0; font-size: 14px; color: var(--t2); }
+    .prod .big { margin-top: 8px; font-size: 20px; font-weight: 700; color: var(--t); }
+    .sec { margin: 20px 0 8px; font-size: 16px; font-weight: 600; }
+    .grp { margin: 12px 0 8px; font-size: 14px; font-weight: 600; color: var(--t2); }
+    .lists { border: 1px solid var(--b); border-radius: 16px; background: var(--r); overflow: visible; }
+    .lrow { position: relative; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 6px 8px 6px 16px; border-bottom: 1px solid var(--b); }
+    .lrow:last-child { border-bottom: 0; }
+    .lwhat { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; line-height: 1.25; font-size: 16px; }
+    .lwhat .last { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--q); }
+    .lwhat .sub { font-size: 12px; color: var(--t3); }
+
+    /* The basket row sheet (velista 0139, 0201, 0204). */
+    .scrim { position: absolute; inset: 0; z-index: 5; background: rgba(10, 12, 20, 0.42); }
+    .night .scrim { background: rgba(10, 12, 20, 0.74); }
+    .sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; padding: 8px 16px 20px; border-radius: 20px 20px 0 0; background: var(--r); box-shadow: var(--sh); }
+    .grab { width: 40px; height: 4px; margin: 0 auto 12px; border-radius: 999px; background: var(--bs); }
+    .shead { display: flex; gap: 12px; align-items: center; }
+    .shead .pic { width: 56px; height: 56px; border-radius: 12px; }
+    .shead h2 { margin: 0; font-size: 20px; font-weight: 600; line-height: 1.25; }
+    .shead p { margin: 2px 0 0; font-size: 14px; color: var(--t2); }
+    .ent-head { display: flex; align-items: center; min-height: 44px; margin-top: 8px; border-bottom: 1px solid var(--b); font-size: 14px; font-weight: 600; color: var(--t2); }
+    .erow { position: relative; display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 4px 0; border-bottom: 1px solid var(--b); }
+    .elabel { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+    .ename { display: flex; min-width: 0; font-size: 16px; line-height: 1.4; white-space: nowrap; }
+    .ename .nm { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .ename .ask { flex: none; color: var(--t2); }
+    .ewhere { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.4; color: var(--t2); }
+    .disc { display: flex; align-items: center; gap: 8px; min-height: 56px; border-bottom: 1px solid var(--b); font-size: 16px; }
+    .disc > span:first-child { flex: 1; }
+    .disc .ic { color: var(--t2); transform: rotate(180deg); }
+    .stitle { margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; font-weight: 400; line-height: 1.3; color: var(--t); }
+    .ssub { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+    .ssub.gap { margin-top: 8px; }
+    .ent-head .chg { margin-left: auto; color: var(--q); }
+    .sbtn { display: flex; align-items: center; justify-content: center; height: 48px; margin-top: 16px; border-radius: 12px; background: var(--act); color: #0a0c14; font-size: 15px; font-weight: 600; }
+    .stext { display: flex; align-items: center; justify-content: center; height: 44px; font-size: 14px; color: var(--t2); }
+    .gl { display: flex; gap: 18px; align-items: flex-end; padding: 14px 16px; }
+    .gl figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: var(--t2); }
+    .gl .ic { width: 48px; height: 48px; color: var(--t); }
+    .sacts { display: flex; gap: 8px; margin-top: 16px; }
+    .btn { flex: 1; display: flex; align-items: center; justify-content: center; height: 48px; padding: 0 12px; border-radius: 12px; font-size: 15px; font-weight: 600; white-space: nowrap; }
+    .btn.primary { background: var(--act); color: #0a0c14; }
+    .btn.quiet { border: 1px solid var(--bs); color: var(--t); background: transparent; }
+    .btn.text { flex: none; color: var(--q); }
+  </style>
+</helmet>
+<div class="cr">
+<div class="col"><div class="cap"><b>Day, mid drag.</b> The thumb is on the chicken (950 g) and has dragged one step left. The tape is the reel of 0043 restored: previous, current and next, each number over its unit, 56 px tall, over the row it belongs to. It covers this row's name and price, and its shadow falls on the rows above and below.</div><div class="phone day"><div class="hdr"><span class="lead"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></span></span><span class="htext"><span class="title">Compra semanal</span><p class="hsub">en Casa</p></span><span class="acts"><span class="act"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="6" height="6" rx="1.4"/><path d="M13 6h7.5M13 9.5h4.5"/><rect x="3.5" y="13.5" width="6" height="6" rx="1.4"/><path d="M13 15h7.5M13 18.5h4.5"/></svg></span></span><span class="act"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6.2 7.3v6.2l-3.6-1.8v-4.4z"/></svg></span></span><span class="act"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span></span></span></div><div class="top"><div class="field"><span>Añade o busca algo</span><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9.2" y="3" width="5.6" height="11" rx="2.8"/><path d="M6.4 11.4a5.6 5.6 0 0 0 11.2 0"/><path d="M12 17v4"/></svg></span></div></div><div class="scroll"><div class="rows-top"><div class="crow"><span class="pic"><img src="photos/milk-hacendado.jpg" alt=""></span><span class="body"><span class="line1"><span class="content">Leche entera</span><span class="cprice">0,92&nbsp;€</span></span><span class="line2"><span>Hacendado&nbsp;· 1 L</span></span></span><span class="reel"><span class="pill"><b>6</b></span></span></div><div class="crow"><span class="pic"><img src="photos/bananas.jpg" alt=""></span><span class="body"><span class="line1"><span class="content">Plátano de Canarias</span><span class="cprice">2,80&nbsp;€<span class="per">/ kg</span></span></span><span class="line2"><span></span></span></span><span class="reel"><span class="pill"><b>1,5</b><i>kg</i></span></span></div><div class="crow"><span class="pic none"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></span><span class="body"><span class="line1"><span class="content">Pechuga de pollo fileteada</span><span class="cprice">6,95&nbsp;€<span class="per">/ kg</span></span></span><span class="line2"><span>Hacendado</span></span></span><span class="reel"><span class="pill hidden"><b>950</b><i>g</i></span><span class="tape st"><span class="nb"><b>950</b><i>g</i></span><span class="cur"><b>975</b><i>g</i></span><span class="nb"><b>1</b><i>kg</i></span></span><span class="thumb" style="right: 64px; top: -1px;"></span></span></div><div class="crow"><span class="pic"><img src="photos/eggs.jpg" alt=""></span><span class="body"><span class="line1"><span class="content">Huevos camperos L</span><span class="cprice">2,35&nbsp;€</span></span><span class="line2"><span>Hacendado&nbsp;· 12 uds</span></span></span><span class="reel"><span class="pill"><b>2</b></span></span></div><div class="crow"><span class="pic"><img src="photos/tomate-frito.jpg" alt=""></span><span class="body"><span class="line1"><span class="content">Tomate frito</span><span class="cprice">0,85&nbsp;€</span></span><span class="line2"><span>Hacendado&nbsp;· 400 g</span></span></span><span class="reel"><span class="pill"><b>3</b></span></span></div><div class="crow"><span class="pic"><img src="photos/yogurt.jpg" alt=""></span><span class="body"><span class="line1"><span class="content">Yogur natural</span><span class="cprice">1,49&nbsp;€</span></span><span class="line2"><span>Danone&nbsp;· 4 × 125 g</span></span></span><span class="reel"><span class="pill"><b>2</b></span></span></div><div class="crow"><span class="pic"><img src="photos/olive-oil.jpg" alt=""></span><span class="body"><span class="line1"><span class="content">Aceite de oliva virgen extra</span><span class="cprice">8,45&nbsp;€</span></span><span class="line2"><span>Hacendado&nbsp;· 1 L</span></span></span><span class="reel"><span class="pill"><b>1</b></span></span></div><div class="crow"><span class="pic none"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></span><span class="body"><span class="line1"><span class="content">Queso tierno</span><span class="cprice">11,90&nbsp;€<span class="per">/ kg</span></span></span><span class="line2"><span>García Baquero</span></span></span><span class="reel"><span class="pill"><b>250</b><i>g</i></span></span></div><div class="crow"><span class="pic none"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></span><span class="body"><span class="line1"><span class="content">Pan de molde integral</span><span class="cprice">2,15&nbsp;€</span></span><span class="line2"><span>Bimbo&nbsp;· 460 g</span></span></span><span class="reel"><span class="pill"><b>1</b></span></span></div><div class="crow"><span class="pic none"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></span><span class="body"><span class="line1"><span class="content">Café molido natural</span><span class="cprice">3,10&nbsp;€</span></span><span class="line2"><span>Marcilla&nbsp;· 250 g</span></span></span><span class="reel"><span class="pill"><b>2</b></span></span></div></div></div><div class="nav"><span class="tab on"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11.2 12 4l8.5 7.2"/><path d="M5.8 10v9.2h12.4V10"/></svg></span><span>Inicio</span></span><span class="tab"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span>Catálogo</span></span><span class="tab"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></span><span>Lista de la compra</span></span></div></div></div>
+<div class="col"><div class="cap"><b>Night, the same moment.</b> The current number is the quiet amber, the neighbours muted. The row is deaf while the tape is up and for the click shield after it.</div><div class="phone night"><div class="hdr"><span class="lead"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></span></span><span class="htext"><span class="title">Weekly shop</span><p class="hsub">in Casa</p></span><span class="acts"><span class="act"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="6" height="6" rx="1.4"/><path d="M13 6h7.5M13 9.5h4.5"/><rect x="3.5" y="13.5" width="6" height="6" rx="1.4"/><path d="M13 15h7.5M13 18.5h4.5"/></svg></span></span><span class="act"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6.2 7.3v6.2l-3.6-1.8v-4.4z"/></svg></span></span><span class="act"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span></span></span></div><div class="top"><div class="field"><span>Add or find something</span><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9.2" y="3" width="5.6" height="11" rx="2.8"/><path d="M6.4 11.4a5.6 5.6 0 0 0 11.2 0"/><path d="M12 17v4"/></svg></span></div></div><div class="scroll"><div class="rows-top"><div class="crow"><span class="pic"><img src="photos/milk-hacendado.jpg" alt=""></span><span class="body"><span class="line1"><span class="content">Whole milk</span><span class="cprice">€0.92</span></span><span class="line2"><span>Hacendado&nbsp;· 1 L</span></span></span><span class="reel"><span class="pill"><b>6</b></span></span></div><div class="crow"><span class="pic"><img src="photos/bananas.jpg" alt=""></span><span class="body"><span class="line1"><span class="content">Canary Islands banana</span><span class="cprice">€2.80<span class="per">/ kg</span></span></span><span class="line2"><span></span></span></span><span class="reel"><span class="pill"><b>1.5</b><i>kg</i></span></span></div><div class="crow"><span class="pic none"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></span><span class="body"><span class="line1"><span class="content">Sliced chicken breast</span><span class="cprice">€6.95<span class="per">/ kg</span></span></span><span class="line2"><span>Hacendado</span></span></span><span class="reel"><span class="pill hidden"><b>950</b><i>g</i></span><span class="tape st"><span class="nb"><b>950</b><i>g</i></span><span class="cur"><b>975</b><i>g</i></span><span class="nb"><b>1</b><i>kg</i></span></span><span class="thumb" style="right: 64px; top: -1px;"></span></span></div><div class="crow"><span class="pic"><img src="photos/eggs.jpg" alt=""></span><span class="body"><span class="line1"><span class="content">Free range eggs L</span><span class="cprice">€2.35</span></span><span class="line2"><span>Hacendado&nbsp;· 12 pcs</span></span></span><span class="reel"><span class="pill"><b>2</b></span></span></div><div class="crow"><span class="pic"><img src="photos/tomate-frito.jpg" alt=""></span><span class="body"><span class="line1"><span class="content">Tomato sauce</span><span class="cprice">€0.85</span></span><span class="line2"><span>Hacendado&nbsp;· 400 g</span></span></span><span class="reel"><span class="pill"><b>3</b></span></span></div><div class="crow"><span class="pic"><img src="photos/yogurt.jpg" alt=""></span><span class="body"><span class="line1"><span class="content">Plain yogurt</span><span class="cprice">€1.49</span></span><span class="line2"><span>Danone&nbsp;· 4 × 125 g</span></span></span><span class="reel"><span class="pill"><b>2</b></span></span></div><div class="crow"><span class="pic"><img src="photos/olive-oil.jpg" alt=""></span><span class="body"><span class="line1"><span class="content">Extra virgin olive oil</span><span class="cprice">€8.45</span></span><span class="line2"><span>Hacendado&nbsp;· 1 L</span></span></span><span class="reel"><span class="pill"><b>1</b></span></span></div><div class="crow"><span class="pic none"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></span><span class="body"><span class="line1"><span class="content">Mild cheese</span><span class="cprice">€11.90<span class="per">/ kg</span></span></span><span class="line2"><span>García Baquero</span></span></span><span class="reel"><span class="pill"><b>250</b><i>g</i></span></span></div><div class="crow"><span class="pic none"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></span><span class="body"><span class="line1"><span class="content">Wholemeal sliced bread</span><span class="cprice">€2.15</span></span><span class="line2"><span>Bimbo&nbsp;· 460 g</span></span></span><span class="reel"><span class="pill"><b>1</b></span></span></div><div class="crow"><span class="pic none"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></span><span class="body"><span class="line1"><span class="content">Ground coffee</span><span class="cprice">€3.10</span></span><span class="line2"><span>Marcilla&nbsp;· 250 g</span></span></span><span class="reel"><span class="pill"><b>2</b></span></span></div></div></div><div class="nav"><span class="tab on"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11.2 12 4l8.5 7.2"/><path d="M5.8 10v9.2h12.4V10"/></svg></span><span>Home</span></span><span class="tab"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span>Catalog</span></span><span class="tab"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></span><span>Shopping list</span></span></div></div></div>
+<div class="col"><div class="cap"><b>The step rule, as the tape draws it.</b> One drag from 950 g, frame by frame: 25 g a step below a kilo, then the stop at 1 kg, then 50 g. Across the drag the tape reads 925, 950, 975, 1000, 1050. Day above, Night below.</div><div class="phone day crop"><div style="padding: 16px; display: flex; flex-direction: column; gap: 6px; align-items: flex-end;"><div style="display: flex; align-items: center; gap: 12px; width: 100%;"><span style="flex: 1; font-size: 13px; color: var(--t2);">en 950&nbsp;g</span><span class="static"><span class="tape st"><span class="nb"><b>925</b><i>g</i></span><span class="cur"><b>950</b><i>g</i></span><span class="nb"><b>975</b><i>g</i></span></span></span></div><div style="display: flex; align-items: center; gap: 12px; width: 100%;"><span style="flex: 1; font-size: 13px; color: var(--t2);">en 975&nbsp;g</span><span class="static"><span class="tape st"><span class="nb"><b>950</b><i>g</i></span><span class="cur"><b>975</b><i>g</i></span><span class="nb"><b>1</b><i>kg</i></span></span></span></div><div style="display: flex; align-items: center; gap: 12px; width: 100%;"><span style="flex: 1; font-size: 13px; color: var(--t2);">en 1&nbsp;kg</span><span class="static"><span class="tape st"><span class="nb"><b>975</b><i>g</i></span><span class="cur"><b>1</b><i>kg</i></span><span class="nb"><b>1,05</b><i>kg</i></span></span></span></div></div></div><div style="height: 12px;"></div><div class="phone night crop"><div style="padding: 16px; display: flex; flex-direction: column; gap: 6px; align-items: flex-end;"><div style="display: flex; align-items: center; gap: 12px; width: 100%;"><span style="flex: 1; font-size: 13px; color: var(--t2);">at 950&nbsp;g</span><span class="static"><span class="tape st"><span class="nb"><b>925</b><i>g</i></span><span class="cur"><b>950</b><i>g</i></span><span class="nb"><b>975</b><i>g</i></span></span></span></div><div style="display: flex; align-items: center; gap: 12px; width: 100%;"><span style="flex: 1; font-size: 13px; color: var(--t2);">at 975&nbsp;g</span><span class="static"><span class="tape st"><span class="nb"><b>950</b><i>g</i></span><span class="cur"><b>975</b><i>g</i></span><span class="nb"><b>1</b><i>kg</i></span></span></span></div><div style="display: flex; align-items: center; gap: 12px; width: 100%;"><span style="flex: 1; font-size: 13px; color: var(--t2);">at 1&nbsp;kg</span><span class="static"><span class="tape st"><span class="nb"><b>975</b><i>g</i></span><span class="cur"><b>1</b><i>kg</i></span><span class="nb"><b>1.05</b><i>kg</i></span></span></span></div></div></div></div>
+</div>
+</x-dc>
+</body>
+</html>

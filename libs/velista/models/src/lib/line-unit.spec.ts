@@ -5,13 +5,18 @@ import {
   legacyLineUnit,
   lineUnitOfProduct,
   lineUnits,
+  QUANTITY_COARSE_STEP,
+  QUANTITY_SNAP_POINTS,
   QUANTITY_STEP,
+  QUANTITY_STEPS,
   servesLineUnit,
   shortHundredths,
   shownLineUnit,
+  snapPointsWithin,
   stepAt,
   stepFrom,
   unitsServedBy,
+  type LineUnit,
   type LineUnitProduct,
 } from './line-unit';
 
@@ -103,39 +108,82 @@ describe('lineUnits (velista 0183, section 1; backend 0246 lineUnitsOf)', () => 
   });
 });
 
-describe('stepAt (velista 0188, S7b: a press always changes what the row reads)', () => {
-  it('steps a count by one below a thousand and by ten from it', () => {
+describe('stepAt (velista 0188, S7b; velista 0195: at least 50 from 1000)', () => {
+  it('steps a count by one below a thousand and by fifty from it', () => {
     expect(stepAt(0, 'UNIT')).toBe(1);
     expect(stepAt(999, 'UNIT')).toBe(1);
-    expect(stepAt(1000, 'UNIT')).toBe(10);
-    expect(stepAt(5000, 'UNIT')).toBe(10);
+    expect(stepAt(1000, 'UNIT')).toBe(50);
+    expect(stepAt(5000, 'UNIT')).toBe(50);
   });
 
-  it('steps grams and millilitres by 25 at every amount', () => {
+  it('steps grams and millilitres by 25 below a thousand and by 50 from it', () => {
     for (const unit of ['GRAM', 'MILLILITER'] as const) {
       expect(stepAt(0, unit)).toBe(25);
       expect(stepAt(975, unit)).toBe(25);
-      expect(stepAt(1000, unit)).toBe(25);
-      expect(stepAt(999_975, unit)).toBe(25);
+      expect(stepAt(1000, unit)).toBe(50);
+      expect(stepAt(99_975, unit)).toBe(50);
     }
   });
 
-  it('keeps the base steps of the owner', () => {
+  it('keeps a product step above 50 from a thousand', () => {
+    expect(stepAt(1000, 'GRAM', 100)).toBe(100);
+    expect(stepAt(1000, 'GRAM', 5)).toBe(50);
+    expect(stepAt(995, 'GRAM', 5)).toBe(5);
+  });
+
+  it('keeps the base steps of the owner and 5% of 1000 from 1000', () => {
     expect(QUANTITY_STEP).toEqual({ UNIT: 1, GRAM: 25, MILLILITER: 25 });
+    expect(QUANTITY_COARSE_STEP).toBe(50);
+    expect(QUANTITY_SNAP_POINTS).toEqual([1000]);
   });
 });
 
-describe('stepFrom (velista 0188, S7b and decision B: no grid)', () => {
-  it('moves a count across a thousand', () => {
-    expect(stepFrom(999, 'UNIT', 1)).toBe(1000);
-    expect(stepFrom(1000, 'UNIT', 1)).toBe(1010);
-    expect(stepFrom(1000, 'UNIT', -1)).toBe(999);
-    expect(stepFrom(1010, 'UNIT', -1)).toBe(1000);
+describe('stepFrom (velista 0188, S7b and decision B; velista 0195 snap points)', () => {
+  it('steps grams across a kilo with no product step (spec 1)', () => {
+    expect(stepFrom(975, 'GRAM', 1)).toBe(1000);
+    expect(stepFrom(1000, 'GRAM', 1)).toBe(1050);
+    expect(stepFrom(1050, 'GRAM', -1)).toBe(1000);
+    expect(stepFrom(1000, 'GRAM', -1)).toBe(975);
   });
 
-  it('does not return from minus then plus for a typed count of 1001 to 1009', () => {
-    expect(stepFrom(1005, 'UNIT', -1)).toBe(995);
-    expect(stepFrom(995, 'UNIT', 1)).toBe(996);
+  it('stops a typed amount on 1000 in both directions (spec 2)', () => {
+    expect(stepFrom(990, 'GRAM', 1)).toBe(1000);
+    expect(stepFrom(1025, 'GRAM', -1)).toBe(1000);
+    expect(stepFrom(1010, 'GRAM', 1)).toBe(1060);
+    expect(stepFrom(1060, 'GRAM', -1)).toBe(1010);
+  });
+
+  it('stops on 1000 on a product step of 100 (spec 3, velista 0186 decision D)', () => {
+    expect(stepFrom(900, 'GRAM', 1, 100)).toBe(1000);
+    expect(stepFrom(1000, 'GRAM', 1, 100)).toBe(1100);
+    expect(stepFrom(975, 'GRAM', 1, 100)).toBe(1000);
+  });
+
+  it('moves a product step of 5 by 50 from 1000 (spec 4)', () => {
+    expect(stepFrom(995, 'GRAM', 1, 5)).toBe(1000);
+    expect(stepFrom(1000, 'GRAM', 1, 5)).toBe(1050);
+  });
+
+  it('steps millilitres as grams (spec 5)', () => {
+    for (const value of [975, 990, 1000, 1010, 1025, 1050]) {
+      for (const direction of [1, -1] as const) {
+        expect(stepFrom(value, 'MILLILITER', direction)).toBe(
+          stepFrom(value, 'GRAM', direction)
+        );
+      }
+    }
+  });
+
+  it('moves a count across a thousand (spec 6)', () => {
+    expect(stepFrom(999, 'UNIT', 1)).toBe(1000);
+    expect(stepFrom(1000, 'UNIT', 1)).toBe(1050);
+    expect(stepFrom(1050, 'UNIT', -1)).toBe(1000);
+    expect(stepFrom(1000, 'UNIT', -1)).toBe(999);
+  });
+
+  it('stops a typed count of 1001 to 1049 on 1000 going down', () => {
+    expect(stepFrom(1005, 'UNIT', -1)).toBe(1000);
+    expect(stepFrom(1049, 'UNIT', -1)).toBe(1000);
   });
 
   it('never goes under zero', () => {
@@ -144,59 +192,173 @@ describe('stepFrom (velista 0188, S7b and decision B: no grid)', () => {
     expect(stepFrom(0, 'GRAM', -1)).toBe(0);
   });
 
-  it('adds and takes away 25 g with no snapping', () => {
-    expect(stepFrom(1000, 'GRAM', -1)).toBe(975);
-    expect(stepFrom(1010, 'GRAM', 1)).toBe(1035);
-    expect(stepFrom(1035, 'GRAM', -1)).toBe(1010);
-    expect(stepFrom(750, 'GRAM', 1)).toBe(775);
+  it('returns after plus then minus from every amount on the grid of each base step, 0 to 3000 (spec 8)', () => {
+    const cases: { unit: LineUnit; step: number | null }[] = [
+      { unit: 'UNIT', step: null },
+      { unit: 'GRAM', step: null },
+      { unit: 'MILLILITER', step: null },
+      ...QUANTITY_STEPS.map((step) => ({ unit: 'GRAM' as const, step })),
+    ];
+    for (const { unit, step } of cases) {
+      const base = step ?? QUANTITY_STEP[unit];
+      const broken: number[] = [];
+      for (let value = 0; value <= 3000; value += base) {
+        const up = stepFrom(value, unit, 1, step);
+        if (stepFrom(up, unit, -1, step) !== value) {
+          broken.push(value);
+        }
+      }
+      expect({ unit, step, broken }).toEqual({ unit, step, broken: [] });
+    }
   });
 
-  it('returns after plus then minus from every amount, for all three units (the loop)', () => {
-    const amounts: number[] = [];
-    for (let value = 0; value <= 1100; value++) {
-      amounts.push(value);
-    }
+  it('returns after plus then minus for every count near the most', () => {
+    const broken: number[] = [];
     for (let value = 99_900; value <= 99_999; value++) {
-      amounts.push(value);
+      if (stepFrom(stepFrom(value, 'UNIT', 1), 'UNIT', -1) !== value) {
+        broken.push(value);
+      }
     }
-    for (const unit of ['UNIT', 'GRAM', 'MILLILITER'] as const) {
-      const broken = amounts.filter(
-        (value) => stepFrom(stepFrom(value, unit, 1), unit, -1) !== value
-      );
-      expect(broken).toEqual([]);
+    expect(broken).toEqual([]);
+  });
+
+  it('reads the default points when snaps is left out (spec 9)', () => {
+    for (let value = 0; value <= 3000; value += 5) {
+      for (const direction of [1, -1] as const) {
+        for (const step of [null, 5, 100]) {
+          expect(stepFrom(value, 'GRAM', direction, step)).toBe(
+            stepFrom(value, 'GRAM', direction, step, [1000])
+          );
+        }
+      }
     }
   });
 });
 
+describe('stepFrom with snap points of the caller (velista 0195)', () => {
+  const ask990 = [1000, 990];
+
+  it('lands on the nearest point in the direction of travel (spec 10)', () => {
+    const points = [990, 1000];
+    expect(stepFrom(975, 'GRAM', 1, null, points)).toBe(990);
+    expect(stepFrom(990, 'GRAM', 1, null, points)).toBe(1000);
+    expect(stepFrom(1010, 'GRAM', -1, null, points)).toBe(1000);
+    expect(stepFrom(1000, 'GRAM', -1, null, points)).toBe(990);
+  });
+
+  it('moves on from a point equal to the value (spec 11)', () => {
+    const points = [990, 1000];
+    expect(stepFrom(990, 'GRAM', -1, null, points)).toBe(975);
+    expect(stepFrom(990, 'GRAM', 1, null, points)).toBe(1000);
+  });
+
+  it('goes back to the grid from a snap point off it (spec 12)', () => {
+    expect(stepFrom(975, 'GRAM', 1, null, ask990)).toBe(990);
+    expect(stepFrom(990, 'GRAM', -1, null, ask990)).toBe(975);
+    expect(stepFrom(990, 'GRAM', 1, null, ask990)).toBe(1000);
+    expect(stepFrom(1000, 'GRAM', -1, null, ask990)).toBe(990);
+    expect(stepFrom(975, 'GRAM', -1, null, ask990)).toBe(950);
+  });
+
+  it('goes back to the grid of 50 above 1000 (spec 13)', () => {
+    const points = [1000, 1030];
+    expect(stepFrom(1000, 'GRAM', 1, null, points)).toBe(1030);
+    expect(stepFrom(1030, 'GRAM', 1, null, points)).toBe(1050);
+    expect(stepFrom(1050, 'GRAM', -1, null, points)).toBe(1030);
+    expect(stepFrom(1030, 'GRAM', -1, null, points)).toBe(1000);
+  });
+
+  it('steps from a point on the grid as from any amount (spec 14)', () => {
+    const points = [1000, 975];
+    expect(stepFrom(975, 'GRAM', 1, null, points)).toBe(1000);
+    expect(stepFrom(975, 'GRAM', -1, null, points)).toBe(950);
+  });
+
+  it('goes back to the grid of a product step of 100 (spec 15)', () => {
+    expect(stepFrom(990, 'GRAM', 1, 100, ask990)).toBe(1000);
+    expect(stepFrom(990, 'GRAM', -1, 100, ask990)).toBe(900);
+  });
+
+  it('keeps the rule of today for a typed amount that is not a point (spec 16)', () => {
+    expect(stepFrom(1010, 'GRAM', 1, null, ask990)).toBe(1060);
+    expect(stepFrom(1060, 'GRAM', -1, null, ask990)).toBe(1010);
+    // The case target state 7 accepts: a typed 980 does not come back.
+    expect(stepFrom(980, 'GRAM', 1, null, ask990)).toBe(990);
+    expect(stepFrom(990, 'GRAM', -1, null, ask990)).toBe(975);
+  });
+
+  it('needs no memory of the amount before (spec 17)', () => {
+    stepFrom(975, 'GRAM', 1, null, ask990);
+    expect(stepFrom(990, 'GRAM', -1, null, ask990)).toBe(975);
+    stepFrom(1000, 'GRAM', -1, null, ask990);
+    expect(stepFrom(990, 'GRAM', -1, null, ask990)).toBe(975);
+    expect(stepFrom(990, 'GRAM', -1, null, ask990)).toBe(975);
+  });
+
+  it('ignores a point at or below 0 or above the most (spec 18)', () => {
+    expect(stepFrom(25, 'GRAM', -1, null, [0, -10])).toBe(0);
+    expect(stepFrom(10, 'GRAM', -1, null, [-5])).toBe(0);
+    expect(stepFrom(99_990, 'GRAM', 1, null, [100_000])).toBe(100_040);
+  });
+
+  it('snaps nowhere on an empty list passed on purpose (spec 19)', () => {
+    expect(stepFrom(990, 'GRAM', 1, null, [])).toBe(1015);
+    expect(stepFrom(1025, 'GRAM', -1, null, [])).toBe(975);
+  });
+});
+
+describe('snapPointsWithin (velista 0195, target state 5)', () => {
+  it('drops the points at or under the floor and over the ceiling (spec 18)', () => {
+    expect(snapPointsWithin([1, 1000], 1, 99_999)).toEqual([1000]);
+    expect(snapPointsWithin([990, 1000], 0, 995)).toEqual([990]);
+    expect(snapPointsWithin([], 0, 99_999)).toEqual([]);
+  });
+
+  it('never gives a point under the floor as a result', () => {
+    expect(stepFrom(110, 'GRAM', -1, null, [90, 1000])).toBe(90);
+    const points = snapPointsWithin([90, 1000], 100, LINE_QUANTITY_MAX);
+    // 85, which the control's own floor then holds at 100.
+    expect(stepFrom(110, 'GRAM', -1, null, points)).toBe(85);
+  });
+});
+
 describe('canStepUp (velista 0188, S8)', () => {
-  it('is off for a count where the next step of 10 passes 99 999 (the owner, 2026-11-17)', () => {
-    expect(canStepUp(99_980, 'UNIT', LINE_QUANTITY_MAX)).toBe(true);
-    for (let value = 99_990; value <= 100_000; value++) {
+  it('is off for a count where the next step of 50 passes 99 999', () => {
+    expect(canStepUp(99_949, 'UNIT', LINE_QUANTITY_MAX)).toBe(true);
+    for (let value = 99_950; value <= 100_000; value++) {
       expect(canStepUp(value, 'UNIT', LINE_QUANTITY_MAX)).toBe(false);
     }
   });
 
-  it('is off from 99 975 for grams and millilitres, one step before the most, and never clamps', () => {
-    expect(canStepUp(99_950, 'GRAM', LINE_QUANTITY_MAX)).toBe(true);
-    expect(canStepUp(99_974, 'GRAM', LINE_QUANTITY_MAX)).toBe(true);
-    expect(canStepUp(99_975, 'GRAM', LINE_QUANTITY_MAX)).toBe(false);
+  it('is off from 99 950 for grams and millilitres, one step before the most, and never clamps (spec 7)', () => {
+    expect(canStepUp(99_900, 'GRAM', LINE_QUANTITY_MAX)).toBe(true);
+    expect(canStepUp(99_949, 'GRAM', LINE_QUANTITY_MAX)).toBe(true);
+    expect(canStepUp(99_950, 'GRAM', LINE_QUANTITY_MAX)).toBe(false);
     expect(canStepUp(99_999, 'MILLILITER', LINE_QUANTITY_MAX)).toBe(false);
     // A line stored above the ceiling, from before the ruling.
     expect(canStepUp(100_000, 'GRAM', LINE_QUANTITY_MAX)).toBe(false);
   });
 
-  it('is off for a count from 999 985 under a larger max, where the reading stays "999,99"', () => {
-    expect(canStepUp(999_980, 'UNIT', 999_999)).toBe(true);
-    for (let value = 999_985; value <= 999_999; value++) {
+  it('is off for a count from 999 950 under a larger max', () => {
+    expect(canStepUp(999_949, 'UNIT', 999_999)).toBe(true);
+    for (let value = 999_950; value <= 999_999; value++) {
       expect(canStepUp(value, 'UNIT', 999_999)).toBe(false);
     }
   });
 
   it('follows the max it is given', () => {
     expect(canStepUp(99_999, 'UNIT', 100_000)).toBe(false);
-    expect(canStepUp(99_990, 'UNIT', 100_000)).toBe(true);
-    expect(canStepUp(99_975, 'GRAM', 100_000)).toBe(true);
-    expect(canStepUp(99_980, 'GRAM', 100_000)).toBe(false);
+    expect(canStepUp(99_950, 'UNIT', 100_000)).toBe(true);
+    expect(canStepUp(99_950, 'GRAM', 100_000)).toBe(true);
+    expect(canStepUp(99_951, 'GRAM', 100_000)).toBe(false);
+  });
+
+  it('reads the snap points of the press', () => {
+    // A plus at 99 990 g would pass the most, unless a point stops it below.
+    expect(canStepUp(99_990, 'GRAM', LINE_QUANTITY_MAX)).toBe(false);
+    expect(canStepUp(99_990, 'GRAM', LINE_QUANTITY_MAX, null, [99_995])).toBe(
+      true
+    );
   });
 });
 
