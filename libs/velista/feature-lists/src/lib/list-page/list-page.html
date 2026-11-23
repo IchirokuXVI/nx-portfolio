@@ -10,10 +10,22 @@
   scrolls away and never waits for the list. On a cold arrival the name is not here
   yet and the title is the word for the kind of page; the name then takes its place in
   the same box, at the same size (rule H6).
+
+  The group is the line under the title (velista 0205): "in Casa". An empty line until
+  the group is known, so the title already sits where it will be once the group
+  arrives, and no line at all when there is no list to name a group for.
 -->
+@let zoneName = header()?.zoneName ?? null;
 <lib-page-header
   (back)="back()"
   [backLabel]="'list.header.back' | rokuT"
+  [subtitle]="
+    header() === null
+      ? null
+      : zoneName === null
+        ? ''
+        : ('list.header.inGroup' | rokuT: { name: zoneName })
+  "
   [title]="header()?.listName ?? ('list.header.title' | rokuT)"
 >
   <ng-container pageHeaderActions>
@@ -69,10 +81,10 @@
 
 <!--
   The head block (velista 0189): pinned between the page header and the column, so
-  the field stays put while the column scrolls. Which group, who else is here, and
-  whether the list is live, then the field. It draws from the cache when the caller
-  arrived from the group page, so the common path shows it on the first frame and
-  skeletons only the lines. On a cold arrival the lines still load without it, which
+  the field stays put while the column scrolls. Who else is here and whether the list
+  is live, then the field; the group is in the page header since velista 0205. It
+  draws from the cache when the caller arrived from the group page, so the common path
+  shows it on the first frame and skeletons only the lines. On a cold arrival the lines still load without it, which
   is rule L2 and is the whole reason these are two requests.
 -->
 <div class="page-top">

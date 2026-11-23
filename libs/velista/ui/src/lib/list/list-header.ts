@@ -5,18 +5,20 @@ import { OfflineIcon } from '../icons/icons';
 import { ListViewers } from '../presence/list-viewers';
 
 /**
- * The list's head block, pinned under the page header (velista `0189`): which group
- * the list belongs to, who else has it open, and whether it is live.
+ * The list's head block, pinned under the page header (velista `0189`): who else has
+ * the list open, and whether it is live.
  *
- * ## The name is not here
+ * ## The name and the group are not here
  *
  * It held the list's name and the settings button until velista `0130`. Both are in
  * the page's `PageHeader` now, because a header holds only a title and everything else
  * about the list is content under it. So this has no `h1` and is not a `header`
  * element, and the name in `ListHeaderVm` is read by the page, for its title.
  *
- * Rule L2 still shapes it: the lines never wait on the request that names the list, so
- * on a cold arrival the group line is absent.
+ * The group went the same way in velista `0205`: it is the subtitle of the page
+ * header now ("in Casa" under the list's name), so `zoneName` too is read by the page.
+ * With nobody else here and a live list this block draws nothing and takes no room,
+ * which is the usual case: the field sits directly under the page header.
  *
  * ## No progress
  *
@@ -29,6 +31,11 @@ import { ListViewers } from '../presence/list-viewers';
   templateUrl: './list-header.html',
   styleUrl: './list-header.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    // The condition under which both lines draw nothing: `ListViewers` hides itself
+    // on an empty set, and the band draws only for a list that is not live.
+    '[class.empty]': 'header().viewers.length === 0 && header().live',
+  },
 })
 export class ListHeader {
   readonly header = input.required<ListHeaderVm>();
