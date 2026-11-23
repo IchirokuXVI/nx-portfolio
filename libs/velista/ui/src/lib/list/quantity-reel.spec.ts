@@ -69,6 +69,7 @@ async function render(
     step?: number | null;
     snaps?: readonly number[];
     locale?: string;
+    target?: number | null;
   } = {}
 ): Promise<{
   fixture: ComponentFixture<QuantityReel>;
@@ -111,6 +112,9 @@ async function render(
   }
   if (options.snaps !== undefined) {
     fixture.componentRef.setInput('snaps', options.snaps);
+  }
+  if (options.target !== undefined) {
+    fixture.componentRef.setInput('target', options.target);
   }
   fixture.detectChanges();
 
@@ -1207,6 +1211,177 @@ describe('QuantityReel', () => {
       expect(host.classList.contains('took')).toBe(true);
       expect(host.getAttribute('aria-valuenow')).toBe('3');
       expect(host.getAttribute('role')).toBe('spinbutton');
+    });
+  });
+
+  /**
+   * Velista `0204`, target state 2 and specs 2 and 5 to 8: with a target a colour is
+   * a status, and the selected number is told by its size and weight alone. jsdom
+   * applies no component styles, so the status is read off the classes the template
+   * sets and the colour and weight off the stylesheet rules those classes meet.
+   */
+  describe('a target (velista 0204)', () => {
+    /** What each number of the open tape is, as `value:status`. */
+    function tape(host: HTMLElement): string[] {
+      return [...host.querySelectorAll('.overlay > span')].map((part) => {
+        const status = part.classList.contains('reached')
+          ? 'reached'
+          : part.classList.contains('over')
+            ? 'over'
+            : 'plain';
+        const role = part.classList.contains('current') ? 'current' : 'nb';
+        return `${part.getAttribute('data-reel-value') ?? ''}:${role}:${status}`;
+      });
+    }
+
+    function pill(host: HTMLElement): string {
+      const element = host.querySelector('.pill');
+      return element?.classList.contains('reached')
+        ? 'reached'
+        : element?.classList.contains('over')
+          ? 'over'
+          : 'plain';
+    }
+
+    it('spec 5: on 2 with a target of 3, draws 1 and 2 plain, 3 reached, and 2 as the current one', async () => {
+      const { fixture, host } = await render(2, { target: 3 });
+
+      tap(host);
+      fixture.detectChanges();
+
+      expect(host.classList.contains('targeted')).toBe(true);
+      expect(tape(host)).toEqual([
+        '1:nb:plain',
+        '2:current:plain',
+        '3:nb:reached',
+      ]);
+      expect(host.querySelectorAll('.over')).toHaveLength(0);
+    });
+
+    it('spec 6: on 3 the current 3 is reached and the neighbour 4 over; on 4 the current 4 is over', async () => {
+      const { fixture, host } = await render(3, { target: 3 });
+
+      tap(host);
+      fixture.detectChanges();
+      expect(tape(host)).toEqual([
+        '2:nb:plain',
+        '3:current:reached',
+        '4:nb:over',
+      ]);
+
+      key(host, 'ArrowUp');
+      fixture.detectChanges();
+      expect(tape(host)).toEqual([
+        '3:nb:reached',
+        '4:current:over',
+        '5:nb:over',
+      ]);
+    });
+
+    it('spec 2: colours the tape while a drag moves it, before it is let go', async () => {
+      const { fixture, host, runs } = await render(0, { target: 3, min: 0 });
+
+      host.dispatchEvent(pointer('pointerdown', 0));
+      host.dispatchEvent(
+        pointer('pointermove', -3 * QUANTITY_REEL_PX_PER_UNIT)
+      );
+      fixture.detectChanges();
+      expect(tape(host)).toEqual([
+        '2:nb:plain',
+        '3:current:reached',
+        '4:nb:over',
+      ]);
+
+      host.dispatchEvent(
+        pointer('pointermove', -4 * QUANTITY_REEL_PX_PER_UNIT)
+      );
+      fixture.detectChanges();
+      expect(tape(host)).toEqual([
+        '3:nb:reached',
+        '4:current:over',
+        '5:nb:over',
+      ]);
+      expect(runs).toEqual([]);
+    });
+
+    it('spec 7: the resting pill is plain below the target, reached at it, over above it', async () => {
+      const { fixture, host } = await render(0, { target: 3, min: 0 });
+      expect(pill(host)).toBe('plain');
+
+      for (const [value, status] of [
+        [2, 'plain'],
+        [3, 'reached'],
+        [4, 'over'],
+      ] as const) {
+        fixture.componentRef.setInput('value', value);
+        fixture.detectChanges();
+        expect(pill(host)).toBe(status);
+      }
+    });
+
+    it('a target of 0 is never reached and any buy is over, as the stepper reads it', async () => {
+      const { fixture, host } = await render(0, { target: 0, min: 0 });
+      expect(pill(host)).toBe('plain');
+
+      fixture.componentRef.setInput('value', 1);
+      fixture.detectChanges();
+      expect(pill(host)).toBe('over');
+    });
+
+    it('spec 8: with no target, no number carries a status and the host is not targeted', async () => {
+      const { fixture, host } = await render(3);
+
+      tap(host);
+      fixture.detectChanges();
+
+      expect(host.classList.contains('targeted')).toBe(false);
+      expect(tape(host)).toEqual([
+        '2:nb:plain',
+        '3:current:plain',
+        '4:nb:plain',
+      ]);
+      expect(pill(host)).toBe('plain');
+    });
+
+    it('spec 8: the zone list, the due rows and the product page give their reels no target', () => {
+      const sources = [
+        join(__dirname, 'line-row.html'),
+        join(__dirname, 'due-line-row.ts'),
+        join(__dirname, '..', 'catalog', 'lists-table.ts'),
+      ].map((file) => readFileSync(file, 'utf8'));
+
+      for (const source of sources) {
+        const reels = source.match(/<lib-quantity-reel[\s\S]*?\/>/g) ?? [];
+        expect(reels.length).toBeGreaterThan(0);
+        for (const reel of reels) {
+          expect(reel).not.toContain('[target]');
+        }
+      }
+    });
+
+    it('the stylesheet: status colours under a target, the current bold and the neighbours regular', () => {
+      const styles = readFileSync(
+        join(__dirname, 'quantity-reel.scss'),
+        'utf8'
+      ).replace(/\r\n/g, '\n');
+      const targeted = /\n:host\(\.targeted\) \{([\s\S]*?)\n\}/.exec(
+        styles
+      )?.[1];
+      const rule = (selector: string) =>
+        new RegExp(`${selector} \\{([^}]*)\\}`).exec(targeted ?? '')?.[1] ?? '';
+
+      expect(targeted).toBeDefined();
+      expect(rule('\\.neighbour')).toContain('color: var(--app-text-primary)');
+      expect(rule('\\.neighbour \\.figure')).toContain('font-weight: 400');
+      expect(rule('\\.reached')).toContain(
+        'color: var(--app-status-success-fg)'
+      );
+      expect(rule('\\.over')).toContain('color: var(--app-action-quiet-fg)');
+      // The current number keeps the bold figure of velista 0203 in either case,
+      // and with no target the quiet amber.
+      const current = /\n\n\.current \{([\s\S]*?)\n\}/.exec(styles)?.[1] ?? '';
+      expect(current).toContain('color: var(--app-action-quiet-fg)');
+      expect(current).toContain('font-weight: 700');
     });
   });
 });

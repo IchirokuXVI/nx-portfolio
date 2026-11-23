@@ -1092,9 +1092,12 @@ export class SettleSheet {
   protected stepBuy(change: {
     readonly lineId: string;
     readonly step: QuantityStep;
+    readonly closed?: true;
   }): void {
     this.buyRuns.step(change.lineId, change.step);
-    if (change.step.typed === true) {
+    // A typed amount, or the one step of a reel that closed (velista 0204), is sent
+    // at once: the press that closed the reel may be a settle that reads it.
+    if (change.step.typed === true || change.closed === true) {
       this.buyRuns.flush(change.lineId);
     }
   }
@@ -1103,9 +1106,10 @@ export class SettleSheet {
   protected stepOther(change: {
     readonly list: BasketProductList;
     readonly step: QuantityStep;
+    readonly closed?: true;
   }): void {
     this.otherRuns.step(change.list.listId, change.step);
-    if (change.step.typed === true) {
+    if (change.step.typed === true || change.closed === true) {
       this.otherRuns.flush(change.list.listId);
     }
   }

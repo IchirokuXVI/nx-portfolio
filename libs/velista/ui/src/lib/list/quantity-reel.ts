@@ -103,6 +103,17 @@ import { classifyReelGesture } from './quantity-reel-gesture';
  * whatever it holds, so every reel of a list sits in one column. The number is drawn
  * over its unit from the short form ("1,5" over "kg"); a count has no unit and its
  * number sits centred. The spinbutton's value text keeps the whole words.
+ *
+ * ## With a target, a colour is a status and never the selection (velista `0204`)
+ *
+ * A reel given a {@link target} (the basket row sheet, where it is the list's ask)
+ * colours every number it draws by where that number stands: the normal text colour
+ * below the target, the success colour at it, the quiet amber above it. That holds
+ * for the resting number and for each number on the tape, selected or not, so amber
+ * means only "more than asked". The selected number is told apart by its size and its
+ * weight alone, larger and bold; its neighbours are smaller and regular. A reel with no
+ * target draws as velista `0203` drew it: the selected number in the quiet amber and
+ * its neighbours muted.
  */
 @Component({
   selector: 'lib-quantity-reel',
@@ -135,6 +146,7 @@ import { classifyReelGesture } from './quantity-reel-gesture';
     '[class.open]': 'open()',
     '[class.readonly]': 'readonly()',
     '[class.took]': 'took()',
+    '[class.targeted]': 'target() !== null',
   },
 })
 export class QuantityReel implements OnDestroy {
@@ -195,6 +207,13 @@ export class QuantityReel implements OnDestroy {
    * an amber edge while it is true. The container decides for how long.
    */
   readonly took = input(false);
+
+  /**
+   * The amount the numbers are measured against (velista `0204`): on the basket row
+   * sheet, what the list asks for. Null for no colour, which is every reel outside
+   * that sheet. See the class's "With a target" section for what each number takes.
+   */
+  readonly target = input<number | null>(null);
 
   /**
    * The lowest number the reel goes to: a line's floor of 0, or 1 on a due row,
@@ -300,6 +319,24 @@ export class QuantityReel implements OnDestroy {
    */
   figureOf(value: number): AmountWords {
     return shortAmount(value, this.unit(), this._locale());
+  }
+
+  /**
+   * Where a number stands against {@link target}: `reached` at it, `over` above it,
+   * null below it or with no target. As the stepper reads it (velista `0201`): a
+   * target of 0 is never reached, so nothing is green for a list that asks nothing,
+   * and any amount above it is over.
+   */
+  reachOf(value: number): 'reached' | 'over' | null {
+    const target = this.target();
+    if (target === null) {
+      return null;
+    }
+    return value > target
+      ? 'over'
+      : value === target && target > 0
+        ? 'reached'
+        : null;
   }
 
   constructor() {
