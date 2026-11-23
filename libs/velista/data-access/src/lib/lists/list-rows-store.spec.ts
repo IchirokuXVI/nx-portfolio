@@ -5,7 +5,7 @@ import {
 } from '@portfolio/velista/platform';
 import { ListRowsStore } from './list-rows-store';
 
-/** Velista `0191`, section 1: the device's choice of row, kept under one key. */
+/** Velista `0202`, section 2: the device's choice of view, kept under one key. */
 function store(
   storage: Map<string, string>,
   overrides: Parameters<typeof provideFakeBrowserFacade>[1] = {}
@@ -17,30 +17,36 @@ function store(
   return TestBed.inject(ListRowsStore);
 }
 
-describe('ListRowsStore (velista 0191)', () => {
-  it('is the row of today with no record', () => {
+describe('ListRowsStore (velista 0202)', () => {
+  it('is the default view with no record', () => {
     expect(store(new Map()).layout()).toBe('default');
   });
 
   it.each([
     ['not JSON', '{compact'],
     ['not a record', '"compact"'],
-    ['an unknown layout', '{"version":1,"layout":"dense"}'],
-    ['no layout', '{"version":1}'],
+    ['an unknown layout', '{"version":2,"layout":"dense"}'],
+    ['no layout', '{"version":2}'],
+    ['of no version', '{"layout":"compact"}'],
+    ['of version 1', '{"version":1,"layout":"compact"}'],
+    ['of a later version', '{"version":3,"layout":"compact"}'],
   ])('reads a record that is %s as the default', (_, raw) => {
     expect(store(new Map([[StorageKeys.listRows, raw]])).layout()).toBe(
       'default'
     );
   });
 
-  it('reads back a compact record', () => {
-    const storage = new Map([
-      [StorageKeys.listRows, '{"version":1,"layout":"compact"}'],
-    ]);
-    expect(store(storage).layout()).toBe('compact');
-  });
+  it.each(['default', 'compact'] as const)(
+    'reads back a version 2 record of the %s view',
+    (layout) => {
+      const storage = new Map([
+        [StorageKeys.listRows, JSON.stringify({ version: 2, layout })],
+      ]);
+      expect(store(storage).layout()).toBe(layout);
+    }
+  );
 
-  it('sets the signal and writes one versioned record', () => {
+  it('sets the signal and writes one record of version 2', () => {
     const storage = new Map<string, string>();
     const rows = store(storage);
 
@@ -48,7 +54,7 @@ describe('ListRowsStore (velista 0191)', () => {
 
     expect(rows.layout()).toBe('compact');
     expect(JSON.parse(storage.get(StorageKeys.listRows) ?? 'null')).toEqual({
-      version: 1,
+      version: 2,
       layout: 'compact',
     });
     // A second store on the same device reads the choice back.

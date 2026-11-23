@@ -1,0 +1,122 @@
+// The view picker and its popover (velista 0202), as the boards
+// `compact-reel/Picker.dc.html`, `Icons.dc.html` and `Basket.dc.html` draw them.
+:host {
+  display: contents;
+}
+
+// While its popover is open the control sits on the sunken surface, in the primary
+// text colour, so it reads as the one the popover belongs to.
+.trigger.is-open {
+  background: var(--app-surface-sunken);
+  color: var(--app-text-primary);
+}
+
+// The tools row look: the square and the quiet colour of the filter button of
+// `list-tools.scss` beside it, so the two read as one pair.
+.tool {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-block-size: var(--app-touch-target);
+  min-inline-size: var(--app-touch-target);
+  padding: 0;
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: transparent;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--app-surface-raised);
+    color: var(--app-text-primary);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+
+  &.is-open {
+    background: var(--app-surface-sunken);
+    color: var(--app-text-primary);
+  }
+}
+
+.tool-glyph {
+  font-size: var(--app-icon-md);
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+}
+
+// A row to the frame's edges, a hairline between two.
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  inline-size: 100%;
+  min-block-size: var(--app-view-choice-row-height);
+  padding: 0 var(--app-space-5);
+  border: none;
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-view-choice-name);
+  text-align: start;
+  cursor: pointer;
+
+  &:active {
+    background: var(--app-surface-sunken);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-width) * -1);
+  }
+
+  &.is-on {
+    font-weight: 600;
+  }
+}
+
+.option + .option {
+  border-block-start: 1px solid var(--app-border-subtle);
+}
+
+.glyph {
+  flex: none;
+  font-size: var(--app-view-choice-glyph);
+  color: var(--app-text-secondary);
+}
+
+.option.is-on .glyph {
+  color: var(--app-text-primary);
+}
+
+.words {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-inline-size: 0;
+  line-height: 1.3;
+}
+
+.hint {
+  font-size: var(--app-view-choice-hint);
+  font-weight: 400;
+  color: var(--app-text-secondary);
+}
+
+// The tick of the current row in the quiet amber, the one accent. Its box is there on
+// every row, so the words line up whichever row is ticked.
+.tick {
+  display: flex;
+  flex: none;
+  inline-size: var(--app-view-choice-glyph);
+  block-size: var(--app-view-choice-glyph);
+  font-size: var(--app-view-choice-glyph);
+  color: var(--app-action-quiet-fg);
+}

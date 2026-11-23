@@ -477,13 +477,14 @@
   }
 }
 
-// ------------------------------------------------------------- The compact row
+// ------------------------------------------------------- The row of the default view
 //
-// Velista 0191, section 3. One grid on the row element: the picture down the start,
+// Velista 0191, section 3, the default view since velista 0202 (its tokens keep the
+// name `compact` of 0191). One grid on the row element: the picture down the start,
 // line 1 across the rest, and under it the facts and the stepper. The stepper is a
 // shared child of the row in both layouts, so it is placed here by its area rather
 // than drawn twice. 12 + 22 + 52 + 12 and the hairline: 99px.
-.row.compact {
+.row.facts-row {
   --app-line-picture-size: var(--app-line-compact-picture-size);
   --app-line-picture-radius: var(--app-radius-md);
   --app-line-picture-glyph: var(--app-icon-lg);
@@ -518,7 +519,7 @@
   }
 }
 
-.compact-line-1 {
+.facts-line-1 {
   grid-area: line1;
   display: flex;
   align-items: baseline;
@@ -535,7 +536,7 @@
 // room (section 3.3). A shrink weight cannot do this: flex shrinks every item in
 // proportion to its width too, and the brand's share, however small, fires its
 // ellipsis while the label still has room.
-.compact-line-1 > .label {
+.facts-line-1 > .label {
   flex: 1 1 0;
   min-inline-size: 0;
   max-inline-size: max-content;
@@ -681,7 +682,7 @@
   align-items: center;
 }
 
-.compact-choose {
+.facts-choose {
   display: flex;
   align-items: center;
   box-sizing: border-box;

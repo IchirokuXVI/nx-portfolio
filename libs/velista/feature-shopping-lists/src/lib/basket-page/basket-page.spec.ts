@@ -25,6 +25,7 @@ import {
   fakeShopDetailStore,
   fakeShopSectionsStore,
   GatewayError,
+  ListRowsStore,
   MEMORY_CATEGORIES,
   MEMORY_SHOP_MAPS,
   provideFakeCategoryStore,
@@ -450,6 +451,16 @@ function queryOnRoute(initial: Params) {
   };
 }
 
+/** The names of the header's actions, in the order they are drawn. */
+function headerActions(fixture: ComponentFixture<BasketPage>): string[] {
+  return Array.from(
+    (fixture.nativeElement as HTMLElement).querySelectorAll(
+      'lib-page-header button[libPageHeaderAction]'
+    ),
+    (button) => button.getAttribute('aria-label') ?? ''
+  );
+}
+
 async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<BasketPage>;
   store: FakeStore;
@@ -767,6 +778,8 @@ async function render(options: Options = {}): Promise<{
         options.categories ?? fakeCategoryStore(PAGE_TREE)
       ),
       provideFakeShopDetailStore(options.shopDetails ?? fakeShopDetailStore()),
+      // The device's choice of view (velista 0202), real, over the storage above.
+      ListRowsStore,
     ],
   }).compileComponents();
 
@@ -1126,13 +1139,31 @@ describe('the basket header, live', () => {
       expect(query(fixture, MENU)).not.toBeNull();
     });
 
-    it('draws no menu for a guest it would hold nothing for', async () => {
+    it('draws the menu for a guest too, for its View row (velista 0202)', async () => {
       // No history and no new list, because both need an account; no finish,
-      // because that is the owner's; and nobody on the basket to read about. A
-      // button that opens onto nothing is not drawn.
+      // because that is the owner's; and nobody on the basket to read about. The
+      // view is a choice about this device, so the menu always holds a row.
       const { fixture } = await render({ me: participant(guest('p-9', 1)) });
 
-      expect(query(fixture, MENU)).toBeNull();
+      expect(query(fixture, MENU)).not.toBeNull();
+    });
+
+    it('keeps three actions in the header, and the view button in the tools row (velista 0202)', async () => {
+      const me = participant(owner());
+      const { fixture } = await render({
+        lines: [line('zl-1')],
+        me,
+        participants: [me],
+      });
+
+      // Share and the menu; the map is the third, on a shop with one (the aisles
+      // spec below). A header that gains or loses an action fails here.
+      expect(headerActions(fixture)).toEqual([
+        'basket.share.open',
+        'basket.more.open',
+      ]);
+      expect(query(fixture, 'lib-page-header lib-view-picker')).toBeNull();
+      expect(query(fixture, 'lib-page-header lib-view-icon')).toBeNull();
     });
 
     it('draws it for a guest once there is somebody to read about', async () => {
@@ -1709,7 +1740,34 @@ describe('searching the basket', () => {
       const row = query(fixture, '.tools');
       expect(row).not.toBeNull();
       expect(row?.querySelector('.progress')).not.toBeNull();
-      expect(row?.querySelectorAll('.tool')).toHaveLength(1);
+      // The view button, then the filter (velista 0202), the same pair as on the
+      // zone list's header.
+      const tools = Array.from(row?.querySelectorAll('.tool') ?? []);
+      expect(tools).toHaveLength(2);
+      expect(tools[0].getAttribute('aria-label')).toBe('view.title');
+      expect(tools[0].querySelector('lib-view-icon')).not.toBeNull();
+      expect(tools[1].querySelector('lib-filter-icon')).not.toBeNull();
+    });
+
+    it('sets the view from the tools row, and the menu names it (velista 0202)', async () => {
+      const { fixture } = await render({ lines: threeLines });
+      document.body.append(fixture.nativeElement as HTMLElement);
+      const picker = query(fixture, '.tools .tool.trigger') as HTMLElement;
+
+      picker.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      document
+        .querySelector<HTMLElement>(
+          '[role="menuitemradio"][data-view="compact"]'
+        )
+        ?.click();
+      fixture.detectChanges();
+
+      expect(TestBed.inject(ListRowsStore).layout()).toBe('compact');
+      expect(document.querySelector('[role="menu"]')).toBeNull();
+      (fixture.nativeElement as HTMLElement).remove();
     });
 
     it('keeps the row and the chips in one bar', async () => {
@@ -2130,7 +2188,7 @@ describe('searching the basket', () => {
       return (
         Array.from(
           (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
-            '.tools .tool'
+            '.tools .tool:not(.trigger)'
           )
         )[0] ?? null
       );
@@ -5416,6 +5474,16 @@ describe('BasketPage: the map of the shop you are in', () => {
     expect(shopDetails.ensured()).toContain('loc-jamon');
   });
 
+  it('holds exactly share, the map and the menu in the header (velista 0202)', async () => {
+    const { fixture } = await atElJamon({ hasMap: true });
+
+    expect(headerActions(fixture)).toEqual([
+      'basket.share.open',
+      'basket.map.openLabel',
+      'basket.more.open',
+    ]);
+  });
+
   it('offers the map in the header when that shop has one', async () => {
     const { fixture } = await atElJamon({ hasMap: true });
     const button = query(fixture, 'lib-page-header button.map');
@@ -5674,8 +5742,11 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
     TestBed.inject(BasketViewStore).setOrder('alpha');
     fixture.detectChanges();
 
+    // Then the view button and the filter (velista 0202).
     const number = query(fixture, NUMBER);
-    expect(number?.nextElementSibling?.classList).toContain('tool');
+    const next = number?.nextElementSibling;
+    expect(next?.tagName.toLowerCase()).toBe('lib-view-picker');
+    expect(next?.nextElementSibling?.classList).toContain('tool');
   });
 
   it('keeps the tools row, the chips and the small row off the edges of the screen', () => {

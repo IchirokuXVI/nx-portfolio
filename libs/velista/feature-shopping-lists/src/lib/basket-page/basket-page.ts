@@ -29,6 +29,7 @@ import {
   GroupMembers,
   ItemNames,
   keepsShopMap,
+  ListRowsStore,
   SessionStore,
   ShopDetailStore,
   ShopSectionsStore,
@@ -111,6 +112,7 @@ import {
   type SuggestionHoldingChange,
   SuggestionList,
   TOOK_DURATION_MS,
+  ViewPicker,
   VisitNotice,
 } from '@portfolio/velista/ui';
 import { basketErrorKey, type BasketOperation } from '../basket-error-copy';
@@ -246,6 +248,7 @@ function basketReturnKey(live: boolean, id: string): string {
     RouterOutlet,
     ShareIcon,
     SuggestionList,
+    ViewPicker,
     VisitNotice,
   ],
   templateUrl: './basket-page.html',
@@ -527,6 +530,13 @@ export class BasketPage {
   protected readonly hasMenu = computed(
     () => basketMenuEntries(this._doors, hasFinishSheet(this._route)).length > 0
   );
+
+  /**
+   * How this device draws the rows of a zone list (velista `0202`). The basket draws
+   * none, and offers the choice from its tools row and its menu, so a person who
+   * shops from here can set it.
+   */
+  protected readonly listRows = inject(ListRowsStore);
 
   /**
    * Whether to ask "all done?", which is **all** the last settle does (section 4).

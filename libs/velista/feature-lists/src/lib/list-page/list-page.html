@@ -18,10 +18,24 @@
 >
   <ng-container pageHeaderActions>
     <!--
-      The filter (velista 0082, section 2). The badge is how many settings are on, and
-      the **name carries it too**, because a count that only exists as a dot over a
-      glyph is a count a screen reader never hears. Absent while the composer's field
-      holds words, and on an empty list.
+      The view picker (velista 0202): the first action, before the filter. The default
+      view or the compact one, kept on the device, which the basket page offers too.
+      Drawn while the rows can be seen, the composer's results included, since the
+      view applies to those as well.
+    -->
+    @if (current.kind === 'loaded' && !current.empty) {
+      <lib-view-picker
+        (chosen)="listRows.setLayout($event)"
+        [layout]="listRows.layout()"
+        look="header"
+      />
+    }
+
+    <!--
+      The filter (velista 0082, section 2). A funnel since velista 0202. The badge is
+      how many settings are on, and the **name carries it too**, because a count that
+      only exists as a dot over a glyph is a count a screen reader never hears. Absent
+      while the composer's field holds words, and on an empty list.
     -->
     @if (current.kind === 'loaded' && !typing() && !current.empty) {
       <button

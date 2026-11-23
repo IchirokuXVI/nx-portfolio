@@ -10,14 +10,24 @@ import { isRecord } from '../mapping/primitives';
 const LAYOUTS: readonly ListRowLayout[] = ['default', 'compact'];
 
 /**
- * How this device draws the rows of a zone list (velista `0191`, decision A): the
- * row of today, or the compact row with its three lines of facts.
+ * The version of the record this build writes and reads (velista `0202`). Version 1
+ * meant the opposite rows: its `compact` was the row that is now the default. No
+ * build with it reached production, so a record of version 1 is read as the default
+ * view and is never translated.
+ */
+const VERSION = 2;
+
+/**
+ * How this device draws the rows of a zone list (velista `0202`): the default view,
+ * which is the row of velista `0191` with its three lines of facts, or the compact
+ * view, the two line row that fits more rows on a screen.
  *
  * On the device and not on the server, under one key (`StorageKeys.listRows`), in
  * the shape of `MappingSettingsStore`: the choice is about this screen size and this
- * person's eyes. Off, which is the row of today, until somebody turns it on. A record
- * that is missing, not JSON, not a record, or names a layout this build does not know
- * reads as the default.
+ * person's eyes. The view picker of the zone list page and of the basket page both
+ * write it, so one choice sets the view everywhere. A record that is missing, not
+ * JSON, not a record, of another version, or names a layout this build does not
+ * know reads as the default.
  */
 // Provided by the app layer, never root: rule D5, beside the other stores.
 @Injectable()
@@ -33,7 +43,7 @@ export class ListRowsStore {
     try {
       this._browser.writeStorage(
         StorageKeys.listRows,
-        JSON.stringify({ version: 1, layout })
+        JSON.stringify({ version: VERSION, layout })
       );
     } catch {
       // A full or blocked storage keeps the choice for this document only.
@@ -49,7 +59,7 @@ export class ListRowsStore {
     } catch {
       raw = null;
     }
-    if (!isRecord(raw)) {
+    if (!isRecord(raw) || raw['version'] !== VERSION) {
       return DEFAULT_LIST_ROW_LAYOUT;
     }
     const layout = raw['layout'];

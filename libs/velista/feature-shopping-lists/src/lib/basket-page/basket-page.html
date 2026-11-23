@@ -173,6 +173,18 @@
       }
 
       <!--
+        The view picker (velista 0202), beside the filter, the same pair as on the
+        zone list's header. Here and not in the header, which keeps its three
+        actions; the menu offers the same choice as its first row.
+      -->
+      <lib-view-picker
+        (chosen)="listRows.setLayout($event)"
+        [layout]="listRows.layout()"
+        listToolsTrail
+        look="tool"
+      />
+
+      <!--
         What the sheet turned on, named on the page (plan 0075, section 5). Absent
         entirely when nothing is on, so the lines move up. The chips name the order
         and the grouping as well as the filters, because a basket that is suddenly
