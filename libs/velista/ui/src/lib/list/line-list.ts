@@ -45,6 +45,7 @@ import { LineRow, type LineRowAction } from './line-row';
             (chooseProduct)="chooseProduct.emit($event)"
             (dismiss)="dismiss.emit($event)"
             (opened)="opened.emit($event)"
+            (quantityReeled)="quantityReeled.emit($event)"
             (quantityStepped)="quantityStepped.emit($event)"
             (retry)="retry.emit($event)"
             [clearing]="clearingIds().has(line.id)"
@@ -121,6 +122,9 @@ export class LineList {
    * about what is on one.
    */
   readonly quantityStepped = output<{ lineId: string; step: QuantityStep }>();
+
+  /** The one step of a row's reel, in the compact view (velista `0203`), passed up. */
+  readonly quantityReeled = output<{ lineId: string; step: QuantityStep }>();
   readonly act = output<{ action: LineRowAction; lineId: string }>();
   readonly retry = output<string>();
   readonly dismiss = output<string>();

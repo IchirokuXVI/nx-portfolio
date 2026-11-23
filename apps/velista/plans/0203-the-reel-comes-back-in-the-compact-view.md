@@ -1,3 +1,5 @@
+> **PR:** [#1086](https://github.com/IchirokuXVI/nx-portfolio/pull/1086)
+
 # 0203: the reel comes back in the compact view
 
 > Decided on 2026-11-22. The reel (velista `0043`), the narrow drag control that velista
