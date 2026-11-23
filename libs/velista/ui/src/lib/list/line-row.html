@@ -416,9 +416,9 @@
   />
 
   <!--
-    The lock of a row being cleared (velista 0199): a layer over the whole row and a
-    spinner in the middle of it, over both layouts. Hidden from a screen reader, which
-    hears aria-busy and the word the row is described by.
+    The lock of a row being cleared (velista 0199): a spinner in the middle of the
+    row, over both layouts, and over the layer drawn under the decisions. Hidden
+    from a screen reader, which hears aria-busy and the word the row is described by.
   -->
   @if (clearing()) {
     <span aria-hidden="true" class="lock" data-clearing-lock>
@@ -452,6 +452,15 @@
       {{ 'list.line.restore' | rokuT }}
     </button>
   </div>
+}
+
+<!--
+  The layer of a row being cleared (velista 0199), over everything the host's lock
+  stops: the row with its borders and the decisions under it. Before the notices, so
+  a notice is drawn over it and stays usable.
+-->
+@if (clearing()) {
+  <span aria-hidden="true" class="lock-layer" data-clearing-layer></span>
 }
 
 <!--

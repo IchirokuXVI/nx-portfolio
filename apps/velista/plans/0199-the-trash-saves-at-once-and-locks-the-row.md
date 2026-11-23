@@ -11,7 +11,8 @@
 > with a spinner in the middle.
 >
 > Amended on 2026-11-23: the lock has a ceiling of 2 minutes, and it is a layer over the
-> whole row, the stepper included.
+> whole row, the stepper included. At the ceiling the lock ends and the row stays drawn at
+> 0, usable, until the write answers.
 >
 > Nothing is deleted: a line at 0 is hidden and found by searching (velista `0192`). This
 > plan changes when the run is written and how the row looks until then.
@@ -59,9 +60,11 @@ answers, then hide it as today.
    of velista `0196`, or a scrim token if that fails contrast), a `SpinnerIcon` centred on
    the row, `aria-busy="true"` and `aria-disabled="true"`. A tap on the row, the stepper, the
    picture or the choose button does nothing. Amended on 2026-11-23: the darker look is a
-   layer over the row's whole box, the picture, the text and the stepper included, in both
-   layouts, so nothing inside a locked row looks active; the spinner is centred on top of
-   it. The layer is `--app-scrim` at the half strength of a disabled control, so the row
+   layer over everything the lock stops, in both layouts: the row's whole box with its
+   hairline and its violet edge, the picture, the text, the stepper, and the approve and
+   reject buttons under the row, so nothing that looks active is dead. A notice under the
+   row is drawn over the layer and stays usable. The spinner is centred on the row, on a
+   raised disc edged with `--app-border-strong`, over the layer. The layer is `--app-scrim` at the half strength of a disabled control, so the row
    under it stays legible. The row is described by the word "Saving" while it is locked,
    and a key held with Alt, Ctrl or Meta passes the lock, as Tab and Escape do.
 4. **After the answer.** On success the line leaves `clearing` and is hidden as today, and
@@ -71,13 +74,18 @@ answers, then hide it as today.
    row stays drawn at 0, unlocked.
 6. **The ceiling** (the owner's ruling of 2026-11-23). A line write has no client timeout.
    When the write has not answered 2 minutes after the trash press
-   (`QUANTITY_CLEAR_LOCK_MAX_MS` in `libs/velista/models/src/lib/limits.ts`), the line
-   leaves `clearing` and the row is usable again, drawn at its stored amount with the failed
-   notice, as a failed write draws it. The store's API does not change: the page draws that
-   amount and that notice over what the store holds. The request is not cancelled. A late
-   answer is applied as any late answer is: on success the line is at 0 and hidden, on
-   failure nothing more happens. The timer is cleared when the write answers and when the
-   page goes away.
+   (`QUANTITY_CLEAR_LOCK_MAX_MS` in `libs/velista/models/src/lib/limits.ts`), the lock ends
+   and the row stays drawn at 0, usable, until the write answers. The line leaves `clearing`
+   and joins `lingering`, which the grouping keeps in place as it keeps `clearing`. The row
+   shows the truth: the 0 the store holds, with no notice and no other amount drawn over
+   it, `aria-busy` still true while the write is out and no `aria-disabled`. A plus is an
+   ordinary step from 0. The request is not cancelled. When it answers, the line leaves
+   `lingering`: on success a line still at 0 is hidden as usual, and focus moves only if it
+   had dropped to the page; a line the person raised meanwhile is decided by the store's
+   handling of two writes in order, as any two runs are; on failure the store snaps the
+   line back and draws its own failed notice. One timer per line, cleared when the write
+   answers and when the page goes away; the answer of an older trash never touches the
+   state of a newer trash of the same line. In a search the ceiling only ends the lock.
 
 ### Scope
 
@@ -113,11 +121,17 @@ see the failed notice.
 3. A clearing row ignores clicks on itself and on its stepper and draws the spinner.
 4. On success the line is hidden and focus is on the next row; on failure the row is back at
    its stored amount, unlocked, with the failed notice.
-5. With fake timers: the row unlocks at the ceiling, at its stored amount, with the failed
-   notice; an answer before the ceiling clears the timer; a late success after the ceiling
-   hides the row; a late failure changes nothing; the page going away clears the timer.
-6. The lock's layer covers the row's whole box and is drawn after the stepper; the row is
-   described by the lock's word; Tab, Escape and a key with Alt, Ctrl or Meta pass the lock.
+5. With fake timers: the row is locked until the ceiling; at the ceiling it is unlocked,
+   drawn at 0, kept in its group, with no notice; a plus after the ceiling is a normal step
+   from 0 and the row shows 1 at once and after the beat; a late success with the line still
+   at 0 hides it and leaves focus where the person put it; a late success after a raise is
+   applied as the store applies two writes in flight; a late failure shows the store's own
+   failed notice; two lines clearing at once do not affect each other; an answer before the
+   ceiling clears the timer; an older trash's answer does not touch a newer one; in a search
+   the ceiling only ends the lock; the page going away clears the timer.
+6. The lock's layer covers the host, the row and the decisions, and comes before a notice,
+   which stays usable; the disc has an edge; the row is described by the lock's word; Tab,
+   Escape and a key with Alt, Ctrl or Meta pass the lock.
 
 ## 2. Acceptance criteria
 
@@ -125,7 +139,8 @@ see the failed notice.
 - A row cannot be tapped between the trash press and the answer.
 - The locked row has a darker layer over all of it, the stepper included, and a spinner in
   the middle.
-- No row stays locked longer than 2 minutes.
+- No row stays locked longer than 2 minutes; at the ceiling the lock ends and the row stays
+  drawn at 0, usable, until the write answers.
 
 ## Not in this plan
 

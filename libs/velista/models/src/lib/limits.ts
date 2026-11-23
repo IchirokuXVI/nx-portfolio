@@ -148,8 +148,8 @@ export const QUANTITY_STEP_QUIET_MS = 800;
  * to 0 has not answered (velista 0199). A line write has no client timeout, so on a
  * dead connection the lock would last for minutes. The owner's ruling of 2026-11-23:
  * a few minutes is fine, more than that bothers somebody who pressed by mistake. At
- * the ceiling the row is usable again with the failed notice, at its stored amount;
- * the request is not cancelled, and a late answer is applied as any late answer is.
+ * the ceiling the lock ends and the row stays drawn at 0, usable, until the write
+ * answers; the request is not cancelled, and its answer is applied as any answer is.
  */
 export const QUANTITY_CLEAR_LOCK_MAX_MS = 2 * 60 * 1000;
 

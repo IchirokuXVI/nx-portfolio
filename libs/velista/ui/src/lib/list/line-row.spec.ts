@@ -1546,29 +1546,68 @@ describe('LineRow: a row being cleared (velista 0199)', () => {
     expect(word?.closest('[aria-hidden="true"]')).toBeNull();
   });
 
-  it('draws the layer over the whole row, the stepper included, from tokens only', () => {
+  it('draws the layer over the whole host, from tokens only, and the disc with an edge', () => {
     const rules = compiledRules('line-row.scss');
+    const layer = rules.find((one) => one.selector === '.lock-layer');
     const lock = rules.find((one) => one.selector === '.lock');
-    const layer = rules.find((one) => one.selector === '.lock::before');
+    const mark = rules.find((one) => one.selector === '.lock-mark');
+    const notice = rules.find((one) => one.selector === '.notice');
 
-    expect(lock?.body).toMatch(/position:\s*absolute;/);
-    expect(lock?.body).toMatch(/inset:\s*0;/);
+    expect(layer?.body).toMatch(/position:\s*absolute;/);
     expect(layer?.body).toMatch(/inset:\s*0;/);
     expect(layer?.body).toMatch(/background:\s*var\(--app-scrim\);/);
+    // Drawn in the order of the template, so a notice after it is drawn over it.
+    expect(layer?.body).not.toMatch(/z-index/);
+    expect(notice?.body).toMatch(/position:\s*relative;/);
+    expect(lock?.body).toMatch(/z-index:\s*1;/);
+    expect(mark?.body).toMatch(
+      /border:\s*1px solid var\(--app-border-strong\);/
+    );
   });
 
-  it('draws the lock after the stepper, so the layer sits over it', async () => {
-    const fixture = await clearing(vm({ quantity: 0 }));
-    const children = Array.from(row(fixture).children);
-    const stepper = children.findIndex(
-      (child) => child.tagName.toLowerCase() === 'lib-quantity-stepper'
+  it('draws the layer after the row and the decisions and before a notice', async () => {
+    const fixture = await clearing(
+      vm({
+        quantity: 0,
+        approvalStatus: 'PENDING',
+        decidable: true,
+        write: 'failed',
+      })
     );
-    const lock = children.findIndex((child) =>
-      child.hasAttribute('data-clearing-lock')
+    const children = Array.from(
+      (fixture.nativeElement as HTMLElement).children
     );
+    const at = (selector: string) =>
+      children.findIndex((child) => child.matches(selector));
 
-    expect(stepper).toBeGreaterThanOrEqual(0);
-    expect(lock).toBeGreaterThan(stepper);
+    expect(at('.row')).toBeGreaterThanOrEqual(0);
+    expect(at('.decisions')).toBeGreaterThan(at('.row'));
+    expect(at('[data-clearing-layer]')).toBeGreaterThan(at('.decisions'));
+    expect(at('.notice.failed')).toBeGreaterThan(at('[data-clearing-layer]'));
+    expect(
+      query(fixture, '[data-clearing-layer]')?.getAttribute('aria-hidden')
+    ).toBe('true');
+  });
+
+  it('stops the decisions under the layer and leaves a notice usable', async () => {
+    const fixture = await clearing(
+      vm({
+        quantity: 0,
+        approvalStatus: 'PENDING',
+        decidable: true,
+        write: 'failed',
+      })
+    );
+    const acted: unknown[] = [];
+    const retried: string[] = [];
+    fixture.componentInstance.act.subscribe((event) => acted.push(event));
+    fixture.componentInstance.retry.subscribe((id) => retried.push(id));
+
+    (query(fixture, '.decision.approve') as HTMLElement).click();
+    (query(fixture, '.notice.failed') as HTMLElement).click();
+
+    expect(acted).toEqual([]);
+    expect(retried).toEqual(['ln-1']);
   });
 
   it('answers again once it is no longer clearing', async () => {

@@ -284,12 +284,16 @@ export class LineRow {
    * phase, so a press is stopped before it reaches the stepper, the picture, a choose
    * button or the row itself, and none of them has to know about the lock. Tab and
    * Escape pass, so focus can still leave the row, and so does a key with Alt, Ctrl
-   * or Meta held, so the browser's shortcuts still work.
+   * or Meta held, so the browser's shortcuts still work. A notice under the row is
+   * not covered by the lock's layer, so nothing on it is stopped either.
    */
   constructor() {
     const host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
     const stop = (event: Event) => {
       if (!this.clearing()) {
+        return;
+      }
+      if (event.target instanceof Element && event.target.closest('.notice')) {
         return;
       }
       if (
