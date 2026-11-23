@@ -1,12 +1,24 @@
 @let current = shown();
 @let words = figure();
+@let reach = reachOf(current);
+@let below = previous();
+@let belowReach = below === null ? null : reachOf(below);
+@let above = next();
+@let aboveReach = above === null ? null : reachOf(above);
 
 <!--
   The pill at rest, and the thing a thumb aims at: the number over its unit in one
-  fixed box (velista 0203). The host carries the role and the focus, so this is
+  fixed box (velista 0203). With a target its colour says where it stands, reached
+  or over (velista 0204). The host carries the role and the focus, so this is
   decoration: everything a screen reader needs is announced from the spinbutton.
 -->
-<span [class.zero]="current === min()" aria-hidden="true" class="pill">
+<span
+  [class.over]="reach === 'over'"
+  [class.reached]="reach === 'reached'"
+  [class.zero]="current === min()"
+  aria-hidden="true"
+  class="pill"
+>
   <b class="figure">{{ words.figure }}</b>
   @if (words.symbol !== '') {
     <i class="symbol">{{ words.symbol }}</i>
@@ -16,6 +28,7 @@
 <!--
   The overlay: the previous number, the current one, and the next, each over its
   unit. `aria-hidden`: it is a picture of a number the spinbutton already announces.
+  Each number takes the same status colour as the pill would at that amount.
 -->
 @if (open()) {
   <span aria-hidden="true" class="overlay">
@@ -24,8 +37,12 @@
       reached the end. `data-reel-value` is what makes a number tappable as well as
       draggable; an empty neighbour carries none, as there is nothing there to tap to.
     -->
-    <span [attr.data-reel-value]="previous()" class="neighbour">
-      @let below = previous();
+    <span
+      [attr.data-reel-value]="below"
+      [class.over]="belowReach === 'over'"
+      [class.reached]="belowReach === 'reached'"
+      class="neighbour"
+    >
       @if (below !== null) {
         @let low = figureOf(below);
         <b class="figure">{{ low.figure }}</b>
@@ -35,15 +52,24 @@
       }
     </span>
 
-    <span [attr.data-reel-value]="current" class="current">
+    <span
+      [attr.data-reel-value]="current"
+      [class.over]="reach === 'over'"
+      [class.reached]="reach === 'reached'"
+      class="current"
+    >
       <b class="figure">{{ words.figure }}</b>
       @if (words.symbol !== '') {
         <i class="symbol">{{ words.symbol }}</i>
       }
     </span>
 
-    <span [attr.data-reel-value]="next()" class="neighbour">
-      @let above = next();
+    <span
+      [attr.data-reel-value]="above"
+      [class.over]="aboveReach === 'over'"
+      [class.reached]="aboveReach === 'reached'"
+      class="neighbour"
+    >
       @if (above !== null) {
         @let high = figureOf(above);
         <b class="figure">{{ high.figure }}</b>

@@ -5,14 +5,21 @@ import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
+import { ListRowsStore } from '@portfolio/velista/data-access';
 import {
+  QUANTITY_REEL_PX_PER_UNIT,
+  QUANTITY_SNAP_POINTS,
   type BasketListRef,
   type BasketProductList,
   type BasketRow,
   type BasketRowEntry,
 } from '@portfolio/velista/models';
-import { provideVelistaTesting } from '@portfolio/velista/platform';
-import { QuantityStepper } from '@portfolio/velista/ui';
+import {
+  provideFakeBrowserFacade,
+  provideVelistaTesting,
+  StorageKeys,
+} from '@portfolio/velista/platform';
+import { QuantityReel, QuantityStepper } from '@portfolio/velista/ui';
 import { RowEntries, type OtherListsState } from './row-entries';
 
 /**
@@ -123,6 +130,8 @@ async function render(
     locale?: string;
     others?: OtherListsState | null;
     changeable?: ReadonlySet<string>;
+    compact?: boolean;
+    step?: number | null;
   } = {}
 ) {
   TestBed.resetTestingModule();
@@ -131,6 +140,20 @@ async function render(
     imports: [RowEntries, RokuTranslatorTestingModule.forTesting()],
     providers: [
       provideVelistaTesting({ basePath: '/velista' }),
+      provideFakeBrowserFacade(
+        new Map(
+          options.compact
+            ? [
+                [
+                  StorageKeys.listRows,
+                  JSON.stringify({ version: 2, layout: 'compact' }),
+                ],
+              ]
+            : []
+        )
+      ),
+      // The view the entries draw by (velista `0204`).
+      ListRowsStore,
       {
         provide: RokuLocaleStore,
         useValue: { locale: signal(options.locale ?? 'en') },
@@ -146,6 +169,13 @@ async function render(
   fixture.componentRef.setInput('busy', false);
   fixture.componentRef.setInput('others', options.others ?? null);
   fixture.componentRef.setInput('changeable', options.changeable ?? new Set());
+  if (options.step !== undefined) {
+    fixture.componentRef.setInput('step', options.step);
+    fixture.componentRef.setInput(
+      'steps',
+      new Map(held.entries.map((one) => [one.lineId, options.step ?? null]))
+    );
+  }
   fixture.detectChanges();
 
   return fixture;
@@ -605,7 +635,7 @@ describe('RowEntries: Bought for another list (velista 0201, target state 7)', (
     ]);
   });
 
-  it('starts each stepper at 0, with no target and no snaps input (spec 8)', async () => {
+  it('starts each stepper at 0, with a target of 0 and no snaps input (spec 8)', async () => {
     const fixture = await render(row([entry()]), {
       others: { state: 'ready', lists: [{ ...PANTRY, quantity: 4 }] },
     });
@@ -616,9 +646,33 @@ describe('RowEntries: Bought for another list (velista 0201, target state 7)', (
       ?.componentInstance as QuantityStepper;
 
     expect(stepper.value()).toBe(0);
-    expect(stepper.target()).toBeNull();
+    // The list asks nothing, so its target is 0: any buy is above it.
+    expect(stepper.target()).toBe(0);
     // The default, so only the stop at 1000 applies.
     expect(stepper.snaps()).toEqual([1000]);
+  });
+
+  it('draws 0 plain and a list stepped to 1 in amber, never green', async () => {
+    const fixture = await render(row([entry()]), {
+      others: { state: 'ready', lists: [PANTRY] },
+    });
+    open(fixture);
+    const held = fixture.debugElement
+      .queryAll(By.directive(QuantityStepper))
+      .find((one) => one.nativeElement.closest('.others') !== null);
+    const element = held?.nativeElement as HTMLElement;
+    expect(element.classList.contains('is-over')).toBe(false);
+    expect(element.classList.contains('is-reached')).toBe(false);
+
+    // The run the sheet holds for the list after one press of its plus.
+    fixture.componentRef.setInput(
+      'pendingOthers',
+      new Map([[PANTRY.listId, 1]])
+    );
+    fixture.detectChanges();
+    expect((held?.componentInstance as QuantityStepper).value()).toBe(1);
+    expect(element.classList.contains('is-over')).toBe(true);
+    expect(element.classList.contains('is-reached')).toBe(false);
   });
 
   it('emits a buy step per press, starting at 0', async () => {
@@ -639,6 +693,195 @@ describe('RowEntries: Bought for another list (velista 0201, target state 7)', (
     expect(boughtOther).toHaveBeenNthCalledWith(1, {
       list: PANTRY,
       step: { from: 0, to: 1, repeat: false },
+    });
+  });
+});
+
+describe('RowEntries: the reel in the compact view (velista 0204)', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  function pointer(type: string, clientX: number): Event {
+    const event = new MouseEvent(type, { bubbles: true, clientX });
+    Object.defineProperty(event, 'pointerId', { value: 1 });
+    Object.defineProperty(event, 'isPrimary', { value: true });
+    Object.defineProperty(event, 'buttons', {
+      value: type === 'pointerup' ? 0 : 1,
+    });
+    return event;
+  }
+
+  const entryReels = (fixture: Fixture) =>
+    fixture.debugElement
+      .queryAll(By.directive(QuantityReel))
+      .filter((held) => held.nativeElement.closest('.others') === null);
+
+  const otherReels = (fixture: Fixture) =>
+    fixture.debugElement
+      .queryAll(By.directive(QuantityReel))
+      .filter((held) => held.nativeElement.closest('.others') !== null);
+
+  /** The numbers of an open tape, as `value:status`. */
+  const tape = (reel: HTMLElement) =>
+    [...reel.querySelectorAll('.overlay > span')].map(
+      (part) =>
+        `${part.getAttribute('data-reel-value')}:${
+          part.classList.contains('reached')
+            ? 'reached'
+            : part.classList.contains('over')
+              ? 'over'
+              : 'plain'
+        }`
+    );
+
+  it('draws a reel for each list and no stepper, and the default view the reverse (spec 1)', async () => {
+    const two = row([
+      entry(),
+      entry({ lineId: 'zl-2', listId: 'l-basics', content: 'Leche' }),
+    ]);
+
+    const compact = await render(two, { compact: true });
+    expect(entryReels(compact)).toHaveLength(2);
+    expect(entrySteppers(compact)).toHaveLength(0);
+
+    const normal = await render(two);
+    expect(entryReels(normal)).toHaveLength(0);
+    expect(entrySteppers(normal)).toHaveLength(2);
+  });
+
+  it('gives each reel the value, unit, step, a floor of 0, the ask as its target and as a snap point', async () => {
+    const fixture = await render(
+      {
+        ...row([entry({ left: 990, asked: 990, bought: 975, unit: 'GRAM' })]),
+        unit: 'GRAM',
+      },
+      { compact: true, step: 25 }
+    );
+
+    const reel = entryReels(fixture)[0].componentInstance as QuantityReel;
+    expect(reel.value()).toBe(975);
+    expect(reel.unit()).toBe('GRAM');
+    expect(reel.step()).toBe(25);
+    expect(reel.min()).toBe(0);
+    expect(reel.target()).toBe(990);
+    expect(reel.snaps()).toEqual([...QUANTITY_SNAP_POINTS, 990]);
+    expect(reel.label()).toBe('basket.entries.boughtLabel');
+  });
+
+  it('spec 4: a drag up from 975 g with an ask of 990 g and a step of 25 shows 990 green, then 1000 amber', async () => {
+    const fixture = await render(
+      {
+        ...row([entry({ left: 990, asked: 990, bought: 975, unit: 'GRAM' })]),
+        unit: 'GRAM',
+      },
+      { compact: true, step: 25 }
+    );
+    const host = entryReels(fixture)[0].nativeElement as HTMLElement;
+
+    host.dispatchEvent(pointer('pointerdown', 0));
+    host.dispatchEvent(pointer('pointermove', -QUANTITY_REEL_PX_PER_UNIT));
+    fixture.detectChanges();
+    expect(tape(host)).toEqual(['975:plain', '990:reached', '1000:over']);
+
+    host.dispatchEvent(pointer('pointermove', -2 * QUANTITY_REEL_PX_PER_UNIT));
+    fixture.detectChanges();
+    // Above a kilo the rule of velista 0195 steps by 50.
+    expect(tape(host)).toEqual(['990:reached', '1000:over', '1050:over']);
+  });
+
+  it('spec 3: a reel closed from 0 at 4 emits one buy step of that line, marked closed', async () => {
+    const fixture = await render(row([entry({ left: 3, asked: 3 })]), {
+      compact: true,
+    });
+    const bought = jest.fn();
+    fixture.componentInstance.bought.subscribe(bought);
+    const host = entryReels(fixture)[0].nativeElement as HTMLElement;
+
+    host.dispatchEvent(pointer('pointerdown', 0));
+    host.dispatchEvent(pointer('pointermove', -4 * QUANTITY_REEL_PX_PER_UNIT));
+    host.dispatchEvent(pointer('pointerup', -4 * QUANTITY_REEL_PX_PER_UNIT));
+    fixture.detectChanges();
+    expect(bought).not.toHaveBeenCalled();
+
+    jest.runOnlyPendingTimers();
+
+    expect(bought).toHaveBeenCalledTimes(1);
+    expect(bought).toHaveBeenCalledWith({
+      lineId: 'zl-1',
+      step: { from: 0, to: 4, repeat: false },
+      closed: true,
+    });
+  });
+
+  it('closes an open reel on a press anywhere outside it, and sends its step once', async () => {
+    const fixture = await render(row([entry({ left: 3, asked: 3 })]), {
+      compact: true,
+    });
+    const bought = jest.fn();
+    fixture.componentInstance.bought.subscribe(bought);
+    const host = entryReels(fixture)[0].nativeElement as HTMLElement;
+
+    host.dispatchEvent(pointer('pointerdown', 0));
+    host.dispatchEvent(pointer('pointermove', -2 * QUANTITY_REEL_PX_PER_UNIT));
+    host.dispatchEvent(pointer('pointerup', -2 * QUANTITY_REEL_PX_PER_UNIT));
+    // A press inside the reel keeps it open.
+    host.dispatchEvent(pointer('pointerdown', -2 * QUANTITY_REEL_PX_PER_UNIT));
+    host.dispatchEvent(pointer('pointerup', -2 * QUANTITY_REEL_PX_PER_UNIT));
+    expect(bought).not.toHaveBeenCalled();
+
+    document.body.dispatchEvent(pointer('pointerdown', 0));
+    expect(bought).toHaveBeenCalledTimes(1);
+    expect(bought).toHaveBeenCalledWith({
+      lineId: 'zl-1',
+      step: { from: 0, to: 2, repeat: false },
+      closed: true,
+    });
+
+    jest.runOnlyPendingTimers();
+    expect(bought).toHaveBeenCalledTimes(1);
+  });
+
+  it('draws a reel from 0 for each list under "Bought for another list", with a target of 0 and no snaps input', async () => {
+    const fixture = await render(row([entry()]), {
+      compact: true,
+      step: 250,
+      others: { state: 'ready', lists: [PANTRY] },
+    });
+    const boughtOther = jest.fn();
+    fixture.componentInstance.boughtOther.subscribe(boughtOther);
+    open(fixture);
+
+    const [held] = otherReels(fixture);
+    const reel = held.componentInstance as QuantityReel;
+    expect(reel.value()).toBe(0);
+    expect(reel.min()).toBe(0);
+    expect(reel.target()).toBe(0);
+    // 0 is plain, and the 1 the tape offers is amber: a list asking nothing is
+    // never green.
+    const pillOf = (at: HTMLElement) =>
+      at.querySelector('.pill') as HTMLElement;
+    const reelHost = held.nativeElement as HTMLElement;
+    expect(pillOf(reelHost).classList.contains('over')).toBe(false);
+    expect(pillOf(reelHost).classList.contains('reached')).toBe(false);
+    // The default, so only the stop at 1000 applies.
+    expect(reel.snaps()).toEqual(QUANTITY_SNAP_POINTS);
+    expect(
+      html(fixture).querySelector('.others lib-quantity-stepper')
+    ).toBeNull();
+
+    const host = held.nativeElement as HTMLElement;
+    host.dispatchEvent(pointer('pointerdown', 0));
+    host.dispatchEvent(pointer('pointermove', -QUANTITY_REEL_PX_PER_UNIT));
+    fixture.detectChanges();
+    expect(tape(host)).toEqual(['0:plain', '1:over', '2:over']);
+    host.dispatchEvent(pointer('pointerup', -QUANTITY_REEL_PX_PER_UNIT));
+    jest.runOnlyPendingTimers();
+
+    expect(boughtOther).toHaveBeenCalledTimes(1);
+    expect(boughtOther).toHaveBeenCalledWith({
+      list: PANTRY,
+      step: { from: 0, to: 1, repeat: false },
+      closed: true,
     });
   });
 });

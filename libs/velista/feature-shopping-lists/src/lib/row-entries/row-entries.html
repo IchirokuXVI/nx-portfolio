@@ -35,7 +35,24 @@
           }
         </span>
 
-        @if (entry.steppable) {
+        @if (entry.steppable && compact()) {
+          <!--
+            The compact view (velista 0204): the reel of velista 0203, with the
+            list's ask as its target and as a snap point beside 1000. No typing.
+          -->
+          <lib-quantity-reel
+            (stepped)="onReeled(entry.lineId, $event)"
+            [label]="entry.label"
+            [min]="0"
+            [readonly]="busy()"
+            [snaps]="entry.snaps"
+            [step]="entry.step"
+            [target]="entry.asked"
+            [unit]="unit()"
+            [value]="entry.shown"
+            class="ask-amount"
+          />
+        } @else if (entry.steppable) {
           <lib-quantity-stepper
             (stepped)="onBought(entry.lineId, $event)"
             [disabled]="busy()"
@@ -115,19 +132,38 @@
                     </span>
                     <span class="row-where">{{ other.where }}</span>
                   </span>
-                  <!-- No ask yet, so no target and no snap point but 1000. -->
-                  <lib-quantity-stepper
-                    (stepped)="onBoughtOther(other.list, $event)"
-                    [disabled]="busy()"
-                    [fieldName]="other.label"
-                    [min]="0"
-                    [name]="other.name"
-                    [step]="step()"
-                    [unit]="unit()"
-                    [value]="other.shown"
-                    class="ask-amount"
-                    variant="sheet-narrow"
-                  />
+                  <!--
+                    The list asks nothing, so its target is 0: any amount bought for
+                    it is above the ask and amber, and 0 is plain (a target of 0 is
+                    never green). No snap point but 1000.
+                  -->
+                  @if (compact()) {
+                    <lib-quantity-reel
+                      (stepped)="onReeledOther(other.list, $event)"
+                      [label]="other.label"
+                      [min]="0"
+                      [readonly]="busy()"
+                      [step]="step()"
+                      [target]="0"
+                      [unit]="unit()"
+                      [value]="other.shown"
+                      class="ask-amount"
+                    />
+                  } @else {
+                    <lib-quantity-stepper
+                      (stepped)="onBoughtOther(other.list, $event)"
+                      [disabled]="busy()"
+                      [fieldName]="other.label"
+                      [min]="0"
+                      [name]="other.name"
+                      [step]="step()"
+                      [target]="0"
+                      [unit]="unit()"
+                      [value]="other.shown"
+                      class="ask-amount"
+                      variant="sheet-narrow"
+                    />
+                  }
                 </li>
               }
             </ul>

@@ -1,6 +1,9 @@
 import { Component, signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
+import {
+  provideRokuTranslatorTesting,
+  RokuLocaleStore,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   QUANTITY_REEL_IDLE_MS,
   QUANTITY_REEL_PX_PER_UNIT,
@@ -69,6 +72,9 @@ async function render(
     step?: number | null;
     snaps?: readonly number[];
     locale?: string;
+    target?: number | null;
+    /** Provide the testing translator, whose words are the keys themselves. */
+    translated?: boolean;
   } = {}
 ): Promise<{
   fixture: ComponentFixture<QuantityReel>;
@@ -80,15 +86,17 @@ async function render(
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [QuantityReel],
-    providers:
-      options.locale === undefined
+    providers: [
+      ...(options.translated ? provideRokuTranslatorTesting() : []),
+      ...(options.locale === undefined
         ? []
         : [
             {
               provide: RokuLocaleStore,
               useValue: { locale: signal(options.locale) },
             },
-          ],
+          ]),
+    ],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(QuantityReel);
@@ -111,6 +119,9 @@ async function render(
   }
   if (options.snaps !== undefined) {
     fixture.componentRef.setInput('snaps', options.snaps);
+  }
+  if (options.target !== undefined) {
+    fixture.componentRef.setInput('target', options.target);
   }
   fixture.detectChanges();
 
@@ -1207,6 +1218,288 @@ describe('QuantityReel', () => {
       expect(host.classList.contains('took')).toBe(true);
       expect(host.getAttribute('aria-valuenow')).toBe('3');
       expect(host.getAttribute('role')).toBe('spinbutton');
+    });
+  });
+
+  /**
+   * Velista `0204`, target state 2 and specs 2 and 5 to 8: with a target a colour is
+   * a status, and the selected number is told by its size and weight alone. jsdom
+   * applies no component styles, so the status is read off the classes the template
+   * sets and the colour and weight off the stylesheet rules those classes meet.
+   */
+  describe('a target (velista 0204)', () => {
+    /** What each number of the open tape is, as `value:status`. */
+    function tape(host: HTMLElement): string[] {
+      return [...host.querySelectorAll('.overlay > span')].map((part) => {
+        const status = part.classList.contains('reached')
+          ? 'reached'
+          : part.classList.contains('over')
+            ? 'over'
+            : 'plain';
+        const role = part.classList.contains('current') ? 'current' : 'nb';
+        return `${part.getAttribute('data-reel-value') ?? ''}:${role}:${status}`;
+      });
+    }
+
+    function pill(host: HTMLElement): string {
+      const element = host.querySelector('.pill');
+      return element?.classList.contains('reached')
+        ? 'reached'
+        : element?.classList.contains('over')
+          ? 'over'
+          : 'plain';
+    }
+
+    it('spec 5: on 2 with a target of 3, draws 1 and 2 plain, 3 reached, and 2 as the current one', async () => {
+      const { fixture, host } = await render(2, { target: 3 });
+
+      tap(host);
+      fixture.detectChanges();
+
+      expect(host.classList.contains('targeted')).toBe(true);
+      expect(tape(host)).toEqual([
+        '1:nb:plain',
+        '2:current:plain',
+        '3:nb:reached',
+      ]);
+      expect(host.querySelectorAll('.over')).toHaveLength(0);
+    });
+
+    it('spec 6: on 3 the current 3 is reached and the neighbour 4 over; on 4 the current 4 is over', async () => {
+      const { fixture, host } = await render(3, { target: 3 });
+
+      tap(host);
+      fixture.detectChanges();
+      expect(tape(host)).toEqual([
+        '2:nb:plain',
+        '3:current:reached',
+        '4:nb:over',
+      ]);
+
+      key(host, 'ArrowUp');
+      fixture.detectChanges();
+      expect(tape(host)).toEqual([
+        '3:nb:reached',
+        '4:current:over',
+        '5:nb:over',
+      ]);
+    });
+
+    it('spec 2: colours the tape while a drag moves it, before it is let go', async () => {
+      const { fixture, host, runs } = await render(0, { target: 3, min: 0 });
+
+      host.dispatchEvent(pointer('pointerdown', 0));
+      host.dispatchEvent(
+        pointer('pointermove', -3 * QUANTITY_REEL_PX_PER_UNIT)
+      );
+      fixture.detectChanges();
+      expect(tape(host)).toEqual([
+        '2:nb:plain',
+        '3:current:reached',
+        '4:nb:over',
+      ]);
+
+      host.dispatchEvent(
+        pointer('pointermove', -4 * QUANTITY_REEL_PX_PER_UNIT)
+      );
+      fixture.detectChanges();
+      expect(tape(host)).toEqual([
+        '3:nb:reached',
+        '4:current:over',
+        '5:nb:over',
+      ]);
+      expect(runs).toEqual([]);
+    });
+
+    it('spec 7: the resting pill is plain below the target, reached at it, over above it', async () => {
+      const { fixture, host } = await render(0, { target: 3, min: 0 });
+      expect(pill(host)).toBe('plain');
+
+      for (const [value, status] of [
+        [2, 'plain'],
+        [3, 'reached'],
+        [4, 'over'],
+      ] as const) {
+        fixture.componentRef.setInput('value', value);
+        fixture.detectChanges();
+        expect(pill(host)).toBe(status);
+      }
+    });
+
+    it('a target of 0 is never reached and any buy is over, as the stepper reads it', async () => {
+      const { fixture, host } = await render(0, { target: 0, min: 0 });
+      expect(pill(host)).toBe('plain');
+
+      fixture.componentRef.setInput('value', 1);
+      fixture.detectChanges();
+      expect(pill(host)).toBe('over');
+    });
+
+    it('spec 8: with no target, no number carries a status and the host is not targeted', async () => {
+      const { fixture, host } = await render(3);
+
+      tap(host);
+      fixture.detectChanges();
+
+      expect(host.classList.contains('targeted')).toBe(false);
+      expect(tape(host)).toEqual([
+        '2:nb:plain',
+        '3:current:plain',
+        '4:nb:plain',
+      ]);
+      expect(pill(host)).toBe('plain');
+    });
+
+    it('spec 8: the zone list, the due rows and the product page give their reels no target', () => {
+      const sources = [
+        join(__dirname, 'line-row.html'),
+        join(__dirname, 'due-line-row.ts'),
+        join(__dirname, '..', 'catalog', 'lists-table.ts'),
+      ].map((file) => readFileSync(file, 'utf8'));
+
+      for (const source of sources) {
+        const reels = source.match(/<lib-quantity-reel[\s\S]*?\/>/g) ?? [];
+        expect(reels.length).toBeGreaterThan(0);
+        for (const reel of reels) {
+          expect(reel).not.toContain('[target]');
+        }
+      }
+    });
+
+    it('the stylesheet: status colours under a target, the current bold and the neighbours regular', () => {
+      const styles = readFileSync(
+        join(__dirname, 'quantity-reel.scss'),
+        'utf8'
+      ).replace(/\r\n/g, '\n');
+      const targeted = /\n:host\(\.targeted\) \{([\s\S]*?)\n\}/.exec(
+        styles
+      )?.[1];
+      const rule = (selector: string) =>
+        new RegExp(`${selector} \\{([^}]*)\\}`).exec(targeted ?? '')?.[1] ?? '';
+
+      expect(targeted).toBeDefined();
+      expect(rule('\\.neighbour')).toContain('color: var(--app-text-primary)');
+      expect(rule('\\.neighbour \\.figure')).toContain('font-weight: 400');
+      expect(rule('\\.reached')).toContain(
+        'color: var(--app-status-success-fg)'
+      );
+      expect(rule('\\.over')).toContain('color: var(--app-action-quiet-fg)');
+      // The current number keeps the bold figure of velista 0203 in either case,
+      // and with no target the quiet amber.
+      const current = /\n\n\.current \{([\s\S]*?)\n\}/.exec(styles)?.[1] ?? '';
+      expect(current).toContain('color: var(--app-action-quiet-fg)');
+      expect(current).toContain('font-weight: 700');
+    });
+
+    describe('what the spinbutton says of the status', () => {
+      it('says the count, then "reached" at the target and "more than asked" above it', async () => {
+        const { fixture, host } = await render(2, {
+          target: 3,
+          translated: true,
+        });
+
+        // Below the target a count is its own words, as before.
+        expect(host.hasAttribute('aria-valuetext')).toBe(false);
+
+        fixture.componentRef.setInput('value', 3);
+        fixture.detectChanges();
+        expect(host.getAttribute('aria-valuetext')).toBe('3, amount.reached');
+
+        fixture.componentRef.setInput('value', 4);
+        fixture.detectChanges();
+        expect(host.getAttribute('aria-valuetext')).toBe('4, amount.over');
+      });
+
+      it('says the status while the tape moves, not only at rest', async () => {
+        const { fixture, host } = await render(2, {
+          target: 3,
+          translated: true,
+        });
+
+        host.dispatchEvent(pointer('pointerdown', 0));
+        host.dispatchEvent(pointer('pointermove', -QUANTITY_REEL_PX_PER_UNIT));
+        fixture.detectChanges();
+
+        expect(host.getAttribute('aria-valuetext')).toBe('3, amount.reached');
+      });
+
+      it('puts the status after the whole words of a weight', async () => {
+        const { fixture, host } = await render(750, {
+          unit: 'GRAM',
+          target: 750,
+          translated: true,
+        });
+
+        expect(host.getAttribute('aria-valuetext')).toBe(
+          '750 g, amount.reached'
+        );
+
+        fixture.componentRef.setInput('value', 500);
+        fixture.detectChanges();
+        expect(host.getAttribute('aria-valuetext')).toBe('500 g');
+      });
+
+      it('says a list asking nothing is over at 1 and nothing at 0', async () => {
+        const { fixture, host } = await render(0, {
+          target: 0,
+          translated: true,
+        });
+
+        expect(host.hasAttribute('aria-valuetext')).toBe(false);
+
+        fixture.componentRef.setInput('value', 1);
+        fixture.detectChanges();
+        expect(host.getAttribute('aria-valuetext')).toBe('1, amount.over');
+      });
+
+      it('says exactly what it said before with no target', async () => {
+        const count = await render(4, { translated: true });
+        expect(count.host.hasAttribute('aria-valuetext')).toBe(false);
+
+        const weight = await render(1500, {
+          unit: 'GRAM',
+          locale: 'es',
+          translated: true,
+        });
+        expect(weight.host.getAttribute('aria-valuetext')).toBe('1,5 kg');
+      });
+    });
+  });
+
+  describe('looking inert when it takes no drag', () => {
+    it('the stylesheet: no raised fill, the hairline kept, muted text, status colours kept', () => {
+      const styles = readFileSync(
+        join(__dirname, 'quantity-reel.scss'),
+        'utf8'
+      ).replace(/\r\n/g, '\n');
+      const inert =
+        /\n:host\(\.readonly\) \.pill \{([\s\S]*?)\n\}/.exec(styles)?.[1] ?? '';
+      const targeted =
+        /\n:host\(\.readonly\.targeted\) \.pill \{([\s\S]*?)\n\}/.exec(
+          styles
+        )?.[1] ?? '';
+
+      expect(inert).toContain('background: transparent');
+      // The border keeps its width and only takes the hairline, so the box is the
+      // same size as a live reel's.
+      expect(inert).toContain('border-color: var(--app-border-subtle)');
+      expect(inert).not.toMatch(/\bborder:|inline-size|block-size|padding/);
+      expect(inert).toContain('color: var(--app-text-muted)');
+      expect(targeted).toContain('color: var(--app-status-success-fg)');
+      expect(targeted).toContain('color: var(--app-action-quiet-fg)');
+      // After the targeted block, whose normal text colour it has to win over.
+      expect(styles.indexOf(':host(.readonly) .pill')).toBeGreaterThan(
+        styles.indexOf(':host(.targeted) {')
+      );
+    });
+
+    it('carries the class the look hangs on only while it is read only', async () => {
+      const { fixture, host } = await render(2, { readonly: true });
+      expect(host.classList.contains('readonly')).toBe(true);
+
+      fixture.componentRef.setInput('readonly', false);
+      fixture.detectChanges();
+      expect(host.classList.contains('readonly')).toBe(false);
     });
   });
 });
