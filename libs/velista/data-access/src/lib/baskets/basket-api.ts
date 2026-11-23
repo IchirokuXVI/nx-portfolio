@@ -3,6 +3,7 @@ import { inject, Injectable } from '@angular/core';
 import type {
   Basket,
   BasketAddLineRequest,
+  BasketBuyForListRequest,
   BasketChangePage,
   BasketDemandRequest,
   BasketLinkPreview,
@@ -484,6 +485,42 @@ export class BasketApi implements BasketServiceI {
     );
 
     return required(toBasketRowResult(answer), 'basket.addLine');
+  }
+
+  /**
+   * Buy the row's product for a list that did not ask for it (backend `0273`).
+   *
+   * Under the participant credential like every write here; the gateway refuses
+   * a guest. `lineId` and the shop are **omitted rather than sent empty**, this
+   * file's rule: the server validates each as a uuid. No price scope and no
+   * product: the gateway prices the row's own product itself.
+   */
+  async buyForList(
+    basketId: string,
+    rowKey: string,
+    body: BasketBuyForListRequest
+  ): Promise<BasketRowResult> {
+    const request: Record<string, unknown> = {
+      targetListId: body.targetListId,
+      quantity: body.quantity,
+      unit: body.unit,
+    };
+    if (body.lineId !== null) {
+      request['lineId'] = body.lineId;
+    }
+    if (body.supermarketLocationId !== undefined) {
+      request['supermarketLocationId'] = body.supermarketLocationId;
+    }
+
+    const answer = await firstValueFrom(
+      this._http.post<unknown>(
+        `${this._row(basketId, rowKey)}/buy-for-list`,
+        request,
+        this._participantOptions(basketId, 'basket.buyForList')
+      )
+    );
+
+    return required(toBasketRowResult(answer), 'basket.buyForList');
   }
 
   /**

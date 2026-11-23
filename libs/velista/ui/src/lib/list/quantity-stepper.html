@@ -103,9 +103,11 @@
       <span aria-hidden="true" class="glyph"></span>
     </button>
 
+    @let reached = reachKey();
     <span aria-live="polite" class="visually-hidden">{{
       announcing()
-        ? ('amount.settled' | rokuT: { name: name(), amount: words().spoken })
+        ? ('amount.settled' | rokuT: { name: name(), amount: words().spoken }) +
+          (reached ? ', ' + (reached | rokuT) : '')
         : ''
     }}</span>
     @if (typed()) {

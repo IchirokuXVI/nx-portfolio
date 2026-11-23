@@ -224,11 +224,11 @@ function toBasketRowEntry(
     // Zero when absent, which is a gateway without backend `0188` behind it, and
     // zero when it is not a number (velista `0131`). Zero draws nothing.
     boughtElsewhere: atLeastZero(raw['boughtElsewhere']),
-    // Not on the wire: the entry view carries `left` and `bought` and backend
-    // `0130` section 4 defines the sum. It is stated once here rather than at the
-    // stepper that needs a ceiling, which is the one arithmetic this file does and
-    // the only one the plan leaves it.
-    asked: bought + left,
+    // What the list asks for, from the wire since backend `0274`, which keeps it
+    // still when a buy goes above it (velista `0201`, target state 10). The sum
+    // is only the fallback for a gateway that does not send it, which meant
+    // exactly that sum.
+    asked: 'asked' in raw ? atLeastZero(raw['asked']) : bought + left,
     state: oneOf(raw['state'], BASKET_ROW_STATES, BASKET_ROW_STATE_FALLBACK),
     // `APPROVED` or `PENDING`, and never `REJECTED`: a rejected line is not
     // covered, so it is never an entry. Anything else reads as approved, which is
@@ -990,6 +990,14 @@ export function toBasketEntryPatch(raw: unknown): BasketEntryPatch | null {
   const left = wholeCount(raw['left']);
   const bought = wholeCount(raw['bought']);
   const boughtElsewhere = wholeCount(raw['boughtElsewhere']);
+  // A missing `asked` is a server before backend `0274`, which meant the sum
+  // (velista `0201`, target state 10), so it does not refuse the patch. One that
+  // is there and unreadable does, as every other field.
+  const asked = !('asked' in raw)
+    ? left === null || bought === null
+      ? null
+      : left + bought
+    : wholeCount(raw['asked']);
   const state = oneOfOrNull(raw['state'], BASKET_ROW_STATES);
   const approval = raw['approvalStatus'];
   const skipped = raw['skipped'];
@@ -1004,6 +1012,7 @@ export function toBasketEntryPatch(raw: unknown): BasketEntryPatch | null {
     unit === null ||
     left === null ||
     bought === null ||
+    asked === null ||
     boughtElsewhere === null ||
     // An entry is never `REMOVED` (backend `0136`).
     state === null ||
@@ -1022,6 +1031,7 @@ export function toBasketEntryPatch(raw: unknown): BasketEntryPatch | null {
     unit,
     left,
     bought,
+    asked,
     boughtElsewhere,
     state,
     awaitingApproval: approval === 'PENDING',

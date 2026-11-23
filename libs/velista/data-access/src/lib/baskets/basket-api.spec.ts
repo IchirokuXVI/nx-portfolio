@@ -256,6 +256,50 @@ describe('BasketApi, the writes on a row', () => {
   const rowUrl = `${GATEWAY}/v1/baskets/${BASKET}/rows/zl-1`;
   const skipUrl = `${rowUrl}/skip`;
 
+  it('buys for another list on its route, with no line, no price scope and no product when it has none (velista 0201)', async () => {
+    const done = api.buyForList(BASKET, 'zl-1', {
+      targetListId: 'list-pantry',
+      lineId: null,
+      quantity: 2,
+      unit: 'UNIT',
+    });
+    const req = httpMock.expectOne(`${rowUrl}/buy-for-list`);
+
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({
+      targetListId: 'list-pantry',
+      quantity: 2,
+      unit: 'UNIT',
+    });
+    req.flush({
+      entries: [{ ...ANSWER.entries[0], left: 0, bought: 2, asked: 0 }],
+    });
+
+    // Through the basket mappers (rule D4): the ask of the wire, 0.
+    expect((await done).entries[0]).toMatchObject({ asked: 0, bought: 2 });
+  });
+
+  it('names the line and the shop when it has them', async () => {
+    const done = api.buyForList(BASKET, 'zl-1', {
+      targetListId: 'list-pantry',
+      lineId: 'zl-9',
+      quantity: 1,
+      unit: 'GRAM',
+      supermarketLocationId: 'shop-1',
+    });
+    const req = httpMock.expectOne(`${rowUrl}/buy-for-list`);
+
+    expect(req.request.body).toEqual({
+      targetListId: 'list-pantry',
+      lineId: 'zl-9',
+      quantity: 1,
+      unit: 'GRAM',
+      supermarketLocationId: 'shop-1',
+    });
+    req.flush(ANSWER);
+    await done;
+  });
+
   it('patches the row route with its lines, and leaves confirmMerge off the first request', async () => {
     const done = api.renameRow(BASKET, TARGET, { content: 'Leche entera' });
     const req = httpMock.expectOne(rowUrl);

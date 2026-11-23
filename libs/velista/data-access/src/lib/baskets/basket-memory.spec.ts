@@ -1557,3 +1557,101 @@ describe('BasketMemory: a row is a product (backend 0201)', () => {
     );
   });
 });
+
+describe('BasketMemory: a buy keeps the ask it met (backend 0274, velista 0201)', () => {
+  const one = (lineId: string): BasketRowTarget => ({
+    rowKey: lineId,
+    lineIds: [lineId],
+  });
+
+  it('answers the original ask after a buy above it, and a revert of the extra gives nothing back', async () => {
+    const memory = new BasketMemory();
+    const line = rowOf(await rowsOf(memory), 'Milk').entries[0];
+
+    await memory.settle(BASKET, one(line.lineId), {
+      outcome: 'BOUGHT',
+      quantity: line.left + 1,
+      from: line.left,
+      unit: 'UNIT',
+    });
+    const over = rowOf(await rowsOf(memory), 'Milk').entries[0];
+    expect(over).toMatchObject({ left: 0, asked: line.asked });
+
+    await memory.revert(BASKET, one(line.lineId), {
+      target: 'UNITS',
+      units: 1,
+      from: over.bought,
+    });
+    const back = rowOf(await rowsOf(memory), 'Milk').entries[0];
+    expect(back).toMatchObject({
+      left: 0,
+      bought: over.bought - 1,
+      asked: line.asked,
+    });
+
+    await memory.revert(BASKET, one(line.lineId), {
+      target: 'UNITS',
+      units: 1,
+      from: back.bought,
+    });
+    // An applied unit goes back onto the line.
+    expect(rowOf(await rowsOf(memory), 'Milk').entries[0]).toMatchObject({
+      left: 1,
+      asked: line.asked,
+    });
+  });
+
+  it('buys for a list that did not ask, which joins the row at an ask of 0', async () => {
+    const memory = new BasketMemory();
+    const eggs = rowOf(await rowsOf(memory), 'Eggs');
+    const [other] = await memory.productLists(BASKET, eggs.productId ?? '');
+
+    const answer = await memory.buyForList(BASKET, eggs.rowKey, {
+      targetListId: other.listId,
+      lineId: other.lineId,
+      quantity: 1,
+      unit: 'UNIT',
+    });
+
+    const joined = answer.entries.find(
+      (entry) => entry.listId === other.listId
+    );
+    expect(joined).toMatchObject({ bought: 1, left: 0, asked: 0 });
+    expect(
+      rowOf(await rowsOf(memory), 'Eggs').entries.map((entry) => entry.listId)
+    ).toContain(other.listId);
+  });
+
+  it('refuses a line that is already an entry of the row', async () => {
+    const memory = new BasketMemory();
+    const milk = rowOf(await rowsOf(memory), 'Milk');
+    const entry = milk.entries[0];
+
+    expect(
+      await codeOf(
+        memory.buyForList(BASKET, milk.rowKey, {
+          targetListId: entry.listId ?? '',
+          lineId: entry.lineId,
+          quantity: 1,
+          unit: 'UNIT',
+        })
+      )
+    ).toBe('basket_line_already_in_row');
+  });
+
+  it('answers not found for a list the basket does not cover, as the server does', async () => {
+    const memory = new BasketMemory();
+    const eggs = rowOf(await rowsOf(memory), 'Eggs');
+
+    expect(
+      await codeOf(
+        memory.buyForList(BASKET, eggs.rowKey, {
+          targetListId: 'list-nobody-covers',
+          lineId: null,
+          quantity: 1,
+          unit: 'UNIT',
+        })
+      )
+    ).toBe('not_found');
+  });
+});

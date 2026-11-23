@@ -184,16 +184,48 @@ export async function openSettleSheet(
 }
 
 /**
- * The amount one list asks for on an open settle sheet (velista `0139`,
- * section 3): the typed field of its stepper, by the list's name. The field is
- * named `basket.demand.askLabel` as given, "Weekly, asks for" (velista `0190`,
- * section 5, as fixed on 2026-11-17).
+ * What this basket bought for one list on an open settle sheet (velista
+ * `0201`): the typed field of its stepper, by the list's name, "Weekly, bought".
  */
-export function askAmount(dialog: Locator, list: string): Locator {
+export function boughtAmount(dialog: Locator, list: string): Locator {
   return amountField(
     dialog.locator('lib-row-entries'),
-    new RegExp(`^${list}, asks for$`)
+    new RegExp(`^${list}, bought$`)
   );
+}
+
+/**
+ * What one list asks for, after its name on an open settle sheet (velista
+ * `0201`, target state 5): " · 2", " · 800 g".
+ */
+export function askOf(dialog: Locator, list: string): Locator {
+  return dialog
+    .locator('lib-row-entries .row-name', { hasText: list })
+    .locator('.row-ask');
+}
+
+/**
+ * "Lists and amounts" from an open settle sheet (velista `0200`): the detailed
+ * view of the row's lists, where each list's ask is changed.
+ */
+export async function openListsAndAmounts(
+  page: Page,
+  dialog: Locator
+): Promise<Locator> {
+  await dialog.getByRole('button', { name: 'Lists and amounts' }).click();
+  await expect(page).toHaveURL(/\/sheet\/rows\/[0-9a-f-]{36}\/lists$/);
+  // The host draws no box of its own, so its way back is what shows it is open.
+  const view = page.locator('lib-row-lists-sheet');
+  await expect(view.getByRole('button', { name: 'Back' })).toBeVisible();
+  return view;
+}
+
+/**
+ * The amount one list asks for in the detailed view (velista `0200`): the
+ * typed field of its stepper, "Weekly, asks for" (velista `0190`, section 5).
+ */
+export function askAmount(view: Locator, list: string): Locator {
+  return amountField(view, new RegExp(`^${list}, asks for$`));
 }
 
 /**

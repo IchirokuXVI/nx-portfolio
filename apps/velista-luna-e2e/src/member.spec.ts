@@ -21,6 +21,7 @@ import {
   expectBasketUrl,
   generateBasket,
   newVisitor,
+  openListsAndAmounts,
   openSettleSheet,
   pressBasketMenuRow,
   readShareLinkFromSheet,
@@ -132,7 +133,7 @@ test.describe('a registered participant', () => {
       const dialog = await openSettleSheet(dana, 'Milk');
       const entries = dialog.locator('lib-row-entries');
       await expect(
-        entries.getByRole('heading', { name: 'Asked for on 1 list' })
+        entries.getByRole('heading', { name: 'What you bought' })
       ).toBeVisible();
       await expect(
         entries.locator('.row-name', { hasText: 'Groceries' })
@@ -198,19 +199,28 @@ test.describe('a registered participant', () => {
         })
         .toBe(true);
 
-      // The lists behind the row: Hardware, with what it asks for in a stepper
-      // the owner may change (velista `0092`, section 6; velista 0190). Raising it from zero is how
-      // the household's list asks for one more after the shop.
+      // The lists behind the row: Hardware, which asks for 1 and has it (velista
+      // 0201). Its ask is changed in "Lists and amounts" (velista 0200): raising
+      // it above what was bought is how the household's list asks for one more
+      // after the shop.
       const dialog = await openSettleSheet(page, aisleLine);
       const entries = dialog.locator('lib-row-entries');
       await expect(
         entries.locator('.row-name', { hasText: 'Hardware' })
       ).toBeVisible();
-      const asks = amountField(entries, /^Hardware.*, asks for$/);
-      await stepAmount(asks, 1);
+      await expect(
+        entries
+          .locator('.row-name', { hasText: 'Hardware' })
+          .locator('.row-ask')
+      ).toHaveText('· 1');
+      const view = await openListsAndAmounts(page, dialog);
+      const asks = amountField(view, /^Hardware.*, asks for$/);
       await expect(asks).toHaveAttribute('aria-valuenow', '1');
+      await stepAmount(asks, 1);
+      await expect(asks).toHaveAttribute('aria-valuenow', '2');
 
-      // The zone list asks for it again, read back through the API.
+      // The zone list asks for one more, read back through the API: the ask of
+      // 2 less the 1 this basket already bought for it (backend 0274).
       await expect
         .poll(
           async () =>

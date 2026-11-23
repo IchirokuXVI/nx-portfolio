@@ -2088,4 +2088,100 @@ describe('QuantityStepper (velista 0188)', () => {
       );
     });
   });
+
+  describe('a target (velista 0201)', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    const reachOf = (h: Harness) => ({
+      reached: h.el.classList.contains('is-reached'),
+      over: h.el.classList.contains('is-over'),
+    });
+
+    it('colours nothing with a null target, the default (spec 4)', () => {
+      const h = render({ value: 3, variant: 'sheet-narrow' });
+      expect(reachOf(h)).toEqual({ reached: false, over: false });
+    });
+
+    it('is reached at the target, over above it, and plain below it (spec 4)', () => {
+      const h = render({ value: 2, target: 3, variant: 'sheet-narrow' });
+      expect(reachOf(h)).toEqual({ reached: false, over: false });
+      h.set('value', 3);
+      expect(reachOf(h)).toEqual({ reached: true, over: false });
+      h.set('value', 4);
+      expect(reachOf(h)).toEqual({ reached: false, over: true });
+    });
+
+    it('is over for any buy on a target of 0, and plain at 0', () => {
+      const h = render({ value: 0, target: 0, variant: 'sheet-narrow' });
+      expect(reachOf(h)).toEqual({ reached: false, over: false });
+      h.set('value', 1);
+      expect(reachOf(h)).toEqual({ reached: false, over: true });
+    });
+
+    it('colours the number in the success colour and the quiet amber, and nothing else', () => {
+      const scss = readFileSync(
+        join(__dirname, 'quantity-stepper.scss'),
+        'utf8'
+      );
+      expect(scss).toMatch(
+        /:host\(\.is-reached\) \.number,\s*:host\(\.is-reached\) \.cell:not\(\.field-cell\) \{\s*color: var\(--app-status-success-fg\);/
+      );
+      expect(scss).toMatch(
+        /:host\(\.is-over\) \.number,\s*:host\(\.is-over\) \.cell:not\(\.field-cell\) \{\s*color: var\(--app-action-quiet-fg\);/
+      );
+      // No ring and no fill: neither class reaches the outline.
+      expect(scss).not.toMatch(/:host\(\.is-(reached|over)\) \.stepper/);
+    });
+
+    it('says "reached" or "more than asked" after the settled amount', () => {
+      const h = render({ value: 2, target: 3, variant: 'sheet-narrow' });
+      const live = () =>
+        h.el.querySelector('[aria-live="polite"]')?.textContent?.trim() ?? '';
+
+      h.plus.click();
+      jest.advanceTimersByTime(1000);
+      h.fixture.detectChanges();
+      expect(live()).toContain('amount.settled');
+      expect(live()).toMatch(/, amount\.reached$/);
+
+      h.plus.click();
+      jest.advanceTimersByTime(1000);
+      h.fixture.detectChanges();
+      expect(live()).toMatch(/, amount\.over$/);
+    });
+
+    it('lands on an ask of 990 g from 975 g, then on 1000, and back down (spec 8)', () => {
+      const h = render({
+        value: 975,
+        unit: 'GRAM',
+        step: 25,
+        target: 990,
+        snaps: [1000, 990],
+        variant: 'sheet-narrow',
+      });
+      h.plus.click();
+      expect(tos(h)).toEqual([990]);
+      expect(reachOf(h).reached).toBe(true);
+      h.plus.click();
+      expect(tos(h)).toEqual([990, 1000]);
+      expect(reachOf(h).over).toBe(true);
+
+      h.set('value', 1010);
+      h.minus.click();
+      h.minus.click();
+      expect(tos(h).slice(2)).toEqual([1000, 990]);
+    });
+
+    // Known limit, from the review of velista 0195: at or above 1000 a count reads
+    // in short form, and `canStepUp` refuses a plus that does not change that
+    // reading. A snap point less than 5 above the value is such a plus, so with an
+    // ask of 1003 the plus is dead at 1000. Recorded here, not worked around.
+    it('leaves the plus dead at 1000 for a count whose ask is 1003', () => {
+      const h = render({ value: 1000, target: 1003, snaps: [1000, 1003] });
+      expect(h.plus.getAttribute('aria-disabled')).toBe('true');
+      h.plus.click();
+      expect(tos(h)).toEqual([]);
+    });
+  });
 });

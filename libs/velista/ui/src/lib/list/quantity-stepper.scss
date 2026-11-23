@@ -238,6 +238,19 @@
   color: var(--app-text-secondary);
 }
 
+// Against a target (velista 0201, colours A): the number alone takes the colour, in
+// the success foreground at the target and the quiet amber above it. The symbol,
+// the outline and the ends keep theirs.
+:host(.is-reached) .number,
+:host(.is-reached) .cell:not(.field-cell) {
+  color: var(--app-status-success-fg);
+}
+
+:host(.is-over) .number,
+:host(.is-over) .cell:not(.field-cell) {
+  color: var(--app-action-quiet-fg);
+}
+
 // Locked, an amount the reader may not change (velista 0200, the mock's round 4):
 // no raised fill, the hairline for the strong border, the amount in muted text at
 // its usual size and weight, and both glyphs in muted text at 60%. The ends' own

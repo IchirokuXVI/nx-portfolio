@@ -58,12 +58,27 @@
 }
 
 .row-name {
-  overflow: hidden;
+  display: flex;
+  min-inline-size: 0;
   font-size: var(--app-text-base);
   line-height: var(--app-leading-body);
   color: var(--app-text-primary);
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+// The list gives way first; what it asks for is never cut (velista 0201,
+// target state 5).
+.row-list {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-ask {
+  flex: none;
+  color: var(--app-text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: pre;
 }
 
 // "zone · line": where the list is and what its line is called, quieter.

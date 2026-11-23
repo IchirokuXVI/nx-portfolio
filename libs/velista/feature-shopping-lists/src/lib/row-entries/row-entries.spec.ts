@@ -16,14 +16,12 @@ import { QuantityStepper } from '@portfolio/velista/ui';
 import { RowEntries, type OtherListsState } from './row-entries';
 
 /**
- * The lists that ask for a row, and the lists that could (velista `0139`,
- * section 3).
+ * What this basket bought for each list of a row, and for the lists that did
+ * not ask (velista `0201`).
  *
- * An entry is its list, then "zone · line", then the quantity the list asks for,
- * which is the stepper of velista 0188 where the server allows it and the number
- * where it does not (velista 0190).
- * "Add it to another list" is last and closed, and is drawn only when the sheet
- * hands it a read.
+ * An entry is its list and its ask, then "zone · line", then a stepper of what
+ * was bought for it, while the sheet can settle. "Bought for another list" is
+ * last and closed, and is drawn only when the sheet hands it a read.
  *
  * Assertions are on translation keys rather than on rendered English, because the
  * testing translator echoes keys.
@@ -121,6 +119,8 @@ async function render(
   options: {
     lists?: ReadonlyMap<string, BasketListRef>;
     finished?: boolean;
+    buying?: boolean;
+    locale?: string;
     others?: OtherListsState | null;
     changeable?: ReadonlySet<string>;
   } = {}
@@ -131,7 +131,10 @@ async function render(
     imports: [RowEntries, RokuTranslatorTestingModule.forTesting()],
     providers: [
       provideVelistaTesting({ basePath: '/velista' }),
-      { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
+      {
+        provide: RokuLocaleStore,
+        useValue: { locale: signal(options.locale ?? 'en') },
+      },
     ],
   }).compileComponents();
 
@@ -139,6 +142,7 @@ async function render(
   fixture.componentRef.setInput('row', held);
   fixture.componentRef.setInput('lists', options.lists ?? LISTS);
   fixture.componentRef.setInput('finished', options.finished ?? false);
+  fixture.componentRef.setInput('buying', options.buying ?? true);
   fixture.componentRef.setInput('busy', false);
   fixture.componentRef.setInput('others', options.others ?? null);
   fixture.componentRef.setInput('changeable', options.changeable ?? new Set());
@@ -190,8 +194,15 @@ function plus(stepper: HTMLElement, fixture: Fixture): void {
   fixture.detectChanges();
 }
 
+/** The steppers of the lists that ask, as components, in order. */
+const entrySteppers = (fixture: Fixture) =>
+  fixture.debugElement
+    .queryAll(By.directive(QuantityStepper))
+    .filter((held) => held.nativeElement.closest('.others') === null)
+    .map((held) => held.componentInstance as QuantityStepper);
+
 describe('RowEntries: the lists that ask', () => {
-  it('heads them with how many lists ask, and draws one row each', async () => {
+  it('heads them with what the sheet is for, and draws one row each', async () => {
     const fixture = await render(
       row([
         entry(),
@@ -203,8 +214,8 @@ describe('RowEntries: the lists that ask', () => {
       ])
     );
 
-    expect(texts(fixture, '.heading')).toEqual(['basket.sheet.askedOn']);
-    expect(texts(fixture, '.entries > .rows .row-name')).toEqual([
+    expect(texts(fixture, '.heading')).toEqual(['basket.entries.heading']);
+    expect(texts(fixture, '.entries > .rows .row-list')).toEqual([
       'Compra semanal',
       'Básicos',
     ]);
@@ -225,11 +236,53 @@ describe('RowEntries: the lists that ask', () => {
       row([entry(), entry({ lineId: 'zl-2', listId: null, left: 3 })])
     );
 
-    expect(texts(fixture, '.entries > .rows .row-name')).toEqual([
+    expect(texts(fixture, '.entries > .rows .row-list')).toEqual([
       'Compra semanal',
       'basket.entries.otherList',
     ]);
     expect(texts(fixture, '.row-where')).toHaveLength(1);
+  });
+});
+
+describe('RowEntries: each name carries its ask (velista 0201, spec 3)', () => {
+  it('reads "Compra semanal · 3"', async () => {
+    const fixture = await render(row([entry({ left: 3, asked: 3 })]));
+
+    expect(texts(fixture, '.entries > .rows .row-name')).toEqual([
+      'Compra semanal · 3',
+    ]);
+    // The ask has its own element, which is never cut.
+    expect(texts(fixture, '.row-ask')).toEqual(['· 3']);
+  });
+
+  it('reads the ask by weight in its exact form with the unit, "· 1,5 kg"', async () => {
+    const fixture = await render(
+      {
+        ...row([entry({ left: 1500, asked: 1500, unit: 'GRAM' })]),
+        unit: 'GRAM',
+      },
+      { locale: 'es' }
+    );
+
+    expect(texts(fixture, '.row-ask')).toEqual(['· 1,5 kg']);
+  });
+
+  it('keeps the ask of the wire after a buy above it: "· 3" with 4 bought (spec 7)', async () => {
+    const fixture = await render(
+      row([entry({ left: 0, bought: 4, asked: 3 })])
+    );
+
+    expect(texts(fixture, '.row-ask')).toEqual(['· 3']);
+    expect(entrySteppers(fixture)[0].reach()).toBe('over');
+  });
+
+  it('reads "· 0" in amber for a list made by a buy of 2 (spec 7)', async () => {
+    const fixture = await render(
+      row([entry({ left: 0, bought: 2, asked: 0 })])
+    );
+
+    expect(texts(fixture, '.row-ask')).toEqual(['· 0']);
+    expect(entrySteppers(fixture)[0].reach()).toBe('over');
   });
 });
 
@@ -279,7 +332,7 @@ describe('RowEntries: Lists and amounts (velista 0200)', () => {
     expect(html(fixture).querySelector('.head .lists-open')).not.toBeNull();
   });
 
-  it('draws no button for a guest who can change neither', async () => {
+  it('draws no button and no "Bought for another list" for a guest who can change neither (spec 6)', async () => {
     const fixture = await render(
       row([
         entry({ listId: null, canWrite: false, demandEditable: false }),
@@ -290,38 +343,61 @@ describe('RowEntries: Lists and amounts (velista 0200)', () => {
           demandEditable: false,
         }),
       ]),
-      { lists: new Map() }
+      // The sheet hands a guest no read of the other lists.
+      { lists: new Map(), others: null }
     );
 
     expect(html(fixture).querySelector('.lists-open')).toBeNull();
+    expect(disclosure(fixture)).toBeNull();
+    expect(html(fixture).textContent).not.toContain(
+      'basket.entries.otherHeading'
+    );
+    // The heading is still there, and a guest still records buys.
+    expect(texts(fixture, '.heading')).toEqual(['basket.entries.heading']);
+    expect(askAmounts(fixture)).toHaveLength(2);
   });
 });
 
-describe('RowEntries: who may change what a list asks for', () => {
+describe('RowEntries: each list steps what was bought (velista 0201)', () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
 
-  it('draws the stepper when the server says the owner may, on a served list', async () => {
-    const fixture = await render(row([entry()]));
+  it('draws a stepper at what was bought, from 0 the first time (spec 1)', async () => {
+    const fixture = await render(row([entry({ left: 2, bought: 0 })]));
 
     expect(askAmounts(fixture)).toHaveLength(1);
     expect(askAmounts(fixture)[0].classList).toContain('variant-sheet-narrow');
-    expect(stepperNames(fixture)).toEqual(['basket.demand.askLabel']);
+    expect(askAmounts(fixture)[0].getAttribute('data-value')).toBe('0');
+    expect(stepperNames(fixture)).toEqual(['basket.entries.boughtLabel']);
   });
 
-  it('names the spinbutton with the ask label as given, and the buttons after the list (velista 0190, section 5)', async () => {
+  it('draws one for every entry, a list the reader was not served included (target state 4)', async () => {
+    const fixture = await render(
+      row([
+        entry({ demandEditable: false }),
+        entry({ lineId: 'zl-2', listId: null, demandEditable: false }),
+      ])
+    );
+
+    expect(askAmounts(fixture)).toHaveLength(2);
+  });
+
+  it('names a guest on a row of one with the plain label', async () => {
+    const fixture = await render(row([entry({ listId: null })]), {
+      lists: new Map(),
+    });
+
+    expect(stepperNames(fixture)).toEqual(['basket.entries.boughtPlain']);
+  });
+
+  it('names the spinbutton with the label as given, and the buttons after the list', async () => {
     const fixture = await render(row([entry()]));
     const stepper = askAmounts(fixture)[0];
 
-    // Not "Amount of Review walk, asks for": the label is the whole name.
     expect(
       stepper.querySelector('[role="spinbutton"]')?.getAttribute('aria-label')
-    ).toBe('basket.demand.askLabel');
-    const [listName] = buttonNames(fixture);
-    expect(listName).not.toContain('askLabel');
-    expect(
-      stepper.querySelector('button.plus')?.getAttribute('aria-label')
-    ).toBe('amount.more');
+    ).toBe('basket.entries.boughtLabel');
+    expect(buttonNames(fixture)).toEqual(['Compra semanal']);
   });
 
   it('is not a live region, because the stepper says the amount itself', async () => {
@@ -332,47 +408,42 @@ describe('RowEntries: who may change what a list asks for', () => {
     expect(section?.getAttribute('role')).toBeNull();
   });
 
-  it('draws the number and no control when the server says the owner may not', async () => {
-    const fixture = await render(row([entry({ demandEditable: false })]));
+  it('measures each stepper against its list ask, and snaps to it beside 1000 (spec 8)', async () => {
+    const fixture = await render({
+      ...row([
+        entry({ left: 990, asked: 990, unit: 'GRAM' }),
+        entry({
+          lineId: 'zl-2',
+          listId: 'l-basics',
+          left: 0,
+          bought: 2,
+          asked: 0,
+          unit: 'GRAM',
+        }),
+      ]),
+      unit: 'GRAM',
+    });
+    const [first, second] = entrySteppers(fixture);
+
+    expect(first.target()).toBe(990);
+    expect(first.snaps()).toEqual([1000, 990]);
+    // An ask of 0 is passed too, and the stepper drops a point at 0.
+    expect(second.snaps()).toEqual([1000, 0]);
+  });
+
+  it('draws the number and no control while the sheet cannot settle', async () => {
+    const fixture = await render(row([entry({ bought: 2 })]), {
+      buying: false,
+    });
 
     expect(askAmounts(fixture)).toHaveLength(0);
-    // The exact form, drawn by the amount figure (decision I).
     expect(
       html(fixture).querySelector('.row-number lib-amount-figure .number')
         ?.textContent
     ).toBe('2');
-  });
-
-  it('says the number with no control in words with its unit', async () => {
-    const fixture = await render({
-      ...row([entry({ demandEditable: false, left: 1275 })]),
-      unit: 'GRAM',
-    });
-    const drawn = fixture.componentInstance['entries']();
-
-    // Not "asks for 1275": the amount the screen reader hears names its unit.
-    expect(drawn[0].asksSpoken).toBe('1.275 kilograms');
     expect(
       html(fixture).querySelector('.row-number .visually-hidden')?.textContent
-    ).toContain('basket.entries.asks');
-  });
-
-  it('draws no control on an unserved entry of a row of several lists', async () => {
-    const fixture = await render(
-      row([entry(), entry({ lineId: 'zl-2', listId: null })])
-    );
-
-    expect(askAmounts(fixture)).toHaveLength(1);
-    expect(html(fixture).querySelectorAll('.row-number')).toHaveLength(1);
-  });
-
-  it('draws it for a guest on a row with one entry, which is all a guest may change', async () => {
-    const fixture = await render(row([entry({ listId: null })]), {
-      lists: new Map(),
-    });
-
-    expect(askAmounts(fixture)).toHaveLength(1);
-    expect(stepperNames(fixture)).toEqual(['basket.demand.label']);
+    ).toContain('basket.entries.bought');
   });
 
   it('takes it off a finished trip', async () => {
@@ -381,7 +452,7 @@ describe('RowEntries: who may change what a list asks for', () => {
     expect(askAmounts(fixture)).toHaveLength(0);
   });
 
-  it('keeps it on an entry bought outside this shopping list, at 0 and already bought (velista 0142)', async () => {
+  it('keeps it on an entry bought outside this shopping list (velista 0142)', async () => {
     const fixture = await render(
       row([
         entry({
@@ -394,58 +465,47 @@ describe('RowEntries: who may change what a list asks for', () => {
     );
 
     expect(askAmounts(fixture)).toHaveLength(1);
-    expect(
-      (fixture.nativeElement as HTMLElement).querySelector('.row-where')
-        ?.textContent
-    ).toContain('basket.line.alreadyBought');
-  });
-
-  it('says nothing about a buy on an entry that still asks', async () => {
-    const fixture = await render(row([entry()]));
-
-    expect((fixture.nativeElement as HTMLElement).textContent).not.toContain(
+    expect(texts(fixture, '.row-where')[0]).toContain(
       'basket.line.alreadyBought'
     );
   });
 
-  it('emits one demand per step, and leaves the waiting to the sheet', async () => {
-    const fixture = await render(row([entry()]));
-    const demanded = jest.fn();
-    fixture.componentInstance.demanded.subscribe(demanded);
+  it('emits one buy step per press, from what was bought, and leaves the waiting to the sheet', async () => {
+    const fixture = await render(row([entry({ left: 1, bought: 1 })]));
+    const bought = jest.fn();
+    fixture.componentInstance.bought.subscribe(bought);
 
     plus(askAmounts(fixture)[0], fixture);
 
-    expect(demanded).toHaveBeenCalledTimes(1);
-    expect(demanded).toHaveBeenCalledWith({
+    expect(bought).toHaveBeenCalledTimes(1);
+    expect(bought).toHaveBeenCalledWith({
       lineId: 'zl-1',
-      step: { from: 2, to: 3, repeat: false },
+      step: { from: 1, to: 2, repeat: false },
     });
   });
 
   it("steps each list by its own line's step (velista 0186, decision A)", async () => {
-    const weighed = entry({ left: 1000, asked: 1000, unit: 'GRAM' });
+    const weighed = entry({ left: 2000, asked: 2000, unit: 'GRAM', bought: 0 });
     const other = entry({
       lineId: 'zl-2',
       listId: 'l-basics',
-      left: 1000,
-      asked: 1000,
+      left: 2000,
+      asked: 2000,
       unit: 'GRAM',
     });
     const fixture = await render({ ...row([weighed, other]), unit: 'GRAM' });
-    // The row's product's step does not reach a list that asks.
     fixture.componentRef.setInput('step', 250);
     fixture.componentRef.setInput('steps', new Map([['zl-1', 100]]));
     fixture.detectChanges();
-    const demanded = jest.fn();
-    fixture.componentInstance.demanded.subscribe(demanded);
+    const bought = jest.fn();
+    fixture.componentInstance.bought.subscribe(bought);
 
     plus(askAmounts(fixture)[0], fixture);
     plus(askAmounts(fixture)[1], fixture);
 
-    expect(demanded.mock.calls.map(([call]) => call)).toEqual([
-      { lineId: 'zl-1', step: { from: 1000, to: 1100, repeat: false } },
-      // A line the sheet names no step for presses by the default.
-      { lineId: 'zl-2', step: { from: 1000, to: 1050, repeat: false } },
+    expect(bought.mock.calls.map(([call]) => call)).toEqual([
+      { lineId: 'zl-1', step: { from: 0, to: 100, repeat: false } },
+      { lineId: 'zl-2', step: { from: 0, to: 25, repeat: false } },
     ]);
   });
 
@@ -458,7 +518,7 @@ describe('RowEntries: who may change what a list asks for', () => {
   });
 });
 
-describe('RowEntries: Add it to another list', () => {
+describe('RowEntries: Bought for another list (velista 0201, target state 7)', () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
 
@@ -485,11 +545,14 @@ describe('RowEntries: Add it to another list', () => {
     expect(disclosure(fixture)).toBeNull();
   });
 
-  it('is closed on every sheet, and opens on a press', async () => {
+  it('is headed "Bought for another list", closed on every sheet, and opens on a press', async () => {
     const fixture = await render(row([entry()]), {
       others: { state: 'ready', lists: [PANTRY] },
     });
 
+    expect(disclosure(fixture)?.textContent).toContain(
+      'basket.entries.otherHeading'
+    );
     expect(disclosure(fixture)?.getAttribute('aria-expanded')).toBe('false');
     expect(html(fixture).querySelector('.others')).toBeNull();
 
@@ -540,17 +603,30 @@ describe('RowEntries: Add it to another list', () => {
       'Casa · Leche',
       'Oficina',
     ]);
-    expect(
-      html(fixture).querySelectorAll('.others lib-quantity-stepper.ask-amount')
-    ).toHaveLength(2);
   });
 
-  it('emits a raise per step, starting at 0', async () => {
+  it('starts each stepper at 0, with no target and no snaps input (spec 8)', async () => {
+    const fixture = await render(row([entry()]), {
+      others: { state: 'ready', lists: [{ ...PANTRY, quantity: 4 }] },
+    });
+    open(fixture);
+    const stepper = fixture.debugElement
+      .queryAll(By.directive(QuantityStepper))
+      .find((held) => held.nativeElement.closest('.others') !== null)
+      ?.componentInstance as QuantityStepper;
+
+    expect(stepper.value()).toBe(0);
+    expect(stepper.target()).toBeNull();
+    // The default, so only the stop at 1000 applies.
+    expect(stepper.snaps()).toEqual([1000]);
+  });
+
+  it('emits a buy step per press, starting at 0', async () => {
     const fixture = await render(row([entry()]), {
       others: { state: 'ready', lists: [PANTRY] },
     });
-    const raised = jest.fn();
-    fixture.componentInstance.raised.subscribe(raised);
+    const boughtOther = jest.fn();
+    fixture.componentInstance.boughtOther.subscribe(boughtOther);
     open(fixture);
 
     const stepper = html(fixture).querySelector<HTMLElement>(
@@ -559,8 +635,8 @@ describe('RowEntries: Add it to another list', () => {
     plus(stepper as HTMLElement, fixture);
     plus(stepper as HTMLElement, fixture);
 
-    expect(raised).toHaveBeenCalledTimes(2);
-    expect(raised).toHaveBeenNthCalledWith(1, {
+    expect(boughtOther).toHaveBeenCalledTimes(2);
+    expect(boughtOther).toHaveBeenNthCalledWith(1, {
       list: PANTRY,
       step: { from: 0, to: 1, repeat: false },
     });
