@@ -11,6 +11,7 @@ import {
   LineApprovalStatus,
   LineItemSource,
   ListPermission,
+  MembershipStatus,
   NO_LINE_CLAIM,
   NO_LINE_SETTLEMENTS,
   ParticipantKind,
@@ -92,6 +93,7 @@ import {
   ListLineGroupRemoval,
   ListLineItem,
   ShoppingList,
+  ZoneMembership,
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import {
@@ -3943,7 +3945,7 @@ export class LineService {
       // takes the same lock before it writes a settlement, so none can land
       // between this read and the write below.
       const extra = counting
-        ? await this.countExtra(manager, counters, line, req.delta)
+        ? await this.countExtra(manager, counters, line, list.zoneId, req.delta)
         : undefined;
       const moved = req.delta - (extra?.counted ?? 0);
 
@@ -4023,11 +4025,16 @@ export class LineService {
    * scope, read with `buysOf`, the demand's own expression, and taken oldest
    * first across every basket. A lowering counts nothing and still answers
    * what is above the ask.
+   *
+   * The baskets were read before the lock, so a basket that finished since
+   * is dropped by the read of its buys, which keeps only open baskets: the
+   * units of a trip that is over are never counted.
    */
   private async countExtra(
     manager: EntityManager,
     counters: readonly CountingBasket[],
     line: ListLine,
+    zoneId: string,
     delta: number
   ): Promise<{ counted: number; answer: CountedExtra }> {
     const buys: CountedBuy[] = [];
@@ -4036,7 +4043,8 @@ export class LineService {
         manager,
         basket.basketId,
         line,
-        basket.scope
+        basket.scope,
+        { openOnly: true }
       )) {
         if (buy.quantity > buy.applied) {
           buys.push({ ...buy, ownerUserId: basket.ownerUserId });
@@ -4059,7 +4067,7 @@ export class LineService {
       answer: {
         above: count.above,
         counted: count.counted,
-        buyers: await this.buyersOf(manager, buys),
+        buyers: await this.buyersOf(manager, buys, zoneId),
       },
     };
   }
@@ -4070,12 +4078,19 @@ export class LineService {
    *
    * A participant with an account is that account. A guest is the owner of
    * the basket the guest bought through, never the guest: core serves no
-   * name, and a guest has no account to name. A buy whose participant row is
-   * gone is `null`, once for each participant it named.
+   * name, and a guest has no account to name.
+   *
+   * A user id is answered only when that user is an approved member of the
+   * list's zone (amended after the plan's review): the person who reads the
+   * answer is a member, and an id of anyone else would tell them which account
+   * a participant of somebody's basket is, which no read serves them. Anyone
+   * else, and a buy whose participant row is gone, is `null`, and every `null`
+   * is one entry, at the place of the first.
    */
   private async buyersOf(
     manager: EntityManager,
-    buys: readonly CountedBuy[]
+    buys: readonly CountedBuy[],
+    zoneId: string
   ): Promise<CountedExtraBuyer[]> {
     const ids = [
       ...new Set(
@@ -4094,22 +4109,43 @@ export class LineService {
       ).map((row) => [row.id, row])
     );
 
-    const seen = new Set<string>();
-    const buyers: CountedExtraBuyer[] = [];
-    for (const buy of buys) {
+    const accountOf = (buy: CountedBuy): string | null => {
       const participant =
         buy.settledByParticipantId === null
           ? undefined
           : participants.get(buy.settledByParticipantId);
-      const userId = !participant
-        ? null
-        : participant.kind === ParticipantKind.GUEST
-          ? buy.ownerUserId
-          : participant.userId;
-      const key =
-        userId !== null
-          ? `user:${userId}`
-          : `participant:${buy.settledByParticipantId ?? ''}`;
+      if (!participant) {
+        return null;
+      }
+      return participant.kind === ParticipantKind.GUEST
+        ? buy.ownerUserId
+        : participant.userId;
+    };
+    const accounts = [
+      ...new Set(buys.map(accountOf).filter((id): id is string => id !== null)),
+    ];
+    // One read of the zone's approved members among them, through the
+    // transaction's manager, so it takes no second connection.
+    const members = new Set(
+      (accounts.length === 0
+        ? []
+        : await manager.getRepository(ZoneMembership).find({
+            select: { userId: true },
+            where: {
+              zoneId,
+              userId: In(accounts),
+              status: MembershipStatus.APPROVED,
+            },
+          })
+      ).map((row) => row.userId)
+    );
+
+    const seen = new Set<string>();
+    const buyers: CountedExtraBuyer[] = [];
+    for (const buy of buys) {
+      const account = accountOf(buy);
+      const userId = account !== null && members.has(account) ? account : null;
+      const key = userId ?? '';
       if (!seen.has(key)) {
         seen.add(key);
         buyers.push({ userId });

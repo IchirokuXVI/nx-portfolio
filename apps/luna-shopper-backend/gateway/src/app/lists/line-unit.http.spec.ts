@@ -313,16 +313,21 @@ describe('the unit of a line over HTTP (plan 0246)', () => {
       }
     );
 
-    it('answers 400 for countExtra as a string, and core hears nothing', async () => {
-      const response = await send('POST', `lines/${LINE}/quantity`, {
-        delta: 2,
-        unit: 'GRAM',
-        countExtra: 'true',
-      });
+    // Null too: it is not a JSON boolean, and passing it on would reach core,
+    // whose schema refuses it with an error that is not this 400.
+    it.each([1, '1', 'true', null])(
+      'answers 400 for countExtra %p, and core hears nothing',
+      async (countExtra) => {
+        const response = await send('POST', `lines/${LINE}/quantity`, {
+          delta: 2,
+          unit: 'GRAM',
+          countExtra,
+        });
 
-      expect(response.status).toBe(400);
-      expect(coreWrites()).toEqual([]);
-    });
+        expect(response.status).toBe(400);
+        expect(coreWrites()).toEqual([]);
+      }
+    );
   });
 
   describe('POST /v1/lists/:id/lines', () => {

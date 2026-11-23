@@ -2,6 +2,9 @@
 
 # 0275: a raise from the zone list counts what was bought above the ask
 
+> Amended on 2026-11-23 after its review: a buyer is named only when they are a member of
+> the list's group; anyone else is answered as nobody.
+>
 > Decided by the owner on 2026-11-22. A list's line was bought above its ask in an open
 > shopping trip: the list asked 3 and Marta bought 4, so 1 unit is above the ask. Backend
 > `0274` records that as `quantity - applied` on the basket's standing buys of the line. A
@@ -128,9 +131,10 @@ how much was above the ask, how much was counted and who bought it.
    - `buyers`: one entry `{ userId: string | null }` for each person who bought units of
      `above`, in the order of their oldest such buy. A participant with an account
      (`OWNER`, `REGISTERED`) is its `userId`. A `GUEST` participant is the `ownerUserId` of
-     the basket the guest bought through. Entries with the same `userId` are one entry. A
-     buy whose participant row is gone is `{ userId: null }`, one entry for each distinct
-     `settledByParticipantId`. With `above` 0 it is empty.
+     the basket the guest bought through. That `userId` is answered only when it is an
+     approved member of the list's zone; anyone else, and a buy whose participant row is
+     gone, is `{ userId: null }`. Entries with the same `userId` are one entry, and every
+     `null` is one entry, at the place of the first. With `above` 0 it is empty.
    Core serves no name, and no participant id, guest name or basket id leaves in this field.
    The client names the people, says "You" for its own user id and "Someone" for null or for
    an id it cannot resolve.

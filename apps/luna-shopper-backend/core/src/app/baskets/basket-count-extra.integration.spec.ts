@@ -7,6 +7,7 @@ import {
   ParticipantKind,
   RealtimeEvent,
   SettlementOutcome,
+  TripKind,
   ZoneRole,
   ZoneStatus,
   type AddLineQuantityResult,
@@ -18,12 +19,13 @@ import {
   requiredEnv,
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { randomUUID } from 'node:crypto';
-import { DataSource, IsNull } from 'typeorm';
+import { DataSource, IsNull, type EntityManager } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
 import {
   Basket,
   BasketParticipant,
   BasketSource,
+  BasketTripRow,
   CORE_ENTITIES,
   LineSettlement,
   ListAccess,
@@ -39,6 +41,11 @@ import { LineChangeRecorder } from '../lists/changes/line-change.recorder';
 import { LineMergeService } from '../lists/line-merge.service';
 import { LineService } from '../lists/line.service';
 import { ListAccessService } from '../lists/list-access.service';
+import { toTripRowView } from '../lists/trips/trips.mappers';
+import {
+  BASKET_TRIP_ROWS_SQL,
+  type TripLineRow,
+} from '../lists/trips/trips.sql';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { fakeBasketAnnouncer } from './basket-announcer.fake';
 import { fakeCoreConfig } from './basket-config.fake';
@@ -47,6 +54,7 @@ import { BasketPatchReader } from './basket-patch.reader';
 import { BasketReadService } from './basket-read.service';
 import { BasketRowResolver } from './basket-row-resolver';
 import { BasketSettleService } from './basket-settle.service';
+import { BASKET_TRIP_ROWS_FREEZE_SQL } from './basket-trip-rows.sql';
 import { BasketWriteContext } from './basket-write.context';
 import { BasketMarksReader } from './changes/basket-marks.reader';
 import { fakeLineClaims } from './line-claims.fake';
@@ -492,6 +500,15 @@ describeIntegration(
           counted: 1,
           buyers: [{ userId: w.userId }],
         });
+        // What the patch carries now: the ask the count moved, and the line's 1.
+        expect(await patchesOf(w, w, [milk.id])).toEqual([
+          expect.objectContaining({
+            lineId: milk.id,
+            asked: 5,
+            left: 1,
+            bought: 4,
+          }),
+        ]);
       });
 
       it('case 2: asks 3, bought 4, +1 with the flag writes no line (spec 3)', async () => {
@@ -679,6 +696,13 @@ describeIntegration(
         });
         expect(answer.extra).toMatchObject({ above: 3, counted: 3 });
         expect(lineUpdates(milk.id)).toHaveLength(1);
+        // Each basket's patch carries its own moved ask beside the shared line.
+        expect(await patchesOf(w, w, [milk.id])).toEqual([
+          expect.objectContaining({ lineId: milk.id, asked: 5, left: 1 }),
+        ]);
+        expect(await patchesOf(b, w, [milk.id])).toEqual([
+          expect.objectContaining({ lineId: milk.id, asked: 3, left: 1 }),
+        ]);
       });
 
       it('cases 9 and 10: a weight, then "Still need"', async () => {
@@ -840,6 +864,8 @@ describeIntegration(
         const w = await world();
         const milk = await line(w, 3);
         const luis = randomUUID();
+        // A member of the list's zone, so the answer may name him.
+        await member(w.zoneId, luis, ZoneRole.MEMBER);
         const registered = await participant(
           w.basket,
           ParticipantKind.REGISTERED,
@@ -870,6 +896,198 @@ describeIntegration(
           buyers: [{ userId: null }],
         });
       });
+
+      it('answers null for a registered participant who is not a member of the zone', async () => {
+        const w = await world();
+        const milk = await line(w, 3);
+        const stranger = randomUUID();
+        const registered = await participant(
+          w.basket,
+          ParticipantKind.REGISTERED,
+          stranger
+        );
+        await buy(w, milk.id, 4, 3, 'UNIT', registered);
+
+        const answer = await raise(w, milk.id, 1, true);
+
+        expect(answer.extra).toEqual({
+          above: 1,
+          counted: 1,
+          buyers: [{ userId: null }],
+        });
+        expect(JSON.stringify(answer.extra)).not.toContain(stranger);
+      });
+
+      it('collapses every null into one entry, at the place of the first', async () => {
+        const w = await world();
+        const milk = await line(w, 0);
+        const stranger = await participant(
+          w.basket,
+          ParticipantKind.REGISTERED,
+          randomUUID()
+        );
+        await insertBuy(w, milk.id, { settledByParticipantId: stranger });
+        await insertBuy(w, milk.id, { settledByParticipantId: randomUUID() });
+        await insertBuy(w, milk.id, {});
+        // A second stranger after the owner: still the one null entry.
+        await insertBuy(w, milk.id, {
+          settledByParticipantId: await participant(
+            w.basket,
+            ParticipantKind.REGISTERED,
+            randomUUID()
+          ),
+        });
+
+        const answer = await raise(w, milk.id, 1, true);
+
+        expect(answer.extra).toEqual({
+          above: 8,
+          counted: 1,
+          buyers: [{ userId: null }, { userId: w.userId }],
+        });
+      });
+    });
+
+    // --- a basket that finishes between the covering read and the lock --------
+
+    it('counts nothing from a basket that finished while the raise waited for the lock', async () => {
+      const { w, milk } = await askedThreeBoughtFour();
+      const before = await appliedOf(milk.id);
+
+      // Something holding the line's lock while the raise reads which baskets
+      // cover the list; the basket finishes before the lock is let go.
+      const runner = dataSource.createQueryRunner();
+      await runner.connect();
+      await runner.startTransaction();
+      try {
+        await runner.manager.getRepository(ListLine).findOne({
+          where: { id: milk.id },
+          lock: { mode: 'pessimistic_write' },
+        });
+        const pending = raise(w, milk.id, 2, true);
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        await runner.manager
+          .getRepository(Basket)
+          .update(w.basket.id, { status: BasketStatus.FINISHED });
+        await runner.commitTransaction();
+
+        const answer = await pending;
+
+        expect(answer.extra).toEqual({ above: 0, counted: 0, buyers: [] });
+        expect(answer.quantity).toBe(2);
+        expect((await lineOf(milk.id)).quantity).toBe(2);
+        expect(await appliedOf(milk.id)).toEqual(before);
+      } finally {
+        if (runner.isTransactionActive) {
+          await runner.rollbackTransaction();
+        }
+        await runner.release();
+      }
+    });
+
+    // --- a failure inside the transaction ------------------------------------------
+
+    it('leaves applied, the line and the change rows as they were when the line write fails', async () => {
+      const { w, milk } = await askedThreeBoughtFour();
+      const applied = await appliedOf(milk.id);
+      const line0 = await lineOf(milk.id);
+      const changes = await changesOf(milk.id);
+      const original = dataSource.transaction.bind(dataSource) as (
+        work: (manager: EntityManager) => Promise<unknown>
+      ) => Promise<unknown>;
+      jest
+        .spyOn(dataSource, 'transaction')
+        .mockImplementationOnce(((
+          work: (m: EntityManager) => Promise<unknown>
+        ) => original((manager) => work(failingLineSave(manager)))) as never);
+
+      // Case 1: one unit is counted, so `applied` is written before the line.
+      await expect(raise(w, milk.id, 2, true)).rejects.toThrow(
+        'forced line failure'
+      );
+
+      expect(await appliedOf(milk.id)).toEqual(applied);
+      const after = await lineOf(milk.id);
+      expect(after.quantity).toBe(line0.quantity);
+      expect(after.version).toBe(line0.version);
+      expect(await changesOf(milk.id)).toBe(changes);
+      expect(lineUpdates(milk.id)).toEqual([]);
+    });
+
+    /** The caller's manager, whose line repository throws on save. */
+    function failingLineSave(manager: EntityManager): EntityManager {
+      return new Proxy(manager, {
+        get(target, prop, receiver) {
+          if (prop === 'getRepository') {
+            return (entity: unknown) => {
+              const repo = target.getRepository(entity as never);
+              if (entity !== ListLine) {
+                return repo;
+              }
+              return new Proxy(repo, {
+                get(inner, key, innerReceiver) {
+                  if (key === 'save') {
+                    return async () => {
+                      throw new Error('forced line failure');
+                    };
+                  }
+                  const value = Reflect.get(inner, key, innerReceiver);
+                  return typeof value === 'function'
+                    ? value.bind(inner)
+                    : value;
+                },
+              });
+            };
+          }
+          const value = Reflect.get(target, prop, receiver);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+    }
+
+    // --- every read agrees after a count ---------------------------------------------
+
+    it('reads the same asked, left and bought in the basket read, the trips read and the frozen basket after a count', async () => {
+      const { w, milk } = await askedThreeBoughtFour();
+      await raise(w, milk.id, 2, true);
+
+      const expectEveryRead = async () => {
+        expect(await numbersOf(w, milk.id)).toEqual({
+          asked: 5,
+          left: 1,
+          bought: 4,
+          above: 0,
+        });
+        const [trip] = (
+          await dataSource.query<TripLineRow[]>(BASKET_TRIP_ROWS_SQL, [
+            w.listId,
+            w.basket.id,
+            null,
+            50,
+          ])
+        ).filter((row) => row.lineId === milk.id);
+        expect(toTripRowView(TripKind.BASKET, trip)).toMatchObject({
+          asked: 5,
+          left: 1,
+          bought: 4,
+        });
+      };
+
+      await expectEveryRead();
+
+      // What the finish does: the status, then the freeze in one transaction.
+      await dataSource.transaction(async (manager) => {
+        await manager
+          .getRepository(Basket)
+          .update(w.basket.id, { status: BasketStatus.FINISHED });
+        await manager.query(BASKET_TRIP_ROWS_FREEZE_SQL, [w.basket.id]);
+      });
+      const frozen = await dataSource
+        .getRepository(BasketTripRow)
+        .findOneByOrFail({ basketId: w.basket.id, lineId: milk.id });
+      expect(frozen.asked).toBe(5);
+
+      await expectEveryRead();
     });
 
     // --- spec 8: the permission -------------------------------------------------

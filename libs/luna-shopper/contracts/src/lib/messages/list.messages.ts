@@ -1134,8 +1134,10 @@ export interface AddLineQuantityRequest {
  * One person who bought units above the ask (plan 0275, section 8).
  *
  * A participant with an account is that account. A guest is the owner of the
- * basket the guest bought through, never the guest. `null` is a buy whose
- * participant is gone. Core serves no name: the reader names the people.
+ * basket the guest bought through, never the guest. The id is answered only
+ * for an approved member of the list's zone. `null` is anyone else, or a buy
+ * whose participant is gone, and is one entry however many it stands for.
+ * Core serves no name: the reader names the people.
  */
 export interface CountedExtraBuyer {
   userId: string | null;

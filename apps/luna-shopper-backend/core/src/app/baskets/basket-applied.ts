@@ -1,5 +1,8 @@
-import { SettlementOutcome } from '@portfolio/luna-shopper/contracts';
-import { IsNull, MoreThanOrEqual, type EntityManager } from 'typeorm';
+import {
+  BasketStatus,
+  SettlementOutcome,
+} from '@portfolio/luna-shopper/contracts';
+import { IsNull, MoreThanOrEqual, Raw, type EntityManager } from 'typeorm';
 import { LineSettlement, type ListLine } from '../entities';
 import type { BasketScope } from './basket-line-facts';
 
@@ -136,12 +139,18 @@ export function countAboveAsk(
  * oldest first: the purchases the read counts the line's ask from (plan 0274,
  * section 3). The scope is the read's, so a `LIVE` basket counts its current
  * session alone.
+ *
+ * With `openOnly`, a basket that is no longer `OPEN` when this runs answers no
+ * buys. The count of plan 0275 reads which baskets cover the list before it
+ * takes the line's lock, so a basket finished in between is dropped here, in
+ * the same query, under the lock.
  */
 export async function buysOf(
   manager: EntityManager,
   basketId: string,
   line: Pick<ListLine, 'id' | 'unit'>,
-  scope: BasketScope
+  scope: BasketScope,
+  options: { openOnly?: boolean } = {}
 ): Promise<StandingBuy[]> {
   if (!scope.enabled) {
     return [];
@@ -155,7 +164,13 @@ export async function buysOf(
       settledByParticipantId: true,
     },
     where: {
-      basketId,
+      basketId: options.openOnly
+        ? Raw(
+            (column) =>
+              `${column} = :buysOfBasketId AND EXISTS (SELECT 1 FROM "baskets" b WHERE b."id" = ${column} AND b."status" = :buysOfOpen)`,
+            { buysOfBasketId: basketId, buysOfOpen: BasketStatus.OPEN }
+          )
+        : basketId,
       lineId: line.id,
       outcome: SettlementOutcome.BOUGHT,
       unit: line.unit ?? 'UNIT',
