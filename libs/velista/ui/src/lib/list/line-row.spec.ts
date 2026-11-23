@@ -788,6 +788,25 @@ describe('LineRow', () => {
       expect(row(fixture).getAttribute('aria-label')).toBe('Sourdough loaf, 1');
     });
 
+    // Velista 0197: the row is not dimmed while it saves. jsdom draws no component
+    // style, so the compiled stylesheet is read for a rule that would change its
+    // opacity.
+    it('is not dimmed while it saves (velista 0197)', async () => {
+      const fixture = await render(vm({ write: 'pending' }));
+      const rules = compiledRules('line-row.scss');
+
+      expect(row(fixture).getAttribute('aria-busy')).toBe('true');
+      expect(['', '1']).toContain(getComputedStyle(row(fixture)).opacity);
+      expect(
+        rules.filter(
+          (rule) =>
+            (rule.selector.includes('.in-flight') ||
+              rule.selector === '.row') &&
+            /(^|[;\s])opacity\s*:/.test(rule.body)
+        )
+      ).toEqual([]);
+    });
+
     it('is not busy when nothing is outstanding', async () => {
       const fixture = await render(vm());
 
