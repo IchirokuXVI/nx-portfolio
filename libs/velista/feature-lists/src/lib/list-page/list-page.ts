@@ -75,6 +75,7 @@ import {
   NO_CATEGORY,
   type PresenceUser,
   productSuggestions,
+  QUANTITY_CLEAR_LOCK_MAX_MS,
   type QuantityStep,
   type RecordedAudio,
   SUGGEST_DEBOUNCE_MS,
@@ -170,6 +171,18 @@ function destroyingFlag(): { readonly destroying: boolean } {
     flag.destroying = true;
   });
   return flag;
+}
+
+/** Timers by key, each one cleared as the context it is called in goes away. */
+function timersClearedOnDestroy<K>(): Map<K, ReturnType<typeof setTimeout>> {
+  const timers = new Map<K, ReturnType<typeof setTimeout>>();
+  inject(DestroyRef).onDestroy(() => {
+    for (const timer of timers.values()) {
+      clearTimeout(timer);
+    }
+    timers.clear();
+  });
+  return timers;
 }
 
 /**
@@ -621,12 +634,13 @@ export class ListPage {
       .listsIn(zoneId)
       .find((candidate) => candidate.id === listId);
 
+    const expired = this._expired();
     return selectListState({
       list,
       zoneName: zone?.name ?? null,
-      lines: lines.lines,
+      lines: withExpiredClears(lines.lines, expired),
       linesState: lines.state,
-      writes: lines.writes,
+      writes: withExpiredNotes(lines.writes, expired),
       commentCounts: lines.commentCounts,
       // Who is out buying what: read off the lines and moved by `line.claimChanged`
       // on the zone room (backend plan 0052). Both halves matter and the read is the
@@ -858,9 +872,10 @@ export class ListPage {
   private readonly _lineById = computed(
     () =>
       new Map<string, Line>(
-        this._lines
-          .forList(this.listId())()
-          .lines.map((line) => [line.id, line])
+        withExpiredClears(
+          this._lines.forList(this.listId())().lines,
+          this._expired()
+        ).map((line) => [line.id, line])
       )
   );
 
@@ -1841,6 +1856,83 @@ export class ListPage {
   /** The line whose run the trash is flushing right now, for `_writeRun` to lock. */
   private _trashed: string | null = null;
 
+  /**
+   * The lines whose lock reached its ceiling with the write to 0 still unanswered
+   * (velista `0199`, the owner's ruling of 2026-11-23). The store still holds the 0
+   * it patched before the request went out, so the page draws each one at its stored
+   * amount with the failed notice, as the store draws a failed write, until the
+   * answer arrives or the line is written again. `notice` goes false when the notice
+   * is tapped or dismissed.
+   */
+  private readonly _expired = signal<ReadonlyMap<string, ExpiredClear>>(
+    new Map()
+  );
+
+  /**
+   * The open lock of each clearing line, so an answer or a ceiling of an older trash
+   * of the same line never ends a newer one.
+   */
+  private readonly _locks = timersClearedOnDestroy<string>();
+
+  private _setExpired(lineId: string, clear: ExpiredClear | null): void {
+    this._expired.update((current) => {
+      if (clear === null && !current.has(lineId)) {
+        return current;
+      }
+      const next = new Map(current);
+      if (clear === null) {
+        next.delete(lineId);
+      } else {
+        next.set(lineId, clear);
+      }
+      return next;
+    });
+  }
+
+  /**
+   * The lock of a trash press: on until the write answers, or until the ceiling,
+   * whichever comes first. Returns what the answer runs.
+   */
+  private _lock(lineId: string, stored: number | undefined): () => void {
+    this._setClearing(lineId, true);
+    const timer = setTimeout(() => {
+      if (this._locks.get(lineId) !== timer) {
+        return;
+      }
+      this._locks.delete(lineId);
+      this._setClearing(lineId, false);
+      if (stored !== undefined) {
+        this._setExpired(lineId, { quantity: stored, notice: true });
+      }
+    }, QUANTITY_CLEAR_LOCK_MAX_MS);
+    this._locks.set(lineId, timer);
+
+    return () => {
+      clearTimeout(timer);
+      if (this._locks.get(lineId) === timer) {
+        // Answered inside the ceiling.
+        this._locks.delete(lineId);
+        this._setClearing(lineId, false);
+        return;
+      }
+      // Answered after it, as any late answer: on success the line is at 0 and is
+      // hidden, on failure the store draws its own notice at the stored amount, which
+      // is what was drawn already. A notice the person dismissed meanwhile stays gone.
+      const clear = this._expired().get(lineId);
+      if (clear === undefined) {
+        return;
+      }
+      this._setExpired(lineId, null);
+      if (
+        !clear.notice &&
+        this._lines.forList(this.listId())().writes.get(lineId)?.outcome ===
+          'failed'
+      ) {
+        this._lines.dismissNote(lineId);
+      }
+    };
+  }
+
   private _setClearing(lineId: string, on: boolean): void {
     this._clearing.update((ids) => {
       if (ids.has(lineId) === on) {
@@ -1877,17 +1969,15 @@ export class ListPage {
       drawn && column !== undefined ? focusAfterLeaving(column, lineId) : null;
     const line = this._lineById().get(lineId);
 
+    // A new write of a line whose lock ran out follows the store again.
+    this._setExpired(lineId, null);
     // Locked before the store patches the 0, so the row is never hidden for a frame.
     const trashed = this._trashed === lineId;
-    if (trashed) {
-      this._setClearing(lineId, true);
-    }
+    const answered = trashed ? this._lock(lineId, line?.quantity) : null;
     const written = this.changeQuantity({ lineId, delta });
     // Unlocked as soon as the write answers, whatever it said, and before anything
     // below reads whether the row is still drawn.
-    const writing = trashed
-      ? written.finally(() => this._setClearing(lineId, false))
-      : written;
+    const writing = answered !== null ? written.finally(answered) : written;
 
     if (!drawn || line === undefined) {
       if (trashed) {
@@ -2819,12 +2909,17 @@ export class ListPage {
    * the gesture anyway.
    */
   retry(lineId: string): void {
-    this._lines.dismissNote(lineId);
+    this.dismissNote(lineId);
     this.openLine(lineId);
   }
 
   dismissNote(lineId: string): void {
     this._lines.dismissNote(lineId);
+    // The notice of a lock that ran out is the page's (velista `0199`).
+    const clear = this._expired().get(lineId);
+    if (clear !== undefined) {
+      this._setExpired(lineId, { ...clear, notice: false });
+    }
   }
 
   openSettings(): void {
@@ -3076,6 +3171,57 @@ const MARK_DURATION_MS = 4000;
 type ListCategoryHeading =
   | { readonly kind: 'key'; readonly key: string }
   | { readonly kind: 'text'; readonly text: string };
+
+/**
+ * A line whose trash lock reached its ceiling unanswered (velista `0199`): the amount
+ * the store held before the run, and whether its failed notice is still drawn.
+ */
+interface ExpiredClear {
+  readonly quantity: number;
+  readonly notice: boolean;
+}
+
+/** A write note as the store keeps one and the list state reads it. */
+interface WriteNote {
+  readonly outcome: 'pending' | 'failed' | 'overwritten';
+  readonly byUserId: string | null;
+}
+
+/** The store's lines, each one whose lock ran out at its stored amount. */
+function withExpiredClears(
+  lines: readonly Line[],
+  expired: ReadonlyMap<string, ExpiredClear>
+): readonly Line[] {
+  if (expired.size === 0) {
+    return lines;
+  }
+  return lines.map((line) => {
+    const clear = expired.get(line.id);
+    return clear === undefined ? line : { ...line, quantity: clear.quantity };
+  });
+}
+
+/**
+ * The store's write notes, with the failed notice of each lock that ran out, drawn
+ * as the store draws a failed write, or none once it was dismissed.
+ */
+function withExpiredNotes(
+  writes: ReadonlyMap<string, WriteNote>,
+  expired: ReadonlyMap<string, ExpiredClear>
+): ReadonlyMap<string, WriteNote> {
+  if (expired.size === 0) {
+    return writes;
+  }
+  const next = new Map<string, WriteNote>(writes);
+  for (const [lineId, clear] of expired) {
+    if (clear.notice) {
+      next.set(lineId, { outcome: 'failed', byUserId: null });
+    } else {
+      next.delete(lineId);
+    }
+  }
+  return next;
+}
 
 /**
  * The change a dropped note names, in the line's unit: "+250 g", not "+250"

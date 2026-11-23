@@ -63,17 +63,19 @@
 }
 
 // A row being cleared (velista 0199): from the trash press until the write to 0
-// answers. The sunken surface of a pressed row (velista 0196), held, and a spinner in
-// the middle of the row. Every text and mark of the row already clears its floor on
-// that surface (the contrast spec), so nothing else is recoloured. Drawn over the row
-// element both layouts share, so the lock is the same in each. The host stops every
-// press; the cursor says so.
+// answers. The sunken surface of a pressed row (velista 0196), held, a layer over the
+// whole row and a spinner in the middle of it. The host stops every press; the cursor
+// says so.
 .row.clearing {
   position: relative;
   background: var(--app-surface-sunken);
   cursor: default;
 }
 
+// The layer covers the row's whole box, the picture, the text and the stepper
+// included, so nothing under it looks active (the owner's ruling of 2026-11-23). Drawn
+// over the row element both layouts share, so the lock is the same in each. Last in
+// the row, so it sits over everything the row draws.
 .lock {
   position: absolute;
   inset: 0;
@@ -82,15 +84,27 @@
   align-items: center;
   justify-content: center;
   pointer-events: none;
+
+  // What a sheet lays over the page it covers, at the half strength of a disabled
+  // control: the row reads as context, still legible, and not as something offered.
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--app-scrim);
+    opacity: 0.5;
+  }
 }
 
-// A disc of the same surface under the spinner, so it reads over the name it sits
+// A raised disc under the spinner, so it reads over the layer and the name it sits
 // on. It turns on a motion token, and stands still under reduced motion.
 .lock-mark {
+  position: relative;
   display: flex;
   padding: var(--app-space-2);
   border-radius: var(--app-radius-full);
-  background: var(--app-surface-sunken);
+  background: var(--app-surface-raised);
+  box-shadow: var(--app-elevation-1);
   color: var(--app-text-secondary);
   font-size: var(--app-icon-md);
 }

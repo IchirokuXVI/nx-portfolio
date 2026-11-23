@@ -283,7 +283,8 @@ export class LineRow {
    * The lock of a row being cleared (velista `0199`), on the host and in the capture
    * phase, so a press is stopped before it reaches the stepper, the picture, a choose
    * button or the row itself, and none of them has to know about the lock. Tab and
-   * Escape pass, so focus can still leave the row.
+   * Escape pass, so focus can still leave the row, and so does a key with Alt, Ctrl
+   * or Meta held, so the browser's shortcuts still work.
    */
   constructor() {
     const host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
@@ -293,7 +294,11 @@ export class LineRow {
       }
       if (
         event instanceof KeyboardEvent &&
-        (event.key === 'Tab' || event.key === 'Escape')
+        (event.key === 'Tab' ||
+          event.key === 'Escape' ||
+          event.altKey ||
+          event.ctrlKey ||
+          event.metaKey)
       ) {
         return;
       }
@@ -400,7 +405,12 @@ export class LineRow {
    * of the thing itself.
    */
   describedBy(): string | null {
-    return this.statuses().length === 0 ? null : `st-${this.line().id}`;
+    const ids = [
+      this.statuses().length === 0 ? null : `st-${this.line().id}`,
+      // The lock's word, "Saving" (velista `0199`).
+      this.clearing() ? `lk-${this.line().id}` : null,
+    ].filter((id): id is string => id !== null);
+    return ids.length === 0 ? null : ids.join(' ');
   }
 
   onRowClick(): void {

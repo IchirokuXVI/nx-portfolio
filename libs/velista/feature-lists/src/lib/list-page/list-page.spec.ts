@@ -82,6 +82,7 @@ import type {
 } from '@portfolio/velista/models';
 import {
   DEFAULT_LIST_VIEW_STATE,
+  QUANTITY_CLEAR_LOCK_MAX_MS,
   QUANTITY_STEP_QUIET_MS,
 } from '@portfolio/velista/models';
 import {
@@ -1449,6 +1450,159 @@ describe('ListPage', () => {
           rowOf(fixture, 'ln-2')?.querySelector('.row')?.classList
         ).not.toContain('clearing');
         expect(page.announcement()).toBe('');
+      });
+
+      describe('the lock has a ceiling (the owner, 2026-11-23)', () => {
+        const stepperValue = (fixture: ComponentFixture<ListPage>) =>
+          rowOf(fixture, 'ln-2')
+            ?.querySelector('lib-quantity-stepper')
+            ?.getAttribute('data-value');
+        const locked = (fixture: ComponentFixture<ListPage>) =>
+          rowOf(fixture, 'ln-2')
+            ?.querySelector('.row')
+            ?.classList.contains('clearing');
+
+        it('is two minutes', () => {
+          expect(QUANTITY_CLEAR_LOCK_MAX_MS).toBe(120_000);
+        });
+
+        it('unlocks the row at the ceiling, at its stored amount, with the failed notice', async () => {
+          const { fixture, sent, release } = await three();
+          jest.useFakeTimers();
+          const page = fixture.componentInstance;
+
+          page.stepQuantity(trash('ln-2'));
+          jest.advanceTimersByTime(QUANTITY_CLEAR_LOCK_MAX_MS - 1);
+          fixture.detectChanges();
+          expect(locked(fixture)).toBe(true);
+
+          jest.advanceTimersByTime(1);
+          fixture.detectChanges();
+
+          expect(page.clearing().size).toBe(0);
+          expect(locked(fixture)).toBe(false);
+          expect(
+            rowOf(fixture, 'ln-2')
+              ?.querySelector('.row')
+              ?.getAttribute('aria-disabled')
+          ).toBeNull();
+          expect(stepperValue(fixture)).toBe('1');
+          expect(
+            rowOf(fixture, 'ln-2')?.querySelector('.notice.failed')
+          ).not.toBeNull();
+          // The request is not cancelled, and nothing else is sent.
+          expect(sent).toEqual([{ lineId: 'ln-2', delta: -1 }]);
+
+          release();
+          await turns();
+        });
+
+        it('clears the timer when the write answers before the ceiling', async () => {
+          const { fixture, release } = await three();
+          jest.useFakeTimers();
+          const page = fixture.componentInstance;
+
+          page.stepQuantity(trash('ln-2'));
+          expect(page['_locks'].has('ln-2')).toBe(true);
+          release();
+          await turns();
+
+          expect(page['_locks'].size).toBe(0);
+          jest.advanceTimersByTime(QUANTITY_CLEAR_LOCK_MAX_MS);
+          fixture.detectChanges();
+          expect(page.clearing().size).toBe(0);
+          // The ceiling never fired: nothing is drawn at a stored amount.
+          expect(page['_expired']().size).toBe(0);
+          expect(rowOf(fixture, 'ln-2')).toBeNull();
+        });
+
+        it('hides the row when a late answer is a success', async () => {
+          const { fixture, release } = await three();
+          jest.useFakeTimers();
+          const page = fixture.componentInstance;
+
+          page.stepQuantity(trash('ln-2'));
+          jest.advanceTimersByTime(QUANTITY_CLEAR_LOCK_MAX_MS);
+          fixture.detectChanges();
+          expect(rowOf(fixture, 'ln-2')).not.toBeNull();
+
+          release();
+          await turns();
+          fixture.detectChanges();
+          fixture.detectChanges();
+
+          expect(rowOf(fixture, 'ln-2')).toBeNull();
+          expect(page.drawnLines().map((row) => row.id)).toEqual([
+            'ln-1',
+            'ln-3',
+          ]);
+        });
+
+        it('changes nothing when a late answer is a failure', async () => {
+          const { fixture, sent, fail } = await three();
+          jest.useFakeTimers();
+          const page = fixture.componentInstance;
+
+          page.stepQuantity(trash('ln-2'));
+          jest.advanceTimersByTime(QUANTITY_CLEAR_LOCK_MAX_MS);
+          fixture.detectChanges();
+          const drawn = page.drawnLines().map((row) => [row.id, row.quantity]);
+
+          fail();
+          await turns();
+          fixture.detectChanges();
+
+          expect(
+            page.drawnLines().map((row) => [row.id, row.quantity])
+          ).toEqual(drawn);
+          expect(locked(fixture)).toBe(false);
+          expect(stepperValue(fixture)).toBe('1');
+          expect(
+            rowOf(fixture, 'ln-2')?.querySelector('.notice.failed')
+          ).not.toBeNull();
+          expect(sent).toHaveLength(1);
+          expect(page.announcement()).toBe('');
+        });
+
+        it('keeps a dismissed notice gone when the late answer is a failure', async () => {
+          const { fixture, fail } = await three();
+          jest.useFakeTimers();
+          const page = fixture.componentInstance;
+
+          page.stepQuantity(trash('ln-2'));
+          jest.advanceTimersByTime(QUANTITY_CLEAR_LOCK_MAX_MS);
+          page.dismissNote('ln-2');
+          fixture.detectChanges();
+          expect(
+            rowOf(fixture, 'ln-2')?.querySelector('.notice.failed')
+          ).toBeNull();
+
+          fail();
+          await turns();
+          fixture.detectChanges();
+
+          expect(
+            rowOf(fixture, 'ln-2')?.querySelector('.notice.failed')
+          ).toBeNull();
+          expect(stepperValue(fixture)).toBe('1');
+        });
+
+        it('clears the timer when the page goes away', async () => {
+          const { fixture, release } = await three();
+          jest.useFakeTimers();
+
+          const page = fixture.componentInstance;
+          page.stepQuantity(trash('ln-2'));
+          expect(page['_locks'].has('ln-2')).toBe(true);
+          fixture.destroy();
+
+          expect(page['_locks'].size).toBe(0);
+          // Past the ceiling, nothing fires on the page that went away.
+          jest.advanceTimersByTime(QUANTITY_CLEAR_LOCK_MAX_MS);
+          expect(page['_expired']().size).toBe(0);
+          release();
+          await turns();
+        });
       });
     });
 

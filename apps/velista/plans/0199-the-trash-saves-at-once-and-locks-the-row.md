@@ -10,6 +10,9 @@
 > cannot be tapped again, it does not wait the quiet beat, and it shows a darker background
 > with a spinner in the middle.
 >
+> Amended on 2026-11-23: the lock has a ceiling of 2 minutes, and it is a layer over the
+> whole row, the stepper included.
+>
 > Nothing is deleted: a line at 0 is hidden and found by searching (velista `0192`). This
 > plan changes when the run is written and how the row looks until then.
 >
@@ -55,12 +58,26 @@ answers, then hide it as today.
    darker background over the whole row (`--app-surface-sunken`, the same as a pressed row
    of velista `0196`, or a scrim token if that fails contrast), a `SpinnerIcon` centred on
    the row, `aria-busy="true"` and `aria-disabled="true"`. A tap on the row, the stepper, the
-   picture or the choose button does nothing.
+   picture or the choose button does nothing. Amended on 2026-11-23: the darker look is a
+   layer over the row's whole box, the picture, the text and the stepper included, in both
+   layouts, so nothing inside a locked row looks active; the spinner is centred on top of
+   it. The layer is `--app-scrim` at the half strength of a disabled control, so the row
+   under it stays legible. The row is described by the word "Saving" while it is locked,
+   and a key held with Alt, Ctrl or Meta passes the lock, as Tab and Escape do.
 4. **After the answer.** On success the line leaves `clearing` and is hidden as today, and
    focus moves as `_writeRun` moves it now. On failure it leaves `clearing`, the row is drawn
    at its stored amount with the failed notice, and it is usable again.
 5. In a search the trash writes at once and locks the row the same way; after the answer the
    row stays drawn at 0, unlocked.
+6. **The ceiling** (the owner's ruling of 2026-11-23). A line write has no client timeout.
+   When the write has not answered 2 minutes after the trash press
+   (`QUANTITY_CLEAR_LOCK_MAX_MS` in `libs/velista/models/src/lib/limits.ts`), the line
+   leaves `clearing` and the row is usable again, drawn at its stored amount with the failed
+   notice, as a failed write draws it. The store's API does not change: the page draws that
+   amount and that notice over what the store holds. The request is not cancelled. A late
+   answer is applied as any late answer is: on success the line is at 0 and hidden, on
+   failure nothing more happens. The timer is cleared when the write answers and when the
+   page goes away.
 
 ### Scope
 
@@ -96,12 +113,19 @@ see the failed notice.
 3. A clearing row ignores clicks on itself and on its stepper and draws the spinner.
 4. On success the line is hidden and focus is on the next row; on failure the row is back at
    its stored amount, unlocked, with the failed notice.
+5. With fake timers: the row unlocks at the ceiling, at its stored amount, with the failed
+   notice; an answer before the ceiling clears the timer; a late success after the ceiling
+   hides the row; a late failure changes nothing; the page going away clears the timer.
+6. The lock's layer covers the row's whole box and is drawn after the stepper; the row is
+   described by the lock's word; Tab, Escape and a key with Alt, Ctrl or Meta pass the lock.
 
 ## 2. Acceptance criteria
 
 - The trash never waits 800 ms.
 - A row cannot be tapped between the trash press and the answer.
-- The locked row has a darker background and a spinner in the middle.
+- The locked row has a darker layer over all of it, the stepper included, and a spinner in
+  the middle.
+- No row stays locked longer than 2 minutes.
 
 ## Not in this plan
 

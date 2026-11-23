@@ -1515,6 +1515,62 @@ describe('LineRow: a row being cleared (velista 0199)', () => {
     expect(chosen).toEqual([]);
   });
 
+  it('lets Tab, Escape and a key with Alt, Ctrl or Meta held through, and no other', async () => {
+    const fixture = await clearing(vm({ quantity: 0 }));
+    const key = (init: KeyboardEventInit) => {
+      const event = new KeyboardEvent('keydown', {
+        ...init,
+        bubbles: true,
+        cancelable: true,
+      });
+      row(fixture).dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+
+    expect(key({ key: 'Tab' })).toBe(false);
+    expect(key({ key: 'Escape' })).toBe(false);
+    expect(key({ key: 'r', ctrlKey: true })).toBe(false);
+    expect(key({ key: 'ArrowLeft', altKey: true })).toBe(false);
+    expect(key({ key: 'l', metaKey: true })).toBe(false);
+    expect(key({ key: 'Enter' })).toBe(true);
+    expect(key({ key: '+' })).toBe(true);
+  });
+
+  it('is described by a spoken word while it is locked', async () => {
+    const fixture = await clearing(vm({ quantity: 0 }));
+
+    const ids = row(fixture).getAttribute('aria-describedby')?.split(' ') ?? [];
+    expect(ids).toContain('lk-ln-1');
+    const word = query(fixture, '#lk-ln-1');
+    expect(word?.classList).toContain('visually-hidden');
+    expect(word?.closest('[aria-hidden="true"]')).toBeNull();
+  });
+
+  it('draws the layer over the whole row, the stepper included, from tokens only', () => {
+    const rules = compiledRules('line-row.scss');
+    const lock = rules.find((one) => one.selector === '.lock');
+    const layer = rules.find((one) => one.selector === '.lock::before');
+
+    expect(lock?.body).toMatch(/position:\s*absolute;/);
+    expect(lock?.body).toMatch(/inset:\s*0;/);
+    expect(layer?.body).toMatch(/inset:\s*0;/);
+    expect(layer?.body).toMatch(/background:\s*var\(--app-scrim\);/);
+  });
+
+  it('draws the lock after the stepper, so the layer sits over it', async () => {
+    const fixture = await clearing(vm({ quantity: 0 }));
+    const children = Array.from(row(fixture).children);
+    const stepper = children.findIndex(
+      (child) => child.tagName.toLowerCase() === 'lib-quantity-stepper'
+    );
+    const lock = children.findIndex((child) =>
+      child.hasAttribute('data-clearing-lock')
+    );
+
+    expect(stepper).toBeGreaterThanOrEqual(0);
+    expect(lock).toBeGreaterThan(stepper);
+  });
+
   it('answers again once it is no longer clearing', async () => {
     const fixture = await clearing(vm({ quantity: 1 }));
     const opened: string[] = [];

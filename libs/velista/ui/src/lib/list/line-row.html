@@ -416,12 +416,16 @@
   />
 
   <!--
-    The lock of a row being cleared (velista 0199): a spinner in the middle of the
-    row, over both layouts. Hidden from a screen reader, which hears aria-busy.
+    The lock of a row being cleared (velista 0199): a layer over the whole row and a
+    spinner in the middle of it, over both layouts. Hidden from a screen reader, which
+    hears aria-busy and the word the row is described by.
   -->
   @if (clearing()) {
     <span aria-hidden="true" class="lock" data-clearing-lock>
       <span class="lock-mark"><lib-spinner-icon /></span>
+    </span>
+    <span [id]="'lk-' + line().id" class="visually-hidden">
+      {{ 'basket.line.busy' | rokuT }}
     </span>
   }
 </div>
