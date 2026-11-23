@@ -1,3 +1,5 @@
+> **PR:** [#1089](https://github.com/IchirokuXVI/nx-portfolio/pull/1089)
+
 # 0207: a raised line asks whether the extra already bought counts
 
 > Decided by the owner on 2026-11-22. A list's line was bought above its ask in an open
