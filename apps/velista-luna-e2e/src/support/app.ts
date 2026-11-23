@@ -214,8 +214,9 @@ export async function openListsAndAmounts(
 ): Promise<Locator> {
   await dialog.getByRole('button', { name: 'Lists and amounts' }).click();
   await expect(page).toHaveURL(/\/sheet\/rows\/[0-9a-f-]{36}\/lists$/);
+  // The host draws no box of its own, so its way back is what shows it is open.
   const view = page.locator('lib-row-lists-sheet');
-  await expect(view).toBeVisible();
+  await expect(view.getByRole('button', { name: 'Back' })).toBeVisible();
   return view;
 }
 

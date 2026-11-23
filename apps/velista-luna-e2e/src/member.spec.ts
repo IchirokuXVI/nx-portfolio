@@ -209,7 +209,9 @@ test.describe('a registered participant', () => {
         entries.locator('.row-name', { hasText: 'Hardware' })
       ).toBeVisible();
       await expect(
-        entries.locator('.row-name', { hasText: 'Hardware' }).locator('.row-ask')
+        entries
+          .locator('.row-name', { hasText: 'Hardware' })
+          .locator('.row-ask')
       ).toHaveText('· 1');
       const view = await openListsAndAmounts(page, dialog);
       const asks = amountField(view, /^Hardware.*, asks for$/);
