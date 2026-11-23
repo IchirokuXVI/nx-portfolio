@@ -26,7 +26,9 @@ import { ChevronLeftIcon, CloseIcon, OfflineIcon } from '../icons/icons';
  *   2026-11-22 (velista `0205`): under the title the header may draw **one** optional
  *   subtitle line, in `--app-text-xs` and `--app-text-muted`, one line and cut with an
  *   ellipsis, inside the same block size (H1 holds). It is a `p` beside the `h1`, so
- *   the page's heading stays the title.
+ *   the page's heading stays the title. Amended again on 2026-11-23: when enlarged
+ *   text leaves no room for both lines, the subtitle is hidden and only read out, and
+ *   the title stands alone, centred. The stylesheet decides it from the real space.
  * - **H3.** Always a bottom border. No input turns it off.
  * - **H4.** The left end holds a back button or an icon, never neither and never
  *   both. `backLabel` decides: set, the chevron draws; not set, the projected

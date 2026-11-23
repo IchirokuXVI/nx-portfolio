@@ -279,9 +279,12 @@ describe('PageHeader and its subtitle', () => {
     expect(line).not.toBeNull();
     expect(line?.textContent?.trim()).toBe('');
     // jsdom lays nothing out, so the height is read off the rule: one line of the
-    // subtitle's own size and leading, whatever it holds.
+    // subtitle's own size and leading, whatever it holds. In `em`, so an enlarged text
+    // enlarges the reserved line as it enlarges the words, and the empty line and the
+    // filled one fit the block, or do not, at the same text size.
     const rule = stylesheet().match(/\.subtitle\s*\{[^}]*\}/)?.[0] ?? '';
-    expect(rule).toContain('min-block-size: calc(var(--app-text-xs) * 1.4)');
+    expect(rule).toContain('font-size: var(--app-text-xs)');
+    expect(rule).toContain('min-block-size: 1.4em');
     expect(rule).toContain('line-height: 1.4');
   });
 
@@ -302,8 +305,10 @@ describe('PageHeader and its subtitle', () => {
     expect(header).toContain(
       'block-size: calc(var(--app-header-height) + var(--app-safe-top))'
     );
-    // The stack is centred in the row and sets no size of its own.
+    // The stack is centred in the row and takes the row's height: it sets no size of
+    // its own, so it can never make the header taller.
     expect(heading).toContain('justify-content: center');
+    expect(heading).toContain('align-self: stretch');
     expect(heading).not.toMatch(/block-size|height/);
   });
 
@@ -320,6 +325,63 @@ describe('PageHeader and its subtitle', () => {
 
     expect(query(fixture, 'h1')).toBe(before);
     expect(query(fixture, '.subtitle')?.textContent?.trim()).toBe('in Casa');
+  });
+});
+
+/**
+ * The owner's ruling of 2026-11-23 (velista `0205`, amended): when enlarged text leaves
+ * no room for both lines in the 64 px block, the subtitle is hidden and only read out.
+ * The browser decides it from the real space, so jsdom, which lays nothing out, reads
+ * the rule that decides it. The walk in the plan's progress evidence measures it.
+ */
+describe('PageHeader and a subtitle that does not fit', () => {
+  function heading(): string {
+    return stylesheet().match(/\.heading\s*\{[^}]*\}/)?.[0] ?? '';
+  }
+
+  it('both fit: the two lines share one column of the row', () => {
+    const rule = heading();
+
+    // One column first, wrapping only when the next line does not fit its height.
+    expect(rule).toContain('flex-flow: column wrap');
+    expect(rule).toContain('justify-content: center');
+    // Every line is the stack's full width, so a wrapped line starts a new column
+    // beside the first and never squeezes in next to the title.
+    const lines = stylesheet().match(/>\s*\*\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(lines).toContain('inline-size: 100%');
+    expect(lines).toContain('flex: none');
+  });
+
+  it('not both: the subtitle wraps whole out of view, never cut, and the title is centred alone', () => {
+    const rule = heading();
+
+    // The second column lies past the stack's end edge, and the clip hides it whole.
+    expect(rule).toContain('overflow: clip');
+    // No scroll container to scroll the hidden column into view: `hidden` is only the
+    // fallback written before `clip`.
+    expect(rule.indexOf('overflow: hidden')).toBeLessThan(
+      rule.indexOf('overflow: clip')
+    );
+    // The stack is exactly the row's height, so the title alone in its column sits
+    // where `align-items: center` puts the h1 of a page with no subtitle.
+    expect(rule).toContain('align-self: stretch');
+    expect(stylesheet()).toMatch(/\.header\s*\{[^}]*align-items: center/);
+  });
+
+  it('not both: the hidden subtitle is still in the DOM and the accessibility tree', async () => {
+    const fixture = await render();
+    fixture.componentInstance.subtitle.set('in Casa');
+    fixture.detectChanges();
+
+    const line = query(fixture, '.heading p.subtitle');
+    expect(line?.textContent?.trim()).toBe('in Casa');
+    // Clipped by the stack, never removed from what a screen reader reads.
+    for (const el of [line, query(fixture, '.heading')]) {
+      expect(el?.hasAttribute('aria-hidden')).toBe(false);
+      expect(el?.hasAttribute('hidden')).toBe(false);
+    }
+    const rule = stylesheet().match(/\.subtitle\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(rule).not.toMatch(/display|visibility/);
   });
 });
 

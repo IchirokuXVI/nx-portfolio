@@ -86,23 +86,41 @@
 // H2 as amended by velista 0205. The title and its subtitle stacked in the title's
 // place, centred as a pair in the row, so the actions stay centred beside them. The
 // title keeps its own size and line; only its flex sizing moves to the stack.
+//
+// The owner's ruling of 2026-11-23: when enlarged text leaves no room for both lines
+// in the block (H1 never gives way), the subtitle is hidden and the title stands alone,
+// centred as on a page with none. The stack decides that from the real space, with no
+// script: it is exactly the row's height and wraps, and every line is the stack's full
+// width. Two lines that fit share the first column. A subtitle that does not fit wraps
+// whole into a second column beside it, which the clip leaves out of view, so it is
+// either all there or gone, never cut through, and the title is then the only item of
+// its column and centred in it. A wrapped subtitle is clipped, not removed: it stays in
+// the accessibility tree and is still read out. `clip` and not `hidden`, so the stack
+// is no scroll container that a focus or a find could scroll to the second column;
+// `hidden` first for a WebView older than `clip`.
 .heading {
   display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
+  flex: 1 1 0;
+  flex-flow: column wrap;
   justify-content: center;
+  align-self: stretch;
   min-inline-size: 0;
+  overflow: hidden;
+  overflow: clip;
 
-  > .title {
+  > * {
     flex: none;
+    inline-size: 100%;
   }
 }
 
 // One line, cut with an ellipsis, in the small muted size. The minimum block size is
 // its own line, so an empty subtitle (a page whose subtitle has not arrived yet) holds
-// the title where it will be once the words arrive.
+// the title where it will be once the words arrive. In `em`, so an enlarged text
+// enlarges the reserved line with the words: the empty line and the filled one then
+// wrap at the same size, and a group that arrives never moves the title.
 .subtitle {
-  min-block-size: calc(var(--app-text-xs) * 1.4);
+  min-block-size: 1.4em;
   margin: 0;
   overflow: hidden;
   color: var(--app-text-muted);
