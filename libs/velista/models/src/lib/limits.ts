@@ -144,6 +144,16 @@ export const QUANTITY_HOLD_FASTEST_MS = 60;
 export const QUANTITY_STEP_QUIET_MS = 800;
 
 /**
+ * How long a zone list row stays locked after its trash was pressed, when the write
+ * to 0 has not answered (velista 0199). A line write has no client timeout, so on a
+ * dead connection the lock would last for minutes. The owner's ruling of 2026-11-23:
+ * a few minutes is fine, more than that bothers somebody who pressed by mistake. At
+ * the ceiling the lock ends and the row stays drawn at 0, usable, until the write
+ * answers; the request is not cancelled, and its answer is applied as any answer is.
+ */
+export const QUANTITY_CLEAR_LOCK_MAX_MS = 2 * 60 * 1000;
+
+/**
  * How many products one line's set may hold: `LINE_ITEM_SET_MAX` in the contracts
  * (backend plan 0048 section 1.1, given its precise meaning by `0070` section 7).
  *

@@ -757,9 +757,12 @@ describe('LineRow', () => {
       expect(pressed[0].body).not.toContain('transition');
     });
 
-    it('sinks a row whose tap opens the line, and never an inert one', () => {
-      // `.inert` is exactly a row whose `onRowClick` returns early.
-      expect(pressed[0].selector).toMatch(/^\.row:not\(\.inert\):active:not\(/);
+    it('sinks a row whose tap opens the line, and never an inert or a clearing one', () => {
+      // `.inert` and `.clearing` (velista 0199) are exactly the rows whose
+      // `onRowClick` returns early.
+      expect(pressed[0].selector).toMatch(
+        /^\.row:not\(\.inert,\s*\.clearing\):active:not\(/
+      );
     });
 
     it('leaves out a press on the stepper, a button or the photo viewer, and only those', () => {
@@ -1453,5 +1456,179 @@ describe('LineRow', () => {
         expect(text(fixture, '.line-1 .price')).toBe('0,92 €');
       });
     });
+  });
+});
+
+describe('LineRow: a row being cleared (velista 0199)', () => {
+  async function clearing(
+    line: LineRowVm,
+    layout: 'default' | 'compact' = 'default'
+  ): Promise<ComponentFixture<LineRow>> {
+    const fixture = await render(line);
+    fixture.componentRef.setInput('layout', layout);
+    fixture.componentRef.setInput('clearing', true);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it.each(['default', 'compact'] as const)(
+    'draws the lock and the spinner in the %s layout',
+    async (layout) => {
+      const fixture = await clearing(
+        vm({ quantity: 0, product: shown() }),
+        layout
+      );
+
+      expect(row(fixture).classList).toContain('clearing');
+      expect(row(fixture).getAttribute('aria-busy')).toBe('true');
+      expect(row(fixture).getAttribute('aria-disabled')).toBe('true');
+      const lock = query(fixture, '.row > [data-clearing-lock]');
+      expect(lock?.getAttribute('aria-hidden')).toBe('true');
+      expect(lock?.querySelector('lib-spinner-icon')).not.toBeNull();
+    }
+  );
+
+  it('ignores a click on itself, on its stepper and on the choose button', async () => {
+    const fixture = await clearing(
+      vm({ quantity: 0, product: { kind: 'none', canChoose: true } })
+    );
+    const opened: string[] = [];
+    const steps: QuantityStep[] = [];
+    const chosen: string[] = [];
+    fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+    fixture.componentInstance.quantityStepped.subscribe((event) =>
+      steps.push(event.step)
+    );
+    fixture.componentInstance.chooseProduct.subscribe((id) => chosen.push(id));
+
+    row(fixture).click();
+    query(fixture, '.step.plus')?.dispatchEvent(
+      new MouseEvent('click', { bubbles: true })
+    );
+    (query(fixture, '.choose') as HTMLElement).click();
+    row(fixture).dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })
+    );
+
+    expect(opened).toEqual([]);
+    expect(steps).toEqual([]);
+    expect(chosen).toEqual([]);
+  });
+
+  it('lets Tab, Escape and a key with Alt, Ctrl or Meta held through, and no other', async () => {
+    const fixture = await clearing(vm({ quantity: 0 }));
+    const key = (init: KeyboardEventInit) => {
+      const event = new KeyboardEvent('keydown', {
+        ...init,
+        bubbles: true,
+        cancelable: true,
+      });
+      row(fixture).dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+
+    expect(key({ key: 'Tab' })).toBe(false);
+    expect(key({ key: 'Escape' })).toBe(false);
+    expect(key({ key: 'r', ctrlKey: true })).toBe(false);
+    expect(key({ key: 'ArrowLeft', altKey: true })).toBe(false);
+    expect(key({ key: 'l', metaKey: true })).toBe(false);
+    expect(key({ key: 'Enter' })).toBe(true);
+    expect(key({ key: '+' })).toBe(true);
+  });
+
+  it('is described by a spoken word while it is locked', async () => {
+    const fixture = await clearing(vm({ quantity: 0 }));
+
+    const ids = row(fixture).getAttribute('aria-describedby')?.split(' ') ?? [];
+    expect(ids).toContain('lk-ln-1');
+    const word = query(fixture, '#lk-ln-1');
+    expect(word?.classList).toContain('visually-hidden');
+    expect(word?.closest('[aria-hidden="true"]')).toBeNull();
+  });
+
+  it('draws the layer over the whole host, from tokens only, and the disc with an edge', () => {
+    const rules = compiledRules('line-row.scss');
+    const layer = rules.find((one) => one.selector === '.lock-layer');
+    const lock = rules.find((one) => one.selector === '.lock');
+    const mark = rules.find((one) => one.selector === '.lock-mark');
+    const notice = rules.find((one) => one.selector === '.notice');
+
+    expect(layer?.body).toMatch(/position:\s*absolute;/);
+    expect(layer?.body).toMatch(/inset:\s*0;/);
+    expect(layer?.body).toMatch(/background:\s*var\(--app-scrim\);/);
+    // Drawn in the order of the template, so a notice after it is drawn over it.
+    expect(layer?.body).not.toMatch(/z-index/);
+    expect(notice?.body).toMatch(/position:\s*relative;/);
+    expect(lock?.body).toMatch(/z-index:\s*1;/);
+    expect(mark?.body).toMatch(
+      /border:\s*1px solid var\(--app-border-strong\);/
+    );
+  });
+
+  it('draws the layer after the row and the decisions and before a notice', async () => {
+    const fixture = await clearing(
+      vm({
+        quantity: 0,
+        approvalStatus: 'PENDING',
+        decidable: true,
+        write: 'failed',
+      })
+    );
+    const children = Array.from(
+      (fixture.nativeElement as HTMLElement).children
+    );
+    const at = (selector: string) =>
+      children.findIndex((child) => child.matches(selector));
+
+    expect(at('.row')).toBeGreaterThanOrEqual(0);
+    expect(at('.decisions')).toBeGreaterThan(at('.row'));
+    expect(at('[data-clearing-layer]')).toBeGreaterThan(at('.decisions'));
+    expect(at('.notice.failed')).toBeGreaterThan(at('[data-clearing-layer]'));
+    expect(
+      query(fixture, '[data-clearing-layer]')?.getAttribute('aria-hidden')
+    ).toBe('true');
+  });
+
+  it('stops the decisions under the layer and leaves a notice usable', async () => {
+    const fixture = await clearing(
+      vm({
+        quantity: 0,
+        approvalStatus: 'PENDING',
+        decidable: true,
+        write: 'failed',
+      })
+    );
+    const acted: unknown[] = [];
+    const retried: string[] = [];
+    fixture.componentInstance.act.subscribe((event) => acted.push(event));
+    fixture.componentInstance.retry.subscribe((id) => retried.push(id));
+
+    (query(fixture, '.decision.approve') as HTMLElement).click();
+    (query(fixture, '.notice.failed') as HTMLElement).click();
+
+    expect(acted).toEqual([]);
+    expect(retried).toEqual(['ln-1']);
+  });
+
+  it('answers again once it is no longer clearing', async () => {
+    const fixture = await clearing(vm({ quantity: 1 }));
+    const opened: string[] = [];
+    fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+    fixture.componentRef.setInput('clearing', false);
+    fixture.detectChanges();
+    row(fixture).click();
+
+    expect(opened).toEqual(['ln-1']);
+    expect(query(fixture, '[data-clearing-lock]')).toBeNull();
+    expect(row(fixture).getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it('draws the lock on the sunken surface of a pressed row, from tokens only', () => {
+    const rule = compiledRules('line-row.scss').find(
+      (one) => one.selector === '.row.clearing'
+    );
+
+    expect(rule?.body).toMatch(/background:\s*var\(--app-surface-sunken\);/);
   });
 });
