@@ -82,6 +82,40 @@ export const ERROR_CODES = {
    */
   BASKET_SHOP_LOCKED: 'basket_shop_locked',
   /**
+   * A buy for a list that does not ask named a line that is already an entry
+   * of the row (plan 0273).
+   *
+   * Its own code because the client's reaction is particular: the line is on
+   * the row, so the buy is the plain settle with `lineIds: [lineId]`, and the
+   * client reads the row again and uses it.
+   */
+  BASKET_LINE_ALREADY_IN_ROW: 'basket_line_already_in_row',
+  /**
+   * A buy for a list that does not ask was made on a row whose lines record
+   * no product (plan 0273). The write buys the row's product, so a row of
+   * free text lines has nothing it could buy for another list.
+   */
+  BASKET_ROW_HAS_NO_PRODUCT: 'basket_row_has_no_product',
+  /**
+   * A buy for a list that does not ask had to make the list's line, and the
+   * product has no name in any language catalog holds (plan 0273). The line
+   * is called by the product's name and never by another list's text, so
+   * nothing is written.
+   */
+  BASKET_PRODUCT_HAS_NO_NAME: 'basket_product_has_no_name',
+  /**
+   * A write needed something only catalog can say, and catalog did not answer
+   * in time or failed (plan 0273, amended on 2026-11-22). The first case is a
+   * buy for a list that does not ask, which had to make the list's line and
+   * so needed the product's name.
+   *
+   * Its own code and not {@link BASKET_PRODUCT_HAS_NO_NAME}, because the two
+   * ask different things of the client: a product with no name stays so, and
+   * a catalog that did not answer is answered by sending the same request
+   * again. Nothing was written.
+   */
+  CATALOG_UNAVAILABLE: 'catalog_unavailable',
+  /**
    * The number this write was moving is not where the caller believed it started
    * (plan 0057, section 5; plan 0056, section 3.2).
    *
@@ -691,6 +725,17 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // 409 for the same reason: the request was well formed, and what refuses it
   // is the basket's own shop, which was fixed when the basket was made.
   [ERROR_CODES.BASKET_SHOP_LOCKED]: HttpStatus.CONFLICT,
+  // 409 for the same reason: the request was well formed, and what refuses it
+  // is a line that is already on the row (plan 0273).
+  [ERROR_CODES.BASKET_LINE_ALREADY_IN_ROW]: HttpStatus.CONFLICT,
+  // 409 for the same reason: well formed, and refused by the row's lines or
+  // by what catalog holds of the product (plan 0273).
+  [ERROR_CODES.BASKET_ROW_HAS_NO_PRODUCT]: HttpStatus.CONFLICT,
+  [ERROR_CODES.BASKET_PRODUCT_HAS_NO_NAME]: HttpStatus.CONFLICT,
+  // 503, which is "try again later": the request was well formed and nothing
+  // about the state refuses it, and what failed is a service this one depends
+  // on. Never 409, which would say the state is at fault (plan 0273).
+  [ERROR_CODES.CATALOG_UNAVAILABLE]: HttpStatus.SERVICE_UNAVAILABLE,
   // 409 for the same reason and apart from it by code: the request was well
   // formed, and what it conflicts with is state that moved underneath it.
   [ERROR_CODES.STALE_QUANTITY]: HttpStatus.CONFLICT,

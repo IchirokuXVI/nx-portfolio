@@ -157,6 +157,42 @@ export class BasketShopLockedException extends DomainException {
 }
 
 /**
+ * A buy for a list that does not ask named a line the row already holds (plan
+ * 0273).
+ *
+ * Renders as 409. The client buys on that line with the plain settle instead.
+ */
+export class BasketLineAlreadyInRowException extends DomainException {
+  readonly code = ERROR_CODES.BASKET_LINE_ALREADY_IN_ROW;
+}
+
+/**
+ * A buy for a list that does not ask was made on a row with no product (plan
+ * 0273). Renders as 409.
+ */
+export class BasketRowHasNoProductException extends DomainException {
+  readonly code = ERROR_CODES.BASKET_ROW_HAS_NO_PRODUCT;
+}
+
+/**
+ * A buy for a list that does not ask had to make a line for a product with
+ * no name in any language (plan 0273). Renders as 409, and nothing is
+ * written.
+ */
+export class BasketProductHasNoNameException extends DomainException {
+  readonly code = ERROR_CODES.BASKET_PRODUCT_HAS_NO_NAME;
+}
+
+/**
+ * A write needed an answer of catalog, and catalog did not give one in time
+ * or failed (plan 0273, amended on 2026-11-22). Renders as 503, nothing is
+ * written, and the client sends the same request again.
+ */
+export class CatalogUnavailableException extends DomainException {
+  readonly code = ERROR_CODES.CATALOG_UNAVAILABLE;
+}
+
+/**
  * The number being moved is not where the caller believed it started (plan 0057,
  * section 5).
  *

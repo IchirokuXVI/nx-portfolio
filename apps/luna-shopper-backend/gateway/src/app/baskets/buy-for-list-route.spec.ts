@@ -1,0 +1,317 @@
+import {
+  BASKET_PATTERNS,
+  ITEM_PATTERNS,
+  ParticipantKind,
+  UnitOfMeasure,
+  type BasketParticipantContext,
+  type BuyForListBasketRequest,
+  type ItemSnapshot,
+} from '@portfolio/luna-shopper/contracts';
+import {
+  ForbiddenException,
+  runWithRequestContext,
+} from '@portfolio/luna-shopper/platform';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import { BasketController } from './basket.controller';
+import { BuyForListBasketRowDto } from './basket.dto';
+import type { SettleChoice } from './settle-price.service';
+
+/**
+ * The route of a buy for a list that does not ask (plan 0273). Core does the
+ * write, `basket-buy-for-list.integration.spec.ts` proves it. What is left
+ * here is what the gateway adds: the owner's price and the product's name, a
+ * guest refused before anything is asked, and the body's bounds.
+ */
+
+const BASKET = 'b4b1f0e2-1f5a-4c2e-9a4d-6f0e2b7c1d33';
+const OWNER = 'u-owner';
+const LIST = '0d2e4b6a-8c13-4f1a-8c5e-2b7d4a6f8c91';
+const ITEM = '3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13';
+const ROW = '6a8c133f-1a0c-4e2b-9d4a-6f8c910d2e4b';
+const SCOPE = 'b4e2c6a8-1f37-4d95-8a0b-2c6e4f9a1d73';
+
+const SNAPSHOT: ItemSnapshot = {
+  name: { en: 'Milk', es: 'Leche' },
+  brand: 'Hacendado',
+  unitSize: 1,
+  packCount: null,
+  defaultUnit: UnitOfMeasure.LITER,
+  approxWeight: null,
+};
+const PAID = {
+  priceScopeId: SCOPE,
+  supermarketLocationId: null,
+  supermarketId: null,
+  pricePaidCents: 95,
+  pricePaidCurrency: 'EUR',
+  estimated: false,
+};
+
+function build(
+  chosen: SettleChoice = { paid: PAID, itemSnapshot: SNAPSHOT },
+  pickedItemId: string | null = ITEM
+) {
+  const sent: { subject: string; payload: unknown }[] = [];
+  const send = jest.fn(async (subject: string, payload: unknown) => {
+    sent.push({ subject, payload });
+    if (subject === BASKET_PATTERNS.searchScope) {
+      return {
+        ownerUserId: OWNER,
+        profileId: null,
+        servesLocations: false,
+        supermarketLocationId: null,
+        // The row's product, as core reads it off the row key's line.
+        pick: { pickedItemId, optionCount: pickedItemId === null ? 0 : 1 },
+      };
+    }
+    if (subject === ITEM_PATTERNS.getMany) {
+      // The sizing the unit check reads: a pack, counted in units.
+      return { items: [{ id: ITEM, ...SNAPSHOT }] };
+    }
+    return { entries: [], progress: {} };
+  });
+  const prices = {
+    choose: jest.fn(async () => chosen),
+    refuseUnknownItem: jest.fn(async () => undefined),
+  };
+  return {
+    controller: new BasketController(
+      { send } as never,
+      {} as never,
+      prices as never
+    ),
+    sent,
+    prices,
+    message: () =>
+      sent.find((call) => call.subject === BASKET_PATTERNS.rowBuyForList)
+        ?.payload as BuyForListBasketRequest | undefined,
+  };
+}
+
+const actor = (
+  kind: ParticipantKind,
+  userId: string | null
+): BasketParticipantContext => ({
+  participantId: 'p-1',
+  basketId: BASKET,
+  kind,
+  userId,
+});
+
+const body = (
+  extra: Partial<BuyForListBasketRowDto> = {}
+): BuyForListBasketRowDto =>
+  ({
+    targetListId: LIST,
+    quantity: 2,
+    unit: 'UNIT',
+    ...extra,
+  }) as BuyForListBasketRowDto;
+
+describe('the buy for a list route (plan 0273)', () => {
+  it('sends the owner’s price, the snapshot and the name in the reader’s language', async () => {
+    const w = build();
+
+    await runWithRequestContext({ correlationId: 'c', locale: 'es' }, () =>
+      w.controller.buyForList(
+        actor(ParticipantKind.REGISTERED, 'u-actor'),
+        BASKET,
+        ROW,
+        body()
+      )
+    );
+
+    expect(w.message()).toEqual({
+      basketId: BASKET,
+      participantId: 'p-1',
+      userId: 'u-actor',
+      rowKey: ROW,
+      targetListId: LIST,
+      expectedItemId: ITEM,
+      quantity: 2,
+      unit: 'UNIT',
+      content: 'Leche',
+      paid: PAID,
+      itemSnapshot: SNAPSHOT,
+    });
+    expect(w.prices.choose).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: OWNER, itemId: ITEM, unit: 'UNIT' })
+    );
+    // The product is the row's, asked of core with the row key's line, and
+    // never one the body names (plan 0273, amended on 2026-11-22).
+    expect(
+      w.sent.find((call) => call.subject === BASKET_PATTERNS.searchScope)
+        ?.payload
+    ).toMatchObject({ lineIds: [ROW] });
+    expect(w.prices.refuseUnknownItem).not.toHaveBeenCalled();
+  });
+
+  it('names the line in another language catalog holds when the reader’s is missing', async () => {
+    const w = build({
+      paid: PAID,
+      itemSnapshot: { ...SNAPSHOT, name: { en: 'Milk' } as never },
+    });
+
+    await runWithRequestContext({ correlationId: 'c', locale: 'es' }, () =>
+      w.controller.buyForList(
+        actor(ParticipantKind.REGISTERED, 'u-actor'),
+        BASKET,
+        ROW,
+        body()
+      )
+    );
+
+    expect(w.message()).toMatchObject({ content: 'Milk' });
+  });
+
+  it('prices and names nothing for a row with no product, and core refuses it', async () => {
+    const w = build({ paid: PAID, itemSnapshot: SNAPSHOT }, null);
+
+    await w.controller.buyForList(
+      actor(ParticipantKind.REGISTERED, 'u-actor'),
+      BASKET,
+      ROW,
+      body()
+    );
+
+    expect(w.prices.choose).not.toHaveBeenCalled();
+    expect(w.message()).not.toHaveProperty('content');
+    expect(w.message()).not.toHaveProperty('paid', PAID);
+    expect(w.message()).not.toHaveProperty('itemId');
+    // Core holds the write to "no product", so a row that gained one since
+    // is a conflict and not a buy with no price.
+    expect(w.message()).toMatchObject({ expectedItemId: null });
+  });
+
+  it('sends the product it priced as expectedItemId, which the body cannot set', async () => {
+    const w = build();
+    const other = '9a1d73b4-e2c6-4a81-b37d-95f80b2c6e4f';
+
+    await w.controller.buyForList(
+      actor(ParticipantKind.REGISTERED, 'u-actor'),
+      BASKET,
+      ROW,
+      body({ expectedItemId: other } as never)
+    );
+
+    expect(w.message()).toMatchObject({ expectedItemId: ITEM });
+    // Nor does the DTO declare it, so the whitelist strips it from a body.
+    const dto = plainToInstance(BuyForListBasketRowDto, {
+      targetListId: LIST,
+      quantity: 1,
+      unit: 'UNIT',
+      expectedItemId: other,
+    });
+    expect(
+      (
+        await validate(dto, { whitelist: true, forbidNonWhitelisted: true })
+      ).map((error) => error.property)
+    ).toEqual(['expectedItemId']);
+  });
+
+  it('surfaces a failed core call as itself, never as a catalog that did not answer', async () => {
+    const w = build();
+    const failure = new Error('core did not answer');
+    const send = jest.fn(async (subject: string) => {
+      if (subject === BASKET_PATTERNS.searchScope) {
+        throw failure;
+      }
+      return { entries: [], progress: {} };
+    });
+    const controller = new BasketController(
+      { send } as never,
+      {} as never,
+      w.prices as never
+    );
+
+    await expect(
+      controller.buyForList(
+        actor(ParticipantKind.REGISTERED, 'u-actor'),
+        BASKET,
+        ROW,
+        body()
+      )
+    ).rejects.toBe(failure);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(w.prices.choose).not.toHaveBeenCalled();
+  });
+
+  it('carries the lineId it was given and no name when catalog did not answer', async () => {
+    const w = build({ paid: null, itemSnapshot: null, unanswered: true });
+    const lineId = '9a1d73b4-e2c6-4a81-b37d-95f80b2c6e4f';
+
+    await w.controller.buyForList(
+      actor(ParticipantKind.OWNER, OWNER),
+      BASKET,
+      ROW,
+      body({ lineId })
+    );
+
+    // Core buys on the named line, which needs no name, so the flag refuses
+    // nothing there.
+    expect(w.message()).toMatchObject({ lineId, catalogUnanswered: true });
+    expect(w.message()).not.toHaveProperty('content');
+    expect(w.message()).not.toHaveProperty('itemSnapshot');
+  });
+
+  it('tells core catalog did not answer, so a line that must be made is a try again (amended 2026-11-22)', async () => {
+    const w = build({ paid: null, itemSnapshot: null, unanswered: true });
+
+    await w.controller.buyForList(
+      actor(ParticipantKind.REGISTERED, 'u-actor'),
+      BASKET,
+      ROW,
+      body()
+    );
+
+    expect(w.message()).toMatchObject({ catalogUnanswered: true });
+    expect(w.message()).not.toHaveProperty('content');
+  });
+
+  it('does not say catalog was silent when it answered a product with no name (amended 2026-11-22)', async () => {
+    const w = build({
+      paid: null,
+      itemSnapshot: { ...SNAPSHOT, name: {} as never },
+    });
+
+    await w.controller.buyForList(
+      actor(ParticipantKind.REGISTERED, 'u-actor'),
+      BASKET,
+      ROW,
+      body()
+    );
+
+    // Core answers 409 `basket_product_has_no_name` for this one.
+    expect(w.message()).not.toHaveProperty('content');
+    expect(w.message()).not.toHaveProperty('catalogUnanswered');
+  });
+
+  it('refuses a guest before catalog or core is asked', async () => {
+    const w = build();
+
+    await expect(
+      w.controller.buyForList(
+        actor(ParticipantKind.GUEST, null),
+        BASKET,
+        ROW,
+        body()
+      )
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(w.sent).toEqual([]);
+    expect(w.prices.choose).not.toHaveBeenCalled();
+  });
+
+  it('takes a quantity of 1 to the ceiling, and no quantity of 0', async () => {
+    const errors = async (raw: Record<string, unknown>) =>
+      (await validate(plainToInstance(BuyForListBasketRowDto, raw))).map(
+        (error) => error.property
+      );
+    const ok = { targetListId: LIST, quantity: 1, unit: 'UNIT' };
+
+    expect(await errors(ok)).toEqual([]);
+    expect(await errors({ ...ok, quantity: 0 })).toEqual(['quantity']);
+    expect(await errors({ ...ok, lineId: 'not-a-uuid' })).toEqual(['lineId']);
+    expect(await errors({ ...ok, unit: undefined })).toEqual(['unit']);
+  });
+});
