@@ -24,6 +24,7 @@ import {
   type ListPageState,
   type ListPermission,
   type ListViewerVm,
+  type PriceWords,
   type ProductOffer,
   type ShoppingListSummary,
 } from '@portfolio/velista/models';
@@ -398,13 +399,36 @@ function rowProduct(
     // Priced by the product's kind (velista `0179`): the piece price of a kilo
     // piece, and no price without one, a price per kilo with its "/ kg", or the
     // price. A product the catalog has not named is priced by its offer alone.
-    price: priceWords(offer, item, catalog.locale, catalog.translate),
+    price: perUnitOf(
+      priceWords(offer, item, catalog.locale, catalog.translate),
+      catalog
+    ),
     // The compact row's facts (velista `0191`, section 2.1). Built here and
     // nowhere else, so both layouts read one product. Its unit price is `price`.
     brand: item === null ? null : nonEmpty(item.brand ?? ''),
     size: item === null ? null : catalog.sizeOf(item),
     total: totalOf(line, item, offer, catalog),
   };
+}
+
+/**
+ * A row's price of one, with "/ u" where `priceWords` names no basis (velista
+ * `0198`): a pack's price and a kilo piece's piece price read "1,20 € / u", as a
+ * price by the kilo reads "2,50 € / kg". The catalog keeps its bare price.
+ *
+ * Also on a line that counts grams or millilitres of a pack or a kilo piece (the
+ * owner's ruling of 2026-11-23): the price drawn there is still the price of one
+ * pack or piece, so a 500 g pack of rice on a line of 1200 g reads "1,20 € / u".
+ * A product sold by the kilo or the litre keeps its "/ kg" or "/ L".
+ */
+function perUnitOf(
+  price: PriceWords | null,
+  catalog: ListStateCatalog
+): PriceWords | null {
+  if (price === null || price.per !== null) {
+    return price;
+  }
+  return { amount: price.amount, per: catalog.translate('list.row.perUnit') };
 }
 
 /**
