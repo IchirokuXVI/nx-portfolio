@@ -389,6 +389,17 @@ export class AddLineQuantityDto {
 
   @RequiredLineUnit()
   unit!: LineUnit;
+
+  @ApiPropertyOptional({
+    description:
+      "Count the units bought above the ask in open shopping lists toward this raise. Only the zone list's rows send it.",
+  })
+  @IsOptional()
+  // As the body spelled it: the pipe's implicit conversion reads the string
+  // "false" as true, and only a JSON boolean counts (plan 0275).
+  @Transform(({ obj }: { obj: Record<string, unknown> }) => obj?.['countExtra'])
+  @IsBoolean()
+  countExtra?: boolean;
 }
 
 export class UpdateLineDto {

@@ -8713,7 +8713,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/list.LineView"
+                  "$ref": "#/components/schemas/list.AddLineQuantityResult"
                 }
               }
             }
@@ -31710,6 +31710,10 @@
               "MILLILITER"
             ],
             "description": "The unit the number was made in, which must be the line’s (plan 0246). Required: a unit that is not the line’s answers 409 `line_unit_mismatch` and changes nothing, and the client reads the line again."
+          },
+          "countExtra": {
+            "type": "boolean",
+            "description": "Count the units bought above the ask in open shopping lists toward this raise. Only the zone list's rows send it."
           }
         },
         "required": [
@@ -47742,6 +47746,156 @@
         ],
         "additionalProperties": false
       },
+      "list.AddLineQuantityResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/enums.LineUnit"
+          },
+          "itemIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "itemSetHash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "productGroupId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "groupItemIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "favoriteItemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preferredSupermarketId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "named": {
+            "type": "boolean"
+          },
+          "position": {
+            "type": "integer"
+          },
+          "approvalStatus": {
+            "$ref": "#/components/schemas/enums.LineApprovalStatus"
+          },
+          "createdByUserId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "approvedByUserId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer"
+          },
+          "boughtCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastSettlementOutcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.SettlementOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "claimed": {
+            "type": "boolean"
+          },
+          "claimedByUserId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "commentCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "extra": {
+            "$ref": "#/components/schemas/list.CountedExtra"
+          }
+        },
+        "required": [
+          "id",
+          "listId",
+          "content",
+          "quantity",
+          "unit",
+          "itemIds",
+          "itemSetHash",
+          "productGroupId",
+          "groupItemIds",
+          "favoriteItemId",
+          "preferredSupermarketId",
+          "named",
+          "position",
+          "approvalStatus",
+          "createdByUserId",
+          "approvedByUserId",
+          "version",
+          "boughtCount",
+          "lastSettlementOutcome",
+          "claimed",
+          "claimedByUserId",
+          "commentCount",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
       "list.AddLineResult": {
         "type": "object",
         "properties": {
@@ -47875,6 +48029,46 @@
           "recording",
           "transcription",
           "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "list.CountedExtra": {
+        "type": "object",
+        "properties": {
+          "above": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "counted": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "buyers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/list.CountedExtraBuyer"
+            }
+          }
+        },
+        "required": [
+          "above",
+          "counted",
+          "buyers"
+        ],
+        "additionalProperties": false
+      },
+      "list.CountedExtraBuyer": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "userId"
         ],
         "additionalProperties": false
       },

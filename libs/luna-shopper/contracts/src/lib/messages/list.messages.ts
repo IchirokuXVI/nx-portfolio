@@ -1115,6 +1115,51 @@ export interface AddLineQuantityRequest {
    * did not intend. A delta alone would apply silently on top of it.
    */
   expect?: number;
+  /**
+   * Count the units bought above the ask in open shopping lists toward this
+   * raise (plan 0275). Only the zone list's rows send it; a basket write never
+   * sets it.
+   *
+   * With it and a positive {@link delta}, core moves up to `delta` units from
+   * above the ask into the ask on the standing buys of the line in every open
+   * basket that covers the list, oldest buy first, and moves the line only by
+   * the rest, in one transaction under the line's lock. The answer then
+   * carries {@link AddLineQuantityResult.extra}. Absent or `false`, the write
+   * is the plain delta it always was.
+   */
+  countExtra?: boolean;
+}
+
+/**
+ * One person who bought units above the ask (plan 0275, section 8).
+ *
+ * A participant with an account is that account. A guest is the owner of the
+ * basket the guest bought through, never the guest. `null` is a buy whose
+ * participant is gone. Core serves no name: the reader names the people.
+ */
+export interface CountedExtraBuyer {
+  userId: string | null;
+}
+
+/** What a raise with `countExtra` counted (plan 0275, section 8). */
+export interface CountedExtra {
+  /** The units above the ask before this write, in the line's unit. */
+  above: number;
+  /** The units of the raise that this write moved into the ask. */
+  counted: number;
+  /**
+   * Who bought the units of {@link above}, one entry each, in the order of
+   * their oldest such buy. Empty when {@link above} is 0.
+   */
+  buyers: CountedExtraBuyer[];
+}
+
+/**
+ * What `line.addQuantity` answers (plan 0275): the line as it now stands, and
+ * {@link extra} only when the request carried `countExtra: true`.
+ */
+export interface AddLineQuantityResult extends LineView {
+  extra?: CountedExtra;
 }
 
 export interface SetLineApprovalRequest {
