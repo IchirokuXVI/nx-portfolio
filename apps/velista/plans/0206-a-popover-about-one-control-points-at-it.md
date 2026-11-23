@@ -1,3 +1,5 @@
+> **PR:** [#1073](https://github.com/IchirokuXVI/nx-portfolio/pull/1073)
+
 # 0206: a popover about one control points at it
 
 > Decided by the owner on 2026-11-22, as a rule for every popover: whenever a popover refers
