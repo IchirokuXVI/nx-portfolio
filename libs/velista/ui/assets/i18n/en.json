@@ -1233,6 +1233,25 @@
       },
       "resend": "Send it again",
       "dismiss": "Dismiss"
+    },
+    "extra": {
+      "boughtBy": "{{name}} already bought {{amount}} extra.",
+      "boughtByYou": "You already bought {{amount}} extra.",
+      "boughtByTwo": "{{first}} and {{second}} already bought {{amount}} extra.",
+      "boughtByYouAndOne": "You and {{name}} already bought {{amount}} extra.",
+      "boughtByOneAndSomeone": "{{name}} and someone else already bought {{amount}} extra.",
+      "boughtByYouAndSomeone": "You and someone else already bought {{amount}} extra.",
+      "boughtByMany": "{{count}} people already bought {{amount}} extra.",
+      "boughtBySomeone": "Someone already bought {{amount}} extra.",
+      "ask": "Do you still need {{asked}}, or just {{left}}?",
+      "askEnough": "Do you still need {{asked}}, or is that enough?",
+      "stillNeed": "Still need",
+      "count": "Count the extra",
+      "enough": "That's enough",
+      "units_one": "{{count}} unit",
+      "units_other": "{{count}} units",
+      "boughtByNamedAndOthers": "{{names}} and others already bought {{amount}} extra.",
+      "announce": "{{question}} Two answers are next to the line's amount: {{stillNeed}}, or {{keep}}."
     }
   },
   "account": {

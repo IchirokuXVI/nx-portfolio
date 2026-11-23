@@ -209,6 +209,29 @@ export interface AddLineQuantityRequest {
    * Required: a delta in another unit is refused with `line_unit_mismatch`.
    */
   readonly unit: LineUnit;
+  /**
+   * Count the units bought above the ask in open shopping lists toward this raise
+   * (backend `0275`, velista `0207`). Only the zone list's rows send it, and only
+   * with a positive delta.
+   */
+  readonly countExtra?: boolean;
+}
+
+/**
+ * What a raise with `countExtra` counted (backend `0275`, velista `0207`): how much
+ * was above the ask before the write, how much of it the write moved into the ask,
+ * and who bought it, in the line's unit.
+ */
+export interface CountedExtra {
+  readonly above: number;
+  readonly counted: number;
+  /**
+   * One entry per buyer, in the order of their oldest buy. A null id is somebody
+   * this reader cannot be told about (a person outside the list's group, or an
+   * account that is gone); every such buyer is one null entry, so the count of
+   * unknown people is never known.
+   */
+  readonly buyers: readonly { readonly userId: string | null }[];
 }
 
 /**

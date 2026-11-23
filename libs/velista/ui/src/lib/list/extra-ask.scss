@@ -1,0 +1,60 @@
+// The question about the extra already bought (velista 0207), inside the anchored
+// popover's `choice` frame, as the board `compact-reel/OverBought.dc.html` draws it:
+// the question in 15 px, then each answer a 48 px row to the frame's edges with the
+// words at its start and the amount at its end. No icon and no tint.
+:host {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.question {
+  margin: 0;
+  padding: 0 var(--app-space-5) var(--app-space-4);
+  color: var(--app-text-primary);
+  font-size: var(--app-add-choice-title);
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.answer {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-5);
+  inline-size: 100%;
+  min-block-size: var(--app-add-choice-row-height);
+  padding: var(--app-space-2) var(--app-space-5);
+  border: 0;
+  border-block-start: 1px solid var(--app-border-subtle);
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-add-choice-name);
+  line-height: 1.3;
+  text-align: start;
+  cursor: pointer;
+
+  &:active {
+    background: var(--app-surface-sunken);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+.words {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+// Never wrapped: "1,5 kg" is one amount.
+.amount {
+  flex: none;
+  font-size: var(--app-text-sm);
+  font-weight: 650;
+  white-space: nowrap;
+}

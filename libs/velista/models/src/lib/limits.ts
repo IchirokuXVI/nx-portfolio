@@ -154,6 +154,20 @@ export const QUANTITY_STEP_QUIET_MS = 800;
 export const QUANTITY_CLEAR_LOCK_MAX_MS = 2 * 60 * 1000;
 
 /**
+ * The flash of a zone list row whose raise asks about the extra already bought, and
+ * of its question (velista 0207, target 12): three pulses of
+ * {@link EXTRA_ASK_PULSE_MS}, {@link EXTRA_ASK_PULSE_GAP_MS} apart. Each pulse is
+ * 240 ms in, 120 ms held and 240 ms out. Under reduced motion nothing pulses and the
+ * accent frame holds for the whole {@link EXTRA_ASK_FLASH_MS}.
+ */
+export const EXTRA_ASK_PULSES = 3;
+export const EXTRA_ASK_PULSE_MS = 600;
+export const EXTRA_ASK_PULSE_GAP_MS = 200;
+export const EXTRA_ASK_FLASH_MS =
+  EXTRA_ASK_PULSES * EXTRA_ASK_PULSE_MS +
+  (EXTRA_ASK_PULSES - 1) * EXTRA_ASK_PULSE_GAP_MS;
+
+/**
  * How many products one line's set may hold: `LINE_ITEM_SET_MAX` in the contracts
  * (backend plan 0048 section 1.1, given its precise meaning by `0070` section 7).
  *

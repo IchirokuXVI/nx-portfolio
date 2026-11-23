@@ -15,16 +15,19 @@
   [attr.aria-disabled]="clearing() ? 'true' : null"
   [attr.aria-label]="accessibleName()"
   [attr.tabindex]="!line().interactive ? null : 0"
+  [class.asked]="asked()"
   [class.awaiting]="line().approvalStatus === 'PENDING'"
   [class.clearing]="clearing()"
   [class.compact]="compact()"
   [class.facts-row]="!compact()"
+  [class.flash]="flashing()"
   [class.in-flight]="line().write === 'pending'"
   [class.inert]="!line().interactive"
   [class.settled]="line().settled"
   [class.turned-down]="line().approvalStatus === 'REJECTED'"
   class="row"
   role="button"
+  data-line-row
 >
   <!--
     **The row of the default view** (velista 0191, the default since velista 0202):
@@ -402,7 +405,9 @@
 
   <!--
     **The quantity, on every row, zero included** (velista 0043, section 3.2): the
-    reel in the compact view (velista 0203), the stepper in the default one.
+    reel in the compact view (velista 0203), the stepper in the default one. Marked
+    `data-amount-control`, which the page's question about the extra already bought
+    points at (velista 0207).
   -->
   @if (compact()) {
     <lib-quantity-reel
@@ -416,6 +421,7 @@
       [took]="took()"
       [unit]="line().unit"
       [value]="amount()"
+      data-amount-control
     />
   } @else {
     <lib-quantity-stepper
@@ -429,6 +435,7 @@
       [unit]="line().unit"
       [value]="amount()"
       variant="row"
+      data-amount-control
     />
   }
 

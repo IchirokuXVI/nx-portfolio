@@ -15,7 +15,68 @@
 }
 
 .line {
+  position: relative;
   display: block;
+}
+
+// The mark the page's question about the extra already bought is held against
+// (velista 0207). The page lays it over the row's amount control when the question
+// opens; it draws nothing and takes no press.
+.ask-anchor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+// The flash's hairline: the popover sits in this item beside the row, so the item
+// carries the colour it reads through `--anchored-popover-accent`. It runs on the same
+// 2.2 s (EXTRA_ASK_FLASH_MS) and the same stops as the row's wash, which starts in the
+// same render. Text keeps its colours.
+@property --line-list-ask-accent {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: transparent;
+}
+
+.line.asked.flash {
+  --anchored-popover-accent: var(--line-list-ask-accent);
+
+  animation: ask-accent 2200ms linear both;
+}
+
+// The stops of the three pulses over 2200 ms: in to 240, held to 360, out to 600,
+// then 800 to 1400 and 1600 to 2200.
+@keyframes ask-accent {
+  0%,
+  27.273%,
+  36.364%,
+  63.636%,
+  72.727%,
+  100% {
+    --line-list-ask-accent: var(--app-border-subtle);
+  }
+
+  10.909%,
+  16.364%,
+  47.273%,
+  52.727%,
+  83.636%,
+  89.091% {
+    --line-list-ask-accent: var(--app-action-quiet-fg);
+  }
+}
+
+// Nothing pulses: the accent frame holds for as long as the page keeps the flash on.
+@media (prefers-reduced-motion: reduce) {
+  .line.asked.flash {
+    --anchored-popover-accent: var(--app-action-quiet-fg);
+
+    animation: none;
+  }
 }
 
 // The row a link came here for (plan 0032, section 8). A ring and a tint rather than a

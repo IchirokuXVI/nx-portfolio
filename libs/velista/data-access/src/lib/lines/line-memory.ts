@@ -10,6 +10,7 @@ import {
   type AddLineOptions,
   type AlsoOnPlaceVm,
   type AlsoOnVm,
+  type CountedExtra,
   type HeldLine,
   type ItemList,
   type ItemLists,
@@ -661,6 +662,20 @@ export class LineMemory implements LineServiceI {
       quantity: current.quantity + delta,
       version: current.version + 1,
     }));
+  }
+
+  /**
+   * {@link addQuantity} with the zone list's flag (backend `0275`). The fixture holds
+   * no shopping lists, so nothing was ever bought above an ask and nothing is
+   * counted: the line moves by the whole delta, and the answer says so.
+   */
+  async raiseCountingExtra(
+    lineId: string,
+    delta: number,
+    unit: LineUnit
+  ): Promise<{ readonly line: Line; readonly extra: CountedExtra | null }> {
+    const line = await this.addQuantity(lineId, delta, unit);
+    return { line, extra: { above: 0, counted: 0, buyers: [] } };
   }
 
   /**
