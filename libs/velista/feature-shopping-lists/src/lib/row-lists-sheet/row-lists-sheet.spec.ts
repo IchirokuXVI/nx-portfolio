@@ -1,7 +1,22 @@
-import { signal } from '@angular/core';
+import { Location } from '@angular/common';
+import { provideLocationMocks } from '@angular/common/testing';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  inject,
+  provideEnvironmentInitializer,
+  signal,
+} from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
+import {
+  ActivatedRoute,
+  convertToParamMap,
+  provideRouter,
+  Router,
+  RouterOutlet,
+} from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import {
   RokuLocaleStore,
   RokuTranslatorService,
@@ -22,6 +37,7 @@ import {
   type ParticipantKind,
 } from '@portfolio/velista/models';
 import {
+  AppHistory,
   provideFakeBrowserFacade,
   provideVelistaTesting,
   SheetNavigation,
@@ -202,7 +218,7 @@ function storeDouble(world: World) {
     basket: signal(null),
     shopRead: signal(null),
     readAt: signal(null),
-    lineLeft: () => false,
+    lineLeft: jest.fn(() => false),
     handOver: jest.fn(),
     setDemand: jest.fn().mockResolvedValue({ entries: [], skippedCount: 0 }),
   };
@@ -382,12 +398,18 @@ describe('RowListsSheet (velista 0200)', () => {
       expect(steppers(fixture)[0].variant()).toBe('sheet');
     });
 
-    it('draws the stepper on every entry: enabled where the ask is editable, disabled elsewhere', async () => {
+    it('draws the stepper on every entry: enabled where the ask is editable, locked elsewhere', async () => {
       const { fixture } = await render();
-      expect(steppers(fixture).map((held) => held.disabled())).toEqual([
+      expect(steppers(fixture).map((held) => held.locked())).toEqual([
         false,
         false,
         true,
+      ]);
+      // Locked is its own state: no stepper here is drawn as a write in flight.
+      expect(steppers(fixture).map((held) => held.disabled())).toEqual([
+        false,
+        false,
+        false,
       ]);
       expect(steppers(fixture).map((held) => held.variant())).toEqual([
         'sheet-narrow',
@@ -400,6 +422,39 @@ describe('RowListsSheet (velista 0200)', () => {
       const { fixture } = await render();
       // Asks 3, has 2 bought, so 1 is left: the stepper shows 3.
       expect(steppers(fixture)[0].value()).toBe(3);
+    });
+
+    it("draws a finished trip's ask as the plain number with its unit, no stepper and no popover", async () => {
+      const { fixture, store } = await render({
+        row: row([
+          entry({ unit: 'GRAM', left: 1000, bought: 500, asked: 1500 }),
+          entry({
+            lineId: 'zl-3',
+            listId: null,
+            unit: 'GRAM',
+            demandEditable: false,
+            asked: 250,
+            left: 250,
+            bought: 0,
+          }),
+        ]),
+      });
+      store.finished.set(true);
+      fixture.detectChanges();
+      expect(steppers(fixture)).toEqual([]);
+      const numbers = rowsOf(fixture).map((held) =>
+        held.querySelector('.ask-number lib-amount-figure')
+      );
+      expect(numbers.every((held) => held !== null)).toBe(true);
+      expect(numbers[0]?.textContent).toContain('1.5');
+      expect(numbers[0]?.textContent).toContain('kg');
+      expect(numbers[1]?.textContent).toContain('250');
+      expect(numbers[1]?.textContent).toContain('g');
+      // Nothing to press, so no reason and no popover either.
+      expect(html(fixture).querySelector('[id^="row-lists-why-"]')).toBeNull();
+      expect(
+        fixture.debugElement.query(By.directive(AnchoredPopover))
+      ).toBeNull();
     });
   });
 
@@ -465,6 +520,34 @@ describe('RowListsSheet (velista 0200)', () => {
         `/velista/en/shopping-lists/${BASKET_ID}/sheet/rows/${ROW_KEY}/change/zl-1`
       );
     });
+
+    it('keeps "Change" where the product cannot be named, with the default icon and the line\'s name', async () => {
+      const { fixture, router } = await render({
+        row: row([
+          entry({ content: 'Leche sin lactosa', itemIds: ['p-gone'] }),
+        ]),
+        products: new Map(),
+      });
+      const line = rowsOf(fixture)[0].querySelector('.line-product');
+      expect(line?.querySelector('.line-name')?.textContent).toBe(
+        'Leche sin lactosa'
+      );
+      expect(line?.querySelector('.line-brand')).toBeNull();
+      expect(line?.querySelector('lib-product-icon')).not.toBeNull();
+      expect(line?.querySelector('lib-product-picture button')).toBeNull();
+      line?.querySelector<HTMLButtonElement>('.change')?.click();
+      expect(router.navigateByUrl).toHaveBeenCalledWith(
+        `/velista/en/shopping-lists/${BASKET_ID}/sheet/rows/${ROW_KEY}/change/zl-1`
+      );
+    });
+
+    it('draws no line for an entry it can neither name nor change', async () => {
+      const { fixture } = await render({
+        row: row([entry({ canWrite: false, demandEditable: false })]),
+        products: new Map(),
+      });
+      expect(rowsOf(fixture)[0].querySelector('.line-product')).toBeNull();
+    });
   });
 
   describe('the ask', () => {
@@ -507,6 +590,118 @@ describe('RowListsSheet (velista 0200)', () => {
       for (const [body] of store.setDemand.mock.calls) {
         expect(body.quantity).not.toBe(2);
       }
+    });
+
+    it('sends the left the run started from when a socket patch lands during the run', async () => {
+      const { fixture, store } = await render();
+      rowsOf(fixture)[0]
+        .querySelector<HTMLButtonElement>('button.step.plus')
+        ?.click();
+      // Somebody else buys the last one while the presses gather: left is now 0.
+      store.rows.set([
+        row([
+          entry({ left: 0, bought: 3, asked: 3 }),
+          ...THREE().entries.slice(1),
+        ]),
+      ]);
+      fixture.detectChanges();
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      await settle();
+      // The person saw 1 left, so the server is asked to judge from 1.
+      expect(store.setDemand).toHaveBeenCalledWith({
+        lineId: 'zl-1',
+        quantity: 4,
+        from: 1,
+      });
+    });
+
+    it("sends a run queued behind a write from that write's answer, never from a newer left", async () => {
+      const { fixture, store } = await render();
+      let answer: (value: unknown) => void = () => undefined;
+      store.setDemand.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          })
+      );
+      steppers(fixture)[0].stepped.emit({
+        from: 3,
+        to: 5,
+        repeat: false,
+        typed: true,
+      });
+      await settle();
+      fixture.detectChanges();
+      // A second run while the first is in flight, from the amount it drew.
+      steppers(fixture)[0].stepped.emit({
+        from: 5,
+        to: 6,
+        repeat: false,
+        typed: true,
+      });
+      await settle();
+      expect(store.setDemand).toHaveBeenCalledTimes(1);
+      expect(store.setDemand).toHaveBeenLastCalledWith({
+        lineId: 'zl-1',
+        quantity: 5,
+        from: 1,
+      });
+
+      // The first write answers: asks 5 with 2 bought, so 3 are left. Right after
+      // its answer is read, somebody else's change lands: asks 11, 9 left.
+      const others = THREE().entries.slice(1);
+      store.rows.set([row([entry({ asked: 5, left: 3 }), ...others])]);
+      store.lineLeft.mockImplementationOnce(() => {
+        store.rows.set([row([entry({ asked: 11, left: 9 }), ...others])]);
+        return false;
+      });
+      answer({ entries: [], skippedCount: 0 });
+      await settle();
+      await settle();
+
+      expect(store.setDemand).toHaveBeenCalledTimes(2);
+      // From what this view's own write answered, so the server says stale.
+      expect(store.setDemand).toHaveBeenLastCalledWith({
+        lineId: 'zl-1',
+        quantity: 6,
+        from: 3,
+      });
+    });
+
+    it('sends a run queued behind a refused write from the left the refused one sent', async () => {
+      const { fixture, store } = await render();
+      let refuse: (value: unknown) => void = () => undefined;
+      store.setDemand.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            refuse = resolve;
+          })
+      );
+      steppers(fixture)[0].stepped.emit({
+        from: 3,
+        to: 5,
+        repeat: false,
+        typed: true,
+      });
+      await settle();
+      steppers(fixture)[0].stepped.emit({
+        from: 5,
+        to: 6,
+        repeat: false,
+        typed: true,
+      });
+      // The refusal re-reads the basket, where somebody else's change shows.
+      store.rows.set([
+        row([entry({ asked: 11, left: 9 }), ...THREE().entries.slice(1)]),
+      ]);
+      refuse(null);
+      await settle();
+      await settle();
+      expect(store.setDemand).toHaveBeenLastCalledWith({
+        lineId: 'zl-1',
+        quantity: 6,
+        from: 1,
+      });
     });
   });
 
@@ -577,6 +772,26 @@ describe('RowListsSheet (velista 0200)', () => {
       expect(store.setDemand).not.toHaveBeenCalled();
     });
 
+    it('closes on a press of its own stepper that is also a press outside, and the next press opens it', async () => {
+      const { fixture } = await render();
+      const locked = steppers(fixture)[2];
+      const isOpen = () =>
+        fixture.debugElement.query(By.directive(AnchoredPopover)) !== null;
+      locked.disabledPress.emit();
+      fixture.detectChanges();
+      expect(isOpen()).toBe(true);
+
+      // The overlay hears the press first, as outside it, then the stepper does.
+      fixture.componentInstance['unexplain']('zl-3', 'outside');
+      locked.disabledPress.emit();
+      fixture.detectChanges();
+      expect(isOpen()).toBe(false);
+
+      locked.disabledPress.emit();
+      fixture.detectChanges();
+      expect(isOpen()).toBe(true);
+    });
+
     it('links the reason with aria-describedby before any press', async () => {
       const { fixture } = await render();
       const field = rowsOf(fixture)[2].querySelector('input');
@@ -641,5 +856,116 @@ describe('RowListsSheet (velista 0200)', () => {
         `/velista/en/shopping-lists/${BASKET_ID}/sheet/rows/${ROW_KEY}/settle`
       );
     });
+  });
+
+  describe('the change sheets, over the real router', () => {
+    /** The basket page under the sheets, with its outlet. */
+    @Component({
+      selector: 'lib-test-basket-page',
+      imports: [RouterOutlet],
+      template: '<router-outlet />',
+      changeDetection: ChangeDetectionStrategy.OnPush,
+    })
+    class TestBasketPage {}
+
+    /** The row sheet the detailed view is pushed over. */
+    @Component({
+      selector: 'lib-test-row-sheet',
+      template: '<p class="row-sheet">row sheet</p>',
+      changeDetection: ChangeDetectionStrategy.OnPush,
+    })
+    class TestRowSheet {}
+
+    /**
+     * A change sheet whose cancel is the real one's: `SheetNavigation.dismiss` with
+     * the row sheet's URL as the fallback.
+     */
+    @Component({
+      selector: 'lib-test-change-sheet',
+      template:
+        '<button (click)="cancel()" class="cancel" type="button">x</button>',
+      changeDetection: ChangeDetectionStrategy.OnPush,
+    })
+    class TestChangeSheet {
+      private readonly _sheet = inject(SheetNavigation);
+      cancel(): void {
+        void this._sheet.dismiss(`${PAGE}/sheet/rows/${ROW_KEY}/settle`);
+      }
+    }
+
+    const PAGE = `/velista/en/shopping-lists/${BASKET_ID}`;
+    const LISTS_URL = `${PAGE}/sheet/rows/${ROW_KEY}/lists`;
+
+    async function routed(rowOf: BasketRow) {
+      TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        imports: [RokuTranslatorTestingModule.forTesting()],
+        providers: [
+          provideRouter([
+            {
+              path: 'velista/en/shopping-lists/:basketId',
+              component: TestBasketPage,
+              children: [
+                { path: 'sheet/rows/:rowKey/settle', component: TestRowSheet },
+                { path: 'sheet/rows/:rowKey/lists', component: RowListsSheet },
+                {
+                  path: 'sheet/rows/:rowKey/change',
+                  component: TestChangeSheet,
+                },
+                {
+                  path: 'sheet/rows/:rowKey/change/:lineId',
+                  component: TestChangeSheet,
+                },
+              ],
+            },
+          ]),
+          provideLocationMocks(),
+          provideVelistaTesting({ basePath: '/velista' }),
+          provideFakeBrowserFacade(new Map()),
+          provideEnvironmentInitializer(() => inject(AppHistory).watch()),
+          { provide: BasketStore, useValue: storeDouble({ row: rowOf }) },
+          { provide: BasketViewStore, useValue: { readAtShop: signal(false) } },
+          { provide: ItemNames, useValue: { nameOf: () => null } },
+          { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
+        ],
+      }).compileComponents();
+      const harness = await RouterTestingHarness.create();
+      TestBed.inject(Router).setUpLocationChangeListener();
+      await harness.navigateByUrl(PAGE);
+      await harness.navigateByUrl(`${PAGE}/sheet/rows/${ROW_KEY}/settle`);
+      await harness.navigateByUrl(LISTS_URL);
+      return { harness, location: TestBed.inject(Location) };
+    }
+
+    async function settleRouted(harness: RouterTestingHarness): Promise<void> {
+      await new Promise<void>((resolve) => setTimeout(resolve));
+      await harness.fixture.whenStable();
+      harness.detectChanges();
+    }
+
+    it.each([
+      ['"Change"', '.line-product .change'],
+      ['"Change for all lists"', '.change-all'],
+    ])(
+      'the back of the sheet %s opens returns to the detailed view',
+      async (_name, selector) => {
+        const { harness, location } = await routed(
+          row([
+            entry(),
+            entry({ lineId: 'zl-2', listId: 'l-basics', asked: 1, bought: 0 }),
+          ])
+        );
+        const host = harness.fixture.nativeElement as HTMLElement;
+        host.querySelector<HTMLButtonElement>(selector)?.click();
+        await settleRouted(harness);
+        expect(host.querySelector('lib-test-change-sheet')).not.toBeNull();
+
+        host.querySelector<HTMLButtonElement>('.cancel')?.click();
+        await settleRouted(harness);
+
+        expect(location.path()).toBe(LISTS_URL);
+        expect(host.querySelector('lib-row-lists-sheet')).not.toBeNull();
+      }
+    );
   });
 });

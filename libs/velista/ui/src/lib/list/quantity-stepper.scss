@@ -238,26 +238,26 @@
   color: var(--app-text-secondary);
 }
 
-// Disabled as a whole (velista 0200, the mock's round 4): no raised fill, the
-// hairline for the strong border, the amount in muted text at its usual size and
-// weight, and both glyphs in muted text at 60%. The ends' own fade gives way to it,
-// so an end of a disabled stepper looks like the other end.
-:host(.is-disabled) .stepper {
+// Locked, an amount the reader may not change (velista 0200, the mock's round 4):
+// no raised fill, the hairline for the strong border, the amount in muted text at
+// its usual size and weight, and both glyphs in muted text at 60%. The ends' own
+// fade gives way to it, so an end of a locked stepper looks like the other end. A
+// write in flight (`is-disabled`) draws none of this.
+:host(.is-locked) .stepper {
   background: transparent;
   box-shadow: inset 0 0 0 1px var(--app-border-subtle);
 }
 
-:host(.is-disabled) .step,
-:host(.is-disabled) .step[aria-disabled='true'],
-:host(.is-disabled) .minus.is-clear {
+:host(.is-locked) .step,
+:host(.is-locked) .step[aria-disabled='true'] {
   color: var(--app-text-muted);
   opacity: 0.6;
 }
 
-:host(.is-disabled) .cell,
-:host(.is-disabled) .number,
-:host(.is-disabled) .number.is-zero,
-:host(.is-disabled) .symbol {
+:host(.is-locked) .cell,
+:host(.is-locked) .number,
+:host(.is-locked) .number.is-zero,
+:host(.is-locked) .symbol {
   color: var(--app-text-muted);
 }
 

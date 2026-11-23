@@ -72,43 +72,63 @@
               <span class="row-bought">{{ list.bought }}</span>
             </span>
 
-            <!--
-              What the list asks for, as a whole. Disabled where the reader may not
-              change it: still in the tab order, and a press says why.
-            -->
-            <span #anchor class="anchor">
-              <lib-quantity-stepper
-                (disabledPress)="explain(list)"
-                (stepped)="stepAsk(list.lineId, $event)"
-                [describedBy]="list.reason === null ? null : list.reasonId"
-                [disabled]="!list.editable"
-                [fieldName]="list.label"
-                [min]="0"
-                [name]="list.name"
-                [step]="list.step"
-                [unit]="unit()"
-                [value]="list.shown"
-                [variant]="unit() === 'UNIT' ? 'sheet-narrow' : 'sheet'"
-                class="ask"
-              />
-            </span>
-            @if (list.reason; as reason) {
-              <span [id]="list.reasonId" class="visually-hidden">{{
-                reason
-              }}</span>
-              @if (explained() === list.lineId) {
-                <lib-anchored-popover
-                  (closed)="unexplain(list.lineId)"
-                  [keepInSight]="rowElement"
-                  [open]="true"
-                  [origin]="anchor"
-                  [pointer]="true"
-                  [role]="null"
-                  align="end"
-                  frame="note"
-                >
-                  <p class="why">{{ reason }}</p>
-                </lib-anchored-popover>
+            @if (list.finished) {
+              <!--
+                A finished trip: the ask as a number in its exact form, with its
+                unit, and no control, as the row sheet draws a finished basket.
+              -->
+              <span [class.is-measured]="unit() !== 'UNIT'" class="ask-number">
+                <span class="visually-hidden">
+                  {{
+                    'basket.entries.asks' | rokuT: { amount: list.shownSpoken }
+                  }}
+                </span>
+                <lib-amount-figure
+                  [quantity]="list.shown"
+                  [speak]="false"
+                  [unit]="unit()"
+                  form="exact"
+                />
+              </span>
+            } @else {
+              <!--
+                What the list asks for, as a whole. Locked where the reader may not
+                change it: still in the tab order, and a press says why.
+              -->
+              <span #anchor class="anchor">
+                <lib-quantity-stepper
+                  (disabledPress)="explain(list)"
+                  (stepped)="stepAsk(list.lineId, $event)"
+                  [describedBy]="list.reason === null ? null : list.reasonId"
+                  [fieldName]="list.label"
+                  [locked]="!list.editable"
+                  [min]="0"
+                  [name]="list.name"
+                  [step]="list.step"
+                  [unit]="unit()"
+                  [value]="list.shown"
+                  [variant]="unit() === 'UNIT' ? 'sheet-narrow' : 'sheet'"
+                  class="ask"
+                />
+              </span>
+              @if (list.reason; as reason) {
+                <span [id]="list.reasonId" class="visually-hidden">{{
+                  reason
+                }}</span>
+                @if (explained() === list.lineId) {
+                  <lib-anchored-popover
+                    (closed)="unexplain(list.lineId, $event)"
+                    [keepInSight]="rowElement"
+                    [open]="true"
+                    [origin]="anchor"
+                    [pointer]="true"
+                    [role]="null"
+                    align="end"
+                    frame="note"
+                  >
+                    <p class="why">{{ reason }}</p>
+                  </lib-anchored-popover>
+                }
               }
             }
           </div>
@@ -116,7 +136,9 @@
           <!--
             The list's product on one line: its picture, its name, then its brand
             and size, which are never cut. In the quiet amber when it is not the
-            row's product. The line is not a control; "Change" is.
+            row's product. The line is not a control; "Change" is. A product the
+            client cannot name draws the default icon and the line's own name, so
+            "Change" is still there.
           -->
           @if (list.product; as held) {
             <div [class.differs]="held.differs" class="line-product">

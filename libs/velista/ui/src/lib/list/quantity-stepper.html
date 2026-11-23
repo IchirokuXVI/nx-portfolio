@@ -10,7 +10,7 @@
   </span>
 } @else {
   <span
-    [attr.aria-disabled]="!typed() && disabled() ? 'true' : null"
+    [attr.aria-disabled]="!typed() && locked() ? 'true' : null"
     [attr.aria-label]="
       typed() ? null : ('amount.group' | rokuT: { name: name() })
     "
@@ -25,8 +25,8 @@
       (pointercancel)="endHold($event)"
       (pointerdown)="startHold(-1, $event)"
       (pointerup)="endHold($event)"
-      [attr.aria-describedby]="describedBy()"
-      [attr.aria-disabled]="disabled() || minusAtEnd() ? 'true' : null"
+      [attr.aria-describedby]="locked() ? describedBy() : null"
+      [attr.aria-disabled]="blocked() || minusAtEnd() ? 'true' : null"
       [attr.aria-label]="
         'amount.less' | rokuT: { step: lessStep(), name: name() }
       "
@@ -52,8 +52,8 @@
             (focus)="onFieldFocus($event)"
             (input)="onFieldInput($event)"
             (keydown)="onFieldKey($event)"
-            [attr.aria-describedby]="describedBy()"
-            [attr.aria-disabled]="disabled() ? 'true' : null"
+            [attr.aria-describedby]="locked() ? describedBy() : null"
+            [attr.aria-disabled]="blocked() ? 'true' : null"
             [attr.aria-label]="
               fieldName() ?? ('amount.group' | rokuT: { name: name() })
             "
@@ -62,7 +62,7 @@
             [attr.aria-valuenow]="value()"
             [attr.aria-valuetext]="words().spoken"
             [class.is-zero]="value() === 0 && draft() === null"
-            [readOnly]="disabled()"
+            [readOnly]="blocked()"
             [value]="fieldText()"
             autocomplete="off"
             class="number"
@@ -90,8 +90,8 @@
       (pointercancel)="endHold($event)"
       (pointerdown)="startHold(1, $event)"
       (pointerup)="endHold($event)"
-      [attr.aria-describedby]="describedBy()"
-      [attr.aria-disabled]="disabled() || plusAtEnd() ? 'true' : null"
+      [attr.aria-describedby]="locked() ? describedBy() : null"
+      [attr.aria-disabled]="blocked() || plusAtEnd() ? 'true' : null"
       [attr.aria-label]="
         'amount.more' | rokuT: { step: moreStep(), name: name() }
       "

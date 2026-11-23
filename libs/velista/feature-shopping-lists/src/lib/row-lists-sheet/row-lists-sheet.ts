@@ -35,6 +35,7 @@ import {
   type QuantityStep,
 } from '@portfolio/velista/models';
 import {
+  exactAmount,
   formatAmount,
   formatMoney,
   quantityRuns,
@@ -43,6 +44,7 @@ import {
   type QuantityRun,
 } from '@portfolio/velista/platform';
 import {
+  AmountFigure,
   AnchoredPopover,
   ChevronLeftIcon,
   priceWords,
@@ -51,6 +53,7 @@ import {
   productSizeText,
   QuantityStepper,
   SheetShell,
+  type AnchoredPopoverClose,
 } from '@portfolio/velista/ui';
 import { basketErrorKey, correlationIdOf } from '../basket-error-copy';
 import { basketLineStep } from '../basket-line-step';
@@ -105,6 +108,10 @@ interface DrawnList {
   readonly bought: string;
   /** What the stepper draws: the open run, else the write in flight, else the ask. */
   readonly shown: number;
+  /** {@link shown} in words with its unit, for the number of a finished trip. */
+  readonly shownSpoken: string;
+  /** The trip is finished: the ask is a plain number, with no stepper. */
+  readonly finished: boolean;
   /** The reader may change the ask. */
   readonly editable: boolean;
   /** Why the ask may not change, or null when it may or nothing says why. */
@@ -120,7 +127,10 @@ interface DrawnList {
   readonly changeable: boolean;
   /** Change's accessible name, which names the list and holds the word. */
   readonly changeLabel: string;
-  /** The list's product, or null for a row with no product. */
+  /**
+   * The list's product, or the line's own name with the default icon when the
+   * client cannot name one and "Change" is drawn; null when neither.
+   */
   readonly product: DrawnLineProduct | null;
 }
 
@@ -132,14 +142,20 @@ interface DrawnList {
  * ## The ask is the list's whole ask
  *
  * Each list's stepper shows `entry.asked`, and a run sends `setDemand` with the
- * run's `to` as `quantity`, the list's new whole ask, and the entry's `left` as
- * `from`, which is what backend `0274` documents for the route. It never sends
- * what is left. The timing is the row sheet's: a typed amount at once, presses
- * after the quiet beat, one write per line at a time.
+ * run's `to` as `quantity`, the list's new whole ask, and as `from` the entry's
+ * `left` the person saw when the run started, which is what backend `0274`
+ * documents for the route. It never sends what is left. The timing is the row
+ * sheet's: a typed amount at once, presses after the quiet beat, one write per
+ * line at a time.
+ *
+ * A run that starts while a write of its line is in flight saw that write's
+ * amount, so its `from` is the `left` that write answered, and nothing newer: a
+ * change somebody else made while it waited is answered `stale_quantity`, never
+ * overwritten.
  *
  * ## An ask the reader may not change
  *
- * Draws the stepper disabled, showing the ask. A press opens a popover that
+ * Draws the stepper locked, showing the ask. A press opens a popover that
  * points at the stepper and says why, and the same words are linked to the
  * stepper with `aria-describedby`, so a screen reader hears them at the stepper.
  *
@@ -152,6 +168,7 @@ interface DrawnList {
 @Component({
   selector: 'lib-row-lists-sheet',
   imports: [
+    AmountFigure,
     AnchoredPopover,
     ChevronLeftIcon,
     ProductPicture,
@@ -186,6 +203,9 @@ export class RowListsSheet {
   /** The list whose disabled stepper was pressed, by line id, while its popover shows. */
   protected readonly explained = signal<string | null>(null);
 
+  /** The popover a press outside just closed, until that press is over. */
+  private _closedByPress: string | null = null;
+
   /** The sentence of the last refused write, decided when it was refused. */
   protected readonly failure = signal<{
     readonly key: string;
@@ -198,10 +218,23 @@ export class RowListsSheet {
 
   /** The waiting saves of each list's ask, by line id. */
   private readonly _demandRuns = quantityRuns<string>((lineId, run) => {
-    void this._write(lineId, run.to, (waited) =>
-      this._demand(lineId, run, waited)
-    );
+    const seen = this._seen.get(lineId);
+    this._seen.delete(lineId);
+    void this._write(lineId, run.to, () => this._demand(lineId, run, seen));
   });
+
+  /**
+   * The `left` each open run started from, by line id: the entry's, or `'answer'`
+   * when a write of the line was in flight, which is then the `left` that write
+   * answered ({@link _answered}).
+   */
+  private readonly _seen = new Map<string, number | 'answer'>();
+
+  /**
+   * The `left` the last write of each line ended on, by line id: what its answer
+   * says, or the `from` it sent when it was refused, so the server judges again.
+   */
+  private readonly _answered = new Map<string, number>();
 
   /** The write in flight for each line, so a run sent while one is out waits. */
   private readonly _writes = new Map<string, Promise<boolean>>();
@@ -349,15 +382,29 @@ export class RowListsSheet {
 
   /** One step of one list's ask: a typed amount is sent at once. */
   protected stepAsk(lineId: string, step: QuantityStep): void {
+    if (!this._demandRuns.pending().has(lineId)) {
+      // The first step of a run: what the person was looking at.
+      const entry = this._entry(lineId);
+      if (this._writes.has(lineId)) {
+        this._seen.set(lineId, 'answer');
+      } else if (entry !== undefined) {
+        this._seen.set(lineId, entry.left);
+      }
+    }
     this._demandRuns.step(lineId, step);
     if (step.typed === true) {
       this._demandRuns.flush(lineId);
     }
   }
 
-  /** A press on a disabled stepper opens its popover, or closes it again. */
+  /** A press on a locked stepper opens its popover, or closes it again. */
   protected explain(list: DrawnList): void {
     if (list.reason === null) {
+      return;
+    }
+    if (this._closedByPress === list.lineId) {
+      // This press already closed the popover, as a press outside it.
+      this._closedByPress = null;
       return;
     }
     this.explained.update((open) =>
@@ -365,9 +412,24 @@ export class RowListsSheet {
     );
   }
 
-  protected unexplain(lineId: string): void {
-    if (this.explained() === lineId) {
-      this.explained.set(null);
+  /**
+   * The popover closes itself: Escape, or a press outside it. A press on its own
+   * stepper is outside it too, and it reaches the overlay before the stepper, so
+   * its own press must not open the popover again at once.
+   */
+  protected unexplain(lineId: string, why?: AnchoredPopoverClose): void {
+    if (this.explained() !== lineId) {
+      return;
+    }
+    this.explained.set(null);
+    if (why === 'outside') {
+      this._closedByPress = lineId;
+      // The stepper's click lands in the same task, so a later press opens again.
+      setTimeout(() => {
+        if (this._closedByPress === lineId) {
+          this._closedByPress = null;
+        }
+      });
     }
   }
 
@@ -390,24 +452,27 @@ export class RowListsSheet {
 
   /**
    * One run as one write: `quantity` is the list's new whole ask, and `from` the
-   * entry's `left` the person was looking at (backend `0274`). A run that waited
-   * for a write of its line starts from that write's answer.
+   * entry's `left` the person was looking at when the run started (backend
+   * `0274`). A run that started while a write of its line was in flight takes
+   * that write's answer, never the entry as it is now: a change by somebody else
+   * in between makes the server answer `stale_quantity`.
    */
   private async _demand(
     lineId: string,
     run: QuantityRun,
-    waited: boolean
+    seen: number | 'answer' | undefined
   ): Promise<boolean> {
     const entry = this._entry(lineId);
     if (entry === undefined) {
+      this._answered.delete(lineId);
       return true;
     }
-    // What this basket's buys met of the ask, which a change of the ask leaves.
-    const met = entry.asked - entry.left;
-    const from = waited ? entry.left : Math.max(0, run.from - met);
-    if (run.to === (waited ? entry.asked : run.from)) {
-      return true;
-    }
+    // Without a recorded start (none is expected), what this basket's buys met of
+    // the ask, which a change of the ask leaves, gives the left the run started at.
+    const from =
+      seen === 'answer'
+        ? (this._answered.get(lineId) ?? entry.left)
+        : (seen ?? Math.max(0, run.from - (entry.asked - entry.left)));
     this.failure.set(null);
     const result = await this._store.setDemand({
       lineId,
@@ -415,6 +480,7 @@ export class RowListsSheet {
       from,
     });
     if (result === null) {
+      this._answered.set(lineId, from);
       const error = this._store.error();
       this.failure.set({
         key: basketErrorKey(error, 'basket.demand'),
@@ -422,6 +488,12 @@ export class RowListsSheet {
         correlationId: correlationIdOf(error),
       });
       return false;
+    }
+    const answered = this._entry(lineId);
+    if (answered === undefined) {
+      this._answered.delete(lineId);
+    } else {
+      this._answered.set(lineId, answered.left);
     }
     if (
       this._store.lineLeft(result, lineId) &&
@@ -444,13 +516,10 @@ export class RowListsSheet {
   private _write(
     lineId: string,
     to: number,
-    send: (waited: boolean) => Promise<boolean>
+    send: () => Promise<boolean>
   ): Promise<boolean> {
     const before = this._writes.get(lineId);
-    const next = (before ?? Promise.resolve(true)).then(
-      () => send(before !== undefined),
-      () => send(true)
-    );
+    const next = (before ?? Promise.resolve(true)).then(send, send);
     this._writes.set(lineId, next);
     this._sent.update((sent) => new Map(sent).set(lineId, to));
     void next.finally(() => {
@@ -500,6 +569,7 @@ export class RowListsSheet {
           : this._translator.t('basket.lists.ownGroup', undefined, locale, {
               group: ref.zoneName,
             });
+    const shown = open ?? entry.asked;
     return {
       lineId: entry.lineId,
       list,
@@ -507,7 +577,9 @@ export class RowListsSheet {
       bought: this._translator.t('basket.lists.bought', undefined, locale, {
         ...boughtOf(entry.bought, entry.asked, entry.unit, locale),
       }),
-      shown: open ?? entry.asked,
+      shown,
+      shownSpoken: exactAmount(shown, entry.unit, locale).spoken,
+      finished,
       editable,
       reason,
       reasonId: `row-lists-why-${entry.lineId}`,
@@ -528,26 +600,41 @@ export class RowListsSheet {
         locale,
         { name: list }
       ),
-      product: this._lineProduct(row, entry),
+      product: this._lineProduct(
+        row,
+        entry,
+        this._changeable().has(entry.lineId)
+      ),
     };
   }
 
   /**
    * The product a list's line counts as (backend `0201`, section 1, the shared
-   * rule), with the row's product as the pick, or null for a row with none.
+   * rule), with the row's product as the pick. When the client cannot name it, a
+   * changeable entry still draws its line, with the default icon and the line's
+   * own name, so its "Change" stays; any other entry draws none.
    */
   private _lineProduct(
     row: BasketRow,
-    entry: BasketRowEntry
+    entry: BasketRowEntry,
+    changeable: boolean
   ): DrawnLineProduct | null {
     const id = lineProductOf(entry, row.productId) ?? row.productId;
-    if (id === null) {
-      return null;
-    }
     const facts: ProductFacts | null =
-      this._store.products().get(id) ?? this._itemNames.nameOf(id);
+      id === null
+        ? null
+        : (this._store.products().get(id) ?? this._itemNames.nameOf(id));
     if (facts === null) {
-      return null;
+      if (!changeable) {
+        return null;
+      }
+      const line = entry.content.trim();
+      return {
+        name: line === '' ? row.content : line,
+        brandSize: null,
+        imageUrl: null,
+        differs: id !== row.productId,
+      };
     }
     const locale = this._locale();
     const translate = (key: string, args?: Record<string, unknown>) =>
