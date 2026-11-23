@@ -82,6 +82,8 @@ describe('the basket room, off the wire', () => {
             unit: 'UNIT',
             left: 1,
             bought: 1,
+            // No `asked` on this patch: a server before backend 0274 meant the sum.
+            asked: 2,
             boughtElsewhere: 0,
             state: 'PARTLY',
             awaitingApproval: true,
@@ -93,6 +95,22 @@ describe('the basket room, off the wire', () => {
         ],
         marksMoved: true,
       });
+    });
+
+    it('reads the ask from the wire, and refuses one it cannot read (velista 0201, spec 11)', () => {
+      const over = toRealtimeEvent('basket.linesChanged', {
+        lineIds: ['zl-1'],
+        entries: [{ ...PATCH, left: 0, bought: 4, asked: 3 }],
+      });
+      expect(over).toMatchObject({
+        entries: [{ left: 0, bought: 4, asked: 3 }],
+      });
+
+      const unreadable = toRealtimeEvent('basket.linesChanged', {
+        lineIds: ['zl-1'],
+        entries: [{ ...PATCH, asked: 'three' }],
+      });
+      expect(unreadable).toMatchObject({ entries: null });
     });
 
     it('reads the unit of a weight patch (velista 0182, criterion 1)', () => {

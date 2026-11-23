@@ -86,7 +86,13 @@ export type BasketOperation =
    * `0140`, section 4). A 403 is the reader's own access to one of those lists
    * having moved, which is the sentence an add says too.
    */
-  | 'basket.change';
+  | 'basket.change'
+  /**
+   * Buying the row's product for a list that did not ask for it, from "Bought for
+   * another list" (velista `0201`, backend `0273`). A 403 is the reader's own
+   * access to that list having moved, as for an add.
+   */
+  | 'basket.buyForList';
 
 /** The message any failure falls back to, including one with no code at all. */
 const GENERIC = 'basket.error.failed';
@@ -145,6 +151,11 @@ export function basketErrorKey(
 
     case 'conflict':
       switch (operation) {
+        case 'basket.buyForList':
+          // A co-shopper changed the row's product between the read and the buy
+          // (backend `0273`). The store has read the row again; the person tries
+          // once more on the row as it now is.
+          return 'basket.entries.buyChanged';
         case 'basket.settle':
         case 'basket.originSettled':
           // Somebody else finished this line between the sheet opening and the tap
@@ -200,6 +211,7 @@ export function basketErrorKey(
           return 'basket.demand.refused';
         case 'basket.addLine':
         case 'basket.change':
+        case 'basket.buyForList':
           // The target list stopped being one this reader may write. That **is**
           // their own access, unlike the case above, so it takes the sentence
           // about access having changed.
@@ -243,6 +255,22 @@ export function basketErrorKey(
       return listNameOf(error) === null
         ? 'list.error.mergeTooManyProducts'
         : 'basket.error.mergeTooManyProducts';
+
+    case 'basket_line_already_in_row':
+      // The list already asks through a line of this row (backend `0273`). The
+      // store has read the basket again, so the list is now among the row's lists
+      // and is stepped there.
+      return 'basket.entries.buyAlreadyInRow';
+
+    case 'basket_row_has_no_product':
+      return 'basket.entries.buyNoProduct';
+
+    case 'basket_product_has_no_name':
+      return 'basket.entries.buyNoName';
+
+    case 'catalog_unavailable':
+      // Nothing was written, and trying again is the answer.
+      return 'basket.entries.buyCatalogDown';
 
     case 'rate_limited':
       // A run of quick taps through an aisle hitting a bucket. Nothing is wrong and

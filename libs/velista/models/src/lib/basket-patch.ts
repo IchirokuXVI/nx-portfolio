@@ -33,6 +33,11 @@ export interface BasketEntryPatch {
   readonly unit: LineUnit;
   readonly left: number;
   readonly bought: number;
+  /**
+   * What the list asks for (backend `0274`), which a buy above it does not move.
+   * `bought + left` from a server that does not send it (velista `0201`).
+   */
+  readonly asked: number;
   readonly boughtElsewhere: number;
   readonly state: BasketRowState;
   /** The wire's `approvalStatus` is `PENDING`. */
@@ -55,6 +60,7 @@ export function basketEntryPatchOf(entry: BasketRowEntry): BasketEntryPatch {
     unit: entry.unit,
     left: entry.left,
     bought: entry.bought,
+    asked: entry.asked,
     boughtElsewhere: entry.boughtElsewhere,
     state: entry.state,
     awaitingApproval: entry.awaitingApproval,
@@ -225,7 +231,7 @@ function patchEntry(
     version: patch.version,
     left: patch.left,
     bought: patch.bought,
-    asked: patch.bought + patch.left,
+    asked: patch.asked,
     boughtElsewhere: patch.boughtElsewhere,
     state: patch.state,
     awaitingApproval: patch.awaitingApproval,
@@ -266,6 +272,7 @@ function samePatched(entry: BasketRowEntry, patch: BasketEntryPatch): boolean {
     entry.version === patch.version &&
     entry.left === patch.left &&
     entry.bought === patch.bought &&
+    entry.asked === patch.asked &&
     entry.boughtElsewhere === patch.boughtElsewhere &&
     entry.state === patch.state &&
     entry.awaitingApproval === patch.awaitingApproval &&

@@ -262,14 +262,24 @@ describe('toBasketRow', () => {
     ).toBe(false);
   });
 
-  /** `bought + left`, which is how backend `0130` section 4 defines it. */
-  it('sums an entry’s asked out of what it bought and what is left', () => {
+  /** `bought + left` from a server before backend `0274`, which meant the sum. */
+  it('sums an entry’s asked out of what it bought and what is left when the wire has none', () => {
     const row = toBasketRow({
       ...ROW,
       entries: [{ ...ENTRY, left: 4, bought: 2 }],
     });
 
     expect(row?.entries[0].asked).toBe(6);
+  });
+
+  // Velista `0201`, spec 9: a buy above the ask keeps the ask (backend `0274`).
+  it('reads an entry’s asked from the wire, in the read and in a write answer', () => {
+    const over = { ...ENTRY, asked: 3, left: 0, bought: 4 };
+
+    expect(toBasketRow({ ...ROW, entries: [over] })?.entries[0].asked).toBe(3);
+    expect(
+      toBasketRowResult({ entries: [over], skippedCount: 0 })?.entries[0].asked
+    ).toBe(3);
   });
 });
 

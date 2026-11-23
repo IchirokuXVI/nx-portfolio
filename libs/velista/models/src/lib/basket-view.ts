@@ -1319,6 +1319,43 @@ export type BasketRevertRequest =
 export type BasketSettleInput = Omit<BasketSettleRequest, 'unit'>;
 
 /**
+ * A buy of the row's product for a covered list that did not ask for it (backend
+ * `0273`; velista `0201`, target state 7), on
+ * `POST /v1/baskets/:id/rows/:rowKey/buy-for-list`.
+ *
+ * The product is the row's, which the server reads from the key: the body names
+ * none, because this write can make a line on another household's list. The
+ * list's line is made at quantity 0 when it has none, so what it asks for does
+ * not move, and the buy is recorded against that line.
+ *
+ * Refused with 409 `basket_line_already_in_row` for a line that is already an
+ * entry of the row, `basket_row_has_no_product`, `basket_product_has_no_name`,
+ * or `conflict` when the row's product changed under the request; 503
+ * `catalog_unavailable` when a line must be made and the catalog did not answer.
+ */
+export interface BasketBuyForListRequest {
+  /** The covered list the buy is for, which the reader may write. */
+  readonly targetListId: string;
+  /**
+   * That list's line of the product, from `productLists`, or null when it has
+   * none, which is then found or made by the server.
+   */
+  readonly lineId: string | null;
+  /** Units bought, 1 or more. */
+  readonly quantity: number;
+  /** The unit {@link quantity} is in: the row's (velista `0182`). */
+  readonly unit: LineUnit;
+  /** The shop the person is standing in, as on a settle (velista `0102`). */
+  readonly supermarketLocationId?: string;
+}
+
+/**
+ * A buy for another list as a screen asks for it: the store adds the row's unit,
+ * as it does for a settle.
+ */
+export type BasketBuyForListInput = Omit<BasketBuyForListRequest, 'unit'>;
+
+/**
  * Changing what one list asks for, from the basket (velista `0092`, section 6).
  *
  * **It writes to a household's list and not to this basket**, which is what
