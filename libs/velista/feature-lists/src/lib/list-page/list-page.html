@@ -358,8 +358,11 @@
             (opened)="openLine($event)"
             (quantityReeled)="reelQuantity($event)"
             (quantityStepped)="stepQuantity($event)"
+            (reelOpened)="onReelOpened($event)"
             (retry)="retry($event)"
+            [askedId]="extraAskedId()"
             [clearingIds]="clearing()"
+            [flashing]="extraFlashing()"
             [highlight]="highlight()"
             [layout]="listRows.layout()"
             [lines]="drawnLines()"
@@ -447,8 +450,11 @@
             (opened)="openLine($event)"
             (quantityReeled)="reelQuantity($event)"
             (quantityStepped)="stepQuantity($event)"
+            (reelOpened)="onReelOpened($event)"
             (retry)="retry($event)"
+            [askedId]="extraAskedId()"
             [clearingIds]="clearing()"
+            [flashing]="extraFlashing()"
             [highlight]="highlight()"
             [layout]="listRows.layout()"
             [lines]="wantedLines()"
@@ -493,8 +499,11 @@
               (opened)="openLine($event)"
               (quantityReeled)="reelQuantity($event)"
               (quantityStepped)="stepQuantity($event)"
+              (reelOpened)="onReelOpened($event)"
               (retry)="retry($event)"
+              [askedId]="extraAskedId()"
               [clearingIds]="clearing()"
+              [flashing]="extraFlashing()"
               [highlight]="highlight()"
               [layout]="listRows.layout()"
               [lines]="restLines()"
@@ -511,8 +520,11 @@
             (opened)="openLine($event)"
             (quantityReeled)="reelQuantity($event)"
             (quantityStepped)="stepQuantity($event)"
+            (reelOpened)="onReelOpened($event)"
             (retry)="retry($event)"
+            [askedId]="extraAskedId()"
             [clearingIds]="clearing()"
+            [flashing]="extraFlashing()"
             [highlight]="highlight()"
             [layout]="listRows.layout()"
             [lines]="drawnLines()"
@@ -558,6 +570,39 @@
               {{ 'list.trips.older' | rokuT }}
             </button>
           }
+        }
+      }
+    }
+
+    <!--
+      Does the extra already bought count? (velista 0207.) Asked after a raise of a
+      row whose save counted units bought above the ask, pointed at that row's amount
+      control and covering neither the row nor the control. Whatever closes it
+      without "Still need" leaves the smaller amount the server already wrote.
+    -->
+    @if (extraAsk(); as asked) {
+      @if (asked.shown) {
+        @if (extraWords(); as words) {
+          <lib-anchored-popover
+            (closed)="closeExtraAsk($event)"
+            [accent]="extraFlashing()"
+            [keepInSight]="asked.row"
+            [labelledBy]="extraAskTitleId"
+            [open]="true"
+            [origin]="asked.anchor"
+            [pointer]="true"
+            [side]="asked.side"
+            align="end"
+            frame="choice"
+          >
+            <lib-extra-ask
+              (dismissed)="closeExtraAsk('escape')"
+              (kept)="keepExtra()"
+              (stillNeed)="stillNeedExtra()"
+              [titleId]="extraAskTitleId"
+              [words]="words"
+            />
+          </lib-anchored-popover>
         }
       }
     }

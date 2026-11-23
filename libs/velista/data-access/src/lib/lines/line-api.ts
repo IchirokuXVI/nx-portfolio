@@ -5,6 +5,7 @@ import type {
   AddLineQuantityRequest,
   AddLineRequest,
   AlsoOnVm,
+  CountedExtra,
   ItemLists,
   Line,
   LineApprovalStatus,
@@ -22,6 +23,7 @@ import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { operation } from '../auth/http-context';
 import { toAddOutcome } from '../mapping/add-choice-mappers';
+import { toCountedExtra } from '../mapping/counted-extra-mapper';
 import {
   toAlsoOnPlace,
   toDeletedId,
@@ -278,6 +280,27 @@ export class LineApi implements LineServiceI {
     );
 
     return required(toLine(body), 'lines.addQuantity');
+  }
+
+  async raiseCountingExtra(
+    lineId: string,
+    delta: number,
+    unit: LineUnit
+  ): Promise<{ readonly line: Line; readonly extra: CountedExtra | null }> {
+    const request: AddLineQuantityRequest = { delta, unit, countExtra: true };
+
+    const body = await firstValueFrom(
+      this._http.post<unknown>(`${this._line(lineId)}/quantity`, request, {
+        context: operation('lines.addQuantity'),
+      })
+    );
+
+    // The answer is a line view with `extra` beside it (backend `0275`), so the line
+    // maps as any other and the extra is read on its own, from `unknown` (rule D4).
+    return {
+      line: required(toLine(body), 'lines.addQuantity'),
+      extra: isRecord(body) ? toCountedExtra(body['extra']) : null,
+    };
   }
 
   async settle(

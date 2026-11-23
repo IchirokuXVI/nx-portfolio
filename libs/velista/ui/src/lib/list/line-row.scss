@@ -78,6 +78,104 @@
   cursor: default;
 }
 
+// A row whose question about the extra already bought is open (velista 0207). Its
+// own stacking context, so the layer drawn under its content is still drawn over
+// its background. The layer reaches past the row on each side with the popover's
+// radius, as the board `compact-reel/OverBought.dc.html` draws `.asked::before`.
+.row.asked {
+  position: relative;
+  z-index: 0;
+}
+
+.row.asked::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline: calc(var(--app-space-3) * -1);
+  z-index: -1;
+  border-radius: var(--app-radius-md);
+  background: var(--app-action-quiet-bg);
+  box-shadow: inset 0 0 0 var(--app-took-edge-width) var(--app-action-quiet-fg);
+  opacity: 0;
+  pointer-events: none;
+}
+
+// The flash: three pulses, each 240 ms in, 120 ms held and 240 ms out, 200 ms apart,
+// 2.2 s in all (EXTRA_ASK_FLASH_MS). One clock drives the layer and the popover's
+// hairline, which the popover reads through `--anchored-popover-accent`: the popover
+// is inserted inside this row, so it inherits the colour. Text keeps its colours.
+@property --line-row-ask-accent {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: transparent;
+}
+
+.row.asked.flash {
+  --anchored-popover-accent: var(--line-row-ask-accent);
+
+  animation: ask-accent 2200ms linear both;
+}
+
+.row.asked.flash::before {
+  animation: ask-wash 2200ms linear both;
+}
+
+// The stops of the three pulses over 2200 ms: in to 240, held to 360, out to 600,
+// then 800 to 1400 and 1600 to 2200.
+@keyframes ask-wash {
+  0%,
+  27.273%,
+  36.364%,
+  63.636%,
+  72.727%,
+  100% {
+    opacity: 0;
+  }
+
+  10.909%,
+  16.364%,
+  47.273%,
+  52.727%,
+  83.636%,
+  89.091% {
+    opacity: 1;
+  }
+}
+
+@keyframes ask-accent {
+  0%,
+  27.273%,
+  36.364%,
+  63.636%,
+  72.727%,
+  100% {
+    --line-row-ask-accent: var(--app-border-subtle);
+  }
+
+  10.909%,
+  16.364%,
+  47.273%,
+  52.727%,
+  83.636%,
+  89.091% {
+    --line-row-ask-accent: var(--app-action-quiet-fg);
+  }
+}
+
+// Nothing pulses: the accent frame holds for as long as the page keeps the flash on.
+@media (prefers-reduced-motion: reduce) {
+  .row.asked.flash {
+    --anchored-popover-accent: var(--app-action-quiet-fg);
+
+    animation: none;
+  }
+
+  .row.asked.flash::before {
+    opacity: 1;
+    animation: none;
+  }
+}
+
 // The layer covers the host's whole box: the row with its hairline and its violet
 // edge, the picture, the text, the stepper, and the decisions under the row. That is
 // exactly what the host's lock stops, so nothing that looks active is dead (the

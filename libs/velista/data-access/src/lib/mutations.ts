@@ -52,6 +52,12 @@ export interface DroppedWriteReplay {
    * which counted pieces.
    */
   readonly unit?: LineUnit;
+  /**
+   * Whether the dropped write was a zone list raise that counted the extra already
+   * bought (velista `0207`), so the write sent again counts it too. Absent on every
+   * other write.
+   */
+  readonly countExtra?: boolean;
 }
 
 /**
@@ -207,7 +213,9 @@ function isReplay(value: unknown): value is DroppedWriteReplay {
     Number.isInteger(delta) &&
     delta !== 0 &&
     (replay['unit'] === undefined ||
-      LINE_UNITS.includes(replay['unit'] as LineUnit))
+      LINE_UNITS.includes(replay['unit'] as LineUnit)) &&
+    (replay['countExtra'] === undefined ||
+      typeof replay['countExtra'] === 'boolean')
   );
 }
 

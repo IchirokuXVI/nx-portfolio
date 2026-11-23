@@ -70,6 +70,7 @@ import type {
   DueLine,
   Line,
   LineRowVm,
+  LineUnit,
   ListAccessEntry,
   ListPermission,
   Membership,
@@ -388,6 +389,23 @@ async function render(options: Options = {}): Promise<{
                   nextCursor: null,
                 }),
                 ...options.lineWrites,
+                // A row's raise counts the extra (velista `0207`). A spec that
+                // answers only the plain write answers it with nothing counted.
+                ...(options.lineWrites?.addQuantity !== undefined &&
+                options.lineWrites.raiseCountingExtra === undefined
+                  ? {
+                      raiseCountingExtra: async (
+                        lineId: string,
+                        delta: number,
+                        unit: LineUnit
+                      ) => ({
+                        line: await (
+                          options.lineWrites?.addQuantity as LineServiceI['addQuantity']
+                        )(lineId, delta, unit),
+                        extra: null,
+                      }),
+                    }
+                  : {}),
               } as Partial<LineServiceI>,
             },
           ]),
@@ -1175,7 +1193,7 @@ describe('ListPage', () => {
 
         jest.advanceTimersByTime(1);
         expect(writes(lines.calls)).toEqual([
-          { kind: 'quantity', lineId: 'ln-1', delta: 75 },
+          { kind: 'quantity', lineId: 'ln-1', delta: 75, countExtra: true },
         ]);
       });
 
@@ -1221,7 +1239,7 @@ describe('ListPage', () => {
         fixture.destroy();
 
         expect(writes(lines.calls)).toEqual([
-          { kind: 'quantity', lineId: 'ln-1', delta: 2 },
+          { kind: 'quantity', lineId: 'ln-1', delta: 2, countExtra: true },
         ]);
       });
 
@@ -1237,7 +1255,7 @@ describe('ListPage', () => {
         });
 
         expect(writes(lines.calls)).toEqual([
-          { kind: 'quantity', lineId: 'ln-1', delta: 150 },
+          { kind: 'quantity', lineId: 'ln-1', delta: 150, countExtra: true },
         ]);
         expect(fixture.componentInstance.quantityRuns.pending().size).toBe(0);
         jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
@@ -1275,7 +1293,7 @@ describe('ListPage', () => {
         });
 
         expect(writes(lines.calls)).toEqual([
-          { kind: 'quantity', lineId: 'ln-1', delta: 3 },
+          { kind: 'quantity', lineId: 'ln-1', delta: 3, countExtra: true },
         ]);
       });
 
@@ -1290,7 +1308,7 @@ describe('ListPage', () => {
 
         // Sent at once, before the sheet reads the line, and not again after.
         expect(writes(lines.calls)).toEqual([
-          { kind: 'quantity', lineId: 'ln-1', delta: 1 },
+          { kind: 'quantity', lineId: 'ln-1', delta: 1, countExtra: true },
         ]);
         expect(router.navigate).toHaveBeenCalledWith(
           ['sheet', 'lines', 'ln-1', 'detail'],
@@ -6052,7 +6070,7 @@ describe('ListPage: the two views (velista 0191, 0202)', () => {
     fixture.destroy();
 
     expect(writes(lines.calls)).toEqual([
-      { kind: 'quantity', lineId: 'ln-milk', delta: 2 },
+      { kind: 'quantity', lineId: 'ln-milk', delta: 2, countExtra: true },
     ]);
     jest.useRealTimers();
   });

@@ -47,8 +47,11 @@ import { LineRow, type LineRowAction } from './line-row';
             (opened)="opened.emit($event)"
             (quantityReeled)="quantityReeled.emit($event)"
             (quantityStepped)="quantityStepped.emit($event)"
+            (reelOpened)="reelOpened.emit($event)"
             (retry)="retry.emit($event)"
+            [asked]="askedId() === line.id"
             [clearing]="clearingIds().has(line.id)"
+            [flashing]="flashing() && askedId() === line.id"
             [layout]="layout()"
             [line]="line"
             [match]="matchOf(line)"
@@ -101,6 +104,13 @@ export class LineList {
   readonly clearingIds = input<ReadonlySet<string>>(new Set());
 
   /**
+   * The line whose question about the extra already bought is open (velista `0207`),
+   * and whether it is flashing. Only that row draws the layer the flash lights.
+   */
+  readonly askedId = input<string | null>(null);
+  readonly flashing = input(false);
+
+  /**
    * The search, folded, or the empty string (velista `0082`, section 6).
    *
    * Each row gets the range of its first match in its own name, worked out here with
@@ -125,6 +135,9 @@ export class LineList {
 
   /** The one step of a row's reel, in the compact view (velista `0203`), passed up. */
   readonly quantityReeled = output<{ lineId: string; step: QuantityStep }>();
+
+  /** A row's reel went up or came down (velista `0207`), passed up. */
+  readonly reelOpened = output<{ lineId: string; open: boolean }>();
   readonly act = output<{ action: LineRowAction; lineId: string }>();
   readonly retry = output<string>();
   readonly dismiss = output<string>();

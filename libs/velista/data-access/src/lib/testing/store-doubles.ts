@@ -5,6 +5,7 @@ import type {
   BasketSummary,
   CatalogItem,
   Comment,
+  CountedExtra,
   Identity,
   Line,
   LineApprovalStatus,
@@ -800,6 +801,8 @@ export type LineWriteCall =
       readonly kind: 'quantity';
       readonly lineId: string;
       readonly delta: number;
+      /** Present only on a zone list raise that counted the extra (velista `0207`). */
+      readonly countExtra?: true;
     }
   /** A settle, with what it claimed happened. */
   | {
@@ -957,6 +960,19 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
   /** Holds every add in flight until released. */
   let addHeld: Promise<void> | null = null;
   let releaseAdd: (() => void) | null = null;
+  /**
+   * The answers the next raises that count the extra give, in order (velista
+   * `0207`): what was counted, and the amount the line is left at, which defaults to
+   * the line's amount plus the delta less what was counted. With none staged, nothing
+   * is counted, as the memory service answers.
+   */
+  const raiseAnswers: {
+    readonly extra: CountedExtra | null;
+    readonly quantity?: number;
+  }[] = [];
+  /** Holds every raise that counts the extra until released. */
+  let raiseHeld: Promise<void> | null = null;
+  let releaseRaise: (() => void) | null = null;
 
   return {
     loadCount: loads.asReadonly(),
@@ -1306,6 +1322,41 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
       return outcome;
     },
 
+    /**
+     * A zone list raise (velista `0207`): recorded with its flag, patched at once as
+     * the real store does, then patched again from the staged answer.
+     */
+    raiseCountingExtra: async (lineId: string, delta: number) => {
+      calls.push({ kind: 'quantity', lineId, delta, countExtra: true });
+      const before = lines().find((l) => l.id === lineId);
+      lines.update((current) =>
+        current.map((l) =>
+          l.id === lineId
+            ? { ...l, quantity: Math.max(0, l.quantity + delta) }
+            : l
+        )
+      );
+      const answer = raiseAnswers.shift() ?? {
+        extra: { above: 0, counted: 0, buyers: [] },
+      };
+      if (raiseHeld !== null) {
+        await raiseHeld;
+      }
+      if (outcome === 'failed' || before === undefined) {
+        lines.update((current) =>
+          current.map((l) => (l.id === lineId && before ? before : l))
+        );
+        return { state: 'failed' as const, extra: null };
+      }
+      const left =
+        answer.quantity ??
+        Math.max(0, before.quantity + delta - (answer.extra?.counted ?? 0));
+      lines.update((current) =>
+        current.map((l) => (l.id === lineId ? { ...l, quantity: left } : l))
+      );
+      return { state: outcome, extra: answer.extra };
+    },
+
     settle: async (
       lineId: string,
       settleOutcome: SettlementOutcome,
@@ -1475,6 +1526,21 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
       updateHeld = null;
       releaseUpdate?.();
       releaseUpdate = null;
+    },
+    /** Stage what the next raise that counts the extra answers (velista `0207`). */
+    answerNextRaise: (answer: (typeof raiseAnswers)[number]) => {
+      raiseAnswers.push(answer);
+    },
+    /** Keep every raise that counts the extra in flight until `releaseRaises`. */
+    holdRaises: () => {
+      raiseHeld = new Promise<void>((resolve) => {
+        releaseRaise = resolve;
+      });
+    },
+    releaseRaises: () => {
+      raiseHeld = null;
+      releaseRaise?.();
+      releaseRaise = null;
     },
     /** What a created line comes back as. APPROVED is the backend's auto approve. */
     setAddedApproval: (next: LineApprovalStatus) => {

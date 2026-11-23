@@ -20,6 +20,7 @@ import {
   type AddLineOptions,
   type AddOutcome,
   type Comment,
+  type CountedExtra,
   type Line,
   type LineApprovalStatus,
   type LineSettlement,
@@ -935,6 +936,39 @@ export class LineStore {
     delta: number,
     options: { readonly reportDropped?: boolean } = {}
   ): Promise<'succeeded' | 'failed' | 'overwritten'> {
+    return (await this._addQuantity(lineId, delta, options, false)).state;
+  }
+
+  /**
+   * {@link addQuantity} for a raise of a zone list row (velista `0207`), which counts
+   * the units bought above the ask first (backend `0275`). The same optimistic write,
+   * overlay and dropped write record; the row is patched from the answer, so it
+   * draws the amount the server left once the extra was counted. A dropped one is
+   * recorded with the flag, so "Send it again" counts the extra too.
+   *
+   * `extra` is the answer's, or null when there was no answer this build can read,
+   * the line was corrected to its unit instead, or the write failed.
+   */
+  async raiseCountingExtra(
+    lineId: string,
+    delta: number,
+    options: { readonly reportDropped?: boolean } = {}
+  ): Promise<{
+    readonly state: 'succeeded' | 'failed' | 'overwritten';
+    readonly extra: CountedExtra | null;
+  }> {
+    return this._addQuantity(lineId, delta, options, delta > 0);
+  }
+
+  private async _addQuantity(
+    lineId: string,
+    delta: number,
+    options: { readonly reportDropped?: boolean },
+    countExtra: boolean
+  ): Promise<{
+    readonly state: 'succeeded' | 'failed' | 'overwritten';
+    readonly extra: CountedExtra | null;
+  }> {
     // A step during the correction of the line waits for its answer: the row is
     // patched to the new unit already, and a delta in it could reach core before
     // the correction and be refused (backend `0246` section 3.2). A step after a
@@ -942,22 +976,38 @@ export class LineStore {
     const correcting = this._corrections.get(lineId);
     if (correcting !== undefined) {
       if ((await correcting) === 'failed') {
-        return 'failed';
+        return { state: 'failed', extra: null };
       }
-      return this.addQuantity(lineId, delta, options);
+      return this._addQuantity(lineId, delta, options, countExtra);
     }
 
     const before = this._lineById(lineId);
     if (before === null || delta === 0) {
-      return 'failed';
+      return { state: 'failed', extra: null };
     }
 
     const legacy = this._legacyUnit(before);
     if (legacy !== null) {
-      return this._correctUnit(before, legacy, delta);
+      return {
+        state: await this._correctUnit(before, legacy, delta),
+        extra: null,
+      };
     }
 
-    return this._write(
+    let extra: CountedExtra | null = null;
+    const send = countExtra
+      ? async () => {
+          const answer = await this._lines.raiseCountingExtra(
+            lineId,
+            delta,
+            before.unit
+          );
+          extra = answer.extra;
+          return answer.line;
+        }
+      : () => this._lines.addQuantity(lineId, delta, before.unit);
+
+    const state = await this._write(
       lineId,
       before,
       ['quantity'],
@@ -965,7 +1015,7 @@ export class LineStore {
         ...line,
         quantity: Math.max(LINE_QUANTITY_MIN, line.quantity + delta),
       }),
-      () => this._lines.addQuantity(lineId, delta, before.unit),
+      send,
       // Velista `0159`: the reconnect reloads the page and this row's note goes with
       // it, so a delta the network dropped is written down for the next document.
       // The name is the line's own text, which the page swaps for the name it draws.
@@ -984,10 +1034,19 @@ export class LineStore {
             },
             // The unit too, so a resend is offered only while the line still
             // counts in it: 250 g sent again as 250 pieces would be a new order.
-            replay: { kind: 'line-quantity', lineId, delta, unit: before.unit },
+            replay: countExtra
+              ? {
+                  kind: 'line-quantity',
+                  lineId,
+                  delta,
+                  unit: before.unit,
+                  countExtra: true,
+                }
+              : { kind: 'line-quantity', lineId, delta, unit: before.unit },
           }
         : undefined
     );
+    return { state, extra: state === 'failed' ? null : extra };
   }
 
   /**

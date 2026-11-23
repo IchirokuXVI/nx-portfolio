@@ -3,10 +3,12 @@ import {
   Component,
   computed,
   DestroyRef,
+  effect,
   ElementRef,
   inject,
   input,
   output,
+  untracked,
   viewChild,
 } from '@angular/core';
 import {
@@ -174,6 +176,26 @@ export class LineRow {
    * press inside it reaches anything.
    */
   readonly clearing = input(false);
+
+  /**
+   * Whether the page's question about the extra already bought is open on this row
+   * (velista `0207`). The row draws the layer the flash lights, which reaches past
+   * its edges as the board draws it.
+   */
+  readonly asked = input(false);
+
+  /**
+   * Whether that question is flashing: three pulses of the quiet amber on the row's
+   * layer and the popover's hairline, or the frame held still under reduced motion.
+   * The page decides for how long.
+   */
+  readonly flashing = input(false);
+
+  /**
+   * The reel of the compact view went up or came down (velista `0207`). The page's
+   * question waits for the tape to close, so it is never drawn over a moving reel.
+   */
+  readonly reelOpened = output<{ lineId: string; open: boolean }>();
 
   /** What the row's stepper draws: the open run, or the stored amount. */
   protected readonly amount = computed(
@@ -356,6 +378,18 @@ export class LineRow {
     const onClick = (event: Event) => this._swallowReelDismissal(event);
     host.addEventListener('pointerdown', onPress, true);
     host.addEventListener('click', onClick, true);
+
+    // Only the changes, so a row drawn with its reel down says nothing.
+    let reelWasOpen = false;
+    effect(() => {
+      const open = this._reel()?.open() ?? false;
+      if (open !== reelWasOpen) {
+        reelWasOpen = open;
+        untracked(() =>
+          this.reelOpened.emit({ lineId: this.line().id, open })
+        );
+      }
+    });
 
     inject(DestroyRef).onDestroy(() => {
       for (const type of LOCKED_EVENTS) {
