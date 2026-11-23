@@ -26,7 +26,9 @@ import {
   QUANTITY_HOLD_FACTOR,
   QUANTITY_HOLD_FASTEST_MS,
   QUANTITY_HOLD_FIRST_MS,
+  QUANTITY_SNAP_POINTS,
   QUANTITY_STEP_QUIET_MS,
+  snapPointsWithin,
   stepAt,
   stepFrom,
   type LineUnit,
@@ -158,6 +160,13 @@ export class QuantityStepper {
    * over it. A container passes `lineStepOf` of its line, never a step it computed.
    */
   readonly step = input<number | null>(null);
+  /**
+   * The amounts a press lands on rather than pass (velista `0195`): 1000 by default.
+   * A caller that passes its own list replaces the default, so a list that keeps
+   * the stop at 1000 names it too. Points at or under {@link min} or over the
+   * {@link ceiling} are dropped by `snapPointsWithin`.
+   */
+  readonly snaps = input<readonly number[]>(QUANTITY_SNAP_POINTS);
   /** What the amount is of, translated: "Plátano de Canarias IGP", or with its list. */
   readonly name = input.required<string>();
   /**
@@ -236,9 +245,18 @@ export class QuantityStepper {
     );
   });
 
-  /** What plus moves at the current amount. */
-  readonly moreStep = computed(() =>
-    this._stepWords(stepAt(this.value(), this.unit(), this.step()))
+  /** What plus moves at the current amount: the real difference, as for minus. */
+  readonly moreStep = computed(() => {
+    const value = this.value();
+    const delta = this._up(value) - value;
+    return this._stepWords(
+      delta > 0 ? delta : stepAt(value, this.unit(), this.step())
+    );
+  });
+
+  /** The snap points this stepper's range can land on (velista `0195`). */
+  private readonly _snaps = computed(() =>
+    snapPointsWithin(this.snaps(), this.min(), this.ceiling())
   );
 
   /** The amount the presses settled on, which the live region says (decision E). */
@@ -759,7 +777,13 @@ export class QuantityStepper {
   }
 
   private _plusAtEndOf(value: number): boolean {
-    return !canStepUp(value, this.unit(), this.ceiling(), this.step());
+    return !canStepUp(
+      value,
+      this.unit(),
+      this.ceiling(),
+      this.step(),
+      this._snaps()
+    );
   }
 
   private _atEnd(direction: 1 | -1): boolean {
@@ -771,13 +795,18 @@ export class QuantityStepper {
 
   private _next(direction: 1 | -1): number {
     const value = this._current();
-    return direction === 1
-      ? stepFrom(value, this.unit(), 1, this.step())
-      : this._down(value);
+    return direction === 1 ? this._up(value) : this._down(value);
+  }
+
+  private _up(value: number): number {
+    return stepFrom(value, this.unit(), 1, this.step(), this._snaps());
   }
 
   private _down(value: number): number {
-    return Math.max(this.min(), stepFrom(value, this.unit(), -1, this.step()));
+    return Math.max(
+      this.min(),
+      stepFrom(value, this.unit(), -1, this.step(), this._snaps())
+    );
   }
 
   private _emit(to: number, repeat: boolean, typed = false): boolean {

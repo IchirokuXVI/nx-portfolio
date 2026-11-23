@@ -1,3 +1,5 @@
+> **PR:** [#1074](https://github.com/IchirokuXVI/nx-portfolio/pull/1074)
+
 # 0197: a row does not dim while its amount saves
 
 > Decided on 2026-11-22. After a row's amount is saved, the owner sees a darker background

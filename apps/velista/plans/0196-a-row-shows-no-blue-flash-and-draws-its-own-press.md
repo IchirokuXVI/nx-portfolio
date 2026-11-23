@@ -1,3 +1,5 @@
+> **PR:** [#1072](https://github.com/IchirokuXVI/nx-portfolio/pull/1072)
+
 # 0196: a row shows no blue flash and draws its own press
 
 > Decided on 2026-11-22. On a phone, a tap on the stepper of a zone list row flashes the

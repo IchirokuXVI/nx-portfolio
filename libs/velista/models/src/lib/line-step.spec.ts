@@ -139,7 +139,7 @@ describe('a product step in stepAt, stepFrom and canStepUp (velista 0186, sectio
     expect(stepAt(975, 'GRAM', null)).toBe(25);
     expect(stepFrom(1000, 'MILLILITER', -1, null)).toBe(975);
     expect(stepFrom(1000, 'UNIT', -1, null)).toBe(999);
-    expect(stepFrom(1000, 'UNIT', 1)).toBe(1010);
+    expect(stepFrom(1000, 'UNIT', 1)).toBe(1050);
   });
 
   it('on a step of 100: 1000 goes down to 900 and back up to 1000', () => {
@@ -148,21 +148,22 @@ describe('a product step in stepAt, stepFrom and canStepUp (velista 0186, sectio
     expect(stepAt(1000, 'GRAM', 100)).toBe(100);
   });
 
-  it('on a step of 100 never snaps: 975 goes up to 1075 and down to 875 (decision D)', () => {
-    expect(stepFrom(975, 'GRAM', 1, 100)).toBe(1075);
+  it('on a step of 100 a typed 975 stops on 1000 going up (decision D as velista 0195 amends it)', () => {
+    expect(stepFrom(975, 'GRAM', 1, 100)).toBe(1000);
     expect(stepFrom(975, 'GRAM', -1, 100)).toBe(875);
-    expect(stepFrom(1075, 'GRAM', -1, 100)).toBe(975);
+    expect(stepFrom(1075, 'GRAM', -1, 100)).toBe(1000);
+    expect(stepFrom(1075, 'GRAM', 1, 100)).toBe(1175);
   });
 
-  it('uses a step under 10 below 1000 and 10 from 1000 (S7b, decision F)', () => {
+  it('uses a step under 50 below 1000 and 50 from 1000 (S7b, decision F, velista 0195)', () => {
     expect(stepAt(500, 'GRAM', 5)).toBe(5);
     expect(stepAt(995, 'GRAM', 5)).toBe(5);
-    expect(stepAt(1000, 'GRAM', 5)).toBe(10);
+    expect(stepAt(1000, 'GRAM', 5)).toBe(50);
     expect(stepAt(999, 'GRAM', 1)).toBe(1);
-    expect(stepAt(1000, 'GRAM', 1)).toBe(10);
+    expect(stepAt(1000, 'GRAM', 1)).toBe(50);
     expect(stepFrom(995, 'GRAM', 1, 5)).toBe(1000);
-    expect(stepFrom(1000, 'GRAM', 1, 5)).toBe(1010);
-    expect(stepFrom(1010, 'GRAM', -1, 5)).toBe(1000);
+    expect(stepFrom(1000, 'GRAM', 1, 5)).toBe(1050);
+    expect(stepFrom(1050, 'GRAM', -1, 5)).toBe(1000);
     expect(stepFrom(1000, 'GRAM', -1, 5)).toBe(995);
   });
 
@@ -173,9 +174,9 @@ describe('a product step in stepAt, stepFrom and canStepUp (velista 0186, sectio
   });
 
   it.each([1, 5, 100, 1000])(
-    'returns on plus then minus on a step of %s, from 0, 995, 1000 and 1010',
+    'returns on plus then minus on a step of %s, from 0, 1000 and 1010',
     (step) => {
-      for (const start of [0, 995, 1000, 1010]) {
+      for (const start of [0, 1000, 1010]) {
         const up = stepFrom(start, 'GRAM', 1, step);
         expect(up).toBeGreaterThan(start);
         expect(stepFrom(up, 'GRAM', -1, step)).toBe(start);
@@ -183,9 +184,16 @@ describe('a product step in stepAt, stepFrom and canStepUp (velista 0186, sectio
     }
   );
 
+  it('does not return a typed 995 that a plus carries onto 1000 (velista 0195, target state 7)', () => {
+    expect(stepFrom(995, 'GRAM', 1, 100)).toBe(1000);
+    expect(stepFrom(1000, 'GRAM', -1, 100)).toBe(900);
+    expect(stepFrom(995, 'GRAM', 1, 1000)).toBe(1000);
+    expect(stepFrom(1000, 'GRAM', -1, 1000)).toBe(0);
+  });
+
   it('ignores a step passed for a count', () => {
     expect(stepAt(5, 'UNIT', 100)).toBe(1);
-    expect(stepAt(1000, 'UNIT', 100)).toBe(10);
+    expect(stepAt(1000, 'UNIT', 100)).toBe(50);
     expect(stepFrom(5, 'UNIT', 1, 100)).toBe(6);
     expect(stepFrom(5, 'UNIT', -1, 100)).toBe(4);
   });

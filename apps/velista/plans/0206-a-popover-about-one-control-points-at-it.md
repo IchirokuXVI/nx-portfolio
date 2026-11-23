@@ -1,3 +1,5 @@
+> **PR:** [#1073](https://github.com/IchirokuXVI/nx-portfolio/pull/1073)
+
 # 0206: a popover about one control points at it
 
 > Decided by the owner on 2026-11-22, as a rule for every popover: whenever a popover refers
@@ -102,6 +104,10 @@ below that control and its row and never covers either.
 
 - Work in `libs/velista/ui/src/lib/list/anchored-popover.{ts,scss,spec.ts}` only.
 - Do NOT add the pointer to any existing caller. Do NOT change any caller's template.
+- The owner ruled on 2026-11-22 that no existing popover gains a pointer. Only the two
+  popovers that the plans name have one: the disabled stepper's popover of velista `0200`
+  and the question of velista `0207`. The refused key hint of velista `0188` and every
+  other caller listed above keep their look.
 
 ### Constraints
 
@@ -116,9 +122,6 @@ below that control and its row and never covers either.
 
 - Stop and ask if the clip of the `choice` frame cannot move to an inner element without a
   visible change to the add choice, the view picker or the list picker popovers.
-- Stop and ask before you give any existing popover a pointer. Which existing popovers refer
-  to one specific thing (the refused key hint of velista `0188` on a stepper, for example) is
-  the owner's call, not this plan's.
 - Stop and ask if the overlay cannot report the side it applied in a way the pointer can
   follow.
 

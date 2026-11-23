@@ -16,12 +16,18 @@
 >   you still need 1, or is that enough?" with "Still need" 1 unit and "That's enough". The
 >   sentence prints a count bare; the answers carry "ud" / "uds" and "unit" / "units". A
 >   weight carries its unit everywhere ("500 g", "1,5 kg").
-> - Who is named: the person who bought the extra; for a guest's buy, the owner of the
->   shopping list the guest shopped. Two buyers: "Marta y Luis ya compraron 2 de más." /
->   "Marta and Luis already bought 2 extra." Three or more: "3 personas ya compraron 2 de
->   más." / "3 people already bought 2 extra." The reader: "Ya compraste 1 de más." / "You
->   already bought 1 extra." No name: "Alguien ya compró 1 de más." / "Someone already
->   bought 1 extra." **The owner reviews this wording after the build.**
+> - Who is named: the person who bought the extra. For a guest's buy, it is the owner of the
+>   shopping list (the basket) the guest bought in. In the owner's words: if a guest buys
+>   milk in Maria's shopping list, the zone list shows Maria's name, because the milk was on
+>   her shopping list, the guest is unknown there, and it is Maria's responsibility. Two
+>   buyers: "Marta y Luis ya compraron 2 de más." / "Marta and Luis already bought 2
+>   extra." Two buyers where one is the reader: "Tú y Luis ya comprasteis 2 de más." / "You
+>   and Luis already bought 2 extra." Two buyers where one has no name: "Luis y otra persona
+>   ya compraron 2 de más." / "Luis and someone else already bought 2 extra." Three or more:
+>   "3 personas ya compraron 2 de más." / "3 people already bought 2 extra." The reader: "Ya
+>   compraste 1 de más." / "You already bought 1 extra." No name: "Alguien ya compró 1 de
+>   más." / "Someone already bought 1 extra." **The owner reviews this wording after the
+>   build.**
 > - **What stands when nobody answers is the smaller amount.** Closing the popover or
 >   leaving the page keeps what is still needed after the extra is counted. "Still need" is
 >   the answer that changes something: it puts the line at the amount the person set.
@@ -32,6 +38,17 @@
 > - A reel asks after it closes on its value, never while its tape is up. A lowering never
 >   asks. Only the zone list rows ask: the line page, the line sheet, the catalog and the
 >   product page do not.
+> - The owner's answers to the plan's open points, on 2026-11-22:
+>   - When the question opens, focus starts on "Count the extra" ("That's enough" when the
+>     extra covers the raise), the answer that changes nothing.
+>   - A press on the row's amount control while its question is open closes the question,
+>     keeps the smaller amount, and then steps as usual.
+>   - A second line's question while one is open replaces the open one. The first line
+>     keeps its smaller amount.
+>   - The due rows do not ask and do not send the flag. To add a due row is not a raise of
+>     a line bought above its ask in this trip.
+>   - A line the extra covers is hidden as any line at 0 (velista `0192`).
+>   - A dropped write that the person sends again carries the flag again.
 >
 > The count itself is the server's (backend `0275`): the zone list's raise carries
 > `countExtra: true`, core counts the extra inside that write, and its answer says how much
@@ -52,7 +69,10 @@
 > `ob-pointer` and `ob-when` in its `canvas.json`. Where a note and the rulings above
 > disagree, the rulings win: the note `ob-frame` says Escape and a press outside close the
 > popover like its first answer, and the note `ob-doubts` item 2 says the amount set stands.
-> Both were written before the ruling that the smaller amount stands.
+> Both were written before the ruling that the smaller amount stands. The board's note that
+> puts focus on the first answer ("Still need") is replaced too: focus starts on "Count the
+> extra". And `ob-doubts` item 8, which draws a covered line as the stepper at 0, is replaced
+> by the ruling that hides it.
 >
 > Code anchors, on `dev` at `3f26ae3d3`: `libs/velista/feature-lists/src/lib/list-page/list-page.ts:1823`
 > (`quantityRuns`), `:1833` (`_writeRun`, also reached at teardown and when the page is
@@ -91,8 +111,8 @@ answers, a scroll to the row and a flash, in both views.
 - After backend `0275`, a raise with the flag can answer a line lower than the client drew:
   the server moved the extra into the ask and raised the line only by the rest. The answer's
   `extra` carries `above` (the extra before the write), `counted` and `buyers`
-  (`{ userId: string | null }` each, guests already replaced by the owner of their shopping
-  list, no names).
+  (`{ userId: string | null }` each, a guest already replaced by the owner of the basket the
+  guest bought in, no names).
 - A reel (velista `0203`) writes its step at once when its tape closes.
 - Velista names a user through `MemberNames.nameOf(zoneId, userId)`, and the reader's own id
   is `SessionStore.userId()`.
@@ -106,6 +126,11 @@ answers, a scroll to the row and a flash, in both views.
    teardown write and the write when the page is hidden, which go through `_writeRun`. A
    negative delta never sends it. No other page or control sends it: the line page, the line
    sheet, the catalog, the product page and the basket keep their calls as they are.
+   - The due rows of the zone list page (velista `0089`, `0203`) never send it and never
+     ask. To add a due row is not a raise of a line bought above its ask in this trip.
+   - A dropped write that the person sends again (velista `0159`, "Send it again", the
+     replay at `list-page.ts:1250`) carries the flag again when the dropped write carried
+     it, and its answer asks by target state 3 as any other answer.
 2. **The data layer.** The flag and the answer travel without changing the other callers:
    - `LineService` gains a call that sends `countExtra: true` and answers the line and the
      extra, for example `raiseCountingExtra(lineId, delta, unit): Promise<{ line: Line;
@@ -128,6 +153,9 @@ answers, a scroll to the row and a flash, in both views.
      is up when the answer comes, the question waits until it closes, and is dropped if that
      close sends a new run.
    No other answer opens anything. In particular a raise with `counted: 0` opens nothing.
+   One question is open at a time. When another line's question is to open while one is
+   open, the new one replaces the old one: the old popover closes as after "Count the
+   extra", so its line keeps the smaller amount `Z`, and the new one opens.
 4. **The numbers.** From the answer: `X` is `extra.above`, `Z` is the answered line's
    `quantity` (what is still needed after the count), and `Y` is `Z + extra.counted` (the
    amount the person set). `Y` is read from the answer, not from the run, so a write of
@@ -160,11 +188,18 @@ answers, a scroll to the row and a flash, in both views.
    - two buyers, both resolved and neither the reader: `list.extra.boughtByTwo` ("{{first}}
      and {{second}} already bought {{amount}} extra." / "{{first}} y {{second}} ya
      compraron {{amount}} de más."), in the order of `buyers`;
+   - two buyers, one the reader and the other resolved: `list.extra.boughtByYouAndOne`
+     ("You and {{name}} already bought {{amount}} extra." / "Tú y {{name}} ya comprasteis
+     {{amount}} de más."), the reader always first;
+   - two buyers, one resolved and neither the reader, the other with a null `userId` or a
+     name that does not resolve: `list.extra.boughtByOneAndSomeone` ("{{name}} and someone
+     else already bought {{amount}} extra." / "{{name}} y otra persona ya compraron
+     {{amount}} de más."), the named buyer always first;
    - three buyers or more: `list.extra.boughtByMany` with the count ("{{count}} people
      already bought {{amount}} extra." / "{{count}} personas ya compraron {{amount}} de
      más.").
-   The case of two buyers where one is the reader or one cannot be named is not ruled (see
-   Action boundaries).
+   Two buyers where neither can be named, or where one is the reader and the other cannot
+   be named, are not ruled (see Action boundaries).
 7. **The popover.** An `AnchoredPopover` drawn by the page, as the add choice of velista
    `0170` is: frame `choice` (276 px, rows to its edges), `pointer` true (velista `0206`),
    `origin` the row's amount control (the stepper's capsule or the reel's pill),
@@ -176,9 +211,12 @@ answers, a scroll to the row and a flash, in both views.
    nor its control, in either view (velista `0206`).
    The row's control shows `Y` while the popover is open, as the board draws it, and the
    store holds `Z`.
+   When the popover opens, focus moves to the answer that changes nothing: "Count the
+   extra" when `Z > 0`, "That's enough" when `Z = 0`. Focus never starts on "Still need".
 8. **The row stays drawn.** While the question is open, its line is drawn where it was, even
    at `Z = 0` where velista `0192` would take it out of To buy. After the question closes, the
-   line follows velista `0192` as any other line.
+   line follows velista `0192` as any other line: a line the extra covers (`Z = 0`) is
+   hidden as any line at 0 (the owner confirmed it on 2026-11-22).
 9. **The answers.**
    - "Still need": the page sends one raise of the line by `extra.counted` without the flag,
      through `changeQuantity` as today (optimistic, with its dropped write record), puts the
@@ -187,6 +225,9 @@ answers, a scroll to the row and a flash, in both views.
      shows `Z`.
    - Escape, a press outside the popover and the back gesture: nothing is sent, the popover
      closes, the row shows `Z`. Leaving the page closes it the same way.
+   - A press on the row's own amount control (a stepper button, or the reel): nothing is
+     sent for the question. The popover closes, the line keeps `Z`, and the press then steps
+     from `Z` as usual, into a new run of `quantityRuns`.
 10. **Asking again.** `stillNeeded` is a set of line ids that lives as long as the page
     component. A line in it never sends the flag, so it never asks again while the person
     stays. Every other raise sends the flag and asks whenever the server counted something,
@@ -209,7 +250,8 @@ answers, a scroll to the row and a flash, in both views.
 13. **Both views.** The same question, words, pointer and flash for the button stepper in the
     default view and for the reel in the compact view (velista `0202`, `0203`).
 14. **The keys**, in `libs/velista/ui/assets/i18n/en.json` and `es.json`, under `list.extra`:
-    `boughtBy`, `boughtByYou`, `boughtByTwo`, `boughtByMany`, `boughtBySomeone`, `ask`,
+    `boughtBy`, `boughtByYou`, `boughtByTwo`, `boughtByYouAndOne`, `boughtByOneAndSomeone`,
+    `boughtByMany`, `boughtBySomeone`, `ask`,
     `askEnough`, `stillNeed`, `count`, `enough`, and `units_one` / `units_other` ("{{count}}
     unit" / "{{count}} units"; "{{count}} ud" / "{{count}} uds"), with the words above.
 
@@ -234,24 +276,9 @@ answers, a scroll to the row and a flash, in both views.
 
 ### Action boundaries
 
-Each item below is a point the owner has not ruled. Stop and ask before you build it:
-
-- Which element takes focus when the popover opens by itself, if any. The board's note puts
-  focus on the first answer ("Still need"), but the ruling made that the answer that changes
-  something, and the popover can open while the person types in the search field.
-- What a press on the line's own control does while its question is open (the control shows
-  `Y` and the store holds `Z`).
-- What a second question does when another line's answer comes while one is open: wait,
-  replace the open one, or be dropped.
-- The words for two buyers when one of them is the reader ("Tú y Marta…"), or when one of
-  them cannot be named.
-- Whether a dropped write that the person sends again (velista `0159`, "Send it again")
-  carries the flag, and whether its answer asks.
-- Whether the due rows of the zone list page (velista `0089`, `0203`) ask. This plan covers
-  the rows of To buy, at rest and in the search.
-- Whether a line that the extra covers (`Z = 0`) stays drawn at 0 in To buy after the
-  question closes. This plan applies velista `0192`, and the board's note `ob-doubts` item 8
-  draws it as the stepper at 0.
+- Stop and ask before you build the words for two buyers where neither can be named, or
+  where one is the reader and the other cannot be named. The owner ruled the other cases of
+  two buyers (target state 6), not these two.
 - Stop if backend `0275` is not built or its answer differs from its plan.
 
 ### Progress evidence
@@ -308,6 +335,21 @@ motion.
 12. The flash runs 3 pulses in 2.2 s and then stops; with reduced motion the accent frame
     holds 2.2 s with no animation. The popover's accent reads `--app-action-quiet-fg`.
 13. The contrast spec covers the muted text on the wash, Day and Night.
+14. When the popover opens, focus is on "Count the extra" (`Z > 0`) or "That's enough"
+    (`Z = 0`), never on "Still need".
+15. A press on the row's control while its question is open closes the popover, sends
+    nothing for the question, and steps from `Z` in a new run.
+16. A question for a second line while one is open closes the first one with its line at
+    `Z` and opens the second one.
+17. The words for two buyers where one is the reader ("Tú y Luis ya comprasteis 2 de más." /
+    "You and Luis already bought 2 extra.") and where one has no name ("Luis y otra persona
+    ya compraron 2 de más." / "Luis and someone else already bought 2 extra."), character
+    for character, with the reader or the named buyer first whatever the order of `buyers`.
+18. A due row's add sends no flag and opens nothing.
+19. A dropped write with the flag, sent again, carries the flag again, and an answer with
+    `counted > 0` opens the question.
+20. After the question closes, a line at `Z = 0` that was bought is hidden from To buy as
+    velista `0192` hides any line at 0.
 
 ## 3. Acceptance criteria
 
