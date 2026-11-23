@@ -38,6 +38,11 @@ export interface BasketSettlementFact {
   outcome: SettlementOutcome;
   quantity: number;
   /**
+   * How many of {@link quantity} lowered the line, so met what it asked (plan
+   * 0274). The rest are above the ask.
+   */
+  applied: number;
+  /**
    * What `quantity` counts (plan 0246, section 3.5). Absent is the entry's
    * unit, which is what every purchase is unless the line changed its unit.
    */
@@ -224,6 +229,21 @@ export function boughtOf(entry: BasketEntry): number {
 }
 
 /**
+ * How many of those purchases met what the line asked (plan 0274, section 3),
+ * in the entry's unit as {@link boughtOf} counts. The entry's ask is its
+ * `left` plus this.
+ */
+export function appliedOf(entry: BasketEntry): number {
+  return entry.settlements
+    .filter(
+      (row) =>
+        row.outcome === SettlementOutcome.BOUGHT &&
+        (row.unit ?? entry.unit) === entry.unit
+    )
+    .reduce((sum, row) => sum + row.applied, 0);
+}
+
+/**
  * What other baskets bought of these entries lately, summed (plan 0188).
  *
  * Kept apart from {@link boughtOf} on purpose. `bought` is what **this** basket
@@ -323,6 +343,8 @@ export function toRuleEntry(
   return {
     left: entry.quantity,
     bought: boughtOf(entry),
+    // What the ask is counted from beside `left` (plan 0274, section 3).
+    applied: appliedOf(entry),
     boughtElsewhere: entry.elsewhere?.quantity ?? 0,
     skipped: facts.skips.get(entry.lineId)?.fresh === true,
     closed:
@@ -527,6 +549,9 @@ export function toEntryPatch(
     unit: entry.unit,
     left: rule.left,
     bought: rule.bought,
+    // `left` plus what this basket's buys met of the ask (plan 0274), by the
+    // rule the row's own `asked` sums, so a client never has to know `applied`.
+    asked: rowNumbersOf([rule]).asked,
     // Somebody else's units, beside this basket's own and never added to them
     // (plan 0188).
     boughtElsewhere: rule.boughtElsewhere,
@@ -581,11 +606,13 @@ export function toRowView(
   context: EntryContext
 ): BasketRowView {
   const entries = group.entries.map((entry) => toEntryView(entry, context));
-  // The sums, the newest act and the state all come from the entries as the
-  // wire carries them, through the rules a client rebuilds its own rows with
-  // (plan 0204, section 4).
-  const numbers = rowNumbersOf(entries);
-  const state = rowStateOf(entries) as BasketRowState;
+  // The sums, the newest act and the state all come from the entries, through
+  // the rules a client rebuilds its own rows with (plan 0204, section 4). The
+  // rule entries and not the wire entries, because the ask is counted from
+  // `applied` (plan 0274, section 3), which the wire does not carry.
+  const rules = group.entries.map((entry) => toRuleEntry(entry, context.facts));
+  const numbers = rowNumbersOf(rules);
+  const state = rowStateOf(rules) as BasketRowState;
   const note = noteOf(group.entries, state, context.facts);
   return {
     rowKey: group.anchor.lineId,
@@ -597,7 +624,8 @@ export function toRowView(
     unit: group.anchor.unit,
     left: numbers.left,
     bought: numbers.bought,
-    // Computed here and stored nowhere, which is the whole of plan 0136.
+    // Computed here and stored nowhere, which is the whole of plan 0136: `left`
+    // plus the units of this basket's buys that met the ask (plan 0274).
     asked: numbers.asked,
     // Not part of `asked`: these units were never this basket's to buy by the
     // time it looked (plan 0188).

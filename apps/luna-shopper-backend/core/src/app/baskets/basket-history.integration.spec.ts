@@ -127,6 +127,7 @@ describeIntegration('a run history row (real Postgres)', () => {
         itemId: null,
         outcome,
         quantity,
+        applied: quantity,
         settledByUserId: ids.owner,
         settledByParticipantId: null,
         settledAt: new Date(settledAt),

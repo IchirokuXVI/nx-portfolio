@@ -3,7 +3,7 @@ import {
   GENERATED_BASKET,
   OPEN_GENERATED_BASKET,
 } from '../../baskets/open-basket.sql';
-import { basketAskedCte } from './basket-asked.sql';
+import { basketAskedCte, basketLineBuys } from './basket-asked.sql';
 
 /**
  * The reads behind the trips of a zone list (plan 0122, sections 3 and 4).
@@ -24,8 +24,10 @@ import { basketAskedCte } from './basket-asked.sql';
  * Plan 0122 section 4 is reversed in one sentence. A finished trip's rows no
  * longer freeze because nothing writes a copy of the list; they freeze because
  * the finish wrote them down. Everything else that section says still holds: one row
- * per zone line, `left` is `max(0, asked - bought)`, and no name and no current
- * quantity on the row.
+ * per zone line and no name and no current quantity on the row. `left` is
+ * `max(0, asked - applied)` since plan 0274: what was asked less the units of
+ * the basket's buys that met it, so units bought above the ask leave nothing
+ * owed and take nothing off a raise of the line after them.
  *
  * ## Which purchase belongs to which kind of trip
  *
@@ -117,6 +119,12 @@ function basketRowsCte(basketParam: string | null): string {
            ll."position" AS "position",
            COALESCE(a."asked", 0) AS "asked",
            COALESCE(b."bought", 0) AS "bought",
+           -- The units of those buys that met the ask (plan 0274), read through
+           -- the fragment every ask is read through. What is left is
+           -- \`asked - applied\`, never \`asked - bought\`: the units bought above
+           -- the ask are no part of it, so a line raised after a buy above its
+           -- ask is left what it was raised to, as the basket read says.
+           ab."applied" AS "applied",
            b."lastOutcome" AS "lastOutcome"
     FROM "asked" a
     FULL JOIN "bought" b
@@ -125,6 +133,7 @@ function basketRowsCte(basketParam: string | null): string {
       ON ll.id = COALESCE(a."lineId", b."lineId")
      AND ll."listId" = $1::uuid
      AND ll."deletedAt" IS NULL
+    ${basketLineBuys('COALESCE(a."tripId", b."tripId")', 'll.id', 'll."unit"', 'ab')}
   )`;
 }
 
@@ -243,7 +252,7 @@ const LOOSE_ROWS_CTE = `
  *
  * `boughtLineCount` is the number of rows whose outcome reads `BOUGHT`, stated
  * here the way `toTripRowView` states it: something was bought and nothing is
- * left.
+ * left, which is `applied >= asked` (plan 0274) and not `bought >= asked`.
  */
 const TRIPS_CTE = `
   ${basketRowsCte(null)},
@@ -259,7 +268,7 @@ const TRIPS_CTE = `
            ) AS "live",
            COUNT(*)::int AS "lineCount",
            (COUNT(*) FILTER (
-             WHERE r."bought" > 0 AND r."bought" >= r."asked"
+             WHERE r."bought" > 0 AND r."applied" >= r."asked"
            ))::int AS "boughtLineCount"
     FROM "basket_rows" r
     JOIN "baskets" gl ON gl.id = r."tripId"
@@ -364,7 +373,7 @@ function lineKeyset(cursorParam: string): string {
  */
 export const BASKET_TRIP_ROWS_SQL = `
   WITH ${basketRowsCte('$2')}
-  SELECT r."lineId", r."asked", r."bought", r."lastOutcome"
+  SELECT r."lineId", r."asked", r."bought", r."applied", r."lastOutcome"
   FROM "basket_rows" r
   WHERE ${lineKeyset('$3')}
   ORDER BY r."position", r."lineId"
@@ -469,6 +478,11 @@ export interface TripLineRow {
   lineId: string;
   asked?: number;
   bought: number;
+  /**
+   * The units of {@link bought} that met the ask (plan 0274). Absent for a
+   * loose trip, which asked for nothing.
+   */
+  applied?: number;
   lastOutcome: string | null;
   settledByUserId?: string | null;
 }

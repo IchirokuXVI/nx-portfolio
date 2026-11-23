@@ -76,6 +76,25 @@ describe('what a trip did to a line (section 4)', () => {
     });
   });
 
+  it('counts what is left from what the buys met, not from what they bought (plan 0274)', () => {
+    // Asked 3, bought 4 (3 met it), then the line raised to 2 on the list page:
+    // the ask is 5, and 2 are left, as the basket read says.
+    expect(
+      toTripRowView(TripKind.BASKET, {
+        lineId: LINE,
+        asked: 5,
+        bought: 4,
+        applied: 3,
+        lastOutcome: 'BOUGHT',
+      })
+    ).toMatchObject({
+      asked: 5,
+      bought: 4,
+      left: 2,
+      outcome: TripRowOutcome.PARTLY,
+    });
+  });
+
   it('reads a loose row as its latest settlement, with nothing asked', () => {
     expect(
       toTripRowView(TripKind.SESSION, {

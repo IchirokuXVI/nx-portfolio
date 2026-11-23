@@ -54,13 +54,15 @@ export function removedRows(
   return removed.map((group) => {
     const rows = group.lineIds.flatMap((lineId) => byLine.get(lineId) ?? []);
     // In the row's unit (plan 0246, section 3.5): never grams added to pieces.
-    const bought = rows
-      .filter(
-        (row) =>
-          row.outcome === SettlementOutcome.BOUGHT &&
-          (row.unit ?? group.unit) === group.unit
-      )
-      .reduce((sum, row) => sum + row.quantity, 0);
+    const buys = rows.filter(
+      (row) =>
+        row.outcome === SettlementOutcome.BOUGHT &&
+        (row.unit ?? group.unit) === group.unit
+    );
+    const bought = buys.reduce((sum, row) => sum + row.quantity, 0);
+    // Nothing is left of a removed row, so it asked what its buys met (plan
+    // 0274, section 3), the rule every other row follows.
+    const applied = buys.reduce((sum, row) => sum + row.applied, 0);
     // The newest act on the row, which is the same answer an ordinary row gives
     // to the same question (plan 0137, section 4): a removed row that was bought
     // still says who bought it and when.
@@ -82,7 +84,7 @@ export function removedRows(
       unit: group.unit,
       left: 0,
       bought,
-      asked: bought,
+      asked: applied,
       // A line that left the coverage is not read for other baskets' purchases
       // (plan 0188): the row is a fact about the past and counts toward nothing.
       boughtElsewhere: 0,

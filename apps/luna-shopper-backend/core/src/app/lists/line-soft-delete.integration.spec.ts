@@ -123,6 +123,7 @@ describeIntegration(
           itemId: MILK,
           outcome: SettlementOutcome.BOUGHT,
           quantity: 1,
+          applied: 1,
           settledByUserId: ids.owner,
           settledAt: new Date(at),
         })

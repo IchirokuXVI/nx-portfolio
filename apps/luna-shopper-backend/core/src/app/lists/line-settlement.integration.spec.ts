@@ -129,6 +129,7 @@ describeIntegration('the settlement history (real Postgres)', () => {
         itemId,
         outcome: SettlementOutcome.BOUGHT,
         quantity: 1,
+        applied: 1,
         settledByUserId: userId,
         settledAt: new Date(settledAt),
       })
@@ -270,6 +271,7 @@ describeIntegration('the settlement history (real Postgres)', () => {
           itemId: MILK,
           outcome: SettlementOutcome.BOUGHT,
           quantity: 1,
+          applied: 1,
           settledByUserId: ids.shopper,
           settledAt: new Date('2026-01-01T10:00:00.000Z'),
           basketId: randomUUID(),
@@ -519,9 +521,9 @@ describeIntegration('the settlement history (real Postgres)', () => {
     }): Promise<void> {
       await dataSource.query(
         `INSERT INTO "line_settlements"
-           ("lineId", "listId", "itemId", "outcome", "quantity",
+           ("lineId", "listId", "itemId", "outcome", "quantity", "applied",
             "settledByUserId", "settledByParticipantId", "settledAt")
-         VALUES ($1, $2, $3, 'BOUGHT', 4, NULL, $4, $5)`,
+         VALUES ($1, $2, $3, 'BOUGHT', 4, 4, NULL, $4, $5)`,
         [
           columns.lineId,
           columns.listId,
@@ -559,6 +561,7 @@ describeIntegration('the settlement history (real Postgres)', () => {
           itemId: MILK,
           outcome: SettlementOutcome.BOUGHT,
           quantity: 4,
+          applied: 4,
           settledByUserId: null,
           settledByParticipantId: randomUUID(),
           settledAt: new Date('2026-05-01T10:00:00.000Z'),

@@ -226,7 +226,8 @@ function build(status: BasketStatus): Harness {
     context,
     zoneLines,
     listAccess,
-    publisher
+    publisher,
+    {} as never
   );
   const add = new BasketLineAddService(context, zoneLines, profiles, publisher);
   const rename = new BasketRowRenameService(

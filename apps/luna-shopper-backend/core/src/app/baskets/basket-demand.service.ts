@@ -1,20 +1,30 @@
 import { Injectable } from '@nestjs/common';
 import {
   isOpenBasket,
+  SettlementOutcome,
   type BasketRowResult,
   type SetBasketRowDemandRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
   BasketFinishedException,
   ForbiddenException,
+  NotFoundException,
+  StaleQuantityException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import type { ListLine } from '../entities';
+import {
+  DataSource,
+  IsNull,
+  MoreThanOrEqual,
+  type EntityManager,
+} from 'typeorm';
+import { LineSettlement, ListLine } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { assertLineUnit, requireLineUnit } from '../lists/line-unit-rules';
 import { LineService } from '../lists/line.service';
 import { ListAccessService } from '../lists/list-access.service';
 import { canChangeDemand } from '../lists/list-acts';
+import { basketScopeOf, type BasketScope } from './basket-line-facts';
 import {
   BasketWriteContext,
   type OpenBasketWrite,
@@ -26,8 +36,22 @@ import {
  *
  * It replaces `setOriginQuantity`, the demand side of `setOutstanding`, and
  * `BelowSettledException`, whose floor ("fewer than this basket has already
- * bought for this list") cannot be stated at all now that `asked` is
- * `bought + left`: there is no stored number for a purchase to be below.
+ * bought for this list") is not a refusal any more.
+ *
+ * ## An ask below what the buys met (plan 0274, section 5)
+ *
+ * `quantity` is what the list asks from now on, and the ask is the line's
+ * `left` plus the units of this basket's buys that met it (`applied`). So an
+ * ask of `n` below what the buys met cannot be a line quantity: the line goes
+ * to 0, and `applied` is lowered on this basket's standing buys of the line,
+ * newest first, until it adds up to `n`. The units taken off become units
+ * above the ask, which a minus takes first. An ask raised again gives units
+ * above the ask back to it, oldest buy first, before the line holds anything:
+ * `applied` adds up to the smaller of `n` and what was bought, and the line
+ * holds the rest of `n`. {@link rebalanceApplied} is that arithmetic.
+ *
+ * Nothing about it is a refusal: a household that asks for less than was
+ * already bought asks for less, and what was bought stays bought.
  *
  * ## The permission is the owner's, never the actor's
  *
@@ -68,7 +92,10 @@ export class BasketDemandService {
     private readonly lines: LineService,
     // The **owner's** permissions on the entry's list, never the actor's.
     private readonly listAccess: ListAccessService,
-    private readonly events: CoreEventsPublisher
+    private readonly events: CoreEventsPublisher,
+    // The split of this basket's buys between the ask and above it (plan
+    // 0274, section 5). Last, so no positional construction has to shift.
+    private readonly dataSource: DataSource
   ) {}
 
   async setDemand(req: SetBasketRowDemandRequest): Promise<BasketRowResult> {
@@ -100,11 +127,72 @@ export class BasketDemandService {
       );
     }
 
-    const delta = req.quantity - req.from;
-    if (delta === 0) {
+    // What this basket's buys of the line met, read before anything is locked
+    // to know which write this is, and read again under the lock below.
+    const scope = await basketScopeOf(this.dataSource, opened.basket);
+    const planned = rebalanceApplied(
+      await buysOf(this.dataSource.manager, opened.basket.id, entry, scope),
+      req.quantity
+    );
+    const delta = planned.left - req.from;
+    if (delta === 0 && planned.changes.size === 0) {
       // A delta of zero writes nothing and answers the row. `addQuantity`
       // refuses one as a client bug, and from here it is an ordinary no-op: a
       // reel let go where it started.
+      return opened.result([entry.id]);
+    }
+
+    /**
+     * The same arithmetic under the lock the line write holds, and the write of
+     * `applied` it gives. A settle or a revert that landed since the read above
+     * moved either the line or this basket's buys, and the gesture is refused
+     * as `from` refuses it rather than applied to numbers nobody was shown.
+     */
+    const underLock = async (
+      manager: EntityManager,
+      line: ListLine
+    ): Promise<void> => {
+      const now = rebalanceApplied(
+        await buysOf(manager, opened.basket.id, line, scope),
+        req.quantity
+      );
+      if (now.left !== line.quantity + delta) {
+        throw new StaleQuantityException(
+          'Somebody else changed this while you were looking at it',
+          { messageArgs: { current: line.quantity } }
+        );
+      }
+      const settlements = manager.getRepository(LineSettlement);
+      for (const [id, applied] of now.changes) {
+        await settlements.update({ id }, { applied });
+      }
+    };
+
+    if (delta === 0) {
+      // The line keeps its number and only the split of this basket's buys
+      // moves (plan 0274, section 5): an ask set below what the buys met, or
+      // raised back over units that were above it. Nothing changed on the
+      // list, so no other basket's rows moved, and this basket is told alone.
+      await this.dataSource.transaction(async (manager) => {
+        const line = await manager.getRepository(ListLine).findOne({
+          where: { id: entry.id },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!line || line.deletedAt !== null) {
+          throw new NotFoundException('Row not found');
+        }
+        assertLineUnit(line, req.unit);
+        if (line.quantity !== req.from) {
+          throw new StaleQuantityException(
+            'Somebody else changed this while you were looking at it',
+            { messageArgs: { current: line.quantity } }
+          );
+        }
+        await underLock(manager, line);
+      });
+      opened.announceBasketMoved([
+        { listId: entry.listId, lineId: entry.id, recorded: false },
+      ]);
       return opened.result([entry.id]);
     }
 
@@ -112,18 +200,21 @@ export class BasketDemandService {
     // the actor's own. `expect` carries the `from` bargain into the locked read,
     // so a settle that landed between the resolve and the write refuses this
     // rather than overwriting it.
-    await this.lines.addQuantity({
-      userId: opened.basket.ownerUserId,
-      lineId: entry.id,
-      delta,
-      unit: req.unit,
-      expect: req.from,
-      // The change record names the person who moved it and the basket they
-      // moved it from, which is **not** the owner above (plan 0138, section 4):
-      // a guest shopping somebody else's list leaves a change with a participant
-      // and no account.
-      via: opened.via(),
-    });
+    await this.lines.addQuantity(
+      {
+        userId: opened.basket.ownerUserId,
+        lineId: entry.id,
+        delta,
+        unit: req.unit,
+        expect: req.from,
+        // The change record names the person who moved it and the basket they
+        // moved it from, which is **not** the owner above (plan 0138, section
+        // 4): a guest shopping somebody else's list leaves a change with a
+        // participant and no account.
+        via: opened.via(),
+      },
+      underLock
+    );
 
     // No announcement of its own (plan 0204, section 3). `addQuantity` tells
     // every basket that covers the list what the line reads now, this one
@@ -184,4 +275,106 @@ export class BasketDemandService {
       entry.approvalStatus
     );
   }
+}
+
+/** One standing buy of a line through a basket, as {@link rebalanceApplied} reads it. */
+export interface DemandBuy {
+  id: string;
+  quantity: number;
+  applied: number;
+}
+
+/** What setting an ask writes: the line's new `left`, and each `applied` that moves. */
+export interface DemandPlan {
+  left: number;
+  /** New `applied` by settlement id, only for the ones that change. */
+  changes: Map<string, number>;
+}
+
+/**
+ * The split of an ask of `asked` between the line and this basket's buys
+ * (plan 0274, section 5). `buys` are oldest first.
+ *
+ * The buys meet as much of the ask as they can: their `applied` adds up to the
+ * smaller of `asked` and what they bought, and the line holds the rest. When
+ * that sum goes down, `applied` is taken off the newest buys first, so the
+ * units above the ask sit on the buys a minus reaches first. When it goes up,
+ * units above the ask are given to it from the oldest buys first, for the same
+ * reason.
+ *
+ * With no units above the ask and an ask at or above what was bought, nothing
+ * moves on the buys and the line holds `asked - bought`.
+ */
+export function rebalanceApplied(
+  buys: readonly DemandBuy[],
+  asked: number
+): DemandPlan {
+  const bought = buys.reduce((sum, buy) => sum + buy.quantity, 0);
+  const held = buys.reduce((sum, buy) => sum + buy.applied, 0);
+  const target = Math.min(asked, bought);
+  const changes = new Map<string, number>();
+
+  if (target < held) {
+    let cut = held - target;
+    for (const buy of [...buys].reverse()) {
+      if (cut <= 0) {
+        break;
+      }
+      const take = Math.min(cut, buy.applied);
+      if (take > 0) {
+        changes.set(buy.id, buy.applied - take);
+        cut -= take;
+      }
+    }
+  } else if (target > held) {
+    let give = target - held;
+    for (const buy of buys) {
+      if (give <= 0) {
+        break;
+      }
+      const room = Math.min(give, buy.quantity - buy.applied);
+      if (room > 0) {
+        changes.set(buy.id, buy.applied + room);
+        give -= room;
+      }
+    }
+  }
+
+  return { left: asked - target, changes };
+}
+
+/**
+ * This basket's standing buys of one line in this trip, in the line's unit,
+ * oldest first: the purchases the read counts the line's ask from (plan 0274,
+ * section 3). The scope is the read's, so a `LIVE` basket counts its current
+ * session alone.
+ */
+async function buysOf(
+  manager: EntityManager,
+  basketId: string,
+  line: Pick<ListLine, 'id' | 'unit'>,
+  scope: BasketScope
+): Promise<DemandBuy[]> {
+  if (!scope.enabled) {
+    return [];
+  }
+  const rows = await manager.getRepository(LineSettlement).find({
+    select: { id: true, quantity: true, applied: true },
+    where: {
+      basketId,
+      lineId: line.id,
+      outcome: SettlementOutcome.BOUGHT,
+      unit: line.unit ?? 'UNIT',
+      revertedAt: IsNull(),
+      ...(scope.startedAt
+        ? { settledAt: MoreThanOrEqual(scope.startedAt) }
+        : {}),
+    },
+    order: { settledAt: 'ASC', id: 'ASC' },
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    quantity: row.quantity,
+    applied: row.applied,
+  }));
 }

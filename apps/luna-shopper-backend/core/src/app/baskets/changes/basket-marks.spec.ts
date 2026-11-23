@@ -653,6 +653,8 @@ describe('the disabled row itself', () => {
       lineId: 'll-1',
       outcome: SettlementOutcome.BOUGHT,
       quantity: 1,
+      // Every unit met the ask unless a spec says otherwise (plan 0274).
+      applied: over.quantity ?? 1,
       settledAt: new Date(2026, 0, 1, 10),
       settledByParticipantId: 'p-1',
       itemId: null,

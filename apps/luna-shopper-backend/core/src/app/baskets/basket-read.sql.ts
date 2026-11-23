@@ -1,5 +1,6 @@
 import type { LineApprovalStatus } from '@portfolio/luna-shopper/contracts';
 import { WRITABLE_LIST } from '../baskets/basket.sql';
+import { basketLineBuys } from '../lists/trips/basket-asked.sql';
 import { OPEN_GENERATED_BASKET } from './open-basket.sql';
 
 /**
@@ -226,9 +227,10 @@ export const COVERED_LINES_BY_ID_SQL = coveredLinesSql('LINES');
  * the finish wrote, and not from the lists as they stand now. So a finished
  * basket's numbers stop when it finishes:
  *
- * - **`quantity` is what is still left of `asked`** after this basket's
- *   purchases, never below zero. The read adds the purchases back, so a row
- *   asks exactly what the trip row says. A line the household raised or
+ * - **`quantity` is what is still left of `asked`** after the units of this
+ *   basket's purchases that met the ask (`applied`, plan 0274), never below
+ *   zero. The read adds those units back, so a row asks exactly what the trip
+ *   row says, also after a buy above the ask. A line the household raised or
  *   lowered afterwards does not move it.
  * - **A list the owner lost is still read.** The trip happened, and the trips
  *   read of `lists/trips/basket-asked.sql.ts` answers its frozen rows with no
@@ -250,7 +252,7 @@ export const FROZEN_LINES_SQL = `
     ll.id AS "id",
     r."listId" AS "listId",
     ll.content AS "content",
-    GREATEST(r."asked" - b."bought", 0)::int AS "quantity",
+    GREATEST(r."asked" - b."applied", 0)::int AS "quantity",
     -- What "asked" counts, frozen beside it (plan 0246, section 3.4).
     r."unit"::text AS "unit",
     ll.version AS "version",
@@ -262,16 +264,7 @@ export const FROZEN_LINES_SQL = `
   JOIN "list_lines" ll ON ll.id = r."lineId"
   -- Within one line, and in the unit of the trip row (plan 0246, section
   -- 3.5): a buy in another unit is never subtracted from what it asked.
-  LEFT JOIN LATERAL (
-    SELECT COALESCE(
-             SUM(s."quantity") FILTER (WHERE s."outcome" = 'BOUGHT'), 0
-           )::int AS "bought"
-    FROM "line_settlements" s
-    WHERE s."basketId" = r."basketId"
-      AND s."lineId" = r."lineId"
-      AND s."unit" = r."unit"
-      AND s."revertedAt" IS NULL
-  ) b ON TRUE
+  ${basketLineBuys('r."basketId"', 'r."lineId"', 'r."unit"')}
   WHERE r."basketId" = ANY($1::uuid[])
   ORDER BY r."basketId", ll."createdAt", ll.id
 `;
@@ -347,6 +340,7 @@ export const BASKET_SETTLEMENTS_SQL = `
     s."lineId" AS "lineId",
     s."outcome"::text AS "outcome",
     s.quantity AS "quantity",
+    s."applied" AS "applied",
     s."unit"::text AS "unit",
     s."settledAt" AS "settledAt",
     s."settledByParticipantId" AS "settledByParticipantId",
@@ -379,6 +373,7 @@ export const BASKETS_SETTLEMENTS_SQL = `
     s."lineId" AS "lineId",
     s."outcome"::text AS "outcome",
     s.quantity AS "quantity",
+    s."applied" AS "applied",
     s."unit"::text AS "unit",
     s."settledAt" AS "settledAt",
     s."settledByParticipantId" AS "settledByParticipantId",
@@ -402,6 +397,8 @@ export interface BasketSettlementRow {
   lineId: string;
   outcome: string;
   quantity: number;
+  /** How many of `quantity` met what the line asked (plan 0274). */
+  applied: number;
   /** What `quantity` counts (plan 0246, section 3.5). */
   unit: string;
   settledAt: Date;

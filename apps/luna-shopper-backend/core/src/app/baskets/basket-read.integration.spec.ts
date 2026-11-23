@@ -217,6 +217,7 @@ describeIntegration('the basket, read from its lists (real Postgres)', () => {
         itemId: null,
         outcome,
         quantity: outcome === SettlementOutcome.BOUGHT ? quantity : 0,
+        applied: outcome === SettlementOutcome.BOUGHT ? quantity : 0,
         settledByUserId: null,
         settledByParticipantId: randomUUID(),
         settledAt: at,
