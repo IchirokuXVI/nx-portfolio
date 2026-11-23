@@ -975,7 +975,7 @@ describe('CatalogAddStore', () => {
         await settled();
 
         expect(calls).toContain('update:old:1000:GRAM');
-        expect(calls).toContain('quantity:old:25');
+        expect(calls).toContain('quantity:old:50');
       });
 
       it('sends nothing for a minus at nothing', async () => {
@@ -1751,14 +1751,14 @@ describe('CatalogAddStore', () => {
 
       await stepped(store, on('weekly', MILK), 'old', 1);
 
-      expect(calls).toContain('quantity:old:25');
+      expect(calls).toContain('quantity:old:50');
       expect(store.visit()).toMatchObject([
-        { lineId: 'old', quantity: 2025, before: 2000, created: false },
+        { lineId: 'old', quantity: 2050, before: 2000, created: false },
       ]);
 
       await store.takeBack('old');
 
-      expect(calls).toContain('quantity:old:-25');
+      expect(calls).toContain('quantity:old:-50');
       expect(calls.some((call) => call.startsWith('delete:'))).toBe(false);
       expect(server.get('old')?.quantity).toBe(2000);
       expect(store.visit()).toEqual([]);

@@ -2345,13 +2345,13 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
         records,
       });
 
-      expect(await plusOnce(fixture)).toEqual([1025]);
+      expect(await plusOnce(fixture)).toEqual([1050]);
 
       records.set(new Map([[OTHER_RICE.id, OTHER_RICE]]));
       fixture.detectChanges();
 
-      // From the open run's 1025, now by the line's 100.
-      expect(await plusOnce(fixture)).toEqual([1125]);
+      // From the open run's 1050, now by the line's 100.
+      expect(await plusOnce(fixture)).toEqual([1150]);
     });
 
     it("reads a press on the line's step as a press, not a typed amount", async () => {
