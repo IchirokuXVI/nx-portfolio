@@ -1,4 +1,4 @@
-import { signal } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
 import {
@@ -27,10 +27,35 @@ import { QuantityReel } from './quantity-reel';
  * events are `MouseEvent`s carrying the two fields the component reads, and the
  * capture call is optional at the call site precisely so this runs.
  */
-function pointer(type: string, clientX: number, clientY = 0): Event {
+/** A reel as a row draws it: inside a block, heard through its template. */
+@Component({
+  imports: [QuantityReel],
+  template: `
+    @if (shown()) {
+      <lib-quantity-reel
+        (stepped)="heard.push($event)"
+        [value]="2"
+        label="How many Milk"
+      />
+    }
+  `,
+})
+class ReelHost {
+  readonly shown = signal(true);
+  readonly heard: QuantityStep[] = [];
+}
+
+function pointer(
+  type: string,
+  clientX: number,
+  clientY = 0,
+  // The button is down from the press until the lift, as on a real pointer.
+  buttons = type === 'pointerup' || type === 'pointercancel' ? 0 : 1
+): Event {
   const event = new MouseEvent(type, { bubbles: true, clientX, clientY });
   Object.defineProperty(event, 'pointerId', { value: 1 });
   Object.defineProperty(event, 'isPrimary', { value: true });
+  Object.defineProperty(event, 'buttons', { value: buttons });
   return event;
 }
 
@@ -51,8 +76,6 @@ async function render(
   deltas: number[];
   /** Every `stepped`, as the reel emitted it. */
   runs: QuantityStep[];
-  /** Every value the thumb sat on, in order, including the null on each close. */
-  previews: (number | null)[];
 }> {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
@@ -97,15 +120,11 @@ async function render(
     runs.push(run);
     deltas.push(run.to - run.from);
   });
-  const previews: (number | null)[] = [];
-  fixture.componentInstance.preview.subscribe((seen) => previews.push(seen));
-
   return {
     fixture,
     host: fixture.nativeElement as HTMLElement,
     deltas,
     runs,
-    previews,
   };
 }
 
@@ -771,50 +790,92 @@ describe('QuantityReel', () => {
     });
   });
 
-  describe('saying what is under the thumb', () => {
-    it('reports the number the thumb is on, as it moves', async () => {
-      // The caption has to be said **while the thumb is still moving**: "buying 20
-      // instead of 5" arrives a beat too late if it waits for the delta.
-      //
-      // It is an effect, so it reports **once per change detection** rather than once
-      // per write, which is what a caption wants: a drag that crosses three numbers
-      // between two frames draws the one it landed on, not all three.
-      const { fixture, host, previews } = await render(2);
+  /**
+   * The open tape covers the row's name and price, so a swipe up or down that starts
+   * on it is the list scrolling, as on the pill: `pan-y`, and the browser's cancel.
+   */
+  describe('a vertical swipe on the open tape', () => {
+    it('is handed to the browser, as the pill is', () => {
+      const styles = readFileSync(
+        join(__dirname, 'quantity-reel.scss'),
+        'utf8'
+      );
+      const overlay = /\n\.overlay \{([^}]*)\}/.exec(styles)?.[1] ?? '';
 
-      // A press alone previews nothing since velista `0079`, section 8: it might be
-      // the start of a scroll, and a caption that flashed on the way would be a
-      // claim about a gesture nobody made. The first sideways move is the drag.
-      host.dispatchEvent(pointer('pointerdown', 0));
-      fixture.detectChanges();
-      expect(previews.every((seen) => seen === null)).toBe(true);
-
-      for (const units of [1, 2, 3]) {
-        host.dispatchEvent(
-          pointer('pointermove', -units * QUANTITY_REEL_PX_PER_UNIT)
-        );
-        fixture.detectChanges();
-        expect(previews[previews.length - 1]).toBe(2 + units);
-      }
-
-      host.dispatchEvent(pointer('pointerup', -3 * QUANTITY_REEL_PX_PER_UNIT));
-      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
-      fixture.detectChanges();
-
-      // Null the moment it closes, so the caption goes away rather than freezing at
-      // the last number a finger was over.
-      expect(previews[previews.length - 1]).toBeNull();
+      expect(overlay).toMatch(/touch-action: pan-y;/);
+      expect(styles).not.toMatch(/touch-action: none/);
     });
 
-    it('goes quiet when the overlay is closed from outside', async () => {
-      const { fixture, host, previews } = await render(2);
+    it('keeps what the tape reached when the browser takes the press for a scroll', async () => {
+      const { fixture, host, deltas } = await render(2);
 
-      drag(host, 1);
+      drag(host, 2);
       fixture.detectChanges();
-      expect(previews[previews.length - 1]).toBe(3);
+      const tape = host.querySelector('.overlay') as HTMLElement;
+      tape.dispatchEvent(pointer('pointerdown', 0, 0));
+      tape.dispatchEvent(pointer('pointercancel', 0, 0));
+      fixture.detectChanges();
 
-      fixture.componentInstance.close();
+      expect(fixture.componentInstance.shown()).toBe(4);
+      expect(deltas).toEqual([]);
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(deltas).toEqual([2]);
+    });
+
+    it('keeps it too when the swipe moved before the cancel', async () => {
+      const { fixture, host, deltas } = await render(2);
+
+      drag(host, 2);
       fixture.detectChanges();
-      expect(previews[previews.length - 1]).toBeNull();
+      const tape = host.querySelector('.overlay') as HTMLElement;
+      tape.dispatchEvent(pointer('pointerdown', 0, 0));
+      tape.dispatchEvent(
+        pointer('pointermove', 0, QUANTITY_REEL_TAP_SLOP_PX + 30)
+      );
+      tape.dispatchEvent(
+        pointer('pointercancel', 0, QUANTITY_REEL_TAP_SLOP_PX + 30)
+      );
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.shown()).toBe(4);
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(deltas).toEqual([2]);
+    });
+  });
+
+  /**
+   * A mouse press that left the host before its first move had nothing captured, so
+   * a release outside it is never seen. The next move with no button down ends it.
+   */
+  describe('a mouse press released outside the reel', () => {
+    it('ends at the first move with no button held, and the hover after it drags nothing', async () => {
+      const { fixture, host, deltas } = await render(2);
+
+      host.dispatchEvent(pointer('pointerdown', 0));
+      // Back over the host later with the button already up, moving sideways.
+      host.dispatchEvent(pointer('pointermove', -10, 0, 0));
+      host.dispatchEvent(
+        pointer('pointermove', -3 * QUANTITY_REEL_PX_PER_UNIT, 0, 0)
+      );
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.open()).toBe(false);
+      expect(fixture.componentInstance.dragging()).toBe(false);
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(deltas).toEqual([]);
+    });
+
+    it('still drags while the button is held', async () => {
+      const { fixture, host } = await render(2);
+
+      host.dispatchEvent(pointer('pointerdown', 0));
+      host.dispatchEvent(
+        pointer('pointermove', -2 * QUANTITY_REEL_PX_PER_UNIT, 0, 1)
+      );
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.dragging()).toBe(true);
+      expect(fixture.componentInstance.shown()).toBe(4);
     });
   });
 
@@ -843,13 +904,62 @@ describe('QuantityReel', () => {
       expect(runs).toEqual([{ from: 2, to: 5, repeat: false }]);
     });
 
-    it('sends what it held when it is destroyed mid gesture', async () => {
-      const { fixture, host, runs } = await render(2);
+    /**
+     * Heard by a parent **template**, not by a subscription from code: the listener
+     * of a template lives in the view that declares the reel, and is gone before that
+     * view's `DestroyRef` callbacks run, so only a template proves the step arrives.
+     */
+    describe('torn off screen with the tape open', () => {
+      async function hosted(): Promise<{
+        fixture: ComponentFixture<ReelHost>;
+        reel: HTMLElement;
+      }> {
+        TestBed.resetTestingModule();
+        await TestBed.configureTestingModule({
+          imports: [ReelHost],
+        }).compileComponents();
+        const fixture = TestBed.createComponent(ReelHost);
+        fixture.detectChanges();
+        const reel = fixture.nativeElement.querySelector(
+          'lib-quantity-reel'
+        ) as HTMLElement;
+        return { fixture, reel };
+      }
 
-      drag(host, 2);
-      fixture.destroy();
+      it('sends what it held to the template above when its view goes', async () => {
+        const { fixture, reel } = await hosted();
 
-      expect(runs).toEqual([{ from: 2, to: 4, repeat: false }]);
+        drag(reel, 2);
+        fixture.detectChanges();
+        fixture.componentInstance.shown.set(false);
+        fixture.detectChanges();
+
+        expect(fixture.componentInstance.heard).toEqual([
+          { from: 2, to: 4, repeat: false },
+        ]);
+      });
+
+      it('sends what it held when the whole host is destroyed', async () => {
+        const { fixture, reel } = await hosted();
+        const heard = fixture.componentInstance.heard;
+
+        drag(reel, 2);
+        fixture.detectChanges();
+        fixture.destroy();
+
+        expect(heard).toEqual([{ from: 2, to: 4, repeat: false }]);
+      });
+
+      it('sends it once, not again when its timer would have run', async () => {
+        const { fixture, reel } = await hosted();
+
+        drag(reel, 2);
+        fixture.componentInstance.shown.set(false);
+        fixture.detectChanges();
+        jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+
+        expect(fixture.componentInstance.heard).toHaveLength(1);
+      });
     });
 
     it('says nothing when the run ended where it began', async () => {

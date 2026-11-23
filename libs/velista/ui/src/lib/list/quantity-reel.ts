@@ -2,7 +2,6 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  DestroyRef,
   effect,
   ElementRef,
   inject,
@@ -10,6 +9,7 @@ import {
   output,
   signal,
   untracked,
+  type OnDestroy,
 } from '@angular/core';
 import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
 import {
@@ -137,20 +137,24 @@ import { classifyReelGesture } from './quantity-reel-gesture';
     '[class.took]': 'took()',
   },
 })
-export class QuantityReel {
-  private readonly _destroyRef = inject(DestroyRef);
-
+export class QuantityReel implements OnDestroy {
   /**
    * The commit is the close, so a control torn off screen mid gesture sends what it
-   * was holding: the number moved on screen, and the person saw it move. Registered
-   * here, before the outputs, because hooks run in the order they were registered
-   * and each output stops emitting in its own: registered later, the step would be
-   * dropped (`NG0953`).
+   * was holding: the number moved on screen, and the person saw it move.
+   *
+   * **`ngOnDestroy`, not a `DestroyRef` callback**, and the difference is whether
+   * anybody hears it. The reel's `DestroyRef` belongs to the view that declares it,
+   * which is also the view that holds the parent's `(stepped)` listener, and Angular
+   * tears a view down in this order: the `ngOnDestroy` hooks of its directives, then
+   * its listeners and output subscriptions, then its `DestroyRef` callbacks. A step
+   * sent from a callback reaches a listener that is already gone. Sent from here, it
+   * reaches the row, and through it the page, because a view is torn down before
+   * the views around it.
    */
-  protected readonly sendsOnDestroy = this._destroyRef.onDestroy(() => {
-    this._flush();
+  ngOnDestroy(): void {
     this._clearTimer();
-  });
+    this._flush();
+  }
 
   /**
    * The settled quantity, as the store holds it.
@@ -207,12 +211,6 @@ export class QuantityReel {
    * started emits nothing. `repeat` is always false, since the reel has no hold.
    */
   readonly stepped = output<QuantityStep>();
-
-  /**
-   * The number under the thumb while the overlay is open, and null once it closes,
-   * however it closed. What a caller draws a caption from while the thumb moves.
-   */
-  readonly preview = output<number | null>();
 
   /**
    * The overlay closed on its own, having waited out {@link QUANTITY_REEL_IDLE_MS}.
@@ -316,12 +314,6 @@ export class QuantityReel {
       });
     });
 
-    // The pending value, out loud, for whoever is drawing a caption from it.
-    effect(() => {
-      const pending = this._pending();
-      untracked(() => this.preview.emit(pending));
-    });
-
     // A native back press shuts the open overlay and sends what it holds, the same
     // close a tap elsewhere on the row makes (velista `0166`).
     handleBackWhile(this.open, () => this.close());
@@ -353,6 +345,19 @@ export class QuantityReel {
 
   onPointerMove(event: PointerEvent): void {
     if (event.pointerId !== this._pointerId) {
+      return;
+    }
+
+    // A move with no button down is a press that already ended: a mouse that left the
+    // host before the first move, when nothing was captured yet, and let go outside
+    // it, where this control never saw the pointerup. Ended here, or the hover that
+    // follows would count as a drag with no button held.
+    if (event.buttons === 0) {
+      if (this._deciding) {
+        this._abandon();
+      } else if (this.dragging()) {
+        this.onPointerUp(event);
+      }
       return;
     }
 

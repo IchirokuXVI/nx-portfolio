@@ -215,6 +215,10 @@ describe('DueLineRow, the compact view and the Add button (velista 0203)', () =>
     const event = new MouseEvent(type, { bubbles: true, clientX });
     Object.defineProperty(event, 'pointerId', { value: 1 });
     Object.defineProperty(event, 'isPrimary', { value: true });
+    // The button is down from the press until the lift, as on a real pointer.
+    Object.defineProperty(event, 'buttons', {
+      value: type === 'pointerup' || type === 'pointercancel' ? 0 : 1,
+    });
     return event;
   }
 
@@ -267,6 +271,75 @@ describe('DueLineRow, the compact view and the Add button (velista 0203)', () =>
     expect(added).toEqual([]);
     el(fixture, '.add').click();
     expect(added).toEqual([{ lineId: 'l-1', quantity: 4 }]);
+  });
+
+  /** A drag, then the tape left open: what a thumb leaves behind on a phone. */
+  function dragReel(fixture: ComponentFixture<DueLineRow>, units: number) {
+    const host = fixture.nativeElement.querySelector(
+      'lib-quantity-reel'
+    ) as HTMLElement;
+    host.dispatchEvent(pointer('pointerdown', 0));
+    host.dispatchEvent(
+      pointer('pointermove', -units * QUANTITY_REEL_PX_PER_UNIT)
+    );
+    host.dispatchEvent(
+      pointer('pointerup', -units * QUANTITY_REEL_PX_PER_UNIT)
+    );
+    fixture.detectChanges();
+  }
+
+  /** A press and a click on Add, as a tap makes them; a touch tap moves no focus. */
+  function tapAdd(fixture: ComponentFixture<DueLineRow>): void {
+    const add = el(fixture, '.add');
+    add.dispatchEvent(pointer('pointerdown', 0));
+    add.click();
+    fixture.detectChanges();
+  }
+
+  it('adds the amount on screen when Add is tapped while the tape is still open', async () => {
+    jest.useFakeTimers();
+    const fixture = await compact(row({ quantity: 2 }));
+    const added: Array<{ lineId: string; quantity: number }> = [];
+    fixture.componentInstance.added.subscribe((event) => added.push(event));
+
+    dragReel(fixture, 2);
+    expect(reel(fixture).open()).toBe(true);
+    tapAdd(fixture);
+
+    expect(added).toEqual([{ lineId: 'l-1', quantity: 4 }]);
+    expect(reel(fixture).open()).toBe(false);
+    jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS * 2);
+    expect(added).toHaveLength(1);
+  });
+
+  it('adds once with addsOnStep on, when Add is tapped while the tape is open', async () => {
+    jest.useFakeTimers();
+    const fixture = await render(row({ quantity: 2 }), {
+      addsOnStep: true,
+      quietMs: 100,
+    });
+    fixture.componentRef.setInput('layout', 'compact');
+    fixture.detectChanges();
+    const added: Array<{ lineId: string; quantity: number }> = [];
+    fixture.componentInstance.added.subscribe((event) => added.push(event));
+
+    dragReel(fixture, 2);
+    tapAdd(fixture);
+    jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS * 2);
+
+    expect(added).toEqual([{ lineId: 'l-1', quantity: 4 }]);
+  });
+
+  it('closes the open tape on a press on the name too', async () => {
+    jest.useFakeTimers();
+    const fixture = await compact(row({ quantity: 2 }));
+
+    dragReel(fixture, 1);
+    el(fixture, '.body').dispatchEvent(pointer('pointerdown', 0));
+    fixture.detectChanges();
+
+    expect(reel(fixture).open()).toBe(false);
+    expect(fixture.componentInstance.amount()).toBe(3);
   });
 
   it('spec 10: the words are "Add" and "Añadir" with no amount', () => {

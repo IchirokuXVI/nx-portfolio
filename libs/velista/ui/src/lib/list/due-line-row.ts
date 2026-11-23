@@ -3,10 +3,12 @@ import {
   Component,
   computed,
   DestroyRef,
+  ElementRef,
   inject,
   input,
   linkedSignal,
   output,
+  viewChild,
 } from '@angular/core';
 import {
   RokuLocaleStore,
@@ -151,8 +153,35 @@ export class DueLineRow {
 
   private _timer: ReturnType<typeof setTimeout> | null = null;
 
+  private readonly _reel = viewChild(QuantityReel);
+  private readonly _reelEl = viewChild(QuantityReel, { read: ElementRef });
+
   constructor() {
-    inject(DestroyRef).onDestroy(() => this._clearTimer());
+    // **A press outside the open reel closes it first** (velista `0203`), in the
+    // capture phase, as `LineRow` does. The reel sends its amount only when it closes,
+    // and a touch drag never focuses it, so a tap on Add would not blur it: without
+    // this the add carries the amount from before the drag, and the reel's own close
+    // a beat later is a second add with `addsOnStep`, or lost with the row.
+    const host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+    const onPress = (event: Event) => this._closeReelOnPress(event);
+    host.addEventListener('pointerdown', onPress, true);
+
+    inject(DestroyRef).onDestroy(() => {
+      host.removeEventListener('pointerdown', onPress, true);
+      this._clearTimer();
+    });
+  }
+
+  private _closeReelOnPress(event: Event): void {
+    const reel = this._reel();
+    if (reel === undefined || !reel.open()) {
+      return;
+    }
+    const element = this._reelEl()?.nativeElement as HTMLElement | undefined;
+    if (element !== undefined && element.contains(event.target as Node)) {
+      return;
+    }
+    reel.close();
   }
 
   step(value: number): void {

@@ -1035,6 +1035,10 @@ describe('ProductPage', () => {
         const event = new MouseEvent(type, { bubbles: true, clientX });
         Object.defineProperty(event, 'pointerId', { value: 1 });
         Object.defineProperty(event, 'isPrimary', { value: true });
+        // The button is down from the press until the lift, as on a real pointer.
+        Object.defineProperty(event, 'buttons', {
+          value: type === 'pointerup' || type === 'pointercancel' ? 0 : 1,
+        });
         return event;
       };
       reel.dispatchEvent(pointer('pointerdown', 0));

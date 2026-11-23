@@ -11,8 +11,7 @@
   // Vertical panning belongs to the browser, so a swipe up or down that starts on the
   // number scrolls the list rather than opening the reel (velista 0079, section 8).
   // Sideways is left to the component, which claims the pointer once the press has
-  // gone past the slop in that direction. The overlay keeps `touch-action: none`: once
-  // it is up, the whole of it is the control.
+  // gone past the slop in that direction. The open overlay is `pan-y` too.
   touch-action: pan-y;
   cursor: grab;
   -webkit-user-select: none;
@@ -134,8 +133,11 @@
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   // The overlay is part of the control, not a picture of it: a thumb that lands on
-  // the number it can see has to be able to drag from there and to tap it.
-  touch-action: none;
+  // the number it can see has to be able to drag from there and to tap it. Sideways
+  // only, as on the pill: the tape covers the row's name and price, so a swipe up or
+  // down that starts on it scrolls the list, and the browser's cancel drops the
+  // press and keeps what the tape reached.
+  touch-action: pan-y;
 }
 
 // A number in the overlay is a target in its own right: tapping one goes to it. Each
