@@ -1,14 +1,7 @@
 <!--
-  Which group the list belongs to. The list's own name is not here: it is the title of
-  the page header above this block, with the settings button beside it (velista 0130).
--->
-@if (header().zoneName !== null) {
-  <p class="in-group">
-    {{ 'list.header.inGroup' | rokuT: { name: header().zoneName } }}
-  </p>
-}
+  No name and no group here. The list's name is the title of the page header above
+  this block (velista 0130), and its group is the line under that title (velista 0205).
 
-<!--
   Who else has this list open. Its own component rather than the `PresenceRow` the
   cards use, because this one opens: the screen somebody stands in a shop looking at is
   the one place worth answering who they are and since when, and a card read in passing

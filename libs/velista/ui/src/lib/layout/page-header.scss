@@ -83,6 +83,35 @@
   white-space: nowrap;
 }
 
+// H2 as amended by velista 0205. The title and its subtitle stacked in the title's
+// place, centred as a pair in the row, so the actions stay centred beside them. The
+// title keeps its own size and line; only its flex sizing moves to the stack.
+.heading {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  min-inline-size: 0;
+
+  > .title {
+    flex: none;
+  }
+}
+
+// One line, cut with an ellipsis, in the small muted size. The minimum block size is
+// its own line, so an empty subtitle (a page whose subtitle has not arrived yet) holds
+// the title where it will be once the words arrive.
+.subtitle {
+  min-block-size: calc(var(--app-text-xs) * 1.4);
+  margin: 0;
+  overflow: hidden;
+  color: var(--app-text-muted);
+  font-size: var(--app-text-xs);
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 // H5. The negative end margin is the mirror of the back control's: the last action is
 // a touch target wide and its glyph is not, so this puts the glyph near the padding
 // edge without shrinking the target.

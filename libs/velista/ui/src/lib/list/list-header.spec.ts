@@ -1,6 +1,6 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
-import type { ListHeaderVm } from '@portfolio/velista/models';
+import type { ListHeaderVm, ListViewerVm } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { ListHeader } from './list-header';
 
@@ -47,23 +47,46 @@ describe('ListHeader', () => {
       expect(host(fixture).textContent).not.toContain('Weekly shop');
     });
 
-    it('says which group the list is in, as its first line', async () => {
-      const fixture = await render();
+    // Velista `0205`: the group is the page header's subtitle now.
+    it('draws no group line, whether the group is known or not', async () => {
+      for (const zoneName of ['Home', null]) {
+        TestBed.resetTestingModule();
+        const fixture = await render(header({ zoneName }));
 
-      expect(host(fixture).firstElementChild?.matches('p.in-group')).toBe(true);
-      expect(host(fixture).firstElementChild?.textContent?.trim()).toBe(
-        'list.header.inGroup'
-      );
+        expect(host(fixture).querySelector('.in-group')).toBeNull();
+        expect(host(fixture).querySelector('p')).toBeNull();
+        expect(host(fixture).textContent).not.toContain('list.header.inGroup');
+        expect(
+          host(fixture).firstElementChild?.matches('lib-list-viewers')
+        ).toBe(true);
+      }
     });
 
-    it('starts on the viewers while the group is not known', async () => {
-      const fixture = await render(header({ listName: null, zoneName: null }));
+    it('is empty, and marked so, with nobody else here and a live list', async () => {
+      const fixture = await render();
 
-      expect(host(fixture).querySelector('.in-group')).toBeNull();
-      expect(host(fixture).querySelector('.name-skeleton')).toBeNull();
-      expect(host(fixture).firstElementChild?.matches('lib-list-viewers')).toBe(
-        true
-      );
+      // The viewers row hides itself on an empty set, and no band draws.
+      expect(host(fixture).classList).toContain('empty');
+      expect(
+        host(fixture).querySelector('lib-list-viewers')?.classList
+      ).toContain('empty');
+      expect(host(fixture).querySelector('.stale')).toBeNull();
+      expect(host(fixture).textContent?.trim()).toBe('');
+    });
+
+    it('is not empty while somebody else is here or the list is not live', async () => {
+      const ana: ListViewerVm = {
+        userId: 'u2',
+        name: 'Ana',
+        role: null,
+        since: null,
+      };
+      for (const vm of [header({ viewers: [ana] }), header({ live: false })]) {
+        TestBed.resetTestingModule();
+        const fixture = await render(vm);
+
+        expect(host(fixture).classList).not.toContain('empty');
+      }
     });
   });
 

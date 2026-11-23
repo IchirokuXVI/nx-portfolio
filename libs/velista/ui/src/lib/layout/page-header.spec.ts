@@ -19,6 +19,7 @@ import { PageHeaderAction } from './page-header-action';
       (back)="backs = backs + 1"
       [backLabel]="backLabel()"
       [leading]="leading()"
+      [subtitle]="subtitle()"
       [title]="title()"
     >
       <span class="page-icon" pageHeaderIcon>icon</span>
@@ -44,6 +45,7 @@ import { PageHeaderAction } from './page-header-action';
 })
 class Host {
   readonly title = signal('Compra semanal');
+  readonly subtitle = signal<string | null>(null);
   readonly backLabel = signal<string | null>('Back to the group');
   readonly leading = signal<'back' | 'close'>('back');
   readonly hasActions = signal(true);
@@ -198,6 +200,126 @@ describe('PageHeader', () => {
 
     expect(query(fixture, 'h1')).toBe(before);
     expect(before?.textContent?.trim()).toBe('Compra semanal');
+  });
+});
+
+/** The header as every page but the zone list draws it: no subtitle bound at all. */
+@Component({
+  imports: [PageHeader],
+  template: ` <lib-page-header backLabel="Back" title="Compra semanal" /> `,
+})
+class PlainHost {}
+
+/** The element children of the header row, as `tag.class` in order. */
+function rowShape(root: HTMLElement): string[] {
+  return Array.from(root.querySelector('header')?.children ?? []).map(
+    (child) => `${child.tagName.toLowerCase()}.${child.className}`
+  );
+}
+
+/**
+ * Velista `0205`: rule H2 amended. One optional subtitle line under the title, in the
+ * same block. Twenty nine templates draw the header and none passes one, so the case
+ * without a subtitle is held to the DOM it had before the amendment.
+ */
+describe('PageHeader and its subtitle', () => {
+  it('without a subtitle draws the row it drew before velista 0205', async () => {
+    await TestBed.configureTestingModule({
+      imports: [PlainHost, RokuTranslatorTestingModule.forTesting()],
+      providers: [provideVelistaTesting()],
+    }).compileComponents();
+    const plain = TestBed.createComponent(PlainHost);
+    plain.detectChanges();
+    const root = plain.nativeElement as HTMLElement;
+
+    // The back control, the h1 straight in the row, the actions: nothing else.
+    expect(rowShape(root)).toEqual(['button.lead', 'h1.title', 'div.actions']);
+    expect(root.querySelector('.heading, .subtitle, p')).toBeNull();
+  });
+
+  it('a null subtitle is the same row as no subtitle bound', async () => {
+    const fixture = await render();
+
+    expect(rowShape(fixture.nativeElement)).toEqual([
+      'button.lead',
+      'h1.title',
+      'div.actions',
+    ]);
+    expect(query(fixture, '.subtitle')).toBeNull();
+  });
+
+  it('draws the subtitle under the title, as a p outside the h1', async () => {
+    const fixture = await render();
+    fixture.componentInstance.subtitle.set('in Casa');
+    fixture.detectChanges();
+
+    expect(rowShape(fixture.nativeElement)).toEqual([
+      'button.lead',
+      'div.heading',
+      'div.actions',
+    ]);
+    const stack = Array.from(query(fixture, '.heading')?.children ?? []);
+    expect(stack.map((child) => child.tagName.toLowerCase())).toEqual([
+      'h1',
+      'p',
+    ]);
+    expect(stack[1].textContent?.trim()).toBe('in Casa');
+    // The page's heading is still the title alone.
+    expect(queryAll(fixture, 'h1')).toHaveLength(1);
+    expect(query(fixture, 'h1')?.textContent?.trim()).toBe('Compra semanal');
+    expect(query(fixture, 'h1 .subtitle')).toBeNull();
+  });
+
+  it('an empty subtitle draws an empty line of the subtitle’s height', async () => {
+    const fixture = await render();
+    fixture.componentInstance.subtitle.set('');
+    fixture.detectChanges();
+
+    const line = query(fixture, '.heading p.subtitle');
+    expect(line).not.toBeNull();
+    expect(line?.textContent?.trim()).toBe('');
+    // jsdom lays nothing out, so the height is read off the rule: one line of the
+    // subtitle's own size and leading, whatever it holds.
+    const rule = stylesheet().match(/\.subtitle\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(rule).toContain('min-block-size: calc(var(--app-text-xs) * 1.4)');
+    expect(rule).toContain('line-height: 1.4');
+  });
+
+  it('is one muted line in the small size, cut with an ellipsis', () => {
+    const rule = stylesheet().match(/\.subtitle\s*\{[^}]*\}/)?.[0] ?? '';
+
+    expect(rule).toContain('font-size: var(--app-text-xs)');
+    expect(rule).toContain('color: var(--app-text-muted)');
+    expect(rule).toContain('white-space: nowrap');
+    expect(rule).toContain('text-overflow: ellipsis');
+  });
+
+  it('H1: the block size is the same rule with or without a subtitle', () => {
+    const sheet = stylesheet();
+    const header = sheet.match(/\.header\s*\{[^}]*\}/)?.[0] ?? '';
+    const heading = sheet.match(/\.heading\s*\{[^}]*\}/)?.[0] ?? '';
+
+    expect(header).toContain(
+      'block-size: calc(var(--app-header-height) + var(--app-safe-top))'
+    );
+    // The stack is centred in the row and sets no size of its own.
+    expect(heading).toContain('justify-content: center');
+    expect(heading).not.toMatch(/block-size|height/);
+  });
+
+  it('keeps the h1 when the subtitle arrives on a title that was waiting', async () => {
+    const fixture = await render();
+    fixture.componentInstance.subtitle.set('');
+    fixture.componentInstance.title.set('List');
+    fixture.detectChanges();
+    const before = query(fixture, 'h1');
+
+    fixture.componentInstance.title.set('Compra semanal');
+    fixture.componentInstance.subtitle.set('in Casa');
+    fixture.detectChanges();
+
+    expect(query(fixture, 'h1')).toBe(before);
+    expect(query(fixture, '.subtitle')?.textContent?.trim()).toBe('in Casa');
   });
 });
 
