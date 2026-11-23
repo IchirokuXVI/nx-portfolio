@@ -1,0 +1,80 @@
+{
+  "title": "Velista: a basket row records buys, and a detailed view of its lists",
+  "lede": "Velista plans <code>0201</code> (the row sheet records what was bought for each list) and <code>0200</code> (a detailed view, <code>rows/:rowKey/lists</code>, holds each list's ask and the change of product), with backend <code>0273</code> behind the first. They ship together, so every frame draws the end state of both. Each board shows Day in English on the left and Night in Spanish on the right. The row sheet gains a heading and one text button where \"Change for all lists\" was; the detailed view is a sheet like the shop picker, with the chevron beside its title. No container, no tint, no banner. The design is layout A with colours A, on the stepper's number only. The detailed view opens on the row's product with \"Change for all lists\" under it; each list shows its own product on one line, in amber when it differs; the word Change at the end of that line is the only control that changes a list's product. A list the reader may not change keeps a stepper disabled as a whole (its border, its number and both ends) that explains itself when pressed. Under its title the detailed view says what it is for, in the sheets' secondary text, on every visit. A guest sees no \"Lists and amounts\". The board marked Today is drawn from the source on <code>dev</code>. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. Approved by the owner on 2026-11-22.",
+  "artboards": [
+    { "file": "Today.dc.html", "x": 0, "y": 0, "w": 860, "h": 872, "title": "Today, drawn from source: swap icon, a stepper that asks" },
+    { "file": "RowSheet.dc.html", "x": 940, "y": 0, "w": 860, "h": 872, "title": "0201 frame 1, 0200 frame 1: what you bought" },
+    { "file": "Guest.dc.html", "x": 1880, "y": 0, "w": 860, "h": 872, "title": "A guest who can change nothing" },
+    { "file": "Detail.dc.html", "x": 0, "y": 1300, "w": 860, "h": 872, "title": "0200 frame 2: one product, one list may change it" },
+    { "file": "DetailAll.dc.html", "x": 940, "y": 1300, "w": 860, "h": 872, "title": "0200 frame 3: Change for all lists, one list on another product" },
+    { "file": "Popover.dc.html", "x": 1880, "y": 1300, "w": 860, "h": 872, "title": "Another list: the disabled stepper, pressed" },
+    { "file": "LongName.dc.html", "x": 0, "y": 2600, "w": 860, "h": 872, "title": "0201 frame 3: a long name in the row sheet" },
+    { "file": "LongDetail.dc.html", "x": 940, "y": 2600, "w": 860, "h": 872, "title": "0200 frame 4: long names in the detailed view" },
+    { "file": "OtherList.dc.html", "x": 1880, "y": 2600, "w": 860, "h": 872, "title": "0201 frame 2: bought for another list" }
+  ],
+  "annotations": [
+    {
+      "id": "today",
+      "x": 0,
+      "y": -250,
+      "w": 420,
+      "text": "TODAY.\nEach list has the swap icon in a bordered square, which changes the product of that list's line, and a stepper that changes what the list asks for.\nDrawn from row-entries and the stepper on dev, not photographed: the staging account no longer signs in."
+    },
+    {
+      "id": "row",
+      "x": 940,
+      "y": -250,
+      "w": 420,
+      "text": "0201 TARGET STATES 2, 5, 6, 8; 0200 TARGET STATE 2. COLOURS A.\nThe heading says What you bought. Each stepper counts what this basket bought for that list in this trip; each name carries the list's ask. Básicos asks 2, has 2: its number is green. Cocina asks 1, has 2: amber. Only the number takes the colour.\nThe buy steppers snap to the list's ask as well as to 1000: a step lands exactly on the ask even when the step size would skip it (velista 0195 and 0201).\nLists and amounts, at the right of the heading, opens the detailed view."
+    },
+    {
+      "id": "guest",
+      "x": 1880,
+      "y": -250,
+      "w": 420,
+      "text": "0200 SPECS 1; 0201 SPECS 6.\nA guest whose lists allow no change of ask or product sees no Lists and amounts and no Bought for another list."
+    },
+    {
+      "id": "detail",
+      "x": 0,
+      "y": 960,
+      "w": 420,
+      "text": "THE DESCRIPTION.\nUnder the title, two lines of the sheets' secondary text say what the view is for, on every visit:\nHere you change the amount and the product of each list. What you bought goes on the previous screen. / Aquí cambias la cantidad y el producto de cada lista. Lo que has comprado se apunta en la pantalla anterior.\nThe description names amount and product, so the heading, What each list asks for, does not repeat it."
+    },
+    {
+      "id": "all",
+      "x": 940,
+      "y": 960,
+      "w": 420,
+      "text": "0200 TARGET STATE 4. CHANGE.\nChange for all lists sits under the product, in the block it changes.\nBásicos takes Puleva: its line is amber because it is not the row's product. The line is plain text, not a control: the word Change / Cambiar (44 px tall) is the only control that changes a list's product, and the small picture opens the picture viewer. A list that may not change its product shows no Change.\nFits 844 px with the description, three lists and the home indicator; nothing scrolls."
+    },
+    {
+      "id": "pop",
+      "x": 1880,
+      "y": 960,
+      "w": 420,
+      "text": "THE BUILD CHANGES THE STEPPER.\nDisabled as a whole: no raised fill, the hairline (border-subtle) for the strong border, the number in text-muted at its usual size and weight, both glyphs in text-muted at 60%. In Night the faint outline stays as drawn.\nNumber on the sheet: Day 5.33 to 1, Night 6.66 to 1 (enabled: 18.4 and 16.3).\nquantity-stepper.scss today fades only the ends (0.35 on aria-disabled); its border and number keep the enabled colours. The build adds a whole-stepper disabled state.\nA press opens the note popover (anchored-popover, 280 px); for a guest's own group it says: Only members of Casa can change what this list asks for."
+    },
+    {
+      "id": "long",
+      "x": 0,
+      "y": 2350,
+      "w": 420,
+      "text": "0201 TARGET STATE 5.\nThe name gives way first: Compra semanal de la… · 1,5 kg. The ask is never cut. The line under it is cut on its own.\nA product by weight shows the ask in its exact form with the unit, and the stepper the figure over kg, as the sheet stepper already does."
+    },
+    {
+      "id": "longd",
+      "x": 940,
+      "y": 2350,
+      "w": 420,
+      "text": "0200 FRAME 4.\nThe list name and its zone · line are cut; Bought 0,5 of 1,5 kg and the stepper are not. A product name that long wraps to two lines in the block and is cut on a list's line, where its brand never is.\nA product with no photo draws the app's product icon on the sunken fill, and is not a button. Both lists here may change their ask, so no disabled stepper shows."
+    },
+    {
+      "id": "other",
+      "x": 1880,
+      "y": 2350,
+      "w": 420,
+      "text": "0201 TARGET STATE 7.\nAdd it to another list becomes Bought for another list. Its steppers start at 0 and a press up records a buy for that list. Despensa is stepped to 1.\nWhen the answer comes back, Despensa becomes a list of the row, Despensa · 0, with its 1 in amber, and leaves this section."
+    }
+  ]
+}

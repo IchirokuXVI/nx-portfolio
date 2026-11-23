@@ -5,7 +5,23 @@ import {
   type LineRowVm,
   type QuantityStep,
 } from '@portfolio/velista/models';
+import { join } from 'node:path';
+import { compile } from 'sass';
 import { LineRow } from './line-row';
+
+/**
+ * The rules of a component's stylesheet as the browser gets them: compiled by the
+ * repo's `sass`, as the contrast spec does, so nesting is flattened and a selector is
+ * matched as it ships, not as it is written. jest's Angular preset does not inline a
+ * `styleUrl`, so the component definition holds no style text to read.
+ */
+function compiledRules(file: string): { selector: string; body: string }[] {
+  const css = compile(join(__dirname, file)).css;
+  return [...css.matchAll(/([^{}]*)\{([^{}]*)\}/g)].map((match) => ({
+    selector: match[1].replace(/\s+/g, ' ').trim(),
+    body: match[2],
+  }));
+}
 
 /**
  * Velista plan 0043 section 7, which **replaces** `0012` section 7's row mapping in
@@ -718,12 +734,77 @@ describe('LineRow', () => {
     });
   });
 
+  /**
+   * Velista 0196. jsdom cannot press an element into `:active`, so the compiled
+   * stylesheet is read: the row turns the browser's tap box off, and draws its own
+   * press exactly when the press will open the line.
+   */
+  describe('the press (velista 0196)', () => {
+    const rules = compiledRules('line-row.scss');
+    const pressed = rules.filter((rule) => rule.selector.includes(':active'));
+
+    it('turns off the tap highlight on the row', () => {
+      expect(rules.find((rule) => rule.selector === '.row')?.body).toMatch(
+        /-webkit-tap-highlight-color:\s*transparent;/
+      );
+    });
+
+    it('has one pressed rule, and it sinks the row with no transition', () => {
+      expect(pressed).toHaveLength(1);
+      expect(pressed[0].body).toMatch(
+        /background:\s*var\(--app-surface-sunken\);/
+      );
+      expect(pressed[0].body).not.toContain('transition');
+    });
+
+    it('sinks a row whose tap opens the line, and never an inert one', () => {
+      // `.inert` is exactly a row whose `onRowClick` returns early.
+      expect(pressed[0].selector).toMatch(/^\.row:not\(\.inert\):active:not\(/);
+    });
+
+    it('leaves out a press on the stepper, a button or the photo viewer, and only those', () => {
+      const excluded = /:not\(:has\(([^()]*(?:\([^()]*\)[^()]*)*)\)\)$/
+        .exec(pressed[0].selector)?.[1]
+        .split(',')
+        .map((term) => term.trim());
+
+      expect(excluded).toEqual([
+        'lib-quantity-stepper:active',
+        'button:active',
+        'lib-photo-viewer:active',
+      ]);
+    });
+
+    it('sinks the row on a press on a picture with no zoom, which opens the line', () => {
+      expect(pressed[0].selector).not.toContain('lib-product-picture');
+    });
+  });
+
   describe('a write in flight', () => {
     it('is aria-busy and keeps its accessible name', async () => {
       const fixture = await render(vm({ write: 'pending' }));
 
       expect(row(fixture).getAttribute('aria-busy')).toBe('true');
       expect(row(fixture).getAttribute('aria-label')).toBe('Sourdough loaf, 1');
+    });
+
+    // Velista 0197: the row is not dimmed while it saves. jsdom draws no component
+    // style, so the compiled stylesheet is read for a rule that would change its
+    // opacity.
+    it('is not dimmed while it saves (velista 0197)', async () => {
+      const fixture = await render(vm({ write: 'pending' }));
+      const rules = compiledRules('line-row.scss');
+
+      expect(row(fixture).getAttribute('aria-busy')).toBe('true');
+      expect(['', '1']).toContain(getComputedStyle(row(fixture)).opacity);
+      expect(
+        rules.filter(
+          (rule) =>
+            (rule.selector.includes('.in-flight') ||
+              rule.selector === '.row') &&
+            /(^|[;\s])opacity\s*:/.test(rule.body)
+        )
+      ).toEqual([]);
     });
 
     it('is not busy when nothing is outstanding', async () => {

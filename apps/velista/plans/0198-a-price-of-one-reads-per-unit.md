@@ -1,3 +1,5 @@
+> **PR:** [#1070](https://github.com/IchirokuXVI/nx-portfolio/pull/1070)
+
 # 0198: a price of one reads "/ u"
 
 > Decided on 2026-11-22. A zone list row of a pack or a piece shows its price with no
@@ -5,6 +7,9 @@
 > owner sees the same price twice and fears it confuses. A product sold by the kilo already
 > reads "2,50 € / kg". The owner's ruling: the price of one reads "1,20 € / u", like the
 > kilo.
+>
+> Amended on 2026-11-23: a line that counts grams or millilitres of a pack or a piece reads
+> / u too, since the price drawn is the price of one.
 >
 > Independent of every other plan of this round; it can be built and released alone. Both
 > row layouts read the same builder, so the change shows in both, and in the layouts of
@@ -56,8 +61,8 @@ price.
 
 ### Action boundaries
 
-- Stop and ask if a row draws "/ u" for anything that is not the price of one of what the
-  line counts.
+- Stop and ask if a row draws "/ u" for anything that is not the price of one pack or one
+  piece, whatever unit the line counts in.
 
 ### Progress evidence
 

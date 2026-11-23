@@ -1,4 +1,20 @@
-import { usernameProblem } from './limits';
+import {
+  QUANTITY_HOLD_DELAY_MS,
+  QUANTITY_HOLD_FIRST_MS,
+  QUANTITY_STEP_QUIET_MS,
+  usernameProblem,
+} from './limits';
+
+/**
+ * The quiet beat outlasts the hold's wait and its slowest interval (velista `0188`
+ * decision F, `0194` section 1), so a hold and a run of taps stay one run.
+ */
+describe('the quiet beat of a stepper', () => {
+  it('is longer than the wait of a hold and than its first interval', () => {
+    expect(QUANTITY_STEP_QUIET_MS).toBeGreaterThan(QUANTITY_HOLD_DELAY_MS);
+    expect(QUANTITY_STEP_QUIET_MS).toBeGreaterThan(QUANTITY_HOLD_FIRST_MS);
+  });
+});
 
 /**
  * The client's mirror of the server's name rule (velista `0160`, item 1).

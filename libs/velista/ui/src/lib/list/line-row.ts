@@ -81,9 +81,16 @@ export type LineRowAction = 'approve' | 'reject' | 'restore';
  *
  * ## A row with a write in flight stays live
  *
- * Drawn at 70% and `aria-busy`, and still usable. Blocking it would make the app feel
- * slow on exactly the connection it was designed for, and the next adjustment simply
- * supersedes the last (`0012`, section 3.3).
+ * `aria-busy`, and still usable. Blocking it would make the app feel slow on exactly
+ * the connection it was designed for, and the next adjustment simply supersedes the
+ * last (`0012`, section 3.3).
+ *
+ * It is not dimmed (velista `0197`, the owner's ruling of 2026-11-22). It was drawn at
+ * 70%, and on the night theme that let the dark page show through the stepper and the
+ * photo, so the row darkened and lightened again a beat after every step. Most people
+ * never learned what the dimming meant; the compact row's spinner in place of the
+ * total says it better. The class `in-flight` stays, with no rule, because specs read
+ * it as the state.
  *
  * ## Somebody else editing is drawn, and decides nothing
  *
