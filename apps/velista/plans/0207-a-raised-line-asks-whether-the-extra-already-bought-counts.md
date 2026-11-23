@@ -2,6 +2,10 @@
 
 # 0207: a raised line asks whether the extra already bought counts
 
+> Superseded in part on 2026-11-23 by velista `0208` (`0208-every-raise-asks-about-the-extra-and-the-amount-set-stands.md`):
+> the default is now the amount the person set, and the extra is counted only on the
+> explicit answer.
+>
 > Decided by the owner on 2026-11-22. A list's line was bought above its ask in an open
 > shopping trip: the list asked 3 and Marta bought 4, so 1 unit is extra. A person then
 > raises that line on the zone list page. Without a question, the list asks for the new
