@@ -146,13 +146,13 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(tos(h)).toEqual([0]);
     });
 
-    it('steps a count by 10 from 1000 and back by 1 below it (S7b)', () => {
+    it('steps a count by 50 from 1000 and back by 1 below it (S7b, velista 0195)', () => {
       const h = render({ value: 999 });
       h.plus.click();
       h.plus.click();
       h.minus.click();
       h.minus.click();
-      expect(tos(h)).toEqual([1000, 1010, 1000, 999]);
+      expect(tos(h)).toEqual([1000, 1050, 1000, 999]);
     });
   });
 
@@ -174,7 +174,7 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(h.plus.getAttribute('aria-disabled')).toBe('true');
       h.plus.click();
       expect(h.steps).toEqual([]);
-      h.set('value', 999_950);
+      h.set('value', 999_900);
       expect(h.plus.getAttribute('aria-disabled')).toBeNull();
     });
 
@@ -183,38 +183,38 @@ describe('QuantityStepper (velista 0188)', () => {
         expect(LINE_QUANTITY_MAX).toBe(99_999);
       });
 
-      it.each(['GRAM', 'MILLILITER'])('stops %s plus at 99 975, and never clamps', (unit) => {
-        const h = render({ value: 99_925, unit });
+      it.each(['GRAM', 'MILLILITER'])('stops %s plus at 99 950, and never clamps', (unit) => {
+        const h = render({ value: 99_850, unit });
         h.plus.click();
         h.plus.click();
-        expect(tos(h)).toEqual([99_950, 99_975]);
+        expect(tos(h)).toEqual([99_900, 99_950]);
         expect(h.plus.getAttribute('aria-disabled')).toBe('true');
         h.plus.click();
-        expect(tos(h)).toEqual([99_950, 99_975]);
-        h.set('value', 99_974);
+        expect(tos(h)).toEqual([99_900, 99_950]);
+        h.set('value', 99_949);
         expect(h.plus.getAttribute('aria-disabled')).toBeNull();
         h.set('value', 99_999);
         expect(h.plus.getAttribute('aria-disabled')).toBe('true');
       });
 
-      it('stops a count plus where a step of 10 would pass it', () => {
-        const h = render({ value: 99_980 });
+      it('stops a count plus where a step of 50 would pass it', () => {
+        const h = render({ value: 99_900 });
         h.plus.click();
-        expect(tos(h)).toEqual([99_990]);
+        expect(tos(h)).toEqual([99_950]);
         expect(h.plus.getAttribute('aria-disabled')).toBe('true');
         h.plus.click();
-        expect(tos(h)).toEqual([99_990]);
+        expect(tos(h)).toEqual([99_950]);
       });
 
       it('stops a plus hold before the ceiling', () => {
-        const h = render({ value: 99_900, unit: 'GRAM' });
+        const h = render({ value: 99_800, unit: 'GRAM' });
         fire(h.plus, 'pointerdown');
         jest.advanceTimersByTime(5000);
-        expect(tos(h)).toEqual([99_925, 99_950, 99_975]);
-        const count = render({ value: 99_950 });
+        expect(tos(h)).toEqual([99_850, 99_900, 99_950]);
+        const count = render({ value: 99_750 });
         fire(count.plus, 'pointerdown');
         jest.advanceTimersByTime(5000);
-        expect(tos(count)).toEqual([99_960, 99_970, 99_980, 99_990]);
+        expect(tos(count)).toEqual([99_800, 99_850, 99_900, 99_950]);
       });
 
       it.each(['GRAM', 'UNIT'])('draws a %s line stored above it as it is, plus off and minus on', (unit) => {
@@ -224,7 +224,7 @@ describe('QuantityStepper (velista 0188)', () => {
         expect(h.plus.getAttribute('aria-disabled')).toBe('true');
         expect(h.minus.getAttribute('aria-disabled')).toBeNull();
         h.minus.click();
-        expect(tos(h)).toEqual([unit === 'GRAM' ? 99_975 : 99_990]);
+        expect(tos(h)).toEqual([99_950]);
       });
 
       it('says the ceiling as aria-valuemax and takes End to it, for every unit', () => {
@@ -449,10 +449,44 @@ describe('QuantityStepper (velista 0188)', () => {
       );
     });
 
-    it('names a count step 1 below 1000 and 10 from it', () => {
+    it('names a count step 1 below 1000 and 50 from it', () => {
       const h = render({ value: 1000 });
       expect(h.minus.getAttribute('aria-label')).toContain('"step":"1"');
-      expect(h.plus.getAttribute('aria-label')).toContain('"step":"10"');
+      expect(h.plus.getAttribute('aria-label')).toContain('"step":"50"');
+    });
+
+    describe('snap points (velista 0195)', () => {
+      it('names the plus with the real difference: 10 g at 990 g, 50 g at 1000 g', () => {
+        const h = render({ value: 990, unit: 'GRAM' });
+        expect(h.plus.getAttribute('aria-label')).toContain('"step":"10 g"');
+        h.set('value', 1000);
+        expect(h.plus.getAttribute('aria-label')).toContain('"step":"50 g"');
+      });
+
+      it('lands on a point the caller passes, and names both presses 15 g', () => {
+        const h = render({ value: 975, unit: 'GRAM', snaps: [990, 1000] });
+        expect(h.plus.getAttribute('aria-label')).toContain('"step":"15 g"');
+        h.plus.click();
+        expect(tos(h)).toEqual([990]);
+        expect(h.minus.getAttribute('aria-label')).toContain('"step":"15 g"');
+        h.minus.click();
+        expect(tos(h)).toEqual([990, 975]);
+      });
+
+      it('stops at 1000 with no snaps input', () => {
+        const h = render({ value: 990, unit: 'GRAM' });
+        h.plus.click();
+        expect(tos(h)).toEqual([1000]);
+        h.set('value', 1025);
+        h.minus.click();
+        expect(tos(h)).toEqual([1000, 1000]);
+      });
+
+      it('never lands on a point under its floor', () => {
+        const h = render({ value: 110, unit: 'GRAM', min: 100, snaps: [90] });
+        h.minus.click();
+        expect(tos(h)).toEqual([100]);
+      });
     });
 
     it('draws the short form with its spoken words, and no focusable cell', () => {
@@ -1182,13 +1216,13 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(tos(sheet)).toEqual([900, 1000]);
     });
 
-    it('moves a press at 1000 by 10 on a step of 5 (S7b, decision F)', () => {
+    it('moves a press at 1000 by 50 on a step of 5 (S7b, decision F, velista 0195)', () => {
       const h = render({ value: 995, unit: 'GRAM', step: 5 });
       h.plus.click();
       h.plus.click();
       h.minus.click();
       h.minus.click();
-      expect(tos(h)).toEqual([1000, 1010, 1000, 995]);
+      expect(tos(h)).toEqual([1000, 1050, 1000, 995]);
     });
 
     it('names the step each button moves', () => {
@@ -1197,11 +1231,11 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(h.plus.getAttribute('aria-label')).toContain('"step":"100 g"');
       h.set('step', 5);
       expect(h.minus.getAttribute('aria-label')).toContain('"step":"5 g"');
-      expect(h.plus.getAttribute('aria-label')).toContain('"step":"10 g"');
+      expect(h.plus.getAttribute('aria-label')).toContain('"step":"50 g"');
     });
 
     it('turns plus off where one step of the product would pass the most', () => {
-      const h = render({ value: 99_950, unit: 'GRAM', step: 100 });
+      const h = render({ value: 99_900, unit: 'GRAM', step: 100 });
       expect(h.plus.getAttribute('aria-disabled')).toBe('true');
       h.set('step', null);
       expect(h.plus.getAttribute('aria-disabled')).toBeNull();
@@ -1314,14 +1348,14 @@ describe('QuantityStepper (velista 0188)', () => {
         ]);
       });
 
-      it('builds quick presses past 1000 by 10 on a step of 5', () => {
+      it('builds quick presses down across 1000 on a step of 5, stopping on it', () => {
         const h = render(
           { value: 1005, unit: 'GRAM', step: 5 },
           { follow: false }
         );
         h.minus.click();
         h.minus.click();
-        expect(tos(h)).toEqual([995, 990]);
+        expect(tos(h)).toEqual([1000, 995]);
       });
 
       it('stops plus at the most within one task on a step of 100', () => {
