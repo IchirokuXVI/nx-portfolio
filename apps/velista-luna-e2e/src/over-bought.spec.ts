@@ -14,7 +14,7 @@ import {
   resetAliceWorld,
   type Session,
 } from './support/api';
-import { signIn } from './support/app';
+import { composerField, signIn } from './support/app';
 
 /**
  * A raise on the zone list asks whether the extra already bought counts (velista
@@ -30,9 +30,7 @@ import { signIn } from './support/app';
  * the server's number either way.
  */
 
-/** Dana's name in the group: the generated username, not her display name. */
-const DANA_NAME = 'Calm Harbour';
-const NB = ' ';
+const NB =' ';
 
 function breadRow(page: Page): Locator {
   return page.locator(`li.line[data-line-id="${LINE_BREAD_ID}"]`);
@@ -46,8 +44,14 @@ function question(page: Page): Locator {
   return page.locator('lib-extra-ask');
 }
 
+/**
+ * Groceries, searched for Bread. Dana's open trip holds the line, so the list
+ * draws it under her trip and not in To buy; the search draws every matching line
+ * with its stepper, and those rows are the zone list's own.
+ */
 async function openGroceries(page: Page): Promise<void> {
   await page.goto(`/en/zones/${ZONE_WEEKLY_ID}/lists/${LIST_GROCERIES_ID}`);
+  await composerField(page).fill('Bread');
   await expect(breadAmount(page)).toBeVisible();
 }
 
@@ -71,10 +75,19 @@ test.describe('a raise asks whether the extra already bought counts (velista 020
 
   let alice: Session;
   let dana: Session;
+  /** Dana's name in the group, as the page names a member: her username. */
+  let danaName = '';
 
   test.beforeAll(async () => {
     alice = await login(ALICE_EMAIL);
     dana = await login(DANA_EMAIL);
+    const members = await alice.get<{
+      items: { userId: string; username: string }[];
+    }>(`/v1/zones/${ZONE_WEEKLY_ID}/members?limit=100`);
+    danaName =
+      members.items.find((member) => member.userId === dana.userId)
+        ?.username ?? '';
+    expect(danaName).not.toBe('');
   });
 
   test.afterAll(async () => {
@@ -95,9 +108,10 @@ test.describe('a raise asks whether the extra already bought counts (velista 020
       sources: [{ zoneId: ZONE_WEEKLY_ID, listId: LIST_GROCERIES_ID }],
       name: `Over bought ${Date.now()}`,
     });
+    // `from` is what the row asks before the buy, which the server checks.
     await buyBasketRow(dana, run.basket.id, [LINE_BREAD_ID], {
       quantity: 2,
-      from: 0,
+      from: 1,
     });
     expect(
       (await readLine(alice, LIST_GROCERIES_ID, LINE_BREAD_ID)).quantity
@@ -119,7 +133,7 @@ test.describe('a raise asks whether the extra already bought counts (velista 020
     expect(sent).toEqual({ delta: 1, unit: 'UNIT', countExtra: true });
 
     await expect(question(page).locator('.question')).toHaveText(
-      `${DANA_NAME} already bought 1 extra. Do you still need 3, or just${NB}2?`
+      `${danaName} already bought 1 extra. Do you still need 3, or just${NB}2?`
     );
     const [stillNeed, count] = await question(page).locator('.answer').all();
     await expect(stillNeed).toHaveText(new RegExp(`Still need\\s*3${NB}units`));
@@ -137,7 +151,7 @@ test.describe('a raise asks whether the extra already bought counts (velista 020
     expect(
       (await readLine(alice, LIST_GROCERIES_ID, LINE_BREAD_ID)).quantity
     ).toBe(2);
-    await page.reload();
+    await openGroceries(page);
     await expect(breadAmount(page)).toHaveAttribute('data-value', '2');
   });
 
@@ -173,7 +187,7 @@ test.describe('a raise asks whether the extra already bought counts (velista 020
     expect(
       (await readLine(alice, LIST_GROCERIES_ID, LINE_BREAD_ID)).quantity
     ).toBe(4);
-    await page.reload();
+    await openGroceries(page);
     await expect(breadAmount(page)).toHaveAttribute('data-value', '4');
   });
 });
