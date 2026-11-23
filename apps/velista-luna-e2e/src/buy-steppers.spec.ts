@@ -228,6 +228,8 @@ test.describe('the buy reels of a row sheet in the compact view (velista 0204)',
       }
     });
 
+    // The sheet rises into place: measure the reel once nothing moves.
+    await page.waitForFunction(() => document.getAnimations().length === 0);
     const box = await field.boundingBox();
     if (box === null) throw new Error('the reel has no box');
     const y = box.y + box.height / 2;
