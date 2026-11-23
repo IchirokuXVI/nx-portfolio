@@ -1,3 +1,5 @@
+> **PR:** [#1087](https://github.com/IchirokuXVI/nx-portfolio/pull/1087)
+
 # 0275: a raise from the zone list counts what was bought above the ask
 
 > Decided by the owner on 2026-11-22. A list's line was bought above its ask in an open
