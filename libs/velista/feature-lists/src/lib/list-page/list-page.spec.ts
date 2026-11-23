@@ -599,6 +599,14 @@ function filterBadge(fixture: ComponentFixture<ListPage>): number | null {
   return badge == null ? null : Number(badge.textContent);
 }
 
+/** The view picker's button (velista `0202`). */
+function viewAction(fixture: ComponentFixture<ListPage>) {
+  return query(
+    fixture,
+    'lib-page-header lib-view-picker button[libPageHeaderAction][aria-label="view.title"]'
+  );
+}
+
 function settingsAction(fixture: ComponentFixture<ListPage>) {
   return query(
     fixture,
@@ -1055,7 +1063,7 @@ describe('ListPage', () => {
       expect(settingsAction(fixture)).toBeNull();
     });
 
-    it('puts the filter before the settings', async () => {
+    it('puts the view button first, then the filter, then the settings (velista 0202)', async () => {
       const { fixture } = await render({ permissions: ADMIN });
 
       const actions = Array.from(
@@ -1064,7 +1072,17 @@ describe('ListPage', () => {
         )
       );
 
-      expect(actions).toEqual([filterAction(fixture), settingsAction(fixture)]);
+      expect(actions).toEqual([
+        viewAction(fixture),
+        filterAction(fixture),
+        settingsAction(fixture),
+      ]);
+      expect(
+        viewAction(fixture)?.querySelector('lib-view-icon')
+      ).not.toBeNull();
+      expect(
+        filterAction(fixture)?.querySelector('lib-filter-icon')
+      ).not.toBeNull();
       expect(query(fixture, 'lib-list-tools')).toBeNull();
     });
 
@@ -4051,6 +4069,10 @@ describe('ListPage: searching and viewing one category', () => {
 
     // Nothing on: no badge, and the plain name.
     expect(filterBadge(fixture)).toBeNull();
+    expect(filterAction(fixture)?.classList).not.toContain('is-on');
+    expect(
+      filterAction(fixture)?.querySelector('lib-filter-icon')
+    ).not.toBeNull();
     expect(filterAction(fixture)?.getAttribute('aria-label')).toBe(
       'basket.view.open'
     );
@@ -4058,6 +4080,8 @@ describe('ListPage: searching and viewing one category', () => {
     view.setOrder('alpha');
     fixture.detectChanges();
     expect(filterBadge(fixture)).toBe(1);
+    // The funnel in the quiet amber (velista 0202).
+    expect(filterAction(fixture)?.classList).toContain('is-on');
     // The name carries the count too, for whoever cannot see the badge.
     expect(filterAction(fixture)?.getAttribute('aria-label')).toBe(
       'basket.view.openCount'
@@ -5779,9 +5803,9 @@ describe('the history names a price per kilo with its slash', () => {
   }
 });
 
-describe('ListPage: compact rows (velista 0191)', () => {
+describe('ListPage: the two views (velista 0191, 0202)', () => {
   const COMPACT = new Map([
-    [StorageKeys.listRows, JSON.stringify({ version: 1, layout: 'compact' })],
+    [StorageKeys.listRows, JSON.stringify({ version: 2, layout: 'compact' })],
   ]);
   const ROWS = [
     line('ln-milk', { content: 'Leche', position: 1 }),
@@ -5796,13 +5820,57 @@ describe('ListPage: compact rows (velista 0191)', () => {
     );
   }
 
-  it('draws the row of today with no choice on the device', async () => {
+  it('draws the default view, the row of 0191, with no choice on the device', async () => {
     const { fixture } = await render({ lines: ROWS });
 
     expect(lineRows(fixture)).toHaveLength(2);
     expect(
+      lineRows(fixture).every((row) => row.classList.contains('facts-row'))
+    ).toBe(true);
+    expect(
       lineRows(fixture).some((row) => row.classList.contains('compact'))
     ).toBe(false);
+  });
+
+  it('reads a record of version 1 as the default view', async () => {
+    const { fixture } = await render({
+      lines: ROWS,
+      storage: new Map([
+        [
+          StorageKeys.listRows,
+          JSON.stringify({ version: 1, layout: 'compact' }),
+        ],
+      ]),
+    });
+
+    expect(
+      lineRows(fixture).some((row) => row.classList.contains('compact'))
+    ).toBe(false);
+  });
+
+  it('sets the view from the header picker, and the rows follow', async () => {
+    const { fixture, storage } = await render({ lines: ROWS });
+    document.body.append(fixture.nativeElement as HTMLElement);
+
+    viewAction(fixture)?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    document
+      .querySelector<HTMLElement>('[role="menuitemradio"][data-view="compact"]')
+      ?.click();
+    fixture.detectChanges();
+
+    expect(TestBed.inject(ListRowsStore).layout()).toBe('compact');
+    expect(JSON.parse(storage.get(StorageKeys.listRows) ?? 'null')).toEqual({
+      version: 2,
+      layout: 'compact',
+    });
+    expect(
+      lineRows(fixture).every((row) => row.classList.contains('compact'))
+    ).toBe(true);
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    (fixture.nativeElement as HTMLElement).remove();
   });
 
   it('draws every row compact when the device chose it', async () => {
@@ -5845,13 +5913,12 @@ describe('ListPage: compact rows (velista 0191)', () => {
   });
 
   it('hands a run to its write in one task, so the row is never neither (2026-11-12)', async () => {
-    // The compact row hides its price while the line has an open run or a write in
+    // The default row hides its price while the line has an open run or a write in
     // flight. The real store over a write that never answers: at the quiet beat the
     // run leaves `pending` and the write is marked in flight before anything draws.
     const { fixture } = await render({
       lineRead: [line('ln-1', { quantity: 2 })],
       lineWrites: { addQuantity: () => new Promise<Line>(() => undefined) },
-      storage: new Map(COMPACT),
     });
     await fixture.whenStable();
     fixture.detectChanges();

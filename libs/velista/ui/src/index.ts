@@ -90,6 +90,7 @@ export * from './lib/list/share-row';
 export * from './lib/list/suggestion-list';
 export * from './lib/list/trip-group';
 export * from './lib/list/trip-row';
+export * from './lib/list/view-picker';
 export * from './lib/presence/list-viewers';
 export * from './lib/presence/presence-row';
 export * from './lib/recording/recording-elapsed';

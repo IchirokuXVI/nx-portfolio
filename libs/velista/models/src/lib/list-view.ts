@@ -181,9 +181,11 @@ export interface LineRowShownProduct {
 }
 
 /**
- * How the rows of a zone list are drawn (velista `0191`): the row of today, or the
- * compact row with its three lines of facts. Chosen on the device, in the account
- * page.
+ * How the rows of a zone list are drawn (velista `0202`, the owner's decision of
+ * 2026-11-22). `default` is the row of velista `0191`, with its three lines of facts
+ * beside the stepper. `compact` is the two line row, which fits more rows on a
+ * screen. Chosen on the device, from the view picker of the zone list page and of
+ * the basket page.
  */
 export type ListRowLayout = 'default' | 'compact';
 

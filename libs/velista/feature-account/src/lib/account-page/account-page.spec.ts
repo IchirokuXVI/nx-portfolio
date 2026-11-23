@@ -14,7 +14,6 @@ import {
   fakeProfileStore,
   fakeZoneStore,
   GoogleSignIn,
-  ListRowsStore,
   profileFor,
   provideFakeAuthService,
   provideFakeProfileStore,
@@ -184,8 +183,6 @@ async function render(options: Options = {}): Promise<{
       { provide: Router, useValue: router },
       { provide: TourStore, useValue: tour },
       GoogleSignIn,
-      // The device's choice of list row (velista 0191), real, over the storage above.
-      ListRowsStore,
       { provide: AuthApi, useValue: {} },
       {
         provide: GOOGLE_CREDENTIAL,
@@ -612,79 +609,13 @@ describe('AccountPage', () => {
     });
   });
 
-  describe('the compact rows switch (velista 0191)', () => {
-    function section(fixture: ComponentFixture<AccountPage>): HTMLElement {
-      return (fixture.nativeElement as HTMLElement).querySelector(
-        'section[aria-labelledby="account-app"]'
-      ) as HTMLElement;
-    }
+  // The view is chosen on the zone list and the basket since velista 0202.
+  it('draws no switch for the rows of a list (velista 0202)', async () => {
+    const { fixture } = await render();
+    const page = fixture.nativeElement as HTMLElement;
 
-    function control(
-      fixture: ComponentFixture<AccountPage>
-    ): HTMLInputElement | null {
-      return section(fixture).querySelector(
-        'lib-account-switch input[role="switch"]'
-      );
-    }
-
-    it.each([
-      ['a registered account', false],
-      ['a guest', true],
-    ])('sits directly under the language row for %s', async (_, guest) => {
-      const { fixture } = await render({ guest });
-      const children = Array.from(section(fixture).children);
-      const language = children.findIndex((child) =>
-        (child.textContent ?? '').includes('account.language.label')
-      );
-
-      expect(language).toBeGreaterThanOrEqual(0);
-      expect(children[language + 1]?.tagName.toLowerCase()).toBe(
-        'lib-account-switch'
-      );
-      expect(children[language + 1]?.textContent).toContain(
-        'account.listRows.label'
-      );
-      expect(children[language + 1]?.textContent).toContain(
-        'account.listRows.hint'
-      );
-    });
-
-    it('is off by default', async () => {
-      const { fixture } = await render();
-
-      expect(control(fixture)?.checked).toBe(false);
-      expect(TestBed.inject(ListRowsStore).layout()).toBe('default');
-    });
-
-    it('reflects the store', async () => {
-      const { fixture } = await render();
-
-      TestBed.inject(ListRowsStore).setLayout('compact');
-      fixture.detectChanges();
-
-      expect(control(fixture)?.checked).toBe(true);
-    });
-
-    it('a flip sets the layout, which the device keeps', async () => {
-      const { fixture, storage } = await render();
-      const rows = TestBed.inject(ListRowsStore);
-      const spy = jest.spyOn(rows, 'setLayout');
-
-      control(fixture)?.click();
-      fixture.detectChanges();
-
-      expect(spy).toHaveBeenLastCalledWith('compact');
-      expect(rows.layout()).toBe('compact');
-      expect(JSON.parse(storage.get(StorageKeys.listRows) ?? 'null')).toEqual({
-        version: 1,
-        layout: 'compact',
-      });
-
-      control(fixture)?.click();
-
-      expect(spy).toHaveBeenLastCalledWith('default');
-      expect(rows.layout()).toBe('default');
-    });
+    expect(page.querySelector('lib-account-switch')).toBeNull();
+    expect(page.textContent).not.toContain('account.listRows');
   });
 
   describe('the language row', () => {

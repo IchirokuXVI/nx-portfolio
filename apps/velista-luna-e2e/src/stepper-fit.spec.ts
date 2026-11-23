@@ -154,9 +154,14 @@ const FIT_LINE = 'Stepper fit e2e';
 const fitRow = (page: Page) =>
   page.locator('lib-line-row', { hasText: FIT_LINE });
 
+/**
+ * The zone list in the view a fresh device draws: the default view, which since
+ * velista 0202 is the row of three facts (velista 0191) with the stepper beside them.
+ */
 async function openList(page: Page): Promise<void> {
   await signIn(page, ALICE_EMAIL);
   await page.goto(`/en/zones/${ZONE_WEEKLY_ID}/lists/${LIST_GROCERIES_ID}`);
+  await expect(fitRow(page).locator('.row')).toHaveClass(/\bfacts-row\b/);
   await expect(
     fitRow(page).locator('lib-quantity-stepper.variant-row')
   ).toBeVisible();
@@ -205,7 +210,9 @@ test.describe('the stepper fits its longest amount (velista 0188)', () => {
     page,
   }) => {
     await openList(page);
-    await fitRow(page).locator('.row').click();
+    // On the label: the middle of a default row with no product is its "Choose a
+    // product" control, which opens the catalog and not the line sheet.
+    await fitRow(page).locator('.facts-line-1 > .label').click();
     const stepper = page
       .getByRole('dialog')
       .locator('lib-quantity-stepper.variant-sheet')

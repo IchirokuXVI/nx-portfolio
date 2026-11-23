@@ -18,17 +18,24 @@ import {
   setAdminPrice,
   type Session,
 } from './support/api';
-import { signIn } from './support/app';
+import { generateBasket, sheet, signIn } from './support/app';
 
 /**
- * Velista 0191, section 8: the compact row, chosen on the account page.
+ * Velista 0191, section 8, and velista 0202: the row of three facts is the default
+ * view, and a view picker on the zone list and on the basket page turns the
+ * compact view, the two line row, on and off.
  *
- * A loose product at 750 g, priced at 1,99 a kilo, so the row has every fact a
- * compact row draws: no size, the price per kilo as its unit price, and what the
+ * A loose product at 750 g, priced at 1,99 a kilo, so the row has every fact the
+ * default row draws: no size, the price per kilo as its unit price, and what the
  * 750 g cost, marked as an estimate. A pack at two, priced at 0,99, draws its
- * price and the exact total of two (the owner's decision of 2026-11-12). The geometry is measured in the browser at the phone width the
- * plan states: 99 high, a 74 square picture, and the 0188 row stepper at 155 by
- * 48. The stepper's own steps are 0188's specs, not this one.
+ * price and the exact total of two (the owner's decision of 2026-11-12). The
+ * geometry is measured in the browser at the phone width the plan states: 99
+ * high, a 74 square picture, and the 0188 row stepper at 155 by 48; the compact
+ * row is 68 high. The stepper's own steps are 0188's specs, not this one.
+ *
+ * The choice is kept on the device and is one setting for every page (velista
+ * 0202): chosen on the zone list, the basket's tools row and its menu name it;
+ * chosen from the basket's menu, the zone list follows.
  */
 
 /** One pixel, for subpixel layout. */
@@ -67,8 +74,30 @@ async function isCropped(locator: Locator): Promise<boolean> {
   });
 }
 
-function compactSwitch(page: Page): Locator {
-  return page.getByRole('switch', { name: 'Compact rows' });
+/** The view button inside `scope`: the zone list's header or the basket's tools row. */
+function viewButton(scope: Locator): Locator {
+  return scope.getByRole('button', { name: 'View', exact: true });
+}
+
+/** A row of the open view picker. */
+function viewChoice(page: Page, view: 'Default' | 'Compact'): Locator {
+  return page.getByRole('menuitemradio', { name: new RegExp(`^${view}`) });
+}
+
+/** The default view's row of three facts, 99 high. */
+async function expectDefaultRow(row: Locator): Promise<void> {
+  await expect(row).toHaveClass(/\bfacts-row\b/);
+  await expect(row).not.toHaveClass(/\bcompact\b/);
+  const rowBox = await size(row);
+  expect(Math.abs(rowBox.height - 99)).toBeLessThanOrEqual(TOLERANCE);
+}
+
+/** The compact view's two line row, 68 high. */
+async function expectCompactRow(row: Locator): Promise<void> {
+  await expect(row).toHaveClass(/\bcompact\b/);
+  await expect(row).not.toHaveClass(/\bfacts-row\b/);
+  const rowBox = await size(row);
+  expect(Math.abs(rowBox.height - 68)).toBeLessThanOrEqual(TOLERANCE);
 }
 
 async function openList(page: Page): Promise<void> {
@@ -80,11 +109,13 @@ async function size(
   locator: Locator
 ): Promise<{ width: number; height: number }> {
   // Polled: in the full suite a late realtime event can redraw the row between
-  // the check of its class and this read.
-  await expect.poll(() => locator.boundingBox()).not.toBeNull();
-  const box = await locator.boundingBox();
+  // the check of its class and this read, so the box the poll saw is the one kept.
+  let box = null as { width: number; height: number } | null;
+  await expect
+    .poll(async () => (box = await locator.boundingBox()))
+    .not.toBeNull();
   if (box === null) throw new Error('the element has no box');
-  return { width: box.width, height: box.height };
+  return box;
 }
 
 /** Where the text of a fact line starts, which its box alone does not say. */
@@ -96,7 +127,7 @@ async function startOfText(locator: Locator): Promise<number> {
   });
 }
 
-test.describe('compact rows (velista 0191)', () => {
+test.describe('the default and the compact view (velista 0191, 0202)', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
   let alice: Session;
@@ -157,26 +188,16 @@ test.describe('compact rows (velista 0191)', () => {
     await admin?.dispose();
   });
 
-  test('the account switch draws every row compact, and survives a reload', async ({
+  test('the default view draws the facts row, and the picker turns the compact view on everywhere', async ({
     page,
   }) => {
     await signIn(page, ALICE_EMAIL);
 
-    await test.step('the switch is on the account page, off', async () => {
-      await page.goto('/en/account');
-      await expect(compactSwitch(page)).toBeVisible();
-      await expect(compactSwitch(page)).not.toBeChecked();
-    });
-
-    await test.step('turned on, the row is compact', async () => {
-      await compactSwitch(page).click();
-      await expect(compactSwitch(page)).toBeChecked();
+    await test.step('with nothing chosen, the row is the default view', async () => {
       await openList(page);
 
       const row = lineRow(page);
-      await expect(row).toHaveClass(/\bcompact\b/);
-      const rowBox = await size(row);
-      expect(Math.abs(rowBox.height - 99)).toBeLessThanOrEqual(TOLERANCE);
+      await expectDefaultRow(row);
 
       const picture = await size(row.locator(':scope > .picture'));
       expect(Math.round(picture.width)).toBe(74);
@@ -205,9 +226,9 @@ test.describe('compact rows (velista 0191)', () => {
 
     await test.step('a long label crops first, a short brand never', async () => {
       const row = lineRow(page, LONG_LABEL);
-      await expect(row).toHaveClass(/\bcompact\b/);
-      const label = row.locator('.compact-line-1 > .label');
-      const brand = row.locator('.compact-line-1 > .brand');
+      await expect(row).toHaveClass(/\bfacts-row\b/);
+      const label = row.locator('.facts-line-1 > .label');
+      const brand = row.locator('.facts-line-1 > .brand');
       await expect(brand).toHaveText(SHORT_BRAND);
 
       expect(await isCropped(label)).toBe(true);
@@ -238,21 +259,72 @@ test.describe('compact rows (velista 0191)', () => {
       await expect(price.locator('lib-spinner-icon')).toHaveCount(0);
     });
 
-    await test.step('a reload keeps it compact', async () => {
-      await page.reload();
-      await expect(lineRow(page)).toHaveClass(/\bcompact\b/);
+    await test.step('the view button of the zone list opens the picker on Default', async () => {
+      const button = viewButton(page.locator('lib-page-header'));
+      await button.click();
+      await expect(button).toHaveAttribute('aria-expanded', 'true');
+      await expect(viewChoice(page, 'Default')).toHaveAttribute(
+        'aria-checked',
+        'true'
+      );
+      await expect(viewChoice(page, 'Compact')).toHaveAttribute(
+        'aria-checked',
+        'false'
+      );
+      await expect(viewChoice(page, 'Compact')).toContainText(
+        'More rows on the screen'
+      );
     });
 
-    await test.step('turned off, the row of today is back', async () => {
-      await page.goto('/en/account');
-      await compactSwitch(page).click();
-      await expect(compactSwitch(page)).not.toBeChecked();
-      await openList(page);
+    await test.step('choosing Compact draws the two line row, and closes the picker', async () => {
+      await viewChoice(page, 'Compact').click();
+      await expect(page.getByRole('menuitemradio')).toHaveCount(0);
+      await expect(viewButton(page.locator('lib-page-header'))).toBeFocused();
 
-      const row = lineRow(page);
-      await expect(row).not.toHaveClass(/\bcompact\b/);
-      const rowBox = await size(row);
-      expect(Math.abs(rowBox.height - 68)).toBeLessThanOrEqual(TOLERANCE);
+      await expectCompactRow(lineRow(page));
+      await expectCompactRow(lineRow(page, LONG_LABEL));
+    });
+
+    await test.step('a reload keeps it compact', async () => {
+      await page.reload();
+      await expect(lineRow(page)).toBeVisible();
+      await expectCompactRow(lineRow(page));
+    });
+
+    await test.step("the basket's tools row picker says Compact", async () => {
+      // From Hardware and not Groceries: a line in a basket being bought is drawn
+      // under that basket on the zone list, not as a row, and the last step
+      // measures this spec's rows again.
+      await generateBasket(page, ['Hardware'], `View ${Date.now()}`);
+      const button = viewButton(page.locator('lib-list-tools'));
+      await button.click();
+      await expect(viewChoice(page, 'Compact')).toHaveAttribute(
+        'aria-checked',
+        'true'
+      );
+      await viewChoice(page, 'Compact').press('Escape');
+      await expect(page.getByRole('menuitemradio')).toHaveCount(0);
+      await expect(button).toBeFocused();
+    });
+
+    await test.step("the basket's menu names Compact, and chooses Default", async () => {
+      await page.getByRole('button', { name: 'More', exact: true }).click();
+      await expect(page).toHaveURL(/\/sheet\/more(\?.*)?$/);
+      const viewRow = sheet(page, 'More').getByRole('button', {
+        name: /^View/,
+      });
+      await expect(viewRow).toContainText('Compact');
+
+      await viewRow.click();
+      await viewChoice(page, 'Default').click();
+      await expect(page.getByRole('menuitemradio')).toHaveCount(0);
+      await expect(viewRow).toContainText('Default');
+    });
+
+    await test.step('the zone list follows the choice made on the basket', async () => {
+      await openList(page);
+      await expectDefaultRow(lineRow(page));
+      await expectDefaultRow(lineRow(page, LONG_LABEL));
     });
   });
 });

@@ -107,11 +107,11 @@ export class SearchIcon {
 }
 
 /**
- * Filtering and ordering, on the basket's tools row (velista `0075`).
+ * Filtering and ordering, on the zone list's header and the basket's tools row
+ * (velista `0075`).
  *
- * Two rules with a knob on each rather than the usual funnel, because the control
- * it opens does two things: a funnel says only that rows are being removed, and
- * half of this sheet reorders and groups without removing anything.
+ * An outline funnel. The owner chose it on 2026-11-22 (velista `0202`) so the filter
+ * is not confused with the view button beside it, whose glyph is rows too.
  */
 @Component({
   selector: 'lib-filter-icon',
@@ -124,6 +124,54 @@ export class FilterIcon {
     () =>
       // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
       import('./filter-icon.svg?raw')
+  );
+}
+
+/**
+ * The view button (velista `0202`, icon set B): two rows, each with its picture. It
+ * opens the choice of the default or the compact view.
+ */
+@Component({
+  selector: 'lib-view-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class ViewIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./view-icon.svg?raw')
+  );
+}
+
+/** The default view's choice (velista `0202`): one picture beside three lines. */
+@Component({
+  selector: 'lib-default-view-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class DefaultViewIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./default-view-icon.svg?raw')
+  );
+}
+
+/** The compact view's choice (velista `0202`): three small rows. */
+@Component({
+  selector: 'lib-compact-view-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class CompactViewIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./compact-view-icon.svg?raw')
   );
 }
 

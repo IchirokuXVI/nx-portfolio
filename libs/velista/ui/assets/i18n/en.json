@@ -1329,10 +1329,6 @@
     },
     "tour": {
       "again": "Show me around again"
-    },
-    "listRows": {
-      "label": "Compact rows",
-      "hint": "Lists show the size, the price and the total on every row. Only on this device."
     }
   },
   "install": {
@@ -2955,5 +2951,11 @@
       "fullPage": "Open the full page",
       "close": "Close"
     }
+  },
+  "view": {
+    "title": "View",
+    "default": "Default",
+    "compact": "Compact",
+    "compactHint": "More rows on the screen"
   }
 }
