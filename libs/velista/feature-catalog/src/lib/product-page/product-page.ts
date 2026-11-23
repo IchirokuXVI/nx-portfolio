@@ -25,6 +25,7 @@ import {
   CatalogAddStore,
   CategoryStore,
   GroupMembers,
+  ListRowsStore,
   SessionStore,
   type CatalogBrowseServiceI,
   type CatalogServiceI,
@@ -73,6 +74,7 @@ import {
   ProductRowSkeleton,
   productRowView,
   unitPriceWords,
+  type ListsTableAdd,
   type ListsTableStep,
   type PriceHistoryLine,
   type PriceTableRow,
@@ -170,6 +172,11 @@ export class ProductPage {
   private readonly _categories = inject(CategoryStore);
   private readonly _groupMembers = inject(GroupMembers);
   private readonly _adds = inject(CatalogAddStore);
+  /**
+   * How this device draws the rows of a zone list (velista `0202`): the table of
+   * lists draws reels in the compact view (velista `0203`).
+   */
+  protected readonly listRows = inject(ListRowsStore);
   private readonly _session = inject(SessionStore);
   private readonly _pages = inject(PageNavigation);
   private readonly _translator = inject(RokuTranslatorService);
@@ -524,9 +531,11 @@ export class ProductPage {
 
   /**
    * The plus of a list in the table that holds no line of this product: one of
-   * it on that list. A list that holds it steps that line (velista `0187`).
+   * it on that list, or, from a reel of the compact view, the amount the reel
+   * closed on (velista `0203`). A list that holds it steps that line (velista
+   * `0187`).
    */
-  protected addToList(listId: string): void {
+  protected addToList({ listId, quantity }: ListsTableAdd): void {
     this.addFailed.set(false);
     void this._adds.add(
       {
@@ -538,6 +547,7 @@ export class ProductPage {
         unit: this.lineUnit(),
         // At one step of its own (velista `0186`, ruling 43).
         step: this.step(),
+        ...(quantity === null ? {} : { quantity }),
       },
       listId
     );

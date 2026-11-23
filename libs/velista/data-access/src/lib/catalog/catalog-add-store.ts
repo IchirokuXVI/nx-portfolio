@@ -66,6 +66,17 @@ export interface CatalogAddProduct {
    * is the unit's default.
    */
   readonly step?: number | null;
+  /**
+   * The amount this add asks for, in base units: the amount a reel of the product
+   * page closed on (velista `0203`). Absent is one step, `addAmount` of the unit and
+   * the step, as every plus asks.
+   */
+  readonly quantity?: number;
+}
+
+/** What one add asks for: its own amount, or one step of the product. */
+function addedAmount(product: CatalogAddProduct): number {
+  return product.quantity ?? addAmount(product.unit ?? 'UNIT', product.step);
 }
 
 /**
@@ -443,7 +454,7 @@ export class CatalogAddStore {
         this._flush(line.lineId);
       }
     }
-    this._addEach.set(key, addAmount(product.unit ?? 'UNIT', product.step));
+    this._addEach.set(key, addedAmount(product));
     if (product.step !== undefined) {
       this._addStep.set(product.itemId, product.step);
     }
@@ -594,7 +605,7 @@ export class CatalogAddStore {
     if (own !== null) {
       // The server raises the line by the amount the add sends, so that is what
       // is drawn: the step of the product in the unit the add states.
-      this._move(own.lineId, addAmount(unit, product.step));
+      this._move(own.lineId, addedAmount(product));
       return own.lineId;
     }
     const lineId = unsavedLineId(listId, product.itemId);
@@ -604,7 +615,7 @@ export class CatalogAddStore {
         lineId,
         listId,
         name: product.name,
-        quantity: addAmount(unit, product.step),
+        quantity: addedAmount(product),
         unit,
         pending: false,
         itemIds: [product.itemId],
@@ -627,9 +638,10 @@ export class CatalogAddStore {
   ): Promise<void> {
     const key = keyOf(listId, product.itemId);
     // One step of the product's unit, 25 g, 25 ml or one piece (velista `0185`),
-    // or one step of its own when it has one (velista `0186`, ruling 43).
+    // or one step of its own when it has one (velista `0186`, ruling 43), or the
+    // amount a reel closed on (velista `0203`).
     const unit = product.unit ?? 'UNIT';
-    const amount = addAmount(unit, product.step);
+    const amount = addedAmount(product);
     try {
       // Not named: the words are the product's (velista `0144`, section 3), and
       // they are still sent, because the server needs them and `sameLineName`

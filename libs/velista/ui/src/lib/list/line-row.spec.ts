@@ -1,6 +1,9 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
+  QUANTITY_REEL_CLICK_SHIELD_MS,
+  QUANTITY_REEL_IDLE_MS,
+  QUANTITY_REEL_PX_PER_UNIT,
   type LineRowShownProduct,
   type LineRowVm,
   type QuantityStep,
@@ -53,9 +56,11 @@ function vm(overrides: Partial<LineRowVm> = {}): LineRowVm {
   };
 }
 
-async function render(
+const render = renderRow;
+
+async function renderRow(
   line: LineRowVm,
-  inputs: { pending?: number | null } = {}
+  inputs: { pending?: number | null; layout?: 'default' | 'compact' } = {}
 ): Promise<ComponentFixture<LineRow>> {
   TestBed.resetTestingModule();
 
@@ -67,7 +72,7 @@ async function render(
   fixture.componentRef.setInput('line', line);
   // The two line row, which is the compact view since velista 0202. The row of the
   // default view has its own `describe` below.
-  fixture.componentRef.setInput('layout', 'compact');
+  fixture.componentRef.setInput('layout', inputs.layout ?? 'compact');
   if (inputs.pending !== undefined) {
     fixture.componentRef.setInput('pending', inputs.pending);
   }
@@ -577,6 +582,13 @@ describe('LineRow', () => {
   });
 
   describe('the quantity (velista 0188)', () => {
+    // The stepper is the control of the default view; the compact view's reel has its
+    // own describe (velista 0203).
+    const render = (
+      line: LineRowVm,
+      inputs: { pending?: number | null } = {}
+    ) => renderRow(line, { ...inputs, layout: 'default' });
+
     it('is drawn on every row, zero included', async () => {
       // `0012` drew it only above one, because it was an annotation. It is the
       // control now, and a control that is only sometimes there is not one anybody
@@ -658,6 +670,150 @@ describe('LineRow', () => {
       plus(fixture).click();
 
       expect(steps).toEqual([{ from: 500, to: 525, repeat: false }]);
+    });
+  });
+
+  /** Velista `0203`: the reel is the control of the compact view. */
+  describe('the reel of the compact view (velista 0203)', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    function pointer(type: string, clientX: number): Event {
+      const event = new MouseEvent(type, { bubbles: true, clientX });
+      Object.defineProperty(event, 'pointerId', { value: 1 });
+      Object.defineProperty(event, 'isPrimary', { value: true });
+      return event;
+    }
+
+    function reel(fixture: ComponentFixture<LineRow>): HTMLElement {
+      return query(fixture, 'lib-quantity-reel') as HTMLElement;
+    }
+
+    /** A sideways drag on the reel of `steps` steps; leftwards is more. */
+    function drag(fixture: ComponentFixture<LineRow>, steps: number): void {
+      const target = reel(fixture);
+      target.dispatchEvent(pointer('pointerdown', 0));
+      target.dispatchEvent(
+        pointer('pointermove', -steps * QUANTITY_REEL_PX_PER_UNIT)
+      );
+      target.dispatchEvent(
+        pointer('pointerup', -steps * QUANTITY_REEL_PX_PER_UNIT)
+      );
+      fixture.detectChanges();
+    }
+
+    it('spec 4: draws the reel and no stepper in the compact view, the reverse in the default one', async () => {
+      const compact = await render(vm({ quantity: 2 }));
+      expect(query(compact, 'lib-quantity-reel')).not.toBeNull();
+      expect(query(compact, 'lib-quantity-stepper')).toBeNull();
+
+      const normal = await render(vm({ quantity: 2 }), { layout: 'default' });
+      expect(query(normal, 'lib-quantity-reel')).toBeNull();
+      expect(query(normal, 'lib-quantity-stepper')).not.toBeNull();
+    });
+
+    it('names the amount, reads the stored or the pending amount, and the step', async () => {
+      const fixture = await render(
+        vm({ quantity: 950, unit: 'GRAM', step: 50 }),
+        { pending: 1000 }
+      );
+
+      expect(reel(fixture).getAttribute('aria-label')).toBe('amount.group');
+      expect(reel(fixture).getAttribute('data-value')).toBe('1000');
+    });
+
+    it('is read only for a caller who may not decide', async () => {
+      const fixture = await render(vm({ adjustable: false }));
+
+      expect(reel(fixture).getAttribute('aria-readonly')).toBe('true');
+    });
+
+    it('emits one reeled step when the reel closes, and not as a stepper step', async () => {
+      const fixture = await render(vm({ quantity: 2 }));
+      const reeled: Array<{ lineId: string; step: QuantityStep }> = [];
+      const stepped: unknown[] = [];
+      fixture.componentInstance.quantityReeled.subscribe((s) => reeled.push(s));
+      fixture.componentInstance.quantityStepped.subscribe((s) =>
+        stepped.push(s)
+      );
+
+      drag(fixture, 3);
+      expect(reeled).toEqual([]);
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+
+      expect(reeled).toEqual([
+        { lineId: 'ln-1', step: { from: 2, to: 5, repeat: false } },
+      ]);
+      expect(stepped).toEqual([]);
+    });
+
+    it('does not open the line for a press on the reel', async () => {
+      const fixture = await render(vm({ quantity: 2 }));
+      const opened: string[] = [];
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+      reel(fixture).dispatchEvent(pointer('pointerdown', 0));
+      reel(fixture).dispatchEvent(pointer('pointerup', 0));
+      reel(fixture).click();
+
+      expect(opened).toEqual([]);
+    });
+
+    it('spec 5: a tap on the row while the reel is open closes it and opens nothing', async () => {
+      const fixture = await render(vm({ quantity: 2 }));
+      const opened: string[] = [];
+      const reeled: unknown[] = [];
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+      fixture.componentInstance.quantityReeled.subscribe((s) => reeled.push(s));
+
+      drag(fixture, 1);
+      const name = query(fixture, '.content') as HTMLElement;
+      name.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      name.click();
+
+      expect(opened).toEqual([]);
+      // The close sends what the reel held.
+      expect(reeled).toHaveLength(1);
+
+      // The next tap is the row's again.
+      name.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      name.click();
+      expect(opened).toEqual(['ln-1']);
+    });
+
+    it('spec 5: a tap within the click shield after the reel closed by itself opens nothing', async () => {
+      const fixture = await render(vm({ quantity: 2 }));
+      const opened: string[] = [];
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+      drag(fixture, 1);
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      fixture.detectChanges();
+
+      const name = query(fixture, '.content') as HTMLElement;
+      name.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      name.click();
+      expect(opened).toEqual([]);
+
+      jest.advanceTimersByTime(QUANTITY_REEL_CLICK_SHIELD_MS);
+      name.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      name.click();
+      expect(opened).toEqual(['ln-1']);
+    });
+
+    it('stays locked when a row being cleared in the default view turns compact (velista 0199)', async () => {
+      const fixture = await render(vm({ quantity: 0 }), { layout: 'default' });
+      fixture.componentRef.setInput('clearing', true);
+      fixture.componentRef.setInput('layout', 'compact');
+      fixture.detectChanges();
+      const reeled: unknown[] = [];
+      fixture.componentInstance.quantityReeled.subscribe((s) => reeled.push(s));
+
+      expect(query(fixture, '[data-clearing-layer]')).not.toBeNull();
+      drag(fixture, 2);
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+
+      expect(reeled).toEqual([]);
     });
   });
 
@@ -768,7 +924,7 @@ describe('LineRow', () => {
       );
     });
 
-    it('leaves out a press on the stepper, a button or the photo viewer, and only those', () => {
+    it('leaves out a press on the stepper, the reel, a button or the photo viewer, and only those', () => {
       const excluded = /:not\(:has\(([^()]*(?:\([^()]*\)[^()]*)*)\)\)$/
         .exec(pressed[0].selector)?.[1]
         .split(',')
@@ -776,6 +932,7 @@ describe('LineRow', () => {
 
       expect(excluded).toEqual([
         'lib-quantity-stepper:active',
+        'lib-quantity-reel:active',
         'button:active',
         'lib-photo-viewer:active',
       ]);

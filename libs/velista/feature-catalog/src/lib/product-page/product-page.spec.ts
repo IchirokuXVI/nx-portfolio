@@ -20,17 +20,21 @@ import {
   fakeCategoryStore,
   GroupMembers,
   ItemNames,
+  ListRowsStore,
   MEMORY_CATEGORIES,
   provideFakeCategoryStore,
   toItemLists,
   type FakeCategoryStore,
 } from '@portfolio/velista/data-access';
 import {
+  QUANTITY_REEL_IDLE_MS,
+  QUANTITY_REEL_PX_PER_UNIT,
   QUANTITY_STEP_QUIET_MS,
   type CatalogItem,
   type CatalogPriceState,
   type CatalogScopeOffer,
   type ItemLists,
+  type ListRowLayout,
 } from '@portfolio/velista/models';
 import {
   PageNavigation,
@@ -136,6 +140,8 @@ const FRYING_LINE: FakeLine = {
 };
 
 interface Options extends FakeAddsOptions {
+  /** How the device draws the rows of a zone list (velista `0202`). */
+  readonly layout?: ListRowLayout;
   readonly state?: CatalogPriceState;
   /** Replaces the double's source rows. */
   readonly rows?: readonly CatalogScopeOffer[] | null;
@@ -236,6 +242,10 @@ async function render(options: Options = {}): Promise<Harness> {
       },
       { provide: PageNavigation, useValue: pages },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
+      {
+        provide: ListRowsStore,
+        useValue: { layout: signal(options.layout ?? 'default') },
+      },
     ],
   }).compileComponents();
 
@@ -1006,6 +1016,52 @@ describe('ProductPage', () => {
         host(fixture).querySelectorAll('lib-lists-table .other')
       ).toHaveLength(1);
       expect(otherLine(fixture, 'line-oil').row).toBeNull();
+    });
+
+    it('adds the amount a reel closed on, in the compact view (velista 0203)', async () => {
+      const { fixture, lines, store } = await render({
+        lists: [WEEKLY, PARTY],
+        layout: 'compact',
+      });
+      const add = jest.spyOn(store, 'add');
+      const reel = listRow(fixture, 'list-party').row?.querySelector(
+        'lib-quantity-reel'
+      ) as HTMLElement;
+      expect(
+        host(fixture).querySelectorAll('lib-lists-table lib-quantity-stepper')
+      ).toHaveLength(0);
+
+      const pointer = (type: string, clientX: number) => {
+        const event = new MouseEvent(type, { bubbles: true, clientX });
+        Object.defineProperty(event, 'pointerId', { value: 1 });
+        Object.defineProperty(event, 'isPrimary', { value: true });
+        return event;
+      };
+      reel.dispatchEvent(pointer('pointerdown', 0));
+      reel.dispatchEvent(
+        pointer('pointermove', -3 * QUANTITY_REEL_PX_PER_UNIT)
+      );
+      reel.dispatchEvent(pointer('pointerup', -3 * QUANTITY_REEL_PX_PER_UNIT));
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      await settle(fixture);
+
+      expect(add).toHaveBeenCalledTimes(1);
+      expect(add).toHaveBeenCalledWith(
+        expect.objectContaining({ itemId: 'item-oil', quantity: 3 }),
+        'list-party'
+      );
+      expect(lines.addLineResult).toHaveBeenCalledWith(
+        'list-party',
+        'Extra virgin olive oil',
+        3,
+        ['item-oil'],
+        false,
+        undefined,
+        'UNIT'
+      );
+      expect(store.visit()).toMatchObject([
+        { listId: 'list-party', quantity: 3, created: true },
+      ]);
     });
 
     it('adds one to the list whose plus was pressed, and that joins the record of the visit', async () => {

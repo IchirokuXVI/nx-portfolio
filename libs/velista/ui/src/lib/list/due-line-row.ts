@@ -16,8 +16,10 @@ import {
   DUE_LINE_STEP_QUIET_MS,
   isMeasured,
   type DueLineRowVm,
+  type ListRowLayout,
 } from '@portfolio/velista/models';
 import { formatAmount } from '@portfolio/velista/platform';
+import { QuantityReel } from './quantity-reel';
 import { QuantityStepper } from './quantity-stepper';
 
 /**
@@ -29,9 +31,10 @@ import { QuantityStepper } from './quantity-stepper';
  *
  * ## The amount is chosen here, and the button takes it
  *
- * The stepper starts at the amount the server suggests and stops at one, because adding
- * nothing is not an add. Nothing is written while it moves: the Add button writes the
- * chosen amount, and its words follow the stepper ("Add 3").
+ * The stepper, or the reel in the compact view (velista `0203`), starts at the amount
+ * the server suggests and stops at one, because adding nothing is not an add. Nothing
+ * is written while it moves: the Add button writes the chosen amount. The button says
+ * "Add" alone, and its accessible name says the amount ("Add 3 of Milk to the list").
  *
  * ## Adding on a step is a switch
  *
@@ -43,7 +46,7 @@ import { QuantityStepper } from './quantity-stepper';
  */
 @Component({
   selector: 'lib-due-line-row',
-  imports: [RokuTranslatorPipe, QuantityStepper],
+  imports: [RokuTranslatorPipe, QuantityReel, QuantityStepper],
   template: `
     @let vm = row();
     <div [attr.data-due-line-id]="vm.lineId" class="row">
@@ -53,15 +56,31 @@ import { QuantityStepper } from './quantity-stepper';
       </button>
 
       <div class="acts">
-        <lib-quantity-stepper
-          (valueChange)="step($event)"
-          [min]="1"
-          [name]="vm.name"
-          [step]="vm.step ?? null"
-          [unit]="vm.unit"
-          [value]="amount()"
-          variant="row"
-        />
+        @if (layout() === 'compact') {
+          <lib-quantity-reel
+            (stepped)="step($event.to)"
+            [label]="'amount.group' | rokuT: { name: vm.name }"
+            [min]="1"
+            [step]="vm.step ?? null"
+            [unit]="vm.unit"
+            [value]="amount()"
+          />
+        } @else {
+          <lib-quantity-stepper
+            (valueChange)="step($event)"
+            [min]="1"
+            [name]="vm.name"
+            [step]="vm.step ?? null"
+            [unit]="vm.unit"
+            [value]="amount()"
+            variant="row"
+          />
+        }
+        <!--
+          "Add" alone in both views (velista 0203, target state 7): the amount is on
+          the control beside it. The accessible name still says the amount and the
+          product, so a screen reader hears what the press adds.
+        -->
         <button
           (click)="add()"
           [attr.aria-label]="
@@ -70,7 +89,7 @@ import { QuantityStepper } from './quantity-stepper';
           class="add"
           type="button"
         >
-          {{ 'list.due.add' | rokuT: { count: amountWords() } }}
+          {{ 'list.due.add' | rokuT }}
         </button>
       </div>
     </div>
@@ -80,6 +99,12 @@ import { QuantityStepper } from './quantity-stepper';
 })
 export class DueLineRow {
   readonly row = input.required<DueLineRowVm>();
+
+  /**
+   * How the list draws its rows (velista `0202`): the stepper in the default view,
+   * the reel in the compact one (velista `0203`), 52 by 44 like the rows above.
+   */
+  readonly layout = input<ListRowLayout>('default');
 
   /** Whether a change of the amount adds the line by itself, once it goes quiet. */
   readonly addsOnStep = input(false);

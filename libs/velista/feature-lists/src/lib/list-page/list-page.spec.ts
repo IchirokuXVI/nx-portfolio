@@ -97,6 +97,7 @@ import {
   DueLineRow,
   LineComposer,
   LineList,
+  LineRow,
   ListHeader,
   TOOK_DURATION_MS,
   TripGroup,
@@ -1220,6 +1221,60 @@ describe('ListPage', () => {
 
         expect(writes(lines.calls)).toEqual([
           { kind: 'quantity', lineId: 'ln-1', delta: 2 },
+        ]);
+      });
+
+      it('writes a reel step at once, in one write (velista 0203)', async () => {
+        const { fixture, lines } = await render({
+          lines: [line('ln-1', { quantity: 950, unit: 'GRAM' })],
+        });
+        jest.useFakeTimers();
+
+        fixture.componentInstance.reelQuantity({
+          lineId: 'ln-1',
+          step: { from: 950, to: 1100, repeat: false },
+        });
+
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-1', delta: 150 },
+        ]);
+        expect(fixture.componentInstance.quantityRuns.pending().size).toBe(0);
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        expect(writes(lines.calls)).toHaveLength(1);
+      });
+
+      it('does not lock a row a reel took to 0: the reel has no trash (velista 0203)', async () => {
+        const { fixture, lines } = await render({
+          lines: [line('ln-1', { quantity: 3 })],
+        });
+        jest.useFakeTimers();
+
+        fixture.componentInstance.reelQuantity({
+          lineId: 'ln-1',
+          step: { from: 3, to: 0, repeat: false },
+        });
+
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-1', delta: -3 },
+        ]);
+        expect(fixture.componentInstance.clearing().size).toBe(0);
+      });
+
+      it('passes the reel of a compact row up to the page', async () => {
+        const { fixture, lines } = await render({
+          lines: [line('ln-1', { quantity: 2 })],
+        });
+        jest.useFakeTimers();
+        const row = fixture.debugElement.query(By.directive(LineRow))
+          .componentInstance as LineRow;
+
+        row.quantityReeled.emit({
+          lineId: 'ln-1',
+          step: { from: 2, to: 5, repeat: false },
+        });
+
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-1', delta: 3 },
         ]);
       });
 

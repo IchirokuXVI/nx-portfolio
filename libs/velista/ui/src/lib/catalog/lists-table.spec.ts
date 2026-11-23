@@ -4,15 +4,21 @@ import {
   RokuTranslatorService,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
-import type {
-  HoldingRow,
-  ProductListGroup,
-  ProductListRow,
+import {
+  QUANTITY_REEL_IDLE_MS,
+  QUANTITY_REEL_PX_PER_UNIT,
+  type HoldingRow,
+  type ProductListGroup,
+  type ProductListRow,
 } from '@portfolio/velista/models';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { QuantityStepper } from '../list/quantity-stepper';
-import { ListsTable, type ListsTableStep } from './lists-table';
+import {
+  ListsTable,
+  type ListsTableAdd,
+  type ListsTableStep,
+} from './lists-table';
 
 /**
  * The lists of every group and how many of one product each holds (velista
@@ -182,13 +188,18 @@ function valuesOf(key: string): unknown[] {
 
 function record(fixture: ComponentFixture<ListsTable>): {
   added: string[];
+  adds: ListsTableAdd[];
   lineStepped: ListsTableStep[];
 } {
   const heard = {
     added: [] as string[],
+    adds: [] as ListsTableAdd[],
     lineStepped: [] as ListsTableStep[],
   };
-  fixture.componentInstance.added.subscribe((id) => heard.added.push(id));
+  fixture.componentInstance.added.subscribe((add) => {
+    heard.added.push(add.listId);
+    heard.adds.push(add);
+  });
   fixture.componentInstance.lineStepped.subscribe((step) =>
     heard.lineStepped.push(step)
   );
@@ -915,5 +926,124 @@ describe('ListsTable', () => {
       expect(amount.inList).toContain('{{name}}');
       expect(amount.inList).toContain('{{list}}');
     }
+  });
+});
+
+/** Velista `0203`, target state 8 and spec 6: the reel in the compact view. */
+describe('ListsTable, the compact view (velista 0203)', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  async function compact(
+    groups: readonly ProductListGroup[] = GROUPS
+  ): Promise<ComponentFixture<ListsTable>> {
+    const fixture = await render(groups);
+    fixture.componentRef.setInput('layout', 'compact');
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  function pointer(type: string, clientX: number): Event {
+    const event = new MouseEvent(type, { bubbles: true, clientX });
+    Object.defineProperty(event, 'pointerId', { value: 1 });
+    Object.defineProperty(event, 'isPrimary', { value: true });
+    return event;
+  }
+
+  /** A whole drag of `count` steps on the first reel within, and its close. */
+  function drag(within: HTMLElement, count: number): void {
+    const reel = within.querySelector('lib-quantity-reel') as HTMLElement;
+    reel.dispatchEvent(pointer('pointerdown', 0));
+    reel.dispatchEvent(
+      pointer('pointermove', -count * QUANTITY_REEL_PX_PER_UNIT)
+    );
+    reel.dispatchEvent(
+      pointer('pointerup', -count * QUANTITY_REEL_PX_PER_UNIT)
+    );
+    jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+  }
+
+  it('draws a reel for every stepper of the table, and no stepper', async () => {
+    const fixture = await compact();
+
+    expect(host(fixture).querySelectorAll('lib-quantity-stepper')).toHaveLength(
+      0
+    );
+    // Weekly shop, Barbecue, and the line under another name on Office.
+    expect(host(fixture).querySelectorAll('lib-quantity-reel')).toHaveLength(3);
+  });
+
+  it('spec 6: a reel closed at 3 on a list with no line adds with 3', async () => {
+    const fixture = await compact();
+    const heard = record(fixture);
+
+    drag(rowOf(fixture, 'l2'), 3);
+
+    expect(heard.adds).toEqual([{ listId: 'l2', quantity: 3 }]);
+    expect(heard.lineStepped).toEqual([]);
+  });
+
+  it('adds a weight at the amount the reel closed on', async () => {
+    const fixture = await compact(only(list('l2', 'Barbecue')));
+    fixture.componentRef.setInput('unit', 'GRAM');
+    fixture.detectChanges();
+    const heard = record(fixture);
+
+    drag(rowOf(fixture, 'l2'), 2);
+
+    expect(heard.adds).toEqual([{ listId: 'l2', quantity: 50 }]);
+  });
+
+  it('steps a line that is there as a press does, never an add', async () => {
+    const fixture = await compact();
+    const heard = record(fixture);
+
+    drag(rowOf(fixture, 'l1'), 2);
+
+    expect(heard.lineStepped).toEqual([
+      {
+        listId: 'l1',
+        lineId: 'line-coffee',
+        step: { from: 2, to: 4, repeat: false },
+      },
+    ]);
+    expect(heard.adds).toEqual([]);
+  });
+
+  it('steps a line under another name on its own reel', async () => {
+    const fixture = await compact();
+    const heard = record(fixture);
+
+    drag(otherOf(fixture, 'line-machine'), 1);
+
+    expect(heard.lineStepped).toEqual([
+      {
+        listId: 'l3',
+        lineId: 'line-machine',
+        step: { from: 1, to: 2, repeat: false },
+      },
+    ]);
+  });
+
+  it('reads and does not move on a line the person may not edit', async () => {
+    const fixture = await compact(
+      only(list('l1', 'Weekly shop', { main: held({ editable: false }) }))
+    );
+    const heard = record(fixture);
+
+    const reel = rowOf(fixture, 'l1').querySelector('lib-quantity-reel');
+    expect(reel?.getAttribute('aria-readonly')).toBe('true');
+    drag(rowOf(fixture, 'l1'), 2);
+
+    expect(heard.lineStepped).toEqual([]);
+  });
+
+  it('keeps the press of the default view an add of one step, with no amount', async () => {
+    const fixture = await render();
+    const heard = record(fixture);
+
+    steps(rowOf(fixture, 'l2'))[1]?.click();
+
+    expect(heard.adds).toEqual([{ listId: 'l2', quantity: null }]);
   });
 });

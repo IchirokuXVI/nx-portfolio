@@ -1,11 +1,18 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
-import type { DueLineRowVm } from '@portfolio/velista/models';
+import {
+  QUANTITY_REEL_IDLE_MS,
+  QUANTITY_REEL_PX_PER_UNIT,
+  type DueLineRowVm,
+} from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { join } from 'node:path';
 import { compile } from 'sass';
+import en from '../../../assets/i18n/en.json';
+import es from '../../../assets/i18n/es.json';
 import { DueLineRow } from './due-line-row';
+import { QuantityReel } from './quantity-reel';
 import { QuantityStepper } from './quantity-stepper';
 
 /**
@@ -198,6 +205,101 @@ describe('DueLineRow (velista 0089)', () => {
 
     expect(fixture.componentInstance.amount()).toBe(900);
   });
+});
+
+/** Velista `0203`: the reel in the compact view, and the button's words in both. */
+describe('DueLineRow, the compact view and the Add button (velista 0203)', () => {
+  afterEach(() => jest.useRealTimers());
+
+  function pointer(type: string, clientX: number): Event {
+    const event = new MouseEvent(type, { bubbles: true, clientX });
+    Object.defineProperty(event, 'pointerId', { value: 1 });
+    Object.defineProperty(event, 'isPrimary', { value: true });
+    return event;
+  }
+
+  async function compact(vm: DueLineRowVm) {
+    const fixture = await render(vm);
+    fixture.componentRef.setInput('layout', 'compact');
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  function reel(fixture: ComponentFixture<DueLineRow>): QuantityReel {
+    return fixture.debugElement.query(By.directive(QuantityReel))
+      .componentInstance as QuantityReel;
+  }
+
+  it('draws the reel with a floor of 1 and no stepper in the compact view', async () => {
+    const fixture = await compact(row({ quantity: 2 }));
+
+    expect(
+      fixture.debugElement.query(By.directive(QuantityStepper))
+    ).toBeNull();
+    expect(reel(fixture).value()).toBe(2);
+    expect(reel(fixture).min()).toBe(1);
+    expect(reel(fixture).previous()).toBe(1);
+  });
+
+  it('draws the stepper and no reel in the default view', async () => {
+    const fixture = await render(row());
+
+    expect(fixture.debugElement.query(By.directive(QuantityReel))).toBeNull();
+    expect(stepper(fixture)).toBeDefined();
+  });
+
+  it('adds the amount the reel closed on', async () => {
+    jest.useFakeTimers();
+    const fixture = await compact(row({ quantity: 2 }));
+    const added: Array<{ lineId: string; quantity: number }> = [];
+    fixture.componentInstance.added.subscribe((event) => added.push(event));
+
+    const host = fixture.nativeElement.querySelector(
+      'lib-quantity-reel'
+    ) as HTMLElement;
+    host.dispatchEvent(pointer('pointerdown', 0));
+    host.dispatchEvent(pointer('pointermove', -2 * QUANTITY_REEL_PX_PER_UNIT));
+    host.dispatchEvent(pointer('pointerup', -2 * QUANTITY_REEL_PX_PER_UNIT));
+    jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.amount()).toBe(4);
+    expect(added).toEqual([]);
+    el(fixture, '.add').click();
+    expect(added).toEqual([{ lineId: 'l-1', quantity: 4 }]);
+  });
+
+  it('spec 10: the words are "Add" and "Añadir" with no amount', () => {
+    expect(en.list.due.add).toBe('Add');
+    expect(es.list.due.add).toBe('Añadir');
+  });
+
+  it.each([
+    ['compact', 3, 'UNIT', '3'],
+    ['default', 3, 'UNIT', '3'],
+    ['compact', 1500, 'GRAM', '1.5 kg'],
+    ['default', 1500, 'GRAM', '1.5 kg'],
+  ] as const)(
+    'specs 10 and 11: in the %s view at %s the button says no amount, and its name does',
+    async (layout, quantity, unit, words) => {
+      const fixture = await render(row({ quantity, unit }));
+      fixture.componentRef.setInput('layout', layout);
+      fixture.detectChanges();
+      const add = el(fixture, '.add');
+
+      // The testing translator draws a key with its values after it, so a key read
+      // with no values is drawn alone.
+      expect(add.textContent?.trim()).toBe('list.due.add');
+      expect(add.textContent).not.toContain(words);
+      expect(add.getAttribute('aria-label')).toBe('list.due.addLabel');
+      expect(fixture.componentInstance.amountWords()).toBe(
+        unit === 'UNIT' ? quantity : words
+      );
+      expect(en.list.due.addLabel).toBe(
+        'Add {{count}} of {{name}} to the list'
+      );
+    }
+  );
 });
 
 /**
