@@ -1,0 +1,1328 @@
+<title>Velista: a basket row records buys, and a detailed view of its lists</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 0 56px;
+    background: #11141f;
+    color: #f7f8fc;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  header { padding: 0 28px; max-width: 860px; }
+  h1 {
+    margin: 0 0 8px;
+    font-family: 'Marcellus', Georgia, serif;
+    font-weight: 400;
+    font-size: 32px;
+    letter-spacing: 0.03em;
+  }
+  .lede { margin: 0; font-size: 14px; line-height: 1.6; color: #98a0bb; }
+  .lede code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #c2c8db; }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 22px 28px 14px;
+    font-size: 13px;
+    color: #98a0bb;
+  }
+  .controls button {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: transparent;
+    color: #c2c8db;
+    font: inherit;
+    cursor: pointer;
+  }
+  .controls button[aria-pressed='true'] { border-color: #ffb454; color: #ffb454; }
+
+  /* The canvas scrolls inside itself so the page body never scrolls sideways. */
+  .viewport { overflow-x: auto; overflow-y: hidden; padding: 0 28px 28px; }
+  .canvas { position: relative; transform-origin: top left; }
+  .board { position: absolute; margin: 0; }
+  figcaption {
+    margin-bottom: 9px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #98a0bb;
+  }
+  .frame {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: #0a0c14;
+    overflow: hidden;
+    position: relative;
+  }
+  .note {
+    position: absolute;
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 180, 84, 0.28);
+    border-radius: 10px;
+    background: rgba(255, 180, 84, 0.07);
+    color: #e4e7f1;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .note p { margin: 0 0 7px; }
+  .note p:last-child { margin-bottom: 0; }
+#ab-Today .pair { display: flex; gap: 80px; align-items: flex-start; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+#ab-Today .col { flex: none; width: 390px; }
+#ab-Today .tag { height: 28px; margin: 0; font-size: 12px; line-height: 16px; color: #98a0bb; }
+#ab-Today .day { --g: #f7f8fc; --r: #ffffff; --o: #ffffff; --s: #eef0f7;
+  --t: #11141f; --t2: #525a78; --t3: #616a8a;
+  --b1: #dde1ed; --b2: #6f7899;
+  --act: #ffb454; --on-act: #0a0c14; --q: #8a5a12;
+  --ok: #047857; --focus: #2563eb;
+  --scrim: rgba(17, 20, 31, 0.42);
+  --shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  --e2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.10);
+  color-scheme: light; }
+#ab-Today .night { --g: #0a0c14; --r: #161a28; --o: #1a1e2e; --s: #11141f;
+  --t: #f7f8fc; --t2: #c2c8db; --t3: #98a0bb;
+  --b1: rgba(255, 255, 255, 0.08); --b2: rgba(255, 255, 255, 0.35);
+  --act: #ffb454; --on-act: #0a0c14; --q: #ffb454;
+  --ok: #34d399; --focus: #60a5fa;
+  --scrim: rgba(10, 12, 20, 0.74);
+  --shadow: 0 -18px 40px rgba(10, 12, 20, 0.42);
+  --e2: inset 0 1px 0 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(10, 12, 20, 0.55);
+  color-scheme: dark; }
+#ab-Today .vel { color: var(--t); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+#ab-Today .vel button { font-family: inherit; cursor: pointer; }
+#ab-Today .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; background: var(--g); }
+#ab-Today .ph { height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid var(--b1); }
+#ab-Today .ph i { width: 24px; height: 24px; display: flex; color: var(--t); }
+#ab-Today .ph b { font-family: Marcellus, Georgia, serif; font-size: 20px; font-weight: 400; letter-spacing: 0.05em; }
+#ab-Today .prow { display: flex; align-items: center; gap: 12px; height: 60px; box-sizing: border-box; padding: 0 16px; border-bottom: 1px solid var(--b1); }
+#ab-Today .prow .dot { width: 26px; height: 26px; flex: none; box-sizing: border-box; border: 1.5px solid var(--b2); border-radius: 999px; }
+#ab-Today .prow span { flex: 1; font-size: 16px; }
+#ab-Today .prow em { font-style: normal; font-size: 16px; font-weight: 600; }
+#ab-Today .scrim { position: absolute; inset: 0; background: var(--scrim); }
+#ab-Today .home { position: absolute; z-index: 3; left: 50%; bottom: 8px; width: 134px; height: 5px; margin-left: -67px; border-radius: 999px; background: var(--t); }
+#ab-Today .sheet { position: absolute; left: 0; right: 0; bottom: 0; box-sizing: border-box; padding: 0 16px 54px; border-radius: 22px 22px 0 0; background: var(--r); box-shadow: var(--shadow); }
+#ab-Today .handle { width: 48px; height: 5px; margin: 10px auto 16px; border-radius: 999px; background: var(--b1); }
+#ab-Today .title { margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 1.2; font-weight: 400; color: var(--t); text-wrap: balance; }
+#ab-Today .sub { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+#ab-Today .happened { margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+#ab-Today .shead { display: flex; align-items: center; gap: 4px; margin-left: -10px; }
+#ab-Today .back { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; background: transparent; color: var(--t2); }
+#ab-Today .back i { width: 24px; height: 24px; display: flex; }
+#ab-Today .shead .title { flex: 1; min-width: 0; }
+#ab-Today .shead + .sub { margin-top: 0; }
+#ab-Today .entries { margin-top: 8px; }
+#ab-Today .head { display: flex; align-items: center; gap: 8px; min-height: 44px; border-bottom: 1px solid var(--b1); }
+#ab-Today .head h3 { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 600; color: var(--t2); }
+#ab-Today .all { flex: none; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); white-space: nowrap; }
+#ab-Today .rows { margin: 0; padding: 0; list-style: none; }
+#ab-Today .row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 4px 0; border-bottom: 1px solid var(--b1); }
+#ab-Today .lbl { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#ab-Today .nm { display: flex; min-width: 0; font-size: 16px; line-height: 1.5; color: var(--t); white-space: nowrap; }
+#ab-Today .nmt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ab-Today .ask { flex: none; white-space: pre; color: var(--t2); font-variant-numeric: tabular-nums; }
+#ab-Today .wh { overflow: hidden; font-size: 12px; line-height: 1.5; color: var(--t2); text-overflow: ellipsis; white-space: nowrap; }
+#ab-Today .got { font-size: 14px; line-height: 1.5; color: var(--t2); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Today .change { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--b1); border-radius: 12px; background: var(--r); color: var(--t); }
+#ab-Today .change i { width: 20px; height: 20px; display: flex; }
+#ab-Today .stp { flex: none; display: inline-grid; grid-template-columns: 48px 72px 48px; height: 48px; border-radius: 999px; background: var(--r); box-shadow: inset 0 0 0 1px var(--b2); }
+#ab-Today .stp.wide { grid-template-columns: 48px 95px 48px; }
+#ab-Today .sb { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; color: var(--t); }
+#ab-Today .sb.end { opacity: 0.35; }
+#ab-Today .g { position: relative; display: block; width: 14px; height: 14px; }
+#ab-Today .g::before { content: ''; position: absolute; left: 0; top: 6px; width: 14px; height: 2px; border-radius: 1px; background: currentColor; }
+#ab-Today .plus .g::after { content: ''; position: absolute; left: 6px; top: 0; width: 2px; height: 14px; border-radius: 1px; background: currentColor; }
+#ab-Today .cell { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 0; padding: 0 4px; overflow: hidden; white-space: nowrap; }
+#ab-Today .fig { font-size: 18px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--t); }
+#ab-Today .fig.unit { font-size: 16px; }
+#ab-Today .sym { font-size: 12px; line-height: 1; color: var(--t2); }
+#ab-Today .stp.zero .fig { color: var(--t2); }
+#ab-Today .stp.reached .fig { color: var(--ok); }
+#ab-Today .stp.over .fig { color: var(--q); }
+#ab-Today .stp.ring-ok { box-shadow: inset 0 0 0 2px var(--ok); }
+#ab-Today .stp.ring-over { box-shadow: inset 0 0 0 2px var(--q); }
+#ab-Today .ask.reached { color: var(--ok); }
+#ab-Today .ask.over { color: var(--q); }
+#ab-Today .rnum { flex: none; display: flex; justify-content: flex-end; align-items: center; width: 168px; height: 48px; font-size: 16px; color: var(--t2); font-variant-numeric: tabular-nums; }
+#ab-Today .rnum.wide { width: 191px; }
+#ab-Today .stp.dis { background: transparent; box-shadow: inset 0 0 0 1px var(--b1); }
+#ab-Today .stp.dis .sb { color: var(--t3); opacity: 0.6; }
+#ab-Today .stp.dis .fig { color: var(--t3); }
+#ab-Today .stp.dis .sym { color: var(--t3); }
+#ab-Today .desc { margin: 0; font-size: 14px; line-height: 1.5; color: var(--t2); text-wrap: pretty; }
+#ab-Today .anchor { position: relative; flex: none; display: flex; }
+#ab-Today .pop { position: absolute; z-index: 5; right: 0; bottom: calc(100% + 8px); box-sizing: border-box; width: 280px; padding: 12px; border: 1px solid var(--b1); border-radius: 12px; background: var(--o); box-shadow: var(--e2); color: var(--t2); font-size: 12px; line-height: 1.4; }
+#ab-Today .pop p { margin: 0; }
+#ab-Today .pop p + p { margin-top: 8px; }
+#ab-Today .pic { box-sizing: border-box; flex: none; display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; padding: 0; overflow: hidden; border: 1px solid var(--b1); border-radius: 10px; background: var(--o); cursor: zoom-in; }
+#ab-Today .pic img { display: block; width: 100%; height: 100%; object-fit: contain; }
+#ab-Today .pic.none { background: var(--s); color: var(--t3); cursor: default; }
+#ab-Today .pic.none i { width: 24px; height: 24px; display: flex; }
+#ab-Today .pic.sm { width: 28px; height: 28px; border-radius: 8px; }
+#ab-Today .pic.sm.none i { width: 16px; height: 16px; }
+#ab-Today .prod { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; column-gap: 12px; align-items: start; padding: 12px 0 0; }
+#ab-Today .prod .pic { grid-row: 1 / span 2; }
+#ab-Today .pwhat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+#ab-Today .pname { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 16px; line-height: 1.3; color: var(--t); }
+#ab-Today .pdet { font-size: 14px; line-height: 1.4; color: var(--t2); }
+#ab-Today .pprice { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding-top: 1px; }
+#ab-Today .amt { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--t); }
+#ab-Today .per { font-size: 12px; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-Today .allp { grid-column: 2 / -1; justify-self: start; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-Today .prod.noall { padding-bottom: 12px; }
+#ab-Today .drow { position: relative; padding: 10px 0 2px; border-bottom: 1px solid var(--b1); }
+#ab-Today .drow:last-child { border-bottom: 0; }
+#ab-Today .dtop { display: flex; align-items: center; gap: 12px; }
+#ab-Today .pl { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 2px 0 2px; }
+#ab-Today .plt { flex: 1; display: flex; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--t2); white-space: nowrap; }
+#ab-Today .pln { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ab-Today .plb { flex: none; white-space: pre; }
+#ab-Today .pl.diff .plt { color: var(--q); }
+#ab-Today .plc { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 0 0 8px; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-Today .disc { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0; border: 0; border-bottom: 1px solid var(--b1); background: transparent; font-size: 16px; color: var(--t); text-align: left; }
+#ab-Today .disc span { flex: 1; }
+#ab-Today .disc i { flex: none; width: 20px; height: 20px; display: flex; color: var(--t2); }
+#ab-Today .disc.open i { transform: rotate(180deg); }
+#ab-Today .actions { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; }
+#ab-Today .primary { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; padding: 8px 12px; border: 0; border-radius: 12px; background: var(--act); color: var(--on-act); font-size: 16px; font-weight: 600; }
+#ab-Today .quiet { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; padding: 4px; border: 0; background: transparent; font-size: 14px; color: var(--t3); }
+#ab-RowSheet .pair { display: flex; gap: 80px; align-items: flex-start; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+#ab-RowSheet .col { flex: none; width: 390px; }
+#ab-RowSheet .tag { height: 28px; margin: 0; font-size: 12px; line-height: 16px; color: #98a0bb; }
+#ab-RowSheet .day { --g: #f7f8fc; --r: #ffffff; --o: #ffffff; --s: #eef0f7;
+  --t: #11141f; --t2: #525a78; --t3: #616a8a;
+  --b1: #dde1ed; --b2: #6f7899;
+  --act: #ffb454; --on-act: #0a0c14; --q: #8a5a12;
+  --ok: #047857; --focus: #2563eb;
+  --scrim: rgba(17, 20, 31, 0.42);
+  --shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  --e2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.10);
+  color-scheme: light; }
+#ab-RowSheet .night { --g: #0a0c14; --r: #161a28; --o: #1a1e2e; --s: #11141f;
+  --t: #f7f8fc; --t2: #c2c8db; --t3: #98a0bb;
+  --b1: rgba(255, 255, 255, 0.08); --b2: rgba(255, 255, 255, 0.35);
+  --act: #ffb454; --on-act: #0a0c14; --q: #ffb454;
+  --ok: #34d399; --focus: #60a5fa;
+  --scrim: rgba(10, 12, 20, 0.74);
+  --shadow: 0 -18px 40px rgba(10, 12, 20, 0.42);
+  --e2: inset 0 1px 0 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(10, 12, 20, 0.55);
+  color-scheme: dark; }
+#ab-RowSheet .vel { color: var(--t); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+#ab-RowSheet .vel button { font-family: inherit; cursor: pointer; }
+#ab-RowSheet .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; background: var(--g); }
+#ab-RowSheet .ph { height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid var(--b1); }
+#ab-RowSheet .ph i { width: 24px; height: 24px; display: flex; color: var(--t); }
+#ab-RowSheet .ph b { font-family: Marcellus, Georgia, serif; font-size: 20px; font-weight: 400; letter-spacing: 0.05em; }
+#ab-RowSheet .prow { display: flex; align-items: center; gap: 12px; height: 60px; box-sizing: border-box; padding: 0 16px; border-bottom: 1px solid var(--b1); }
+#ab-RowSheet .prow .dot { width: 26px; height: 26px; flex: none; box-sizing: border-box; border: 1.5px solid var(--b2); border-radius: 999px; }
+#ab-RowSheet .prow span { flex: 1; font-size: 16px; }
+#ab-RowSheet .prow em { font-style: normal; font-size: 16px; font-weight: 600; }
+#ab-RowSheet .scrim { position: absolute; inset: 0; background: var(--scrim); }
+#ab-RowSheet .home { position: absolute; z-index: 3; left: 50%; bottom: 8px; width: 134px; height: 5px; margin-left: -67px; border-radius: 999px; background: var(--t); }
+#ab-RowSheet .sheet { position: absolute; left: 0; right: 0; bottom: 0; box-sizing: border-box; padding: 0 16px 54px; border-radius: 22px 22px 0 0; background: var(--r); box-shadow: var(--shadow); }
+#ab-RowSheet .handle { width: 48px; height: 5px; margin: 10px auto 16px; border-radius: 999px; background: var(--b1); }
+#ab-RowSheet .title { margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 1.2; font-weight: 400; color: var(--t); text-wrap: balance; }
+#ab-RowSheet .sub { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+#ab-RowSheet .happened { margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+#ab-RowSheet .shead { display: flex; align-items: center; gap: 4px; margin-left: -10px; }
+#ab-RowSheet .back { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; background: transparent; color: var(--t2); }
+#ab-RowSheet .back i { width: 24px; height: 24px; display: flex; }
+#ab-RowSheet .shead .title { flex: 1; min-width: 0; }
+#ab-RowSheet .shead + .sub { margin-top: 0; }
+#ab-RowSheet .entries { margin-top: 8px; }
+#ab-RowSheet .head { display: flex; align-items: center; gap: 8px; min-height: 44px; border-bottom: 1px solid var(--b1); }
+#ab-RowSheet .head h3 { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 600; color: var(--t2); }
+#ab-RowSheet .all { flex: none; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); white-space: nowrap; }
+#ab-RowSheet .rows { margin: 0; padding: 0; list-style: none; }
+#ab-RowSheet .row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 4px 0; border-bottom: 1px solid var(--b1); }
+#ab-RowSheet .lbl { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#ab-RowSheet .nm { display: flex; min-width: 0; font-size: 16px; line-height: 1.5; color: var(--t); white-space: nowrap; }
+#ab-RowSheet .nmt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ab-RowSheet .ask { flex: none; white-space: pre; color: var(--t2); font-variant-numeric: tabular-nums; }
+#ab-RowSheet .wh { overflow: hidden; font-size: 12px; line-height: 1.5; color: var(--t2); text-overflow: ellipsis; white-space: nowrap; }
+#ab-RowSheet .got { font-size: 14px; line-height: 1.5; color: var(--t2); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-RowSheet .change { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--b1); border-radius: 12px; background: var(--r); color: var(--t); }
+#ab-RowSheet .change i { width: 20px; height: 20px; display: flex; }
+#ab-RowSheet .stp { flex: none; display: inline-grid; grid-template-columns: 48px 72px 48px; height: 48px; border-radius: 999px; background: var(--r); box-shadow: inset 0 0 0 1px var(--b2); }
+#ab-RowSheet .stp.wide { grid-template-columns: 48px 95px 48px; }
+#ab-RowSheet .sb { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; color: var(--t); }
+#ab-RowSheet .sb.end { opacity: 0.35; }
+#ab-RowSheet .g { position: relative; display: block; width: 14px; height: 14px; }
+#ab-RowSheet .g::before { content: ''; position: absolute; left: 0; top: 6px; width: 14px; height: 2px; border-radius: 1px; background: currentColor; }
+#ab-RowSheet .plus .g::after { content: ''; position: absolute; left: 6px; top: 0; width: 2px; height: 14px; border-radius: 1px; background: currentColor; }
+#ab-RowSheet .cell { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 0; padding: 0 4px; overflow: hidden; white-space: nowrap; }
+#ab-RowSheet .fig { font-size: 18px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--t); }
+#ab-RowSheet .fig.unit { font-size: 16px; }
+#ab-RowSheet .sym { font-size: 12px; line-height: 1; color: var(--t2); }
+#ab-RowSheet .stp.zero .fig { color: var(--t2); }
+#ab-RowSheet .stp.reached .fig { color: var(--ok); }
+#ab-RowSheet .stp.over .fig { color: var(--q); }
+#ab-RowSheet .stp.ring-ok { box-shadow: inset 0 0 0 2px var(--ok); }
+#ab-RowSheet .stp.ring-over { box-shadow: inset 0 0 0 2px var(--q); }
+#ab-RowSheet .ask.reached { color: var(--ok); }
+#ab-RowSheet .ask.over { color: var(--q); }
+#ab-RowSheet .rnum { flex: none; display: flex; justify-content: flex-end; align-items: center; width: 168px; height: 48px; font-size: 16px; color: var(--t2); font-variant-numeric: tabular-nums; }
+#ab-RowSheet .rnum.wide { width: 191px; }
+#ab-RowSheet .stp.dis { background: transparent; box-shadow: inset 0 0 0 1px var(--b1); }
+#ab-RowSheet .stp.dis .sb { color: var(--t3); opacity: 0.6; }
+#ab-RowSheet .stp.dis .fig { color: var(--t3); }
+#ab-RowSheet .stp.dis .sym { color: var(--t3); }
+#ab-RowSheet .desc { margin: 0; font-size: 14px; line-height: 1.5; color: var(--t2); text-wrap: pretty; }
+#ab-RowSheet .anchor { position: relative; flex: none; display: flex; }
+#ab-RowSheet .pop { position: absolute; z-index: 5; right: 0; bottom: calc(100% + 8px); box-sizing: border-box; width: 280px; padding: 12px; border: 1px solid var(--b1); border-radius: 12px; background: var(--o); box-shadow: var(--e2); color: var(--t2); font-size: 12px; line-height: 1.4; }
+#ab-RowSheet .pop p { margin: 0; }
+#ab-RowSheet .pop p + p { margin-top: 8px; }
+#ab-RowSheet .pic { box-sizing: border-box; flex: none; display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; padding: 0; overflow: hidden; border: 1px solid var(--b1); border-radius: 10px; background: var(--o); cursor: zoom-in; }
+#ab-RowSheet .pic img { display: block; width: 100%; height: 100%; object-fit: contain; }
+#ab-RowSheet .pic.none { background: var(--s); color: var(--t3); cursor: default; }
+#ab-RowSheet .pic.none i { width: 24px; height: 24px; display: flex; }
+#ab-RowSheet .pic.sm { width: 28px; height: 28px; border-radius: 8px; }
+#ab-RowSheet .pic.sm.none i { width: 16px; height: 16px; }
+#ab-RowSheet .prod { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; column-gap: 12px; align-items: start; padding: 12px 0 0; }
+#ab-RowSheet .prod .pic { grid-row: 1 / span 2; }
+#ab-RowSheet .pwhat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+#ab-RowSheet .pname { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 16px; line-height: 1.3; color: var(--t); }
+#ab-RowSheet .pdet { font-size: 14px; line-height: 1.4; color: var(--t2); }
+#ab-RowSheet .pprice { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding-top: 1px; }
+#ab-RowSheet .amt { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--t); }
+#ab-RowSheet .per { font-size: 12px; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-RowSheet .allp { grid-column: 2 / -1; justify-self: start; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-RowSheet .prod.noall { padding-bottom: 12px; }
+#ab-RowSheet .drow { position: relative; padding: 10px 0 2px; border-bottom: 1px solid var(--b1); }
+#ab-RowSheet .drow:last-child { border-bottom: 0; }
+#ab-RowSheet .dtop { display: flex; align-items: center; gap: 12px; }
+#ab-RowSheet .pl { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 2px 0 2px; }
+#ab-RowSheet .plt { flex: 1; display: flex; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--t2); white-space: nowrap; }
+#ab-RowSheet .pln { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ab-RowSheet .plb { flex: none; white-space: pre; }
+#ab-RowSheet .pl.diff .plt { color: var(--q); }
+#ab-RowSheet .plc { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 0 0 8px; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-RowSheet .disc { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0; border: 0; border-bottom: 1px solid var(--b1); background: transparent; font-size: 16px; color: var(--t); text-align: left; }
+#ab-RowSheet .disc span { flex: 1; }
+#ab-RowSheet .disc i { flex: none; width: 20px; height: 20px; display: flex; color: var(--t2); }
+#ab-RowSheet .disc.open i { transform: rotate(180deg); }
+#ab-RowSheet .actions { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; }
+#ab-RowSheet .primary { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; padding: 8px 12px; border: 0; border-radius: 12px; background: var(--act); color: var(--on-act); font-size: 16px; font-weight: 600; }
+#ab-RowSheet .quiet { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; padding: 4px; border: 0; background: transparent; font-size: 14px; color: var(--t3); }
+#ab-Guest .pair { display: flex; gap: 80px; align-items: flex-start; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+#ab-Guest .col { flex: none; width: 390px; }
+#ab-Guest .tag { height: 28px; margin: 0; font-size: 12px; line-height: 16px; color: #98a0bb; }
+#ab-Guest .day { --g: #f7f8fc; --r: #ffffff; --o: #ffffff; --s: #eef0f7;
+  --t: #11141f; --t2: #525a78; --t3: #616a8a;
+  --b1: #dde1ed; --b2: #6f7899;
+  --act: #ffb454; --on-act: #0a0c14; --q: #8a5a12;
+  --ok: #047857; --focus: #2563eb;
+  --scrim: rgba(17, 20, 31, 0.42);
+  --shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  --e2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.10);
+  color-scheme: light; }
+#ab-Guest .night { --g: #0a0c14; --r: #161a28; --o: #1a1e2e; --s: #11141f;
+  --t: #f7f8fc; --t2: #c2c8db; --t3: #98a0bb;
+  --b1: rgba(255, 255, 255, 0.08); --b2: rgba(255, 255, 255, 0.35);
+  --act: #ffb454; --on-act: #0a0c14; --q: #ffb454;
+  --ok: #34d399; --focus: #60a5fa;
+  --scrim: rgba(10, 12, 20, 0.74);
+  --shadow: 0 -18px 40px rgba(10, 12, 20, 0.42);
+  --e2: inset 0 1px 0 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(10, 12, 20, 0.55);
+  color-scheme: dark; }
+#ab-Guest .vel { color: var(--t); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+#ab-Guest .vel button { font-family: inherit; cursor: pointer; }
+#ab-Guest .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; background: var(--g); }
+#ab-Guest .ph { height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid var(--b1); }
+#ab-Guest .ph i { width: 24px; height: 24px; display: flex; color: var(--t); }
+#ab-Guest .ph b { font-family: Marcellus, Georgia, serif; font-size: 20px; font-weight: 400; letter-spacing: 0.05em; }
+#ab-Guest .prow { display: flex; align-items: center; gap: 12px; height: 60px; box-sizing: border-box; padding: 0 16px; border-bottom: 1px solid var(--b1); }
+#ab-Guest .prow .dot { width: 26px; height: 26px; flex: none; box-sizing: border-box; border: 1.5px solid var(--b2); border-radius: 999px; }
+#ab-Guest .prow span { flex: 1; font-size: 16px; }
+#ab-Guest .prow em { font-style: normal; font-size: 16px; font-weight: 600; }
+#ab-Guest .scrim { position: absolute; inset: 0; background: var(--scrim); }
+#ab-Guest .home { position: absolute; z-index: 3; left: 50%; bottom: 8px; width: 134px; height: 5px; margin-left: -67px; border-radius: 999px; background: var(--t); }
+#ab-Guest .sheet { position: absolute; left: 0; right: 0; bottom: 0; box-sizing: border-box; padding: 0 16px 54px; border-radius: 22px 22px 0 0; background: var(--r); box-shadow: var(--shadow); }
+#ab-Guest .handle { width: 48px; height: 5px; margin: 10px auto 16px; border-radius: 999px; background: var(--b1); }
+#ab-Guest .title { margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 1.2; font-weight: 400; color: var(--t); text-wrap: balance; }
+#ab-Guest .sub { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+#ab-Guest .happened { margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+#ab-Guest .shead { display: flex; align-items: center; gap: 4px; margin-left: -10px; }
+#ab-Guest .back { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; background: transparent; color: var(--t2); }
+#ab-Guest .back i { width: 24px; height: 24px; display: flex; }
+#ab-Guest .shead .title { flex: 1; min-width: 0; }
+#ab-Guest .shead + .sub { margin-top: 0; }
+#ab-Guest .entries { margin-top: 8px; }
+#ab-Guest .head { display: flex; align-items: center; gap: 8px; min-height: 44px; border-bottom: 1px solid var(--b1); }
+#ab-Guest .head h3 { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 600; color: var(--t2); }
+#ab-Guest .all { flex: none; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); white-space: nowrap; }
+#ab-Guest .rows { margin: 0; padding: 0; list-style: none; }
+#ab-Guest .row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 4px 0; border-bottom: 1px solid var(--b1); }
+#ab-Guest .lbl { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#ab-Guest .nm { display: flex; min-width: 0; font-size: 16px; line-height: 1.5; color: var(--t); white-space: nowrap; }
+#ab-Guest .nmt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ab-Guest .ask { flex: none; white-space: pre; color: var(--t2); font-variant-numeric: tabular-nums; }
+#ab-Guest .wh { overflow: hidden; font-size: 12px; line-height: 1.5; color: var(--t2); text-overflow: ellipsis; white-space: nowrap; }
+#ab-Guest .got { font-size: 14px; line-height: 1.5; color: var(--t2); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Guest .change { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--b1); border-radius: 12px; background: var(--r); color: var(--t); }
+#ab-Guest .change i { width: 20px; height: 20px; display: flex; }
+#ab-Guest .stp { flex: none; display: inline-grid; grid-template-columns: 48px 72px 48px; height: 48px; border-radius: 999px; background: var(--r); box-shadow: inset 0 0 0 1px var(--b2); }
+#ab-Guest .stp.wide { grid-template-columns: 48px 95px 48px; }
+#ab-Guest .sb { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; color: var(--t); }
+#ab-Guest .sb.end { opacity: 0.35; }
+#ab-Guest .g { position: relative; display: block; width: 14px; height: 14px; }
+#ab-Guest .g::before { content: ''; position: absolute; left: 0; top: 6px; width: 14px; height: 2px; border-radius: 1px; background: currentColor; }
+#ab-Guest .plus .g::after { content: ''; position: absolute; left: 6px; top: 0; width: 2px; height: 14px; border-radius: 1px; background: currentColor; }
+#ab-Guest .cell { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 0; padding: 0 4px; overflow: hidden; white-space: nowrap; }
+#ab-Guest .fig { font-size: 18px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--t); }
+#ab-Guest .fig.unit { font-size: 16px; }
+#ab-Guest .sym { font-size: 12px; line-height: 1; color: var(--t2); }
+#ab-Guest .stp.zero .fig { color: var(--t2); }
+#ab-Guest .stp.reached .fig { color: var(--ok); }
+#ab-Guest .stp.over .fig { color: var(--q); }
+#ab-Guest .stp.ring-ok { box-shadow: inset 0 0 0 2px var(--ok); }
+#ab-Guest .stp.ring-over { box-shadow: inset 0 0 0 2px var(--q); }
+#ab-Guest .ask.reached { color: var(--ok); }
+#ab-Guest .ask.over { color: var(--q); }
+#ab-Guest .rnum { flex: none; display: flex; justify-content: flex-end; align-items: center; width: 168px; height: 48px; font-size: 16px; color: var(--t2); font-variant-numeric: tabular-nums; }
+#ab-Guest .rnum.wide { width: 191px; }
+#ab-Guest .stp.dis { background: transparent; box-shadow: inset 0 0 0 1px var(--b1); }
+#ab-Guest .stp.dis .sb { color: var(--t3); opacity: 0.6; }
+#ab-Guest .stp.dis .fig { color: var(--t3); }
+#ab-Guest .stp.dis .sym { color: var(--t3); }
+#ab-Guest .desc { margin: 0; font-size: 14px; line-height: 1.5; color: var(--t2); text-wrap: pretty; }
+#ab-Guest .anchor { position: relative; flex: none; display: flex; }
+#ab-Guest .pop { position: absolute; z-index: 5; right: 0; bottom: calc(100% + 8px); box-sizing: border-box; width: 280px; padding: 12px; border: 1px solid var(--b1); border-radius: 12px; background: var(--o); box-shadow: var(--e2); color: var(--t2); font-size: 12px; line-height: 1.4; }
+#ab-Guest .pop p { margin: 0; }
+#ab-Guest .pop p + p { margin-top: 8px; }
+#ab-Guest .pic { box-sizing: border-box; flex: none; display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; padding: 0; overflow: hidden; border: 1px solid var(--b1); border-radius: 10px; background: var(--o); cursor: zoom-in; }
+#ab-Guest .pic img { display: block; width: 100%; height: 100%; object-fit: contain; }
+#ab-Guest .pic.none { background: var(--s); color: var(--t3); cursor: default; }
+#ab-Guest .pic.none i { width: 24px; height: 24px; display: flex; }
+#ab-Guest .pic.sm { width: 28px; height: 28px; border-radius: 8px; }
+#ab-Guest .pic.sm.none i { width: 16px; height: 16px; }
+#ab-Guest .prod { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; column-gap: 12px; align-items: start; padding: 12px 0 0; }
+#ab-Guest .prod .pic { grid-row: 1 / span 2; }
+#ab-Guest .pwhat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+#ab-Guest .pname { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 16px; line-height: 1.3; color: var(--t); }
+#ab-Guest .pdet { font-size: 14px; line-height: 1.4; color: var(--t2); }
+#ab-Guest .pprice { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding-top: 1px; }
+#ab-Guest .amt { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--t); }
+#ab-Guest .per { font-size: 12px; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-Guest .allp { grid-column: 2 / -1; justify-self: start; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-Guest .prod.noall { padding-bottom: 12px; }
+#ab-Guest .drow { position: relative; padding: 10px 0 2px; border-bottom: 1px solid var(--b1); }
+#ab-Guest .drow:last-child { border-bottom: 0; }
+#ab-Guest .dtop { display: flex; align-items: center; gap: 12px; }
+#ab-Guest .pl { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 2px 0 2px; }
+#ab-Guest .plt { flex: 1; display: flex; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--t2); white-space: nowrap; }
+#ab-Guest .pln { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ab-Guest .plb { flex: none; white-space: pre; }
+#ab-Guest .pl.diff .plt { color: var(--q); }
+#ab-Guest .plc { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 0 0 8px; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-Guest .disc { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0; border: 0; border-bottom: 1px solid var(--b1); background: transparent; font-size: 16px; color: var(--t); text-align: left; }
+#ab-Guest .disc span { flex: 1; }
+#ab-Guest .disc i { flex: none; width: 20px; height: 20px; display: flex; color: var(--t2); }
+#ab-Guest .disc.open i { transform: rotate(180deg); }
+#ab-Guest .actions { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; }
+#ab-Guest .primary { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; padding: 8px 12px; border: 0; border-radius: 12px; background: var(--act); color: var(--on-act); font-size: 16px; font-weight: 600; }
+#ab-Guest .quiet { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; padding: 4px; border: 0; background: transparent; font-size: 14px; color: var(--t3); }
+#ab-Detail .pair { display: flex; gap: 80px; align-items: flex-start; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+#ab-Detail .col { flex: none; width: 390px; }
+#ab-Detail .tag { height: 28px; margin: 0; font-size: 12px; line-height: 16px; color: #98a0bb; }
+#ab-Detail .day { --g: #f7f8fc; --r: #ffffff; --o: #ffffff; --s: #eef0f7;
+  --t: #11141f; --t2: #525a78; --t3: #616a8a;
+  --b1: #dde1ed; --b2: #6f7899;
+  --act: #ffb454; --on-act: #0a0c14; --q: #8a5a12;
+  --ok: #047857; --focus: #2563eb;
+  --scrim: rgba(17, 20, 31, 0.42);
+  --shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  --e2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.10);
+  color-scheme: light; }
+#ab-Detail .night { --g: #0a0c14; --r: #161a28; --o: #1a1e2e; --s: #11141f;
+  --t: #f7f8fc; --t2: #c2c8db; --t3: #98a0bb;
+  --b1: rgba(255, 255, 255, 0.08); --b2: rgba(255, 255, 255, 0.35);
+  --act: #ffb454; --on-act: #0a0c14; --q: #ffb454;
+  --ok: #34d399; --focus: #60a5fa;
+  --scrim: rgba(10, 12, 20, 0.74);
+  --shadow: 0 -18px 40px rgba(10, 12, 20, 0.42);
+  --e2: inset 0 1px 0 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(10, 12, 20, 0.55);
+  color-scheme: dark; }
+#ab-Detail .vel { color: var(--t); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+#ab-Detail .vel button { font-family: inherit; cursor: pointer; }
+#ab-Detail .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; background: var(--g); }
+#ab-Detail .ph { height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid var(--b1); }
+#ab-Detail .ph i { width: 24px; height: 24px; display: flex; color: var(--t); }
+#ab-Detail .ph b { font-family: Marcellus, Georgia, serif; font-size: 20px; font-weight: 400; letter-spacing: 0.05em; }
+#ab-Detail .prow { display: flex; align-items: center; gap: 12px; height: 60px; box-sizing: border-box; padding: 0 16px; border-bottom: 1px solid var(--b1); }
+#ab-Detail .prow .dot { width: 26px; height: 26px; flex: none; box-sizing: border-box; border: 1.5px solid var(--b2); border-radius: 999px; }
+#ab-Detail .prow span { flex: 1; font-size: 16px; }
+#ab-Detail .prow em { font-style: normal; font-size: 16px; font-weight: 600; }
+#ab-Detail .scrim { position: absolute; inset: 0; background: var(--scrim); }
+#ab-Detail .home { position: absolute; z-index: 3; left: 50%; bottom: 8px; width: 134px; height: 5px; margin-left: -67px; border-radius: 999px; background: var(--t); }
+#ab-Detail .sheet { position: absolute; left: 0; right: 0; bottom: 0; box-sizing: border-box; padding: 0 16px 54px; border-radius: 22px 22px 0 0; background: var(--r); box-shadow: var(--shadow); }
+#ab-Detail .handle { width: 48px; height: 5px; margin: 10px auto 16px; border-radius: 999px; background: var(--b1); }
+#ab-Detail .title { margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 1.2; font-weight: 400; color: var(--t); text-wrap: balance; }
+#ab-Detail .sub { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+#ab-Detail .happened { margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+#ab-Detail .shead { display: flex; align-items: center; gap: 4px; margin-left: -10px; }
+#ab-Detail .back { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; background: transparent; color: var(--t2); }
+#ab-Detail .back i { width: 24px; height: 24px; display: flex; }
+#ab-Detail .shead .title { flex: 1; min-width: 0; }
+#ab-Detail .shead + .sub { margin-top: 0; }
+#ab-Detail .entries { margin-top: 8px; }
+#ab-Detail .head { display: flex; align-items: center; gap: 8px; min-height: 44px; border-bottom: 1px solid var(--b1); }
+#ab-Detail .head h3 { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 600; color: var(--t2); }
+#ab-Detail .all { flex: none; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); white-space: nowrap; }
+#ab-Detail .rows { margin: 0; padding: 0; list-style: none; }
+#ab-Detail .row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 4px 0; border-bottom: 1px solid var(--b1); }
+#ab-Detail .lbl { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#ab-Detail .nm { display: flex; min-width: 0; font-size: 16px; line-height: 1.5; color: var(--t); white-space: nowrap; }
+#ab-Detail .nmt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ab-Detail .ask { flex: none; white-space: pre; color: var(--t2); font-variant-numeric: tabular-nums; }
+#ab-Detail .wh { overflow: hidden; font-size: 12px; line-height: 1.5; color: var(--t2); text-overflow: ellipsis; white-space: nowrap; }
+#ab-Detail .got { font-size: 14px; line-height: 1.5; color: var(--t2); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Detail .change { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--b1); border-radius: 12px; background: var(--r); color: var(--t); }
+#ab-Detail .change i { width: 20px; height: 20px; display: flex; }
+#ab-Detail .stp { flex: none; display: inline-grid; grid-template-columns: 48px 72px 48px; height: 48px; border-radius: 999px; background: var(--r); box-shadow: inset 0 0 0 1px var(--b2); }
+#ab-Detail .stp.wide { grid-template-columns: 48px 95px 48px; }
+#ab-Detail .sb { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; color: var(--t); }
+#ab-Detail .sb.end { opacity: 0.35; }
+#ab-Detail .g { position: relative; display: block; width: 14px; height: 14px; }
+#ab-Detail .g::before { content: ''; position: absolute; left: 0; top: 6px; width: 14px; height: 2px; border-radius: 1px; background: currentColor; }
+#ab-Detail .plus .g::after { content: ''; position: absolute; left: 6px; top: 0; width: 2px; height: 14px; border-radius: 1px; background: currentColor; }
+#ab-Detail .cell { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 0; padding: 0 4px; overflow: hidden; white-space: nowrap; }
+#ab-Detail .fig { font-size: 18px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--t); }
+#ab-Detail .fig.unit { font-size: 16px; }
+#ab-Detail .sym { font-size: 12px; line-height: 1; color: var(--t2); }
+#ab-Detail .stp.zero .fig { color: var(--t2); }
+#ab-Detail .stp.reached .fig { color: var(--ok); }
+#ab-Detail .stp.over .fig { color: var(--q); }
+#ab-Detail .stp.ring-ok { box-shadow: inset 0 0 0 2px var(--ok); }
+#ab-Detail .stp.ring-over { box-shadow: inset 0 0 0 2px var(--q); }
+#ab-Detail .ask.reached { color: var(--ok); }
+#ab-Detail .ask.over { color: var(--q); }
+#ab-Detail .rnum { flex: none; display: flex; justify-content: flex-end; align-items: center; width: 168px; height: 48px; font-size: 16px; color: var(--t2); font-variant-numeric: tabular-nums; }
+#ab-Detail .rnum.wide { width: 191px; }
+#ab-Detail .stp.dis { background: transparent; box-shadow: inset 0 0 0 1px var(--b1); }
+#ab-Detail .stp.dis .sb { color: var(--t3); opacity: 0.6; }
+#ab-Detail .stp.dis .fig { color: var(--t3); }
+#ab-Detail .stp.dis .sym { color: var(--t3); }
+#ab-Detail .desc { margin: 0; font-size: 14px; line-height: 1.5; color: var(--t2); text-wrap: pretty; }
+#ab-Detail .anchor { position: relative; flex: none; display: flex; }
+#ab-Detail .pop { position: absolute; z-index: 5; right: 0; bottom: calc(100% + 8px); box-sizing: border-box; width: 280px; padding: 12px; border: 1px solid var(--b1); border-radius: 12px; background: var(--o); box-shadow: var(--e2); color: var(--t2); font-size: 12px; line-height: 1.4; }
+#ab-Detail .pop p { margin: 0; }
+#ab-Detail .pop p + p { margin-top: 8px; }
+#ab-Detail .pic { box-sizing: border-box; flex: none; display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; padding: 0; overflow: hidden; border: 1px solid var(--b1); border-radius: 10px; background: var(--o); cursor: zoom-in; }
+#ab-Detail .pic img { display: block; width: 100%; height: 100%; object-fit: contain; }
+#ab-Detail .pic.none { background: var(--s); color: var(--t3); cursor: default; }
+#ab-Detail .pic.none i { width: 24px; height: 24px; display: flex; }
+#ab-Detail .pic.sm { width: 28px; height: 28px; border-radius: 8px; }
+#ab-Detail .pic.sm.none i { width: 16px; height: 16px; }
+#ab-Detail .prod { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; column-gap: 12px; align-items: start; padding: 12px 0 0; }
+#ab-Detail .prod .pic { grid-row: 1 / span 2; }
+#ab-Detail .pwhat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+#ab-Detail .pname { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 16px; line-height: 1.3; color: var(--t); }
+#ab-Detail .pdet { font-size: 14px; line-height: 1.4; color: var(--t2); }
+#ab-Detail .pprice { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding-top: 1px; }
+#ab-Detail .amt { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--t); }
+#ab-Detail .per { font-size: 12px; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-Detail .allp { grid-column: 2 / -1; justify-self: start; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-Detail .prod.noall { padding-bottom: 12px; }
+#ab-Detail .drow { position: relative; padding: 10px 0 2px; border-bottom: 1px solid var(--b1); }
+#ab-Detail .drow:last-child { border-bottom: 0; }
+#ab-Detail .dtop { display: flex; align-items: center; gap: 12px; }
+#ab-Detail .pl { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 2px 0 2px; }
+#ab-Detail .plt { flex: 1; display: flex; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--t2); white-space: nowrap; }
+#ab-Detail .pln { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ab-Detail .plb { flex: none; white-space: pre; }
+#ab-Detail .pl.diff .plt { color: var(--q); }
+#ab-Detail .plc { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 0 0 8px; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-Detail .disc { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0; border: 0; border-bottom: 1px solid var(--b1); background: transparent; font-size: 16px; color: var(--t); text-align: left; }
+#ab-Detail .disc span { flex: 1; }
+#ab-Detail .disc i { flex: none; width: 20px; height: 20px; display: flex; color: var(--t2); }
+#ab-Detail .disc.open i { transform: rotate(180deg); }
+#ab-Detail .actions { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; }
+#ab-Detail .primary { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; padding: 8px 12px; border: 0; border-radius: 12px; background: var(--act); color: var(--on-act); font-size: 16px; font-weight: 600; }
+#ab-Detail .quiet { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; padding: 4px; border: 0; background: transparent; font-size: 14px; color: var(--t3); }
+#ab-DetailAll .pair { display: flex; gap: 80px; align-items: flex-start; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+#ab-DetailAll .col { flex: none; width: 390px; }
+#ab-DetailAll .tag { height: 28px; margin: 0; font-size: 12px; line-height: 16px; color: #98a0bb; }
+#ab-DetailAll .day { --g: #f7f8fc; --r: #ffffff; --o: #ffffff; --s: #eef0f7;
+  --t: #11141f; --t2: #525a78; --t3: #616a8a;
+  --b1: #dde1ed; --b2: #6f7899;
+  --act: #ffb454; --on-act: #0a0c14; --q: #8a5a12;
+  --ok: #047857; --focus: #2563eb;
+  --scrim: rgba(17, 20, 31, 0.42);
+  --shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  --e2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.10);
+  color-scheme: light; }
+#ab-DetailAll .night { --g: #0a0c14; --r: #161a28; --o: #1a1e2e; --s: #11141f;
+  --t: #f7f8fc; --t2: #c2c8db; --t3: #98a0bb;
+  --b1: rgba(255, 255, 255, 0.08); --b2: rgba(255, 255, 255, 0.35);
+  --act: #ffb454; --on-act: #0a0c14; --q: #ffb454;
+  --ok: #34d399; --focus: #60a5fa;
+  --scrim: rgba(10, 12, 20, 0.74);
+  --shadow: 0 -18px 40px rgba(10, 12, 20, 0.42);
+  --e2: inset 0 1px 0 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(10, 12, 20, 0.55);
+  color-scheme: dark; }
+#ab-DetailAll .vel { color: var(--t); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+#ab-DetailAll .vel button { font-family: inherit; cursor: pointer; }
+#ab-DetailAll .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; background: var(--g); }
+#ab-DetailAll .ph { height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid var(--b1); }
+#ab-DetailAll .ph i { width: 24px; height: 24px; display: flex; color: var(--t); }
+#ab-DetailAll .ph b { font-family: Marcellus, Georgia, serif; font-size: 20px; font-weight: 400; letter-spacing: 0.05em; }
+#ab-DetailAll .prow { display: flex; align-items: center; gap: 12px; height: 60px; box-sizing: border-box; padding: 0 16px; border-bottom: 1px solid var(--b1); }
+#ab-DetailAll .prow .dot { width: 26px; height: 26px; flex: none; box-sizing: border-box; border: 1.5px solid var(--b2); border-radius: 999px; }
+#ab-DetailAll .prow span { flex: 1; font-size: 16px; }
+#ab-DetailAll .prow em { font-style: normal; font-size: 16px; font-weight: 600; }
+#ab-DetailAll .scrim { position: absolute; inset: 0; background: var(--scrim); }
+#ab-DetailAll .home { position: absolute; z-index: 3; left: 50%; bottom: 8px; width: 134px; height: 5px; margin-left: -67px; border-radius: 999px; background: var(--t); }
+#ab-DetailAll .sheet { position: absolute; left: 0; right: 0; bottom: 0; box-sizing: border-box; padding: 0 16px 54px; border-radius: 22px 22px 0 0; background: var(--r); box-shadow: var(--shadow); }
+#ab-DetailAll .handle { width: 48px; height: 5px; margin: 10px auto 16px; border-radius: 999px; background: var(--b1); }
+#ab-DetailAll .title { margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 1.2; font-weight: 400; color: var(--t); text-wrap: balance; }
+#ab-DetailAll .sub { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+#ab-DetailAll .happened { margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+#ab-DetailAll .shead { display: flex; align-items: center; gap: 4px; margin-left: -10px; }
+#ab-DetailAll .back { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; background: transparent; color: var(--t2); }
+#ab-DetailAll .back i { width: 24px; height: 24px; display: flex; }
+#ab-DetailAll .shead .title { flex: 1; min-width: 0; }
+#ab-DetailAll .shead + .sub { margin-top: 0; }
+#ab-DetailAll .entries { margin-top: 8px; }
+#ab-DetailAll .head { display: flex; align-items: center; gap: 8px; min-height: 44px; border-bottom: 1px solid var(--b1); }
+#ab-DetailAll .head h3 { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 600; color: var(--t2); }
+#ab-DetailAll .all { flex: none; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); white-space: nowrap; }
+#ab-DetailAll .rows { margin: 0; padding: 0; list-style: none; }
+#ab-DetailAll .row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 4px 0; border-bottom: 1px solid var(--b1); }
+#ab-DetailAll .lbl { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#ab-DetailAll .nm { display: flex; min-width: 0; font-size: 16px; line-height: 1.5; color: var(--t); white-space: nowrap; }
+#ab-DetailAll .nmt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ab-DetailAll .ask { flex: none; white-space: pre; color: var(--t2); font-variant-numeric: tabular-nums; }
+#ab-DetailAll .wh { overflow: hidden; font-size: 12px; line-height: 1.5; color: var(--t2); text-overflow: ellipsis; white-space: nowrap; }
+#ab-DetailAll .got { font-size: 14px; line-height: 1.5; color: var(--t2); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-DetailAll .change { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--b1); border-radius: 12px; background: var(--r); color: var(--t); }
+#ab-DetailAll .change i { width: 20px; height: 20px; display: flex; }
+#ab-DetailAll .stp { flex: none; display: inline-grid; grid-template-columns: 48px 72px 48px; height: 48px; border-radius: 999px; background: var(--r); box-shadow: inset 0 0 0 1px var(--b2); }
+#ab-DetailAll .stp.wide { grid-template-columns: 48px 95px 48px; }
+#ab-DetailAll .sb { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; color: var(--t); }
+#ab-DetailAll .sb.end { opacity: 0.35; }
+#ab-DetailAll .g { position: relative; display: block; width: 14px; height: 14px; }
+#ab-DetailAll .g::before { content: ''; position: absolute; left: 0; top: 6px; width: 14px; height: 2px; border-radius: 1px; background: currentColor; }
+#ab-DetailAll .plus .g::after { content: ''; position: absolute; left: 6px; top: 0; width: 2px; height: 14px; border-radius: 1px; background: currentColor; }
+#ab-DetailAll .cell { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 0; padding: 0 4px; overflow: hidden; white-space: nowrap; }
+#ab-DetailAll .fig { font-size: 18px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--t); }
+#ab-DetailAll .fig.unit { font-size: 16px; }
+#ab-DetailAll .sym { font-size: 12px; line-height: 1; color: var(--t2); }
+#ab-DetailAll .stp.zero .fig { color: var(--t2); }
+#ab-DetailAll .stp.reached .fig { color: var(--ok); }
+#ab-DetailAll .stp.over .fig { color: var(--q); }
+#ab-DetailAll .stp.ring-ok { box-shadow: inset 0 0 0 2px var(--ok); }
+#ab-DetailAll .stp.ring-over { box-shadow: inset 0 0 0 2px var(--q); }
+#ab-DetailAll .ask.reached { color: var(--ok); }
+#ab-DetailAll .ask.over { color: var(--q); }
+#ab-DetailAll .rnum { flex: none; display: flex; justify-content: flex-end; align-items: center; width: 168px; height: 48px; font-size: 16px; color: var(--t2); font-variant-numeric: tabular-nums; }
+#ab-DetailAll .rnum.wide { width: 191px; }
+#ab-DetailAll .stp.dis { background: transparent; box-shadow: inset 0 0 0 1px var(--b1); }
+#ab-DetailAll .stp.dis .sb { color: var(--t3); opacity: 0.6; }
+#ab-DetailAll .stp.dis .fig { color: var(--t3); }
+#ab-DetailAll .stp.dis .sym { color: var(--t3); }
+#ab-DetailAll .desc { margin: 0; font-size: 14px; line-height: 1.5; color: var(--t2); text-wrap: pretty; }
+#ab-DetailAll .anchor { position: relative; flex: none; display: flex; }
+#ab-DetailAll .pop { position: absolute; z-index: 5; right: 0; bottom: calc(100% + 8px); box-sizing: border-box; width: 280px; padding: 12px; border: 1px solid var(--b1); border-radius: 12px; background: var(--o); box-shadow: var(--e2); color: var(--t2); font-size: 12px; line-height: 1.4; }
+#ab-DetailAll .pop p { margin: 0; }
+#ab-DetailAll .pop p + p { margin-top: 8px; }
+#ab-DetailAll .pic { box-sizing: border-box; flex: none; display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; padding: 0; overflow: hidden; border: 1px solid var(--b1); border-radius: 10px; background: var(--o); cursor: zoom-in; }
+#ab-DetailAll .pic img { display: block; width: 100%; height: 100%; object-fit: contain; }
+#ab-DetailAll .pic.none { background: var(--s); color: var(--t3); cursor: default; }
+#ab-DetailAll .pic.none i { width: 24px; height: 24px; display: flex; }
+#ab-DetailAll .pic.sm { width: 28px; height: 28px; border-radius: 8px; }
+#ab-DetailAll .pic.sm.none i { width: 16px; height: 16px; }
+#ab-DetailAll .prod { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; column-gap: 12px; align-items: start; padding: 12px 0 0; }
+#ab-DetailAll .prod .pic { grid-row: 1 / span 2; }
+#ab-DetailAll .pwhat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+#ab-DetailAll .pname { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 16px; line-height: 1.3; color: var(--t); }
+#ab-DetailAll .pdet { font-size: 14px; line-height: 1.4; color: var(--t2); }
+#ab-DetailAll .pprice { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding-top: 1px; }
+#ab-DetailAll .amt { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--t); }
+#ab-DetailAll .per { font-size: 12px; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-DetailAll .allp { grid-column: 2 / -1; justify-self: start; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-DetailAll .prod.noall { padding-bottom: 12px; }
+#ab-DetailAll .drow { position: relative; padding: 10px 0 2px; border-bottom: 1px solid var(--b1); }
+#ab-DetailAll .drow:last-child { border-bottom: 0; }
+#ab-DetailAll .dtop { display: flex; align-items: center; gap: 12px; }
+#ab-DetailAll .pl { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 2px 0 2px; }
+#ab-DetailAll .plt { flex: 1; display: flex; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--t2); white-space: nowrap; }
+#ab-DetailAll .pln { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ab-DetailAll .plb { flex: none; white-space: pre; }
+#ab-DetailAll .pl.diff .plt { color: var(--q); }
+#ab-DetailAll .plc { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 0 0 8px; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-DetailAll .disc { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0; border: 0; border-bottom: 1px solid var(--b1); background: transparent; font-size: 16px; color: var(--t); text-align: left; }
+#ab-DetailAll .disc span { flex: 1; }
+#ab-DetailAll .disc i { flex: none; width: 20px; height: 20px; display: flex; color: var(--t2); }
+#ab-DetailAll .disc.open i { transform: rotate(180deg); }
+#ab-DetailAll .actions { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; }
+#ab-DetailAll .primary { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; padding: 8px 12px; border: 0; border-radius: 12px; background: var(--act); color: var(--on-act); font-size: 16px; font-weight: 600; }
+#ab-DetailAll .quiet { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; padding: 4px; border: 0; background: transparent; font-size: 14px; color: var(--t3); }
+#ab-Popover .pair { display: flex; gap: 80px; align-items: flex-start; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+#ab-Popover .col { flex: none; width: 390px; }
+#ab-Popover .tag { height: 28px; margin: 0; font-size: 12px; line-height: 16px; color: #98a0bb; }
+#ab-Popover .day { --g: #f7f8fc; --r: #ffffff; --o: #ffffff; --s: #eef0f7;
+  --t: #11141f; --t2: #525a78; --t3: #616a8a;
+  --b1: #dde1ed; --b2: #6f7899;
+  --act: #ffb454; --on-act: #0a0c14; --q: #8a5a12;
+  --ok: #047857; --focus: #2563eb;
+  --scrim: rgba(17, 20, 31, 0.42);
+  --shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  --e2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.10);
+  color-scheme: light; }
+#ab-Popover .night { --g: #0a0c14; --r: #161a28; --o: #1a1e2e; --s: #11141f;
+  --t: #f7f8fc; --t2: #c2c8db; --t3: #98a0bb;
+  --b1: rgba(255, 255, 255, 0.08); --b2: rgba(255, 255, 255, 0.35);
+  --act: #ffb454; --on-act: #0a0c14; --q: #ffb454;
+  --ok: #34d399; --focus: #60a5fa;
+  --scrim: rgba(10, 12, 20, 0.74);
+  --shadow: 0 -18px 40px rgba(10, 12, 20, 0.42);
+  --e2: inset 0 1px 0 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(10, 12, 20, 0.55);
+  color-scheme: dark; }
+#ab-Popover .vel { color: var(--t); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+#ab-Popover .vel button { font-family: inherit; cursor: pointer; }
+#ab-Popover .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; background: var(--g); }
+#ab-Popover .ph { height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid var(--b1); }
+#ab-Popover .ph i { width: 24px; height: 24px; display: flex; color: var(--t); }
+#ab-Popover .ph b { font-family: Marcellus, Georgia, serif; font-size: 20px; font-weight: 400; letter-spacing: 0.05em; }
+#ab-Popover .prow { display: flex; align-items: center; gap: 12px; height: 60px; box-sizing: border-box; padding: 0 16px; border-bottom: 1px solid var(--b1); }
+#ab-Popover .prow .dot { width: 26px; height: 26px; flex: none; box-sizing: border-box; border: 1.5px solid var(--b2); border-radius: 999px; }
+#ab-Popover .prow span { flex: 1; font-size: 16px; }
+#ab-Popover .prow em { font-style: normal; font-size: 16px; font-weight: 600; }
+#ab-Popover .scrim { position: absolute; inset: 0; background: var(--scrim); }
+#ab-Popover .home { position: absolute; z-index: 3; left: 50%; bottom: 8px; width: 134px; height: 5px; margin-left: -67px; border-radius: 999px; background: var(--t); }
+#ab-Popover .sheet { position: absolute; left: 0; right: 0; bottom: 0; box-sizing: border-box; padding: 0 16px 54px; border-radius: 22px 22px 0 0; background: var(--r); box-shadow: var(--shadow); }
+#ab-Popover .handle { width: 48px; height: 5px; margin: 10px auto 16px; border-radius: 999px; background: var(--b1); }
+#ab-Popover .title { margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 1.2; font-weight: 400; color: var(--t); text-wrap: balance; }
+#ab-Popover .sub { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+#ab-Popover .happened { margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+#ab-Popover .shead { display: flex; align-items: center; gap: 4px; margin-left: -10px; }
+#ab-Popover .back { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; background: transparent; color: var(--t2); }
+#ab-Popover .back i { width: 24px; height: 24px; display: flex; }
+#ab-Popover .shead .title { flex: 1; min-width: 0; }
+#ab-Popover .shead + .sub { margin-top: 0; }
+#ab-Popover .entries { margin-top: 8px; }
+#ab-Popover .head { display: flex; align-items: center; gap: 8px; min-height: 44px; border-bottom: 1px solid var(--b1); }
+#ab-Popover .head h3 { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 600; color: var(--t2); }
+#ab-Popover .all { flex: none; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); white-space: nowrap; }
+#ab-Popover .rows { margin: 0; padding: 0; list-style: none; }
+#ab-Popover .row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 4px 0; border-bottom: 1px solid var(--b1); }
+#ab-Popover .lbl { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#ab-Popover .nm { display: flex; min-width: 0; font-size: 16px; line-height: 1.5; color: var(--t); white-space: nowrap; }
+#ab-Popover .nmt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ab-Popover .ask { flex: none; white-space: pre; color: var(--t2); font-variant-numeric: tabular-nums; }
+#ab-Popover .wh { overflow: hidden; font-size: 12px; line-height: 1.5; color: var(--t2); text-overflow: ellipsis; white-space: nowrap; }
+#ab-Popover .got { font-size: 14px; line-height: 1.5; color: var(--t2); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Popover .change { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--b1); border-radius: 12px; background: var(--r); color: var(--t); }
+#ab-Popover .change i { width: 20px; height: 20px; display: flex; }
+#ab-Popover .stp { flex: none; display: inline-grid; grid-template-columns: 48px 72px 48px; height: 48px; border-radius: 999px; background: var(--r); box-shadow: inset 0 0 0 1px var(--b2); }
+#ab-Popover .stp.wide { grid-template-columns: 48px 95px 48px; }
+#ab-Popover .sb { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; color: var(--t); }
+#ab-Popover .sb.end { opacity: 0.35; }
+#ab-Popover .g { position: relative; display: block; width: 14px; height: 14px; }
+#ab-Popover .g::before { content: ''; position: absolute; left: 0; top: 6px; width: 14px; height: 2px; border-radius: 1px; background: currentColor; }
+#ab-Popover .plus .g::after { content: ''; position: absolute; left: 6px; top: 0; width: 2px; height: 14px; border-radius: 1px; background: currentColor; }
+#ab-Popover .cell { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 0; padding: 0 4px; overflow: hidden; white-space: nowrap; }
+#ab-Popover .fig { font-size: 18px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--t); }
+#ab-Popover .fig.unit { font-size: 16px; }
+#ab-Popover .sym { font-size: 12px; line-height: 1; color: var(--t2); }
+#ab-Popover .stp.zero .fig { color: var(--t2); }
+#ab-Popover .stp.reached .fig { color: var(--ok); }
+#ab-Popover .stp.over .fig { color: var(--q); }
+#ab-Popover .stp.ring-ok { box-shadow: inset 0 0 0 2px var(--ok); }
+#ab-Popover .stp.ring-over { box-shadow: inset 0 0 0 2px var(--q); }
+#ab-Popover .ask.reached { color: var(--ok); }
+#ab-Popover .ask.over { color: var(--q); }
+#ab-Popover .rnum { flex: none; display: flex; justify-content: flex-end; align-items: center; width: 168px; height: 48px; font-size: 16px; color: var(--t2); font-variant-numeric: tabular-nums; }
+#ab-Popover .rnum.wide { width: 191px; }
+#ab-Popover .stp.dis { background: transparent; box-shadow: inset 0 0 0 1px var(--b1); }
+#ab-Popover .stp.dis .sb { color: var(--t3); opacity: 0.6; }
+#ab-Popover .stp.dis .fig { color: var(--t3); }
+#ab-Popover .stp.dis .sym { color: var(--t3); }
+#ab-Popover .desc { margin: 0; font-size: 14px; line-height: 1.5; color: var(--t2); text-wrap: pretty; }
+#ab-Popover .anchor { position: relative; flex: none; display: flex; }
+#ab-Popover .pop { position: absolute; z-index: 5; right: 0; bottom: calc(100% + 8px); box-sizing: border-box; width: 280px; padding: 12px; border: 1px solid var(--b1); border-radius: 12px; background: var(--o); box-shadow: var(--e2); color: var(--t2); font-size: 12px; line-height: 1.4; }
+#ab-Popover .pop p { margin: 0; }
+#ab-Popover .pop p + p { margin-top: 8px; }
+#ab-Popover .pic { box-sizing: border-box; flex: none; display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; padding: 0; overflow: hidden; border: 1px solid var(--b1); border-radius: 10px; background: var(--o); cursor: zoom-in; }
+#ab-Popover .pic img { display: block; width: 100%; height: 100%; object-fit: contain; }
+#ab-Popover .pic.none { background: var(--s); color: var(--t3); cursor: default; }
+#ab-Popover .pic.none i { width: 24px; height: 24px; display: flex; }
+#ab-Popover .pic.sm { width: 28px; height: 28px; border-radius: 8px; }
+#ab-Popover .pic.sm.none i { width: 16px; height: 16px; }
+#ab-Popover .prod { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; column-gap: 12px; align-items: start; padding: 12px 0 0; }
+#ab-Popover .prod .pic { grid-row: 1 / span 2; }
+#ab-Popover .pwhat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+#ab-Popover .pname { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 16px; line-height: 1.3; color: var(--t); }
+#ab-Popover .pdet { font-size: 14px; line-height: 1.4; color: var(--t2); }
+#ab-Popover .pprice { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding-top: 1px; }
+#ab-Popover .amt { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--t); }
+#ab-Popover .per { font-size: 12px; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-Popover .allp { grid-column: 2 / -1; justify-self: start; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-Popover .prod.noall { padding-bottom: 12px; }
+#ab-Popover .drow { position: relative; padding: 10px 0 2px; border-bottom: 1px solid var(--b1); }
+#ab-Popover .drow:last-child { border-bottom: 0; }
+#ab-Popover .dtop { display: flex; align-items: center; gap: 12px; }
+#ab-Popover .pl { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 2px 0 2px; }
+#ab-Popover .plt { flex: 1; display: flex; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--t2); white-space: nowrap; }
+#ab-Popover .pln { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ab-Popover .plb { flex: none; white-space: pre; }
+#ab-Popover .pl.diff .plt { color: var(--q); }
+#ab-Popover .plc { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 0 0 8px; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-Popover .disc { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0; border: 0; border-bottom: 1px solid var(--b1); background: transparent; font-size: 16px; color: var(--t); text-align: left; }
+#ab-Popover .disc span { flex: 1; }
+#ab-Popover .disc i { flex: none; width: 20px; height: 20px; display: flex; color: var(--t2); }
+#ab-Popover .disc.open i { transform: rotate(180deg); }
+#ab-Popover .actions { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; }
+#ab-Popover .primary { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; padding: 8px 12px; border: 0; border-radius: 12px; background: var(--act); color: var(--on-act); font-size: 16px; font-weight: 600; }
+#ab-Popover .quiet { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; padding: 4px; border: 0; background: transparent; font-size: 14px; color: var(--t3); }
+#ab-LongName .pair { display: flex; gap: 80px; align-items: flex-start; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+#ab-LongName .col { flex: none; width: 390px; }
+#ab-LongName .tag { height: 28px; margin: 0; font-size: 12px; line-height: 16px; color: #98a0bb; }
+#ab-LongName .day { --g: #f7f8fc; --r: #ffffff; --o: #ffffff; --s: #eef0f7;
+  --t: #11141f; --t2: #525a78; --t3: #616a8a;
+  --b1: #dde1ed; --b2: #6f7899;
+  --act: #ffb454; --on-act: #0a0c14; --q: #8a5a12;
+  --ok: #047857; --focus: #2563eb;
+  --scrim: rgba(17, 20, 31, 0.42);
+  --shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  --e2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.10);
+  color-scheme: light; }
+#ab-LongName .night { --g: #0a0c14; --r: #161a28; --o: #1a1e2e; --s: #11141f;
+  --t: #f7f8fc; --t2: #c2c8db; --t3: #98a0bb;
+  --b1: rgba(255, 255, 255, 0.08); --b2: rgba(255, 255, 255, 0.35);
+  --act: #ffb454; --on-act: #0a0c14; --q: #ffb454;
+  --ok: #34d399; --focus: #60a5fa;
+  --scrim: rgba(10, 12, 20, 0.74);
+  --shadow: 0 -18px 40px rgba(10, 12, 20, 0.42);
+  --e2: inset 0 1px 0 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(10, 12, 20, 0.55);
+  color-scheme: dark; }
+#ab-LongName .vel { color: var(--t); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+#ab-LongName .vel button { font-family: inherit; cursor: pointer; }
+#ab-LongName .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; background: var(--g); }
+#ab-LongName .ph { height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid var(--b1); }
+#ab-LongName .ph i { width: 24px; height: 24px; display: flex; color: var(--t); }
+#ab-LongName .ph b { font-family: Marcellus, Georgia, serif; font-size: 20px; font-weight: 400; letter-spacing: 0.05em; }
+#ab-LongName .prow { display: flex; align-items: center; gap: 12px; height: 60px; box-sizing: border-box; padding: 0 16px; border-bottom: 1px solid var(--b1); }
+#ab-LongName .prow .dot { width: 26px; height: 26px; flex: none; box-sizing: border-box; border: 1.5px solid var(--b2); border-radius: 999px; }
+#ab-LongName .prow span { flex: 1; font-size: 16px; }
+#ab-LongName .prow em { font-style: normal; font-size: 16px; font-weight: 600; }
+#ab-LongName .scrim { position: absolute; inset: 0; background: var(--scrim); }
+#ab-LongName .home { position: absolute; z-index: 3; left: 50%; bottom: 8px; width: 134px; height: 5px; margin-left: -67px; border-radius: 999px; background: var(--t); }
+#ab-LongName .sheet { position: absolute; left: 0; right: 0; bottom: 0; box-sizing: border-box; padding: 0 16px 54px; border-radius: 22px 22px 0 0; background: var(--r); box-shadow: var(--shadow); }
+#ab-LongName .handle { width: 48px; height: 5px; margin: 10px auto 16px; border-radius: 999px; background: var(--b1); }
+#ab-LongName .title { margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 1.2; font-weight: 400; color: var(--t); text-wrap: balance; }
+#ab-LongName .sub { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+#ab-LongName .happened { margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+#ab-LongName .shead { display: flex; align-items: center; gap: 4px; margin-left: -10px; }
+#ab-LongName .back { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; background: transparent; color: var(--t2); }
+#ab-LongName .back i { width: 24px; height: 24px; display: flex; }
+#ab-LongName .shead .title { flex: 1; min-width: 0; }
+#ab-LongName .shead + .sub { margin-top: 0; }
+#ab-LongName .entries { margin-top: 8px; }
+#ab-LongName .head { display: flex; align-items: center; gap: 8px; min-height: 44px; border-bottom: 1px solid var(--b1); }
+#ab-LongName .head h3 { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 600; color: var(--t2); }
+#ab-LongName .all { flex: none; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); white-space: nowrap; }
+#ab-LongName .rows { margin: 0; padding: 0; list-style: none; }
+#ab-LongName .row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 4px 0; border-bottom: 1px solid var(--b1); }
+#ab-LongName .lbl { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#ab-LongName .nm { display: flex; min-width: 0; font-size: 16px; line-height: 1.5; color: var(--t); white-space: nowrap; }
+#ab-LongName .nmt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ab-LongName .ask { flex: none; white-space: pre; color: var(--t2); font-variant-numeric: tabular-nums; }
+#ab-LongName .wh { overflow: hidden; font-size: 12px; line-height: 1.5; color: var(--t2); text-overflow: ellipsis; white-space: nowrap; }
+#ab-LongName .got { font-size: 14px; line-height: 1.5; color: var(--t2); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-LongName .change { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--b1); border-radius: 12px; background: var(--r); color: var(--t); }
+#ab-LongName .change i { width: 20px; height: 20px; display: flex; }
+#ab-LongName .stp { flex: none; display: inline-grid; grid-template-columns: 48px 72px 48px; height: 48px; border-radius: 999px; background: var(--r); box-shadow: inset 0 0 0 1px var(--b2); }
+#ab-LongName .stp.wide { grid-template-columns: 48px 95px 48px; }
+#ab-LongName .sb { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; color: var(--t); }
+#ab-LongName .sb.end { opacity: 0.35; }
+#ab-LongName .g { position: relative; display: block; width: 14px; height: 14px; }
+#ab-LongName .g::before { content: ''; position: absolute; left: 0; top: 6px; width: 14px; height: 2px; border-radius: 1px; background: currentColor; }
+#ab-LongName .plus .g::after { content: ''; position: absolute; left: 6px; top: 0; width: 2px; height: 14px; border-radius: 1px; background: currentColor; }
+#ab-LongName .cell { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 0; padding: 0 4px; overflow: hidden; white-space: nowrap; }
+#ab-LongName .fig { font-size: 18px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--t); }
+#ab-LongName .fig.unit { font-size: 16px; }
+#ab-LongName .sym { font-size: 12px; line-height: 1; color: var(--t2); }
+#ab-LongName .stp.zero .fig { color: var(--t2); }
+#ab-LongName .stp.reached .fig { color: var(--ok); }
+#ab-LongName .stp.over .fig { color: var(--q); }
+#ab-LongName .stp.ring-ok { box-shadow: inset 0 0 0 2px var(--ok); }
+#ab-LongName .stp.ring-over { box-shadow: inset 0 0 0 2px var(--q); }
+#ab-LongName .ask.reached { color: var(--ok); }
+#ab-LongName .ask.over { color: var(--q); }
+#ab-LongName .rnum { flex: none; display: flex; justify-content: flex-end; align-items: center; width: 168px; height: 48px; font-size: 16px; color: var(--t2); font-variant-numeric: tabular-nums; }
+#ab-LongName .rnum.wide { width: 191px; }
+#ab-LongName .stp.dis { background: transparent; box-shadow: inset 0 0 0 1px var(--b1); }
+#ab-LongName .stp.dis .sb { color: var(--t3); opacity: 0.6; }
+#ab-LongName .stp.dis .fig { color: var(--t3); }
+#ab-LongName .stp.dis .sym { color: var(--t3); }
+#ab-LongName .desc { margin: 0; font-size: 14px; line-height: 1.5; color: var(--t2); text-wrap: pretty; }
+#ab-LongName .anchor { position: relative; flex: none; display: flex; }
+#ab-LongName .pop { position: absolute; z-index: 5; right: 0; bottom: calc(100% + 8px); box-sizing: border-box; width: 280px; padding: 12px; border: 1px solid var(--b1); border-radius: 12px; background: var(--o); box-shadow: var(--e2); color: var(--t2); font-size: 12px; line-height: 1.4; }
+#ab-LongName .pop p { margin: 0; }
+#ab-LongName .pop p + p { margin-top: 8px; }
+#ab-LongName .pic { box-sizing: border-box; flex: none; display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; padding: 0; overflow: hidden; border: 1px solid var(--b1); border-radius: 10px; background: var(--o); cursor: zoom-in; }
+#ab-LongName .pic img { display: block; width: 100%; height: 100%; object-fit: contain; }
+#ab-LongName .pic.none { background: var(--s); color: var(--t3); cursor: default; }
+#ab-LongName .pic.none i { width: 24px; height: 24px; display: flex; }
+#ab-LongName .pic.sm { width: 28px; height: 28px; border-radius: 8px; }
+#ab-LongName .pic.sm.none i { width: 16px; height: 16px; }
+#ab-LongName .prod { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; column-gap: 12px; align-items: start; padding: 12px 0 0; }
+#ab-LongName .prod .pic { grid-row: 1 / span 2; }
+#ab-LongName .pwhat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+#ab-LongName .pname { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 16px; line-height: 1.3; color: var(--t); }
+#ab-LongName .pdet { font-size: 14px; line-height: 1.4; color: var(--t2); }
+#ab-LongName .pprice { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding-top: 1px; }
+#ab-LongName .amt { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--t); }
+#ab-LongName .per { font-size: 12px; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-LongName .allp { grid-column: 2 / -1; justify-self: start; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-LongName .prod.noall { padding-bottom: 12px; }
+#ab-LongName .drow { position: relative; padding: 10px 0 2px; border-bottom: 1px solid var(--b1); }
+#ab-LongName .drow:last-child { border-bottom: 0; }
+#ab-LongName .dtop { display: flex; align-items: center; gap: 12px; }
+#ab-LongName .pl { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 2px 0 2px; }
+#ab-LongName .plt { flex: 1; display: flex; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--t2); white-space: nowrap; }
+#ab-LongName .pln { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ab-LongName .plb { flex: none; white-space: pre; }
+#ab-LongName .pl.diff .plt { color: var(--q); }
+#ab-LongName .plc { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 0 0 8px; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-LongName .disc { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0; border: 0; border-bottom: 1px solid var(--b1); background: transparent; font-size: 16px; color: var(--t); text-align: left; }
+#ab-LongName .disc span { flex: 1; }
+#ab-LongName .disc i { flex: none; width: 20px; height: 20px; display: flex; color: var(--t2); }
+#ab-LongName .disc.open i { transform: rotate(180deg); }
+#ab-LongName .actions { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; }
+#ab-LongName .primary { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; padding: 8px 12px; border: 0; border-radius: 12px; background: var(--act); color: var(--on-act); font-size: 16px; font-weight: 600; }
+#ab-LongName .quiet { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; padding: 4px; border: 0; background: transparent; font-size: 14px; color: var(--t3); }
+#ab-LongDetail .pair { display: flex; gap: 80px; align-items: flex-start; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+#ab-LongDetail .col { flex: none; width: 390px; }
+#ab-LongDetail .tag { height: 28px; margin: 0; font-size: 12px; line-height: 16px; color: #98a0bb; }
+#ab-LongDetail .day { --g: #f7f8fc; --r: #ffffff; --o: #ffffff; --s: #eef0f7;
+  --t: #11141f; --t2: #525a78; --t3: #616a8a;
+  --b1: #dde1ed; --b2: #6f7899;
+  --act: #ffb454; --on-act: #0a0c14; --q: #8a5a12;
+  --ok: #047857; --focus: #2563eb;
+  --scrim: rgba(17, 20, 31, 0.42);
+  --shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  --e2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.10);
+  color-scheme: light; }
+#ab-LongDetail .night { --g: #0a0c14; --r: #161a28; --o: #1a1e2e; --s: #11141f;
+  --t: #f7f8fc; --t2: #c2c8db; --t3: #98a0bb;
+  --b1: rgba(255, 255, 255, 0.08); --b2: rgba(255, 255, 255, 0.35);
+  --act: #ffb454; --on-act: #0a0c14; --q: #ffb454;
+  --ok: #34d399; --focus: #60a5fa;
+  --scrim: rgba(10, 12, 20, 0.74);
+  --shadow: 0 -18px 40px rgba(10, 12, 20, 0.42);
+  --e2: inset 0 1px 0 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(10, 12, 20, 0.55);
+  color-scheme: dark; }
+#ab-LongDetail .vel { color: var(--t); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+#ab-LongDetail .vel button { font-family: inherit; cursor: pointer; }
+#ab-LongDetail .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; background: var(--g); }
+#ab-LongDetail .ph { height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid var(--b1); }
+#ab-LongDetail .ph i { width: 24px; height: 24px; display: flex; color: var(--t); }
+#ab-LongDetail .ph b { font-family: Marcellus, Georgia, serif; font-size: 20px; font-weight: 400; letter-spacing: 0.05em; }
+#ab-LongDetail .prow { display: flex; align-items: center; gap: 12px; height: 60px; box-sizing: border-box; padding: 0 16px; border-bottom: 1px solid var(--b1); }
+#ab-LongDetail .prow .dot { width: 26px; height: 26px; flex: none; box-sizing: border-box; border: 1.5px solid var(--b2); border-radius: 999px; }
+#ab-LongDetail .prow span { flex: 1; font-size: 16px; }
+#ab-LongDetail .prow em { font-style: normal; font-size: 16px; font-weight: 600; }
+#ab-LongDetail .scrim { position: absolute; inset: 0; background: var(--scrim); }
+#ab-LongDetail .home { position: absolute; z-index: 3; left: 50%; bottom: 8px; width: 134px; height: 5px; margin-left: -67px; border-radius: 999px; background: var(--t); }
+#ab-LongDetail .sheet { position: absolute; left: 0; right: 0; bottom: 0; box-sizing: border-box; padding: 0 16px 54px; border-radius: 22px 22px 0 0; background: var(--r); box-shadow: var(--shadow); }
+#ab-LongDetail .handle { width: 48px; height: 5px; margin: 10px auto 16px; border-radius: 999px; background: var(--b1); }
+#ab-LongDetail .title { margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 1.2; font-weight: 400; color: var(--t); text-wrap: balance; }
+#ab-LongDetail .sub { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+#ab-LongDetail .happened { margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+#ab-LongDetail .shead { display: flex; align-items: center; gap: 4px; margin-left: -10px; }
+#ab-LongDetail .back { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; background: transparent; color: var(--t2); }
+#ab-LongDetail .back i { width: 24px; height: 24px; display: flex; }
+#ab-LongDetail .shead .title { flex: 1; min-width: 0; }
+#ab-LongDetail .shead + .sub { margin-top: 0; }
+#ab-LongDetail .entries { margin-top: 8px; }
+#ab-LongDetail .head { display: flex; align-items: center; gap: 8px; min-height: 44px; border-bottom: 1px solid var(--b1); }
+#ab-LongDetail .head h3 { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 600; color: var(--t2); }
+#ab-LongDetail .all { flex: none; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); white-space: nowrap; }
+#ab-LongDetail .rows { margin: 0; padding: 0; list-style: none; }
+#ab-LongDetail .row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 4px 0; border-bottom: 1px solid var(--b1); }
+#ab-LongDetail .lbl { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#ab-LongDetail .nm { display: flex; min-width: 0; font-size: 16px; line-height: 1.5; color: var(--t); white-space: nowrap; }
+#ab-LongDetail .nmt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ab-LongDetail .ask { flex: none; white-space: pre; color: var(--t2); font-variant-numeric: tabular-nums; }
+#ab-LongDetail .wh { overflow: hidden; font-size: 12px; line-height: 1.5; color: var(--t2); text-overflow: ellipsis; white-space: nowrap; }
+#ab-LongDetail .got { font-size: 14px; line-height: 1.5; color: var(--t2); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-LongDetail .change { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--b1); border-radius: 12px; background: var(--r); color: var(--t); }
+#ab-LongDetail .change i { width: 20px; height: 20px; display: flex; }
+#ab-LongDetail .stp { flex: none; display: inline-grid; grid-template-columns: 48px 72px 48px; height: 48px; border-radius: 999px; background: var(--r); box-shadow: inset 0 0 0 1px var(--b2); }
+#ab-LongDetail .stp.wide { grid-template-columns: 48px 95px 48px; }
+#ab-LongDetail .sb { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; color: var(--t); }
+#ab-LongDetail .sb.end { opacity: 0.35; }
+#ab-LongDetail .g { position: relative; display: block; width: 14px; height: 14px; }
+#ab-LongDetail .g::before { content: ''; position: absolute; left: 0; top: 6px; width: 14px; height: 2px; border-radius: 1px; background: currentColor; }
+#ab-LongDetail .plus .g::after { content: ''; position: absolute; left: 6px; top: 0; width: 2px; height: 14px; border-radius: 1px; background: currentColor; }
+#ab-LongDetail .cell { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 0; padding: 0 4px; overflow: hidden; white-space: nowrap; }
+#ab-LongDetail .fig { font-size: 18px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--t); }
+#ab-LongDetail .fig.unit { font-size: 16px; }
+#ab-LongDetail .sym { font-size: 12px; line-height: 1; color: var(--t2); }
+#ab-LongDetail .stp.zero .fig { color: var(--t2); }
+#ab-LongDetail .stp.reached .fig { color: var(--ok); }
+#ab-LongDetail .stp.over .fig { color: var(--q); }
+#ab-LongDetail .stp.ring-ok { box-shadow: inset 0 0 0 2px var(--ok); }
+#ab-LongDetail .stp.ring-over { box-shadow: inset 0 0 0 2px var(--q); }
+#ab-LongDetail .ask.reached { color: var(--ok); }
+#ab-LongDetail .ask.over { color: var(--q); }
+#ab-LongDetail .rnum { flex: none; display: flex; justify-content: flex-end; align-items: center; width: 168px; height: 48px; font-size: 16px; color: var(--t2); font-variant-numeric: tabular-nums; }
+#ab-LongDetail .rnum.wide { width: 191px; }
+#ab-LongDetail .stp.dis { background: transparent; box-shadow: inset 0 0 0 1px var(--b1); }
+#ab-LongDetail .stp.dis .sb { color: var(--t3); opacity: 0.6; }
+#ab-LongDetail .stp.dis .fig { color: var(--t3); }
+#ab-LongDetail .stp.dis .sym { color: var(--t3); }
+#ab-LongDetail .desc { margin: 0; font-size: 14px; line-height: 1.5; color: var(--t2); text-wrap: pretty; }
+#ab-LongDetail .anchor { position: relative; flex: none; display: flex; }
+#ab-LongDetail .pop { position: absolute; z-index: 5; right: 0; bottom: calc(100% + 8px); box-sizing: border-box; width: 280px; padding: 12px; border: 1px solid var(--b1); border-radius: 12px; background: var(--o); box-shadow: var(--e2); color: var(--t2); font-size: 12px; line-height: 1.4; }
+#ab-LongDetail .pop p { margin: 0; }
+#ab-LongDetail .pop p + p { margin-top: 8px; }
+#ab-LongDetail .pic { box-sizing: border-box; flex: none; display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; padding: 0; overflow: hidden; border: 1px solid var(--b1); border-radius: 10px; background: var(--o); cursor: zoom-in; }
+#ab-LongDetail .pic img { display: block; width: 100%; height: 100%; object-fit: contain; }
+#ab-LongDetail .pic.none { background: var(--s); color: var(--t3); cursor: default; }
+#ab-LongDetail .pic.none i { width: 24px; height: 24px; display: flex; }
+#ab-LongDetail .pic.sm { width: 28px; height: 28px; border-radius: 8px; }
+#ab-LongDetail .pic.sm.none i { width: 16px; height: 16px; }
+#ab-LongDetail .prod { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; column-gap: 12px; align-items: start; padding: 12px 0 0; }
+#ab-LongDetail .prod .pic { grid-row: 1 / span 2; }
+#ab-LongDetail .pwhat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+#ab-LongDetail .pname { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 16px; line-height: 1.3; color: var(--t); }
+#ab-LongDetail .pdet { font-size: 14px; line-height: 1.4; color: var(--t2); }
+#ab-LongDetail .pprice { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding-top: 1px; }
+#ab-LongDetail .amt { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--t); }
+#ab-LongDetail .per { font-size: 12px; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-LongDetail .allp { grid-column: 2 / -1; justify-self: start; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-LongDetail .prod.noall { padding-bottom: 12px; }
+#ab-LongDetail .drow { position: relative; padding: 10px 0 2px; border-bottom: 1px solid var(--b1); }
+#ab-LongDetail .drow:last-child { border-bottom: 0; }
+#ab-LongDetail .dtop { display: flex; align-items: center; gap: 12px; }
+#ab-LongDetail .pl { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 2px 0 2px; }
+#ab-LongDetail .plt { flex: 1; display: flex; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--t2); white-space: nowrap; }
+#ab-LongDetail .pln { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ab-LongDetail .plb { flex: none; white-space: pre; }
+#ab-LongDetail .pl.diff .plt { color: var(--q); }
+#ab-LongDetail .plc { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 0 0 8px; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-LongDetail .disc { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0; border: 0; border-bottom: 1px solid var(--b1); background: transparent; font-size: 16px; color: var(--t); text-align: left; }
+#ab-LongDetail .disc span { flex: 1; }
+#ab-LongDetail .disc i { flex: none; width: 20px; height: 20px; display: flex; color: var(--t2); }
+#ab-LongDetail .disc.open i { transform: rotate(180deg); }
+#ab-LongDetail .actions { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; }
+#ab-LongDetail .primary { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; padding: 8px 12px; border: 0; border-radius: 12px; background: var(--act); color: var(--on-act); font-size: 16px; font-weight: 600; }
+#ab-LongDetail .quiet { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; padding: 4px; border: 0; background: transparent; font-size: 14px; color: var(--t3); }
+#ab-OtherList .pair { display: flex; gap: 80px; align-items: flex-start; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+#ab-OtherList .col { flex: none; width: 390px; }
+#ab-OtherList .tag { height: 28px; margin: 0; font-size: 12px; line-height: 16px; color: #98a0bb; }
+#ab-OtherList .day { --g: #f7f8fc; --r: #ffffff; --o: #ffffff; --s: #eef0f7;
+  --t: #11141f; --t2: #525a78; --t3: #616a8a;
+  --b1: #dde1ed; --b2: #6f7899;
+  --act: #ffb454; --on-act: #0a0c14; --q: #8a5a12;
+  --ok: #047857; --focus: #2563eb;
+  --scrim: rgba(17, 20, 31, 0.42);
+  --shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  --e2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.10);
+  color-scheme: light; }
+#ab-OtherList .night { --g: #0a0c14; --r: #161a28; --o: #1a1e2e; --s: #11141f;
+  --t: #f7f8fc; --t2: #c2c8db; --t3: #98a0bb;
+  --b1: rgba(255, 255, 255, 0.08); --b2: rgba(255, 255, 255, 0.35);
+  --act: #ffb454; --on-act: #0a0c14; --q: #ffb454;
+  --ok: #34d399; --focus: #60a5fa;
+  --scrim: rgba(10, 12, 20, 0.74);
+  --shadow: 0 -18px 40px rgba(10, 12, 20, 0.42);
+  --e2: inset 0 1px 0 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(10, 12, 20, 0.55);
+  color-scheme: dark; }
+#ab-OtherList .vel { color: var(--t); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+#ab-OtherList .vel button { font-family: inherit; cursor: pointer; }
+#ab-OtherList .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; background: var(--g); }
+#ab-OtherList .ph { height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid var(--b1); }
+#ab-OtherList .ph i { width: 24px; height: 24px; display: flex; color: var(--t); }
+#ab-OtherList .ph b { font-family: Marcellus, Georgia, serif; font-size: 20px; font-weight: 400; letter-spacing: 0.05em; }
+#ab-OtherList .prow { display: flex; align-items: center; gap: 12px; height: 60px; box-sizing: border-box; padding: 0 16px; border-bottom: 1px solid var(--b1); }
+#ab-OtherList .prow .dot { width: 26px; height: 26px; flex: none; box-sizing: border-box; border: 1.5px solid var(--b2); border-radius: 999px; }
+#ab-OtherList .prow span { flex: 1; font-size: 16px; }
+#ab-OtherList .prow em { font-style: normal; font-size: 16px; font-weight: 600; }
+#ab-OtherList .scrim { position: absolute; inset: 0; background: var(--scrim); }
+#ab-OtherList .home { position: absolute; z-index: 3; left: 50%; bottom: 8px; width: 134px; height: 5px; margin-left: -67px; border-radius: 999px; background: var(--t); }
+#ab-OtherList .sheet { position: absolute; left: 0; right: 0; bottom: 0; box-sizing: border-box; padding: 0 16px 54px; border-radius: 22px 22px 0 0; background: var(--r); box-shadow: var(--shadow); }
+#ab-OtherList .handle { width: 48px; height: 5px; margin: 10px auto 16px; border-radius: 999px; background: var(--b1); }
+#ab-OtherList .title { margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 1.2; font-weight: 400; color: var(--t); text-wrap: balance; }
+#ab-OtherList .sub { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+#ab-OtherList .happened { margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+#ab-OtherList .shead { display: flex; align-items: center; gap: 4px; margin-left: -10px; }
+#ab-OtherList .back { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; background: transparent; color: var(--t2); }
+#ab-OtherList .back i { width: 24px; height: 24px; display: flex; }
+#ab-OtherList .shead .title { flex: 1; min-width: 0; }
+#ab-OtherList .shead + .sub { margin-top: 0; }
+#ab-OtherList .entries { margin-top: 8px; }
+#ab-OtherList .head { display: flex; align-items: center; gap: 8px; min-height: 44px; border-bottom: 1px solid var(--b1); }
+#ab-OtherList .head h3 { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 600; color: var(--t2); }
+#ab-OtherList .all { flex: none; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); white-space: nowrap; }
+#ab-OtherList .rows { margin: 0; padding: 0; list-style: none; }
+#ab-OtherList .row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 4px 0; border-bottom: 1px solid var(--b1); }
+#ab-OtherList .lbl { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#ab-OtherList .nm { display: flex; min-width: 0; font-size: 16px; line-height: 1.5; color: var(--t); white-space: nowrap; }
+#ab-OtherList .nmt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ab-OtherList .ask { flex: none; white-space: pre; color: var(--t2); font-variant-numeric: tabular-nums; }
+#ab-OtherList .wh { overflow: hidden; font-size: 12px; line-height: 1.5; color: var(--t2); text-overflow: ellipsis; white-space: nowrap; }
+#ab-OtherList .got { font-size: 14px; line-height: 1.5; color: var(--t2); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-OtherList .change { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--b1); border-radius: 12px; background: var(--r); color: var(--t); }
+#ab-OtherList .change i { width: 20px; height: 20px; display: flex; }
+#ab-OtherList .stp { flex: none; display: inline-grid; grid-template-columns: 48px 72px 48px; height: 48px; border-radius: 999px; background: var(--r); box-shadow: inset 0 0 0 1px var(--b2); }
+#ab-OtherList .stp.wide { grid-template-columns: 48px 95px 48px; }
+#ab-OtherList .sb { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; color: var(--t); }
+#ab-OtherList .sb.end { opacity: 0.35; }
+#ab-OtherList .g { position: relative; display: block; width: 14px; height: 14px; }
+#ab-OtherList .g::before { content: ''; position: absolute; left: 0; top: 6px; width: 14px; height: 2px; border-radius: 1px; background: currentColor; }
+#ab-OtherList .plus .g::after { content: ''; position: absolute; left: 6px; top: 0; width: 2px; height: 14px; border-radius: 1px; background: currentColor; }
+#ab-OtherList .cell { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 0; padding: 0 4px; overflow: hidden; white-space: nowrap; }
+#ab-OtherList .fig { font-size: 18px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--t); }
+#ab-OtherList .fig.unit { font-size: 16px; }
+#ab-OtherList .sym { font-size: 12px; line-height: 1; color: var(--t2); }
+#ab-OtherList .stp.zero .fig { color: var(--t2); }
+#ab-OtherList .stp.reached .fig { color: var(--ok); }
+#ab-OtherList .stp.over .fig { color: var(--q); }
+#ab-OtherList .stp.ring-ok { box-shadow: inset 0 0 0 2px var(--ok); }
+#ab-OtherList .stp.ring-over { box-shadow: inset 0 0 0 2px var(--q); }
+#ab-OtherList .ask.reached { color: var(--ok); }
+#ab-OtherList .ask.over { color: var(--q); }
+#ab-OtherList .rnum { flex: none; display: flex; justify-content: flex-end; align-items: center; width: 168px; height: 48px; font-size: 16px; color: var(--t2); font-variant-numeric: tabular-nums; }
+#ab-OtherList .rnum.wide { width: 191px; }
+#ab-OtherList .stp.dis { background: transparent; box-shadow: inset 0 0 0 1px var(--b1); }
+#ab-OtherList .stp.dis .sb { color: var(--t3); opacity: 0.6; }
+#ab-OtherList .stp.dis .fig { color: var(--t3); }
+#ab-OtherList .stp.dis .sym { color: var(--t3); }
+#ab-OtherList .desc { margin: 0; font-size: 14px; line-height: 1.5; color: var(--t2); text-wrap: pretty; }
+#ab-OtherList .anchor { position: relative; flex: none; display: flex; }
+#ab-OtherList .pop { position: absolute; z-index: 5; right: 0; bottom: calc(100% + 8px); box-sizing: border-box; width: 280px; padding: 12px; border: 1px solid var(--b1); border-radius: 12px; background: var(--o); box-shadow: var(--e2); color: var(--t2); font-size: 12px; line-height: 1.4; }
+#ab-OtherList .pop p { margin: 0; }
+#ab-OtherList .pop p + p { margin-top: 8px; }
+#ab-OtherList .pic { box-sizing: border-box; flex: none; display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; padding: 0; overflow: hidden; border: 1px solid var(--b1); border-radius: 10px; background: var(--o); cursor: zoom-in; }
+#ab-OtherList .pic img { display: block; width: 100%; height: 100%; object-fit: contain; }
+#ab-OtherList .pic.none { background: var(--s); color: var(--t3); cursor: default; }
+#ab-OtherList .pic.none i { width: 24px; height: 24px; display: flex; }
+#ab-OtherList .pic.sm { width: 28px; height: 28px; border-radius: 8px; }
+#ab-OtherList .pic.sm.none i { width: 16px; height: 16px; }
+#ab-OtherList .prod { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; column-gap: 12px; align-items: start; padding: 12px 0 0; }
+#ab-OtherList .prod .pic { grid-row: 1 / span 2; }
+#ab-OtherList .pwhat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+#ab-OtherList .pname { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 16px; line-height: 1.3; color: var(--t); }
+#ab-OtherList .pdet { font-size: 14px; line-height: 1.4; color: var(--t2); }
+#ab-OtherList .pprice { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding-top: 1px; }
+#ab-OtherList .amt { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--t); }
+#ab-OtherList .per { font-size: 12px; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-OtherList .allp { grid-column: 2 / -1; justify-self: start; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-OtherList .prod.noall { padding-bottom: 12px; }
+#ab-OtherList .drow { position: relative; padding: 10px 0 2px; border-bottom: 1px solid var(--b1); }
+#ab-OtherList .drow:last-child { border-bottom: 0; }
+#ab-OtherList .dtop { display: flex; align-items: center; gap: 12px; }
+#ab-OtherList .pl { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 2px 0 2px; }
+#ab-OtherList .plt { flex: 1; display: flex; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--t2); white-space: nowrap; }
+#ab-OtherList .pln { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ab-OtherList .plb { flex: none; white-space: pre; }
+#ab-OtherList .pl.diff .plt { color: var(--q); }
+#ab-OtherList .plc { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 0 0 8px; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-OtherList .disc { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0; border: 0; border-bottom: 1px solid var(--b1); background: transparent; font-size: 16px; color: var(--t); text-align: left; }
+#ab-OtherList .disc span { flex: 1; }
+#ab-OtherList .disc i { flex: none; width: 20px; height: 20px; display: flex; color: var(--t2); }
+#ab-OtherList .disc.open i { transform: rotate(180deg); }
+#ab-OtherList .actions { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; }
+#ab-OtherList .primary { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; padding: 8px 12px; border: 0; border-radius: 12px; background: var(--act); color: var(--on-act); font-size: 16px; font-weight: 600; }
+#ab-OtherList .quiet { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; padding: 4px; border: 0; background: transparent; font-size: 14px; color: var(--t3); }
+</style>
+
+<header>
+  <h1>Velista: a basket row records buys, and a detailed view of its lists</h1>
+  <p class="lede">Velista plans <code>0201</code> (the row sheet records what was bought for each list) and <code>0200</code> (a detailed view, <code>rows/:rowKey/lists</code>, holds each list's ask and the change of product), with backend <code>0273</code> behind the first. They ship together, so every frame draws the end state of both. Each board shows Day in English on the left and Night in Spanish on the right. The row sheet gains a heading and one text button where "Change for all lists" was; the detailed view is a sheet like the shop picker, with the chevron beside its title. No container, no tint, no banner. The design is layout A with colours A, on the stepper's number only. The detailed view opens on the row's product with "Change for all lists" under it; each list shows its own product on one line, in amber when it differs; the word Change at the end of that line is the only control that changes a list's product. A list the reader may not change keeps a stepper disabled as a whole (its border, its number and both ends) that explains itself when pressed. Under its title the detailed view says what it is for, in the sheets' secondary text, on every visit. A guest sees no "Lists and amounts". The board marked Today is drawn from the source on <code>dev</code>. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. Approved by the owner on 2026-11-22.</p>
+</header>
+
+<div class="controls">
+  <span>Scale</span>
+  <button type="button" data-scale="1" aria-pressed="true">100%</button>
+  <button type="button" data-scale="0.66" aria-pressed="false">66%</button>
+  <button type="button" data-scale="0.4" aria-pressed="false">40%</button>
+</div>
+
+<div class="viewport">
+  <div class="canvas" id="canvas" style="width: 2740px; height: 3722px;">
+      <figure class="board" style="left: 0px; top: 250px; width: 860px;">
+        <figcaption>Today, drawn from source: swap icon, a stepper that asks</figcaption>
+        <div class="frame" id="ab-Today" style="width: 860px; height: 872px;">
+          <div class="pair"><div class="col"><p class="tag">Day, in English</p><div class="vel day phone">
+          <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Shopping list</b></header>
+          <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
+          <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
+          <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><h2 class="title">Leche semidesnatada Hacendado 1 L</h2><p class="sub">0,92 € each · 3 to get</p><div class="entries"><div class="head"><h3>Asked for on 2 lists</h3><button class="all" type="button">Change for all lists</button></div><ul class="rows"><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span></span><button class="change" type="button"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8.5h13M14.5 5l3.5 3.5-3.5 3.5M19 15.5H6M9.5 12 6 15.5 9.5 19"/></svg></i></button><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span></span><button class="change" type="button"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8.5h13M14.5 5l3.5 3.5-3.5 3.5M19 15.5H6M9.5 12 6 15.5 9.5 19"/></svg></i></button><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></li></ul><button class="disc" type="button" aria-expanded="false"><span>Add it to another list</span><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></i></button></div><div class="actions"><button class="primary" type="button">Got all 3</button><button class="quiet" type="button">They had none</button><button class="quiet" type="button">Not today</button></div></section><span class="home"></span></div></div><div class="col"><p class="tag">Night, en español</p><div class="vel night phone">
+          <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Lista de la compra</b></header>
+          <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
+          <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
+          <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><h2 class="title">Leche semidesnatada Hacendado 1 L</h2><p class="sub">0,92 € la unidad · Faltan 3</p><div class="entries"><div class="head"><h3>Lo piden 2 listas</h3><button class="all" type="button">Cambiar en todas las listas</button></div><ul class="rows"><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span></span><button class="change" type="button"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8.5h13M14.5 5l3.5 3.5-3.5 3.5M19 15.5H6M9.5 12 6 15.5 9.5 19"/></svg></i></button><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span></span><button class="change" type="button"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8.5h13M14.5 5l3.5 3.5-3.5 3.5M19 15.5H6M9.5 12 6 15.5 9.5 19"/></svg></i></button><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></li></ul><button class="disc" type="button" aria-expanded="false"><span>Añadirlo a otra lista</span><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></i></button></div><div class="actions"><button class="primary" type="button">Ya tengo los 3</button><button class="quiet" type="button">No había</button><button class="quiet" type="button">Hoy no</button></div></section><span class="home"></span></div></div></div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 940px; top: 250px; width: 860px;">
+        <figcaption>0201 frame 1, 0200 frame 1: what you bought</figcaption>
+        <div class="frame" id="ab-RowSheet" style="width: 860px; height: 872px;">
+          <div class="pair"><div class="col"><p class="tag">Day, in English</p><div class="vel day phone">
+          <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Shopping list</b></header>
+          <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
+          <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
+          <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><h2 class="title">Leche semidesnatada Hacendado 1 L</h2><p class="sub">0,92 € each · 2 to get</p><p class="happened">Got 5 today at 0,92 €, at Mercadona, Gran Vía 12.</p><div class="entries"><div class="head"><h3>What you bought</h3><button class="all" type="button">Lists and amounts</button></div><ul class="rows"><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span><span class="ask"> · 3</span></span><span class="wh">Casa · Leche</span></span><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span><span class="ask"> · 2</span></span><span class="wh">Piso de la playa · Leche</span></span><span class="stp reached"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Cocina</span><span class="ask"> · 1</span></span><span class="wh">Oficina · Leche para el café</span></span><span class="stp over"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></li></ul><button class="disc" type="button" aria-expanded="false"><span>Bought for another list</span><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></i></button></div><div class="actions"><button class="primary" type="button">Got the other 2</button><button class="quiet" type="button">They had none</button><button class="quiet" type="button">Not today</button></div></section><span class="home"></span></div></div><div class="col"><p class="tag">Night, en español</p><div class="vel night phone">
+          <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Lista de la compra</b></header>
+          <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
+          <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
+          <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><h2 class="title">Leche semidesnatada Hacendado 1 L</h2><p class="sub">0,92 € la unidad · Faltan 2</p><p class="happened">Hoy se han cogido 5 a 0,92 €, en Mercadona, Gran Vía 12.</p><div class="entries"><div class="head"><h3>Lo que has comprado</h3><button class="all" type="button">Listas y cantidades</button></div><ul class="rows"><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span><span class="ask"> · 3</span></span><span class="wh">Casa · Leche</span></span><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span><span class="ask"> · 2</span></span><span class="wh">Piso de la playa · Leche</span></span><span class="stp reached"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Cocina</span><span class="ask"> · 1</span></span><span class="wh">Oficina · Leche para el café</span></span><span class="stp over"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></li></ul><button class="disc" type="button" aria-expanded="false"><span>Comprado para otra lista</span><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></i></button></div><div class="actions"><button class="primary" type="button">Ya tengo los 2 que faltan</button><button class="quiet" type="button">No había</button><button class="quiet" type="button">Hoy no</button></div></section><span class="home"></span></div></div></div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 1880px; top: 250px; width: 860px;">
+        <figcaption>A guest who can change nothing</figcaption>
+        <div class="frame" id="ab-Guest" style="width: 860px; height: 872px;">
+          <div class="pair"><div class="col"><p class="tag">Day, in English</p><div class="vel day phone">
+          <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Shopping list</b></header>
+          <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
+          <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
+          <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><h2 class="title">Leche semidesnatada Hacendado 1 L</h2><p class="sub">0,92 € each · 2 to get</p><p class="happened">Got 5 today at 0,92 €, at Mercadona, Gran Vía 12.</p><div class="entries"><div class="head"><h3>What you bought</h3></div><ul class="rows"><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span><span class="ask"> · 3</span></span><span class="wh">Casa · Leche</span></span><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span><span class="ask"> · 2</span></span><span class="wh">Piso de la playa · Leche</span></span><span class="stp reached"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Cocina</span><span class="ask"> · 1</span></span><span class="wh">Oficina · Leche para el café</span></span><span class="stp over"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></li></ul></div><div class="actions"><button class="primary" type="button">Got the other 2</button><button class="quiet" type="button">They had none</button><button class="quiet" type="button">Not today</button></div></section><span class="home"></span></div></div><div class="col"><p class="tag">Night, en español</p><div class="vel night phone">
+          <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Lista de la compra</b></header>
+          <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
+          <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
+          <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><h2 class="title">Leche semidesnatada Hacendado 1 L</h2><p class="sub">0,92 € la unidad · Faltan 2</p><p class="happened">Hoy se han cogido 5 a 0,92 €, en Mercadona, Gran Vía 12.</p><div class="entries"><div class="head"><h3>Lo que has comprado</h3></div><ul class="rows"><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span><span class="ask"> · 3</span></span><span class="wh">Casa · Leche</span></span><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span><span class="ask"> · 2</span></span><span class="wh">Piso de la playa · Leche</span></span><span class="stp reached"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Cocina</span><span class="ask"> · 1</span></span><span class="wh">Oficina · Leche para el café</span></span><span class="stp over"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></li></ul></div><div class="actions"><button class="primary" type="button">Ya tengo los 2 que faltan</button><button class="quiet" type="button">No había</button><button class="quiet" type="button">Hoy no</button></div></section><span class="home"></span></div></div></div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 0px; top: 1550px; width: 860px;">
+        <figcaption>0200 frame 2: one product, one list may change it</figcaption>
+        <div class="frame" id="ab-Detail" style="width: 860px; height: 872px;">
+          <div class="pair"><div class="col"><p class="tag">Day, in English</p><div class="vel day phone">
+          <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Shopping list</b></header>
+          <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
+          <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
+          <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Lists and amounts</h2></div><p class="desc">Here you change the amount and the product of each list. What you bought goes on the previous screen.</p><div class="prod noall"><button class="pic" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="pwhat"><span class="pname">Leche semidesnatada</span><span class="pdet">Hacendado · 1 L</span></span><span class="pprice"><span class="amt">0,92 €</span><span class="per">0,92 € / L</span></span></div><div class="entries"><div class="head"><h3>What each list asks for</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span><span class="got">Bought 2 of 3</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span><button class="plc" type="button">Change</button></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Bought 0 of 1</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Another list</span></span><span class="got">Bought 1 of 2</span></span><span class="anchor"><span class="stp dis"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span></div></li></ul></div></section><span class="home"></span></div></div><div class="col"><p class="tag">Night, en español</p><div class="vel night phone">
+          <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Lista de la compra</b></header>
+          <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
+          <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
+          <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Listas y cantidades</h2></div><p class="desc">Aquí cambias la cantidad y el producto de cada lista. Lo que has comprado se apunta en la pantalla anterior.</p><div class="prod noall"><button class="pic" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="pwhat"><span class="pname">Leche semidesnatada</span><span class="pdet">Hacendado · 1 L</span></span><span class="pprice"><span class="amt">0,92 €</span><span class="per">0,92 € / L</span></span></div><div class="entries"><div class="head"><h3>Lo que pide cada lista</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span><span class="got">Comprado 2 de 3</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span><button class="plc" type="button">Cambiar</button></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Comprado 0 de 1</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Otra lista</span></span><span class="got">Comprado 1 de 2</span></span><span class="anchor"><span class="stp dis"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span></div></li></ul></div></section><span class="home"></span></div></div></div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 940px; top: 1550px; width: 860px;">
+        <figcaption>0200 frame 3: Change for all lists, one list on another product</figcaption>
+        <div class="frame" id="ab-DetailAll" style="width: 860px; height: 872px;">
+          <div class="pair"><div class="col"><p class="tag">Day, in English</p><div class="vel day phone">
+          <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Shopping list</b></header>
+          <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
+          <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
+          <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Lists and amounts</h2></div><p class="desc">Here you change the amount and the product of each list. What you bought goes on the previous screen.</p><div class="prod"><button class="pic" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="pwhat"><span class="pname">Leche semidesnatada</span><span class="pdet">Hacendado · 1 L</span></span><span class="pprice"><span class="amt">0,92 €</span><span class="per">0,92 € / L</span></span><button class="allp" type="button">Change for all lists</button></div><div class="entries"><div class="head"><h3>What each list asks for</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span><span class="got">Bought 2 of 3</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span><button class="plc" type="button">Change</button></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Bought 0 of 1</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl diff"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-puleva.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Puleva 1 L</span></span><button class="plc" type="button">Change</button></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Another list</span></span><span class="got">Bought 1 of 2</span></span><span class="anchor"><span class="stp dis"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span></div></li></ul></div></section><span class="home"></span></div></div><div class="col"><p class="tag">Night, en español</p><div class="vel night phone">
+          <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Lista de la compra</b></header>
+          <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
+          <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
+          <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Listas y cantidades</h2></div><p class="desc">Aquí cambias la cantidad y el producto de cada lista. Lo que has comprado se apunta en la pantalla anterior.</p><div class="prod"><button class="pic" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="pwhat"><span class="pname">Leche semidesnatada</span><span class="pdet">Hacendado · 1 L</span></span><span class="pprice"><span class="amt">0,92 €</span><span class="per">0,92 € / L</span></span><button class="allp" type="button">Cambiar en todas las listas</button></div><div class="entries"><div class="head"><h3>Lo que pide cada lista</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span><span class="got">Comprado 2 de 3</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span><button class="plc" type="button">Cambiar</button></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Comprado 0 de 1</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl diff"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-puleva.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Puleva 1 L</span></span><button class="plc" type="button">Cambiar</button></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Otra lista</span></span><span class="got">Comprado 1 de 2</span></span><span class="anchor"><span class="stp dis"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span></div></li></ul></div></section><span class="home"></span></div></div></div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 1880px; top: 1550px; width: 860px;">
+        <figcaption>Another list: the disabled stepper, pressed</figcaption>
+        <div class="frame" id="ab-Popover" style="width: 860px; height: 872px;">
+          <div class="pair"><div class="col"><p class="tag">Day, in English</p><div class="vel day phone">
+          <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Shopping list</b></header>
+          <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
+          <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
+          <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Lists and amounts</h2></div><p class="desc">Here you change the amount and the product of each list. What you bought goes on the previous screen.</p><div class="prod noall"><button class="pic" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="pwhat"><span class="pname">Leche semidesnatada</span><span class="pdet">Hacendado · 1 L</span></span><span class="pprice"><span class="amt">0,92 €</span><span class="per">0,92 € / L</span></span></div><div class="entries"><div class="head"><h3>What each list asks for</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span><span class="got">Bought 2 of 3</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span><button class="plc" type="button">Change</button></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Bought 0 of 1</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Another list</span></span><span class="got">Bought 1 of 2</span></span><span class="anchor"><span class="stp dis"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span><span class="pop" role="note"><p>This list belongs to a group you are not in. Only its members can change what it asks for.</p></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span></div></li></ul></div></section><span class="home"></span></div></div><div class="col"><p class="tag">Night, en español</p><div class="vel night phone">
+          <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Lista de la compra</b></header>
+          <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
+          <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
+          <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Listas y cantidades</h2></div><p class="desc">Aquí cambias la cantidad y el producto de cada lista. Lo que has comprado se apunta en la pantalla anterior.</p><div class="prod noall"><button class="pic" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="pwhat"><span class="pname">Leche semidesnatada</span><span class="pdet">Hacendado · 1 L</span></span><span class="pprice"><span class="amt">0,92 €</span><span class="per">0,92 € / L</span></span></div><div class="entries"><div class="head"><h3>Lo que pide cada lista</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span><span class="got">Comprado 2 de 3</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span><button class="plc" type="button">Cambiar</button></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Comprado 0 de 1</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Otra lista</span></span><span class="got">Comprado 1 de 2</span></span><span class="anchor"><span class="stp dis"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span><span class="pop" role="note"><p>Esta lista es de un grupo del que no formas parte. Solo sus miembros pueden cambiar lo que pide.</p></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span></div></li></ul></div></section><span class="home"></span></div></div></div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 0px; top: 2850px; width: 860px;">
+        <figcaption>0201 frame 3: a long name in the row sheet</figcaption>
+        <div class="frame" id="ab-LongName" style="width: 860px; height: 872px;">
+          <div class="pair"><div class="col"><p class="tag">Day, in English</p><div class="vel day phone">
+          <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Shopping list</b></header>
+          <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
+          <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
+          <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><h2 class="title">Tomate pera</h2><p class="sub">2,49 € per kg · 1 kg to get</p><p class="happened">Got 1,5 kg today at 2,49 € per kg, at Mercadona, Gran Vía 12.</p><div class="entries"><div class="head"><h3>What you bought</h3><button class="all" type="button">Lists and amounts</button></div><ul class="rows"><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal de la casa de la playa</span><span class="ask"> · 1,5 kg</span></span><span class="wh">Piso de la playa de Cullera · Tomate pera para ensalada</span></span><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">0,5</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span><span class="ask"> · 1 kg</span></span><span class="wh">Casa · Tomates</span></span><span class="stp reached"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">1</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></li></ul><button class="disc" type="button" aria-expanded="false"><span>Bought for another list</span><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></i></button></div><div class="actions"><button class="primary" type="button">Got the other 1 kg</button><button class="quiet" type="button">They had none</button><button class="quiet" type="button">Not today</button></div></section><span class="home"></span></div></div><div class="col"><p class="tag">Night, en español</p><div class="vel night phone">
+          <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Lista de la compra</b></header>
+          <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
+          <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
+          <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><h2 class="title">Tomate pera</h2><p class="sub">2,49 € el kg · Por coger: 1 kg</p><p class="happened">Cogido hoy: 1,5 kg a 2,49 € el kg, en Mercadona, Gran Vía 12.</p><div class="entries"><div class="head"><h3>Lo que has comprado</h3><button class="all" type="button">Listas y cantidades</button></div><ul class="rows"><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal de la casa de la playa</span><span class="ask"> · 1,5 kg</span></span><span class="wh">Piso de la playa de Cullera · Tomate pera para ensalada</span></span><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">0,5</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span><span class="ask"> · 1 kg</span></span><span class="wh">Casa · Tomates</span></span><span class="stp reached"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">1</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></li></ul><button class="disc" type="button" aria-expanded="false"><span>Comprado para otra lista</span><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></i></button></div><div class="actions"><button class="primary" type="button">Ya tengo lo que falta (1 kg)</button><button class="quiet" type="button">No había</button><button class="quiet" type="button">Hoy no</button></div></section><span class="home"></span></div></div></div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 940px; top: 2850px; width: 860px;">
+        <figcaption>0200 frame 4: long names in the detailed view</figcaption>
+        <div class="frame" id="ab-LongDetail" style="width: 860px; height: 872px;">
+          <div class="pair"><div class="col"><p class="tag">Day, in English</p><div class="vel day phone">
+          <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Shopping list</b></header>
+          <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
+          <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
+          <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Lists and amounts</h2></div><p class="desc">Here you change the amount and the product of each list. What you bought goes on the previous screen.</p><div class="prod noall"><span class="pic none"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></i></span><span class="pwhat"><span class="pname">Tomate pera de Almería en rama, categoría primera</span><span class="pdet">Granel</span></span><span class="pprice"><span class="amt">2,49 € / kg</span></span></div><div class="entries"><div class="head"><h3>What each list asks for</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal de la casa de la playa</span></span><span class="wh">Piso de la playa de Cullera · Tomate pera para ensalada</span><span class="got">Bought 0,5 of 1,5 kg</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">1,5</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><span class="pic none sm"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></i></span><span class="plt"><span class="pln">Tomate pera de Almería en rama, categoría primera</span><span class="plb"> · Granel</span></span><button class="plc" type="button">Change</button></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Casa · Tomates</span><span class="got">Bought 1 of 1 kg</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">1</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><span class="pic none sm"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></i></span><span class="plt"><span class="pln">Tomate pera de Almería en rama, categoría primera</span><span class="plb"> · Granel</span></span></div></li></ul></div></section><span class="home"></span></div></div><div class="col"><p class="tag">Night, en español</p><div class="vel night phone">
+          <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Lista de la compra</b></header>
+          <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
+          <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
+          <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Listas y cantidades</h2></div><p class="desc">Aquí cambias la cantidad y el producto de cada lista. Lo que has comprado se apunta en la pantalla anterior.</p><div class="prod noall"><span class="pic none"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></i></span><span class="pwhat"><span class="pname">Tomate pera de Almería en rama, categoría primera</span><span class="pdet">Granel</span></span><span class="pprice"><span class="amt">2,49 € / kg</span></span></div><div class="entries"><div class="head"><h3>Lo que pide cada lista</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal de la casa de la playa</span></span><span class="wh">Piso de la playa de Cullera · Tomate pera para ensalada</span><span class="got">Comprado 0,5 de 1,5 kg</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">1,5</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><span class="pic none sm"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></i></span><span class="plt"><span class="pln">Tomate pera de Almería en rama, categoría primera</span><span class="plb"> · Granel</span></span><button class="plc" type="button">Cambiar</button></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Casa · Tomates</span><span class="got">Comprado 1 de 1 kg</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">1</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><span class="pic none sm"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></i></span><span class="plt"><span class="pln">Tomate pera de Almería en rama, categoría primera</span><span class="plb"> · Granel</span></span></div></li></ul></div></section><span class="home"></span></div></div></div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 1880px; top: 2850px; width: 860px;">
+        <figcaption>0201 frame 2: bought for another list</figcaption>
+        <div class="frame" id="ab-OtherList" style="width: 860px; height: 872px;">
+          <div class="pair"><div class="col"><p class="tag">Day, in English</p><div class="vel day phone">
+          <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Shopping list</b></header>
+          <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
+          <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
+          <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><h2 class="title">Leche semidesnatada Hacendado 1 L</h2><p class="sub">0,92 € each · 3 to get</p><div class="entries"><div class="head"><h3>What you bought</h3><button class="all" type="button">Lists and amounts</button></div><ul class="rows"><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span><span class="ask"> · 2</span></span><span class="wh">Casa · Leche</span></span><span class="stp zero"><span class="sb minus end"><i class="g"></i></span><span class="cell"><span class="fig">0</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span><span class="ask"> · 1</span></span><span class="wh">Piso de la playa · Leche</span></span><span class="stp zero"><span class="sb minus end"><i class="g"></i></span><span class="cell"><span class="fig">0</span></span><span class="sb plus"><i class="g"></i></span></span></li></ul><button class="disc open" type="button" aria-expanded="true"><span>Bought for another list</span><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></i></button><ul class="rows"><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Despensa</span></span><span class="wh">Casa</span></span><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Cena del sábado</span></span><span class="wh">Casa</span></span><span class="stp zero"><span class="sb minus end"><i class="g"></i></span><span class="cell"><span class="fig">0</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Café de la oficina</span></span><span class="wh">Oficina</span></span><span class="stp zero"><span class="sb minus end"><i class="g"></i></span><span class="cell"><span class="fig">0</span></span><span class="sb plus"><i class="g"></i></span></span></li></ul></div><div class="actions"><button class="primary" type="button">Got all 3</button><button class="quiet" type="button">They had none</button></div></section><span class="home"></span></div></div><div class="col"><p class="tag">Night, en español</p><div class="vel night phone">
+          <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Lista de la compra</b></header>
+          <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
+          <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
+          <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><h2 class="title">Leche semidesnatada Hacendado 1 L</h2><p class="sub">0,92 € la unidad · Faltan 3</p><div class="entries"><div class="head"><h3>Lo que has comprado</h3><button class="all" type="button">Listas y cantidades</button></div><ul class="rows"><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span><span class="ask"> · 2</span></span><span class="wh">Casa · Leche</span></span><span class="stp zero"><span class="sb minus end"><i class="g"></i></span><span class="cell"><span class="fig">0</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span><span class="ask"> · 1</span></span><span class="wh">Piso de la playa · Leche</span></span><span class="stp zero"><span class="sb minus end"><i class="g"></i></span><span class="cell"><span class="fig">0</span></span><span class="sb plus"><i class="g"></i></span></span></li></ul><button class="disc open" type="button" aria-expanded="true"><span>Comprado para otra lista</span><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></i></button><ul class="rows"><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Despensa</span></span><span class="wh">Casa</span></span><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Cena del sábado</span></span><span class="wh">Casa</span></span><span class="stp zero"><span class="sb minus end"><i class="g"></i></span><span class="cell"><span class="fig">0</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Café de la oficina</span></span><span class="wh">Oficina</span></span><span class="stp zero"><span class="sb minus end"><i class="g"></i></span><span class="cell"><span class="fig">0</span></span><span class="sb plus"><i class="g"></i></span></span></li></ul></div><div class="actions"><button class="primary" type="button">Ya tengo los 3</button><button class="quiet" type="button">No había</button></div></section><span class="home"></span></div></div></div>
+        </div>
+      </figure>
+      <aside class="note" style="left: 0px; top: 0px; width: 420px;"><p>TODAY.</p><p>Each list has the swap icon in a bordered square, which changes the product of that list's line, and a stepper that changes what the list asks for.</p><p>Drawn from row-entries and the stepper on dev, not photographed: the staging account no longer signs in.</p></aside>
+      <aside class="note" style="left: 940px; top: 0px; width: 420px;"><p>0201 TARGET STATES 2, 5, 6, 8; 0200 TARGET STATE 2. COLOURS A.</p><p>The heading says What you bought. Each stepper counts what this basket bought for that list in this trip; each name carries the list's ask. Básicos asks 2, has 2: its number is green. Cocina asks 1, has 2: amber. Only the number takes the colour.</p><p>The buy steppers snap to the list's ask as well as to 1000: a step lands exactly on the ask even when the step size would skip it (velista 0195 and 0201).</p><p>Lists and amounts, at the right of the heading, opens the detailed view.</p></aside>
+      <aside class="note" style="left: 1880px; top: 0px; width: 420px;"><p>0200 SPECS 1; 0201 SPECS 6.</p><p>A guest whose lists allow no change of ask or product sees no Lists and amounts and no Bought for another list.</p></aside>
+      <aside class="note" style="left: 0px; top: 1210px; width: 420px;"><p>THE DESCRIPTION.</p><p>Under the title, two lines of the sheets' secondary text say what the view is for, on every visit:</p><p>Here you change the amount and the product of each list. What you bought goes on the previous screen. / Aquí cambias la cantidad y el producto de cada lista. Lo que has comprado se apunta en la pantalla anterior.</p><p>The description names amount and product, so the heading, What each list asks for, does not repeat it.</p></aside>
+      <aside class="note" style="left: 940px; top: 1210px; width: 420px;"><p>0200 TARGET STATE 4. CHANGE.</p><p>Change for all lists sits under the product, in the block it changes.</p><p>Básicos takes Puleva: its line is amber because it is not the row's product. The line is plain text, not a control: the word Change / Cambiar (44 px tall) is the only control that changes a list's product, and the small picture opens the picture viewer. A list that may not change its product shows no Change.</p><p>Fits 844 px with the description, three lists and the home indicator; nothing scrolls.</p></aside>
+      <aside class="note" style="left: 1880px; top: 1210px; width: 420px;"><p>THE BUILD CHANGES THE STEPPER.</p><p>Disabled as a whole: no raised fill, the hairline (border-subtle) for the strong border, the number in text-muted at its usual size and weight, both glyphs in text-muted at 60%. In Night the faint outline stays as drawn.</p><p>Number on the sheet: Day 5.33 to 1, Night 6.66 to 1 (enabled: 18.4 and 16.3).</p><p>quantity-stepper.scss today fades only the ends (0.35 on aria-disabled); its border and number keep the enabled colours. The build adds a whole-stepper disabled state.</p><p>A press opens the note popover (anchored-popover, 280 px); for a guest's own group it says: Only members of Casa can change what this list asks for.</p></aside>
+      <aside class="note" style="left: 0px; top: 2600px; width: 420px;"><p>0201 TARGET STATE 5.</p><p>The name gives way first: Compra semanal de la… · 1,5 kg. The ask is never cut. The line under it is cut on its own.</p><p>A product by weight shows the ask in its exact form with the unit, and the stepper the figure over kg, as the sheet stepper already does.</p></aside>
+      <aside class="note" style="left: 940px; top: 2600px; width: 420px;"><p>0200 FRAME 4.</p><p>The list name and its zone · line are cut; Bought 0,5 of 1,5 kg and the stepper are not. A product name that long wraps to two lines in the block and is cut on a list's line, where its brand never is.</p><p>A product with no photo draws the app's product icon on the sunken fill, and is not a button. Both lists here may change their ask, so no disabled stepper shows.</p></aside>
+      <aside class="note" style="left: 1880px; top: 2600px; width: 420px;"><p>0201 TARGET STATE 7.</p><p>Add it to another list becomes Bought for another list. Its steppers start at 0 and a press up records a buy for that list. Despensa is stepped to 1.</p><p>When the answer comes back, Despensa becomes a list of the row, Despensa · 0, with its 1 in amber, and leaves this section.</p></aside>
+  </div>
+</div>
+
+<script>
+  // The only script on the page. It scales the canvas for reading on a laptop and
+  // does nothing else: these are artboards, not an editor.
+  (function () {
+    var canvas = document.getElementById('canvas');
+    var w = 2740;
+    var h = 3722;
+    var buttons = document.querySelectorAll('.controls button');
+    buttons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var scale = parseFloat(button.dataset.scale);
+        canvas.style.transform = 'scale(' + scale + ')';
+        canvas.style.width = w * scale + 'px';
+        canvas.style.height = h * scale + 'px';
+        buttons.forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+      });
+    });
+  })();
+</script>
