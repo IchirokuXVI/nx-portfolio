@@ -176,6 +176,7 @@ describeIntegration('the order a shopper walks (real Postgres)', () => {
         itemId: options.itemId ?? null,
         outcome,
         quantity: outcome === SettlementOutcome.BOUGHT ? 1 : 0,
+        applied: outcome === SettlementOutcome.BOUGHT ? 1 : 0,
         settledByUserId: ids.author,
         settledByParticipantId: null,
         settledAt,

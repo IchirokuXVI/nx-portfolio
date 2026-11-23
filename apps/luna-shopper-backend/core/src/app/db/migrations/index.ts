@@ -37,6 +37,7 @@ import { SettlementSnapshotAndReplacement1756003800000 } from './1756003800000-S
 import { LineNamed1756003900000 } from './1756003900000-LineNamed';
 import { AssistantAllowance1756004000000 } from './1756004000000-AssistantAllowance';
 import { LineUnit1756004100000 } from './1756004100000-LineUnit';
+import { SettlementApplied1756004200000 } from './1756004200000-SettlementApplied';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -202,4 +203,9 @@ export const CORE_MIGRATIONS = [
   // takes `UNIT` or null, and it reads and writes no row, so it follows every
   // migration that touched those tables (plan 0246, section 7).
   LineUnit1756004100000,
+  // One column and one check on `line_settlements`, which plan 0246's
+  // migration last reshaped. It fills every row from its own `quantity` and
+  // reads no other table, so it follows every migration that touched that
+  // table (plan 0274, section 1).
+  SettlementApplied1756004200000,
 ];

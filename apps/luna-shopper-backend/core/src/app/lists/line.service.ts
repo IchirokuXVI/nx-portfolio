@@ -3586,7 +3586,16 @@ export class LineService {
    * remove. Routing it through the same code costs nothing, because that code
    * already knows what a reduction means.
    */
-  async addQuantity(req: AddLineQuantityRequest): Promise<LineView> {
+  async addQuantity(
+    req: AddLineQuantityRequest,
+    /**
+     * A write of the caller's that belongs in this transaction, run under the
+     * line's lock after the `expect` check and before the line is written
+     * (plan 0274, section 5: the basket's demand moves `applied` on its buys
+     * with the line). It may refuse by throwing, and then nothing is written.
+     */
+    underLock?: (manager: EntityManager, line: ListLine) => Promise<void>
+  ): Promise<LineView> {
     this.validateDelta(req.delta);
     // Required (plan 0246 M8): an old client holding a weight line would add
     // one gram where it meant one kilo. Refused before anything is read.
@@ -3639,6 +3648,9 @@ export class LineService {
       // The request an absolute edit of the same field would have been, so the
       // refusal a caller gets is word for word the one the PATCH gives them.
       this.authorizeEdit({ quantity }, line, permissions);
+      if (underLock) {
+        await underLock(manager, line);
+      }
 
       // The row as the lock read it, which is the only state a delta can
       // honestly say it moved from.

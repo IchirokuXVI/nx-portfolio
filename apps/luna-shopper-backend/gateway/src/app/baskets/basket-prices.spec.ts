@@ -112,6 +112,7 @@ const row = (
       canWrite: false,
       left: 2,
       bought: 0,
+      asked: 2,
       boughtElsewhere: 0,
       state: BasketRowState.WANTED,
       approvalStatus: LineApprovalStatus.APPROVED,

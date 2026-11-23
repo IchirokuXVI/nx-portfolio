@@ -272,6 +272,24 @@ describe('rowNumbersOf', () => {
     ).toEqual({ left: 2, bought: 4, asked: 6, boughtElsewhere: 1, act: null });
   });
 
+  it('counts the ask from what the buys met, not from what they bought (plan 0274)', () => {
+    // Asks 3, bought 4: one unit above the ask, which the ask does not grow by.
+    expect(
+      rowNumbersOf([entry({ left: 0, bought: 4, applied: 3 })])
+    ).toMatchObject({ left: 0, bought: 4, asked: 3 });
+    // A line made at 0 and bought 2 still asks nothing.
+    expect(
+      rowNumbersOf([entry({ left: 0, bought: 2, applied: 0 })]).asked
+    ).toBe(0);
+    // Two entries sum their own.
+    expect(
+      rowNumbersOf([
+        entry({ left: 0, bought: 5, applied: 3 }),
+        entry({ left: 1, bought: 0, applied: 0 }),
+      ]).asked
+    ).toBe(4);
+  });
+
   it('keeps bought elsewhere out of asked', () => {
     expect(rowNumbersOf([entry({ left: 1, boughtElsewhere: 5 })]).asked).toBe(
       1

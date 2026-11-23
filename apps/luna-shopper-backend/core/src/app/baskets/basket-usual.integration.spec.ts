@@ -191,6 +191,7 @@ describeIntegration('where a row is usually bought (real Postgres)', () => {
         itemId: null,
         outcome: s.outcome ?? SettlementOutcome.BOUGHT,
         quantity: 1,
+        applied: 1,
         // The list page settles as the account; a basket settles as its
         // participant, and a guest is a participant with no account.
         settledByUserId: via === 'list' ? shopper : null,

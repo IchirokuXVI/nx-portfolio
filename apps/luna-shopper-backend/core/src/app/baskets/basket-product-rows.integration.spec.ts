@@ -257,7 +257,8 @@ describeIntegration('a basket row is a product (real Postgres)', () => {
       context,
       lines,
       listAccess,
-      events as never
+      events as never,
+      dataSource
     );
     renameService = new BasketRowRenameService(
       dataSource,

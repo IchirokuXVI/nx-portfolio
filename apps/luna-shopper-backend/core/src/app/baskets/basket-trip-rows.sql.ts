@@ -1,3 +1,7 @@
+import {
+  basketLineBuys,
+  OPEN_BASKET_ASKED,
+} from '../lists/trips/basket-asked.sql';
 import { WRITABLE_LIST } from './basket.sql';
 
 /**
@@ -12,7 +16,8 @@ import { WRITABLE_LIST } from './basket.sql';
  * over `basket_line_origins` and said plan 0136 would replace it with
  * `bought + left` over the basket's coverage, changing nothing else. That is
  * exactly what happened, and the two callers, the finish and the reopen, are
- * untouched.
+ * untouched. Plan 0274 changed it once more, to `left` plus the units of this
+ * basket's buys that met the ask, and again nothing else.
  */
 
 /**
@@ -23,13 +28,17 @@ import { WRITABLE_LIST } from './basket.sql';
  * change, and a status set to the value it already holds must not be a second
  * write.
  *
- * ## `asked` is `bought + left`, computed here and stored once
+ * ## `asked` is `left` plus the units that met the ask, computed here and stored once
  *
- * That is the whole of plan 0136's arithmetic (section 4 of plan 0130): while a
- * basket is open nothing about a row is stored, and the finish is the moment the
- * numbers stop moving. `left` is the zone line's own `quantity` and `bought` is
- * the sum over this basket's standing purchases of that line, so a line bought
- * to zero freezes at what it asked for rather than at nothing.
+ * That is plan 0136's arithmetic (section 4 of plan 0130) as plan 0274 corrected
+ * it: while a basket is open nothing about a row is stored, and the finish is
+ * the moment the numbers stop moving. `asked` is `left`, the zone line's own
+ * `quantity`, plus the units of this basket's standing purchases of that line
+ * that met the ask (`applied`), computed, never stored until now. So a line
+ * bought to zero freezes at what it asked for rather than at nothing, and a
+ * line bought above its ask freezes at the ask rather than at what was bought.
+ * It is `OPEN_BASKET_ASKED` over `basketLineBuys`, the fragments the trips
+ * read uses.
  *
  * ## It reads the coverage, and the coverage is read **at this moment**
  *
@@ -56,23 +65,13 @@ export const BASKET_TRIP_ROWS_FREEZE_SQL = `
   SELECT gl.id,
          sl.id,
          ll.id,
-         (ll.quantity + b."bought")::int,
+         ${OPEN_BASKET_ASKED},
          ll."unit"
   FROM "baskets" gl
   JOIN "zone_memberships" m ON m."userId" = gl."ownerUserId"
   JOIN "shopping_lists" sl ON sl."zoneId" = m."zoneId"
   JOIN "list_lines" ll ON ll."listId" = sl.id
-  LEFT JOIN LATERAL (
-    SELECT COALESCE(
-             SUM(s."quantity") FILTER (WHERE s."outcome" = 'BOUGHT'), 0
-           )::int AS "bought"
-    FROM "line_settlements" s
-    WHERE s."basketId" = gl.id
-      AND s."lineId" = ll.id
-      -- Within one line, in its unit (plan 0246, section 3.4).
-      AND s."unit" = ll."unit"
-      AND s."revertedAt" IS NULL
-  ) b ON TRUE
+  ${basketLineBuys('gl.id', 'll.id', 'll."unit"')}
   WHERE gl.id = $1::uuid
     AND gl."kind" = 'GENERATED'
     AND EXISTS (

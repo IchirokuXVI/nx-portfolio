@@ -2507,6 +2507,7 @@ export type BasketBasketRowEntryView = {
   version: number;
   left: number;
   bought: number;
+  asked: number;
   boughtElsewhere: number;
   state: EnumsBasketRowState;
   approvalStatus: EnumsLineApprovalStatus;

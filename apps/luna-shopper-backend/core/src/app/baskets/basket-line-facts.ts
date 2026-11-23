@@ -183,6 +183,7 @@ export function toEntries(
       id: row.id,
       outcome: row.outcome as SettlementOutcome,
       quantity: row.quantity,
+      applied: row.applied,
       unit: isLineUnit(row.unit) ? row.unit : 'UNIT',
       // `pg` hands a `timestamptz` back as a `Date`, but a driver that hands
       // back a string would otherwise reach `toISOString` and throw.

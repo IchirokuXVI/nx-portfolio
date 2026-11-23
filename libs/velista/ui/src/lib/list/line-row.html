@@ -10,11 +10,13 @@
 <div
   (click)="onRowClick()"
   (keydown)="onRowKeydown($event)"
-  [attr.aria-busy]="line().write === 'pending' ? 'true' : null"
+  [attr.aria-busy]="clearing() || line().write === 'pending' ? 'true' : null"
   [attr.aria-describedby]="describedBy()"
+  [attr.aria-disabled]="clearing() ? 'true' : null"
   [attr.aria-label]="accessibleName()"
   [attr.tabindex]="!line().interactive ? null : 0"
   [class.awaiting]="line().approvalStatus === 'PENDING'"
+  [class.clearing]="clearing()"
   [class.compact]="compact()"
   [class.in-flight]="line().write === 'pending'"
   [class.inert]="!line().interactive"
@@ -412,6 +414,20 @@
     [value]="amount()"
     variant="row"
   />
+
+  <!--
+    The lock of a row being cleared (velista 0199): a spinner in the middle of the
+    row, over both layouts, and over the layer drawn under the decisions. Hidden
+    from a screen reader, which hears aria-busy and the word the row is described by.
+  -->
+  @if (clearing()) {
+    <span aria-hidden="true" class="lock" data-clearing-lock>
+      <span class="lock-mark"><lib-spinner-icon /></span>
+    </span>
+    <span [id]="'lk-' + line().id" class="visually-hidden">
+      {{ 'basket.line.busy' | rokuT }}
+    </span>
+  }
 </div>
 
 <!--
@@ -436,6 +452,15 @@
       {{ 'list.line.restore' | rokuT }}
     </button>
   </div>
+}
+
+<!--
+  The layer of a row being cleared (velista 0199), over everything the host's lock
+  stops: the row with its borders and the decisions under it. Before the notices, so
+  a notice is drawn over it and stays usable.
+-->
+@if (clearing()) {
+  <span aria-hidden="true" class="lock-layer" data-clearing-layer></span>
 }
 
 <!--

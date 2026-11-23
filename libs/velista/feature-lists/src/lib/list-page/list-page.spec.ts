@@ -82,6 +82,7 @@ import type {
 } from '@portfolio/velista/models';
 import {
   DEFAULT_LIST_VIEW_STATE,
+  QUANTITY_CLEAR_LOCK_MAX_MS,
   QUANTITY_STEP_QUIET_MS,
 } from '@portfolio/velista/models';
 import {
@@ -1225,24 +1226,547 @@ describe('ListPage', () => {
         expect(writes(lines.calls)).toHaveLength(1);
       });
 
-      it('keeps the row and writes nothing for a minus to 0 and a plus inside the quiet beat (velista 0192)', async () => {
+      it('writes the trash at once, with every press of the run before it (velista 0199)', async () => {
         const { fixture, lines } = await render({
-          lines: [line('ln-1', { quantity: 1 })],
+          lines: [line('ln-1', { quantity: 3 })],
         });
         jest.useFakeTimers();
         const page = fixture.componentInstance;
 
-        page.stepQuantity(press(1, 0));
-        fixture.detectChanges();
-        expect(page.drawnLines().map((row) => row.id)).toEqual(['ln-1']);
-
-        page.stepQuantity(press(0, 1));
-        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
-        fixture.detectChanges();
-
+        page.stepQuantity(press(3, 2));
+        page.stepQuantity(press(2, 1));
         expect(writes(lines.calls)).toEqual([]);
-        expect(page.drawnLines().map((row) => row.id)).toEqual(['ln-1']);
+
+        // The trash: the press from 1 to 0. Written in the same task, no beat.
+        page.stepQuantity(press(1, 0));
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-1', delta: -3 },
+        ]);
+
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        expect(writes(lines.calls)).toHaveLength(1);
+      });
+
+      it('waits the quiet beat for a press to 1 (velista 0199)', async () => {
+        const { fixture, lines } = await render({
+          lines: [line('ln-1', { quantity: 2 })],
+        });
+        jest.useFakeTimers();
+
+        fixture.componentInstance.stepQuantity(press(2, 1));
+        expect(writes(lines.calls)).toEqual([]);
+
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-1', delta: -1 },
+        ]);
+      });
+    });
+
+    describe('the trash locks the row until its write answers (velista 0199)', () => {
+      const trash = (lineId: string, from = 1) => ({
+        lineId,
+        step: { from, to: 0, repeat: false },
+      });
+      const LINES = [
+        line('ln-1', { quantity: 2, position: 1 }),
+        line('ln-2', { content: 'Bananas', quantity: 1, position: 2 }),
+        line('ln-3', { quantity: 3, position: 3 }),
+      ];
+      const rowOf = (fixture: ComponentFixture<ListPage>, id: string) =>
+        (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(
+          `li.line[data-line-id="${id}"]`
+        );
+      const turns = async () => {
+        for (let turn = 0; turn < 20; turn += 1) {
+          await Promise.resolve();
+        }
+      };
+
+      /**
+       * The real `LineStore` over a service whose quantity writes are held until the
+       * spec answers them: the store patches the amount before the request goes out,
+       * and snaps it back with the failed note when the request fails.
+       */
+      const three = async () => {
+        const sent: { lineId: string; delta: number }[] = [];
+        let answer: (ok: boolean) => void = () => undefined;
+        const answered = new Promise<boolean>((resolve) => (answer = resolve));
+        const rendered = await render({
+          lineRead: LINES,
+          lineWrites: {
+            addQuantity: async (lineId, delta) => {
+              sent.push({ lineId, delta });
+              const held = LINES.find((one) => one.id === lineId) as Line;
+              if (!(await answered)) {
+                throw new Error('offline');
+              }
+              return {
+                ...held,
+                quantity: held.quantity + delta,
+                version: held.version + 1,
+              };
+            },
+          },
+        });
+        await rendered.fixture.whenStable();
+        rendered.fixture.detectChanges();
+        return {
+          ...rendered,
+          sent,
+          release: () => answer(true),
+          fail: () => answer(false),
+        };
+      };
+
+      afterEach(() => jest.useRealTimers());
+
+      it('keeps the row drawn in To buy at 0, locked, while the write is out', async () => {
+        const { fixture, sent, release } = await three();
+        jest.useFakeTimers();
+        const page = fixture.componentInstance;
+
+        page.stepQuantity(trash('ln-2'));
+        fixture.detectChanges();
+
+        // Sent in the press's own task: the trash never waits the quiet beat.
+        expect(sent).toEqual([{ lineId: 'ln-2', delta: -1 }]);
+        expect(page.clearing().has('ln-2')).toBe(true);
+        expect(page.drawnLines().map((row) => row.id)).toEqual([
+          'ln-1',
+          'ln-2',
+          'ln-3',
+        ]);
+        const row = rowOf(fixture, 'ln-2')?.querySelector<HTMLElement>('.row');
+        expect(row?.classList).toContain('clearing');
+        expect(row?.getAttribute('aria-busy')).toBe('true');
+        expect(row?.getAttribute('aria-disabled')).toBe('true');
+        expect(
+          rowOf(fixture, 'ln-2')
+            ?.querySelector('lib-quantity-stepper')
+            ?.getAttribute('data-value')
+        ).toBe('0');
         expect(page.announcement()).toBe('');
+
+        release();
+        await turns();
+      });
+
+      it('ignores a second press on the locked row', async () => {
+        const { fixture, sent, release } = await three();
+        jest.useFakeTimers();
+        const page = fixture.componentInstance;
+
+        page.stepQuantity(trash('ln-2'));
+        fixture.detectChanges();
+        rowOf(fixture, 'ln-2')
+          ?.querySelector<HTMLElement>('.step.plus')
+          ?.click();
+        page.stepQuantity({
+          lineId: 'ln-2',
+          step: { from: 0, to: 1, repeat: false },
+        });
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+
+        expect(sent).toEqual([{ lineId: 'ln-2', delta: -1 }]);
+        release();
+        await turns();
+      });
+
+      it('hides the row after the answer and moves focus to the next row', async () => {
+        const { fixture, release } = await three();
+        jest.useFakeTimers();
+        rowOf(fixture, 'ln-2')
+          ?.querySelector<HTMLElement>('.step.minus')
+          ?.focus();
+
+        fixture.componentInstance.stepQuantity(trash('ln-2'));
+        fixture.detectChanges();
+        expect(rowOf(fixture, 'ln-2')).not.toBeNull();
+
+        release();
+        await turns();
+        fixture.detectChanges();
+        fixture.detectChanges();
+
+        expect(fixture.componentInstance.clearing().size).toBe(0);
+        expect(rowOf(fixture, 'ln-2')).toBeNull();
+        expect(document.activeElement).toBe(
+          rowOf(fixture, 'ln-3')?.querySelector('.step.minus')
+        );
+        expect(fixture.componentInstance.announcement()).toBe(
+          'list.line.hiddenAtZero'
+        );
+      });
+
+      it('draws the row back at its stored amount, unlocked, when the write failed', async () => {
+        const { fixture, fail } = await three();
+        jest.useFakeTimers();
+
+        fixture.componentInstance.stepQuantity(trash('ln-2'));
+        fixture.detectChanges();
+
+        fail();
+        await turns();
+        fixture.detectChanges();
+
+        expect(fixture.componentInstance.clearing().size).toBe(0);
+        const row = rowOf(fixture, 'ln-2')?.querySelector<HTMLElement>('.row');
+        expect(row?.classList).not.toContain('clearing');
+        expect(row?.getAttribute('aria-disabled')).toBeNull();
+        expect(
+          rowOf(fixture, 'ln-2')
+            ?.querySelector('lib-quantity-stepper')
+            ?.getAttribute('data-value')
+        ).toBe('1');
+        expect(
+          rowOf(fixture, 'ln-2')?.querySelector('.notice.failed')
+        ).not.toBeNull();
+        expect(fixture.componentInstance.announcement()).toBe('');
+      });
+
+      it('locks the row in a search too, and leaves it drawn at 0 after the answer', async () => {
+        const { fixture, release } = await three();
+        const page = fixture.componentInstance;
+        page.onComposerQuery('banan');
+        fixture.detectChanges();
+        jest.useFakeTimers();
+
+        page.stepQuantity(trash('ln-2'));
+        fixture.detectChanges();
+        expect(
+          rowOf(fixture, 'ln-2')?.querySelector('.row')?.classList
+        ).toContain('clearing');
+
+        release();
+        await turns();
+        fixture.detectChanges();
+
+        expect(page.clearing().size).toBe(0);
+        expect(page.drawnLines().map((row) => [row.id, row.quantity])).toEqual([
+          ['ln-2', 0],
+        ]);
+        expect(
+          rowOf(fixture, 'ln-2')?.querySelector('.row')?.classList
+        ).not.toContain('clearing');
+        expect(page.announcement()).toBe('');
+      });
+
+      describe('the lock has a ceiling (the owner, 2026-11-23)', () => {
+        const stepperValue = (
+          fixture: ComponentFixture<ListPage>,
+          id = 'ln-2'
+        ) =>
+          rowOf(fixture, id)
+            ?.querySelector('lib-quantity-stepper')
+            ?.getAttribute('data-value');
+        const rowEl = (fixture: ComponentFixture<ListPage>, id = 'ln-2') =>
+          rowOf(fixture, id)?.querySelector<HTMLElement>('.row');
+        const locked = (fixture: ComponentFixture<ListPage>, id = 'ln-2') =>
+          rowEl(fixture, id)?.classList.contains('clearing');
+
+        /**
+         * The real `LineStore` over a server that answers each quantity write when the
+         * spec says so, in the order the spec says: a write that succeeds applies its
+         * delta to the server's line and moves its version by one.
+         */
+        const held = async () => {
+          const server = new Map(
+            LINES.map((one) => [one.id, { ...one }] as const)
+          );
+          const calls: {
+            lineId: string;
+            delta: number;
+            answer: (ok: boolean) => void;
+          }[] = [];
+          const rendered = await render({
+            lineRead: LINES,
+            lineWrites: {
+              addQuantity: async (lineId, delta) => {
+                let answer: (ok: boolean) => void = () => undefined;
+                const answered = new Promise<boolean>(
+                  (resolve) => (answer = resolve)
+                );
+                calls.push({ lineId, delta, answer });
+                if (!(await answered)) {
+                  throw new Error('offline');
+                }
+                const now = server.get(lineId) as Line;
+                const next = {
+                  ...now,
+                  quantity: Math.max(0, now.quantity + delta),
+                  version: now.version + 1,
+                };
+                server.set(lineId, next);
+                return next;
+              },
+            },
+          });
+          await rendered.fixture.whenStable();
+          rendered.fixture.detectChanges();
+          return {
+            ...rendered,
+            sent: () => calls.map(({ lineId, delta }) => ({ lineId, delta })),
+            release: (index: number, ok: boolean) => calls[index].answer(ok),
+            answer: async (index: number, ok: boolean) => {
+              calls[index].answer(ok);
+              await turns();
+              rendered.fixture.detectChanges();
+              rendered.fixture.detectChanges();
+            },
+          };
+        };
+
+        const pastCeiling = (fixture: ComponentFixture<ListPage>) => {
+          jest.advanceTimersByTime(QUANTITY_CLEAR_LOCK_MAX_MS);
+          fixture.detectChanges();
+        };
+
+        it('is two minutes', () => {
+          expect(QUANTITY_CLEAR_LOCK_MAX_MS).toBe(120_000);
+        });
+
+        it('keeps the row locked until the ceiling', async () => {
+          const { fixture, answer } = await held();
+          jest.useFakeTimers();
+
+          fixture.componentInstance.stepQuantity(trash('ln-2'));
+          jest.advanceTimersByTime(QUANTITY_CLEAR_LOCK_MAX_MS - 1);
+          fixture.detectChanges();
+
+          expect(locked(fixture)).toBe(true);
+          expect(rowEl(fixture)?.getAttribute('aria-disabled')).toBe('true');
+          await answer(0, true);
+        });
+
+        it('ends the lock at the ceiling and keeps the row drawn at 0 in its place, with no notice', async () => {
+          const { fixture, sent, answer } = await held();
+          jest.useFakeTimers();
+          const page = fixture.componentInstance;
+
+          page.stepQuantity(trash('ln-2'));
+          pastCeiling(fixture);
+
+          expect(page.clearing().size).toBe(0);
+          expect(locked(fixture)).toBe(false);
+          expect(rowEl(fixture)?.getAttribute('aria-disabled')).toBeNull();
+          // Still saving, because the write is still out.
+          expect(rowEl(fixture)?.getAttribute('aria-busy')).toBe('true');
+          expect(stepperValue(fixture)).toBe('0');
+          expect(page.drawnLines().map((row) => row.id)).toEqual([
+            'ln-1',
+            'ln-2',
+            'ln-3',
+          ]);
+          expect(rowOf(fixture, 'ln-2')?.querySelector('.notice')).toBeNull();
+          // The request is not cancelled, and nothing else is sent.
+          expect(sent()).toEqual([{ lineId: 'ln-2', delta: -1 }]);
+          await answer(0, true);
+        });
+
+        it('takes a plus after the ceiling as an ordinary step from 0', async () => {
+          const { fixture, sent, answer } = await held();
+          jest.useFakeTimers();
+          const page = fixture.componentInstance;
+
+          page.stepQuantity(trash('ln-2'));
+          pastCeiling(fixture);
+          page.stepQuantity({
+            lineId: 'ln-2',
+            step: { from: 0, to: 1, repeat: false },
+          });
+          fixture.detectChanges();
+          expect(stepperValue(fixture)).toBe('1');
+
+          jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+          fixture.detectChanges();
+
+          expect(stepperValue(fixture)).toBe('1');
+          expect(sent()).toEqual([
+            { lineId: 'ln-2', delta: -1 },
+            { lineId: 'ln-2', delta: 1 },
+          ]);
+          await answer(0, true);
+          await answer(1, true);
+        });
+
+        it('hides the row on a late success and leaves focus where the person is', async () => {
+          const { fixture, answer } = await held();
+          jest.useFakeTimers();
+          const page = fixture.componentInstance;
+          rowOf(fixture, 'ln-2')
+            ?.querySelector<HTMLElement>('.step.minus')
+            ?.focus();
+
+          page.stepQuantity(trash('ln-2'));
+          pastCeiling(fixture);
+          const elsewhere = rowOf(fixture, 'ln-1')?.querySelector<HTMLElement>(
+            '.step.plus'
+          );
+          elsewhere?.focus();
+
+          await answer(0, true);
+
+          expect(rowOf(fixture, 'ln-2')).toBeNull();
+          expect(page.drawnLines().map((row) => row.id)).toEqual([
+            'ln-1',
+            'ln-3',
+          ]);
+          expect(document.activeElement).toBe(elsewhere);
+        });
+
+        it('applies a late success after a raise as the store applies two writes in flight', async () => {
+          const { fixture, answer } = await held();
+          jest.useFakeTimers();
+          const page = fixture.componentInstance;
+
+          page.stepQuantity(trash('ln-2'));
+          pastCeiling(fixture);
+          page.stepQuantity({
+            lineId: 'ln-2',
+            step: { from: 0, to: 1, repeat: false },
+          });
+          jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+          fixture.detectChanges();
+
+          // The trash's answer lands first. The two writes share the store's one
+          // overlay for the line's quantity, so this answer drops the raise's overlay
+          // and draws the server's 0 until the raise answers. That is the store's
+          // handling of any two writes of one line in flight, not this page's.
+          await answer(0, true);
+          expect(rowOf(fixture, 'ln-2')).toBeNull();
+
+          // The raise was sent against the version the line had before the trash
+          // answered, so the server's line is two versions on and the store reports
+          // it as overwritten, at the amount the person raised it to.
+          await answer(1, true);
+          expect(stepperValue(fixture)).toBe('1');
+          expect(
+            rowOf(fixture, 'ln-2')?.querySelector('.notice.overwritten')
+          ).not.toBeNull();
+        });
+
+        it("shows the store's own failed notice on a late failure", async () => {
+          const { fixture, answer } = await held();
+          jest.useFakeTimers();
+          const page = fixture.componentInstance;
+
+          page.stepQuantity(trash('ln-2'));
+          pastCeiling(fixture);
+          await answer(0, false);
+
+          expect(locked(fixture)).toBe(false);
+          expect(stepperValue(fixture)).toBe('1');
+          expect(
+            rowOf(fixture, 'ln-2')?.querySelector('.notice.failed')
+          ).not.toBeNull();
+          expect(page.announcement()).toBe('');
+        });
+
+        it('keeps two lines being cleared apart', async () => {
+          const { fixture, answer } = await held();
+          jest.useFakeTimers();
+          const page = fixture.componentInstance;
+
+          page.stepQuantity(trash('ln-2'));
+          jest.advanceTimersByTime(QUANTITY_CLEAR_LOCK_MAX_MS / 2);
+          page.stepQuantity(trash('ln-1', 2));
+          jest.advanceTimersByTime(QUANTITY_CLEAR_LOCK_MAX_MS / 2);
+          fixture.detectChanges();
+          expect(locked(fixture, 'ln-2')).toBe(false);
+          expect(locked(fixture, 'ln-1')).toBe(true);
+
+          await answer(0, true);
+          expect(rowOf(fixture, 'ln-2')).toBeNull();
+          expect(locked(fixture, 'ln-1')).toBe(true);
+
+          pastCeiling(fixture);
+          expect(locked(fixture, 'ln-1')).toBe(false);
+          expect(stepperValue(fixture, 'ln-1')).toBe('0');
+          await answer(1, true);
+          expect(rowOf(fixture, 'ln-1')).toBeNull();
+        });
+
+        it('clears the timer when the write answers before the ceiling', async () => {
+          const { fixture, answer } = await held();
+          jest.useFakeTimers();
+          const page = fixture.componentInstance;
+
+          page.stepQuantity(trash('ln-2'));
+          expect(page['_locks'].has('ln-2')).toBe(true);
+          await answer(0, true);
+
+          expect(page['_locks'].size).toBe(0);
+          pastCeiling(fixture);
+          expect(page.clearing().size).toBe(0);
+          expect(page['_lingering']().size).toBe(0);
+          expect(rowOf(fixture, 'ln-2')).toBeNull();
+        });
+
+        it('lets no answer of an older trash touch a newer one', async () => {
+          const { fixture, answer } = await held();
+          jest.useFakeTimers();
+          const page = fixture.componentInstance;
+
+          page.stepQuantity(trash('ln-2'));
+          pastCeiling(fixture);
+          page.stepQuantity({
+            lineId: 'ln-2',
+            step: { from: 0, to: 1, repeat: false },
+          });
+          jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+          await answer(1, true);
+          page.stepQuantity(trash('ln-2'));
+          fixture.detectChanges();
+          expect(locked(fixture)).toBe(true);
+
+          // The first trash answers late, while the second is still out.
+          await answer(0, true);
+          expect(page.clearing().has('ln-2')).toBe(true);
+          expect(page['_locks'].has('ln-2')).toBe(true);
+
+          await answer(2, true);
+          expect(page.clearing().size).toBe(0);
+          expect(page['_lingering']().size).toBe(0);
+          expect(page['_locks'].size).toBe(0);
+        });
+
+        it('only ends the lock in a search', async () => {
+          const { fixture, answer } = await held();
+          const page = fixture.componentInstance;
+          page.onComposerQuery('banan');
+          fixture.detectChanges();
+          jest.useFakeTimers();
+
+          page.stepQuantity(trash('ln-2'));
+          pastCeiling(fixture);
+
+          expect(locked(fixture)).toBe(false);
+          expect(
+            page.drawnLines().map((row) => [row.id, row.quantity])
+          ).toEqual([['ln-2', 0]]);
+          await answer(0, true);
+          expect(
+            page.drawnLines().map((row) => [row.id, row.quantity])
+          ).toEqual([['ln-2', 0]]);
+        });
+
+        it('clears the timer when the page goes away', async () => {
+          const { fixture, release } = await held();
+          jest.useFakeTimers();
+
+          const page = fixture.componentInstance;
+          page.stepQuantity(trash('ln-2'));
+          expect(page['_locks'].has('ln-2')).toBe(true);
+          fixture.destroy();
+
+          expect(page['_locks'].size).toBe(0);
+          // Past the ceiling, nothing fires on the page that went away.
+          jest.advanceTimersByTime(QUANTITY_CLEAR_LOCK_MAX_MS);
+          expect(page['_lingering']().size).toBe(0);
+          release(0, true);
+          await turns();
+        });
       });
     });
 
@@ -1263,8 +1787,10 @@ describe('ListPage', () => {
         (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(
           `li.line[data-line-id="${id}"]`
         );
-      const settle = (fixture: ComponentFixture<ListPage>) => {
-        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      // The trash's write answers before its row is hidden (velista 0199), so the
+      // answer is awaited too.
+      const settle = async (fixture: ComponentFixture<ListPage>) => {
+        await jest.advanceTimersByTimeAsync(QUANTITY_STEP_QUIET_MS);
         fixture.detectChanges();
         fixture.detectChanges();
       };
@@ -1276,7 +1802,7 @@ describe('ListPage', () => {
         jest.useFakeTimers();
 
         fixture.componentInstance.stepQuantity(lower('ln-2', 1));
-        settle(fixture);
+        await settle(fixture);
 
         expect(rowOf(fixture, 'ln-2')).toBeNull();
         expect(lines.calls).toEqual([
@@ -1296,7 +1822,7 @@ describe('ListPage', () => {
           ?.focus();
 
         fixture.componentInstance.stepQuantity(lower('ln-2', 1));
-        settle(fixture);
+        await settle(fixture);
 
         expect(document.activeElement).toBe(
           rowOf(fixture, 'ln-3')?.querySelector('.step.minus')
@@ -1311,7 +1837,7 @@ describe('ListPage', () => {
           ?.focus();
 
         fixture.componentInstance.stepQuantity(lower('ln-3', 3));
-        settle(fixture);
+        await settle(fixture);
 
         expect(document.activeElement).toBe(
           rowOf(fixture, 'ln-2')?.querySelector('.step.minus')
@@ -1328,7 +1854,7 @@ describe('ListPage', () => {
           ?.focus();
 
         fixture.componentInstance.stepQuantity(lower('ln-1', 1));
-        settle(fixture);
+        await settle(fixture);
 
         expect(document.activeElement).toBe(
           (fixture.nativeElement as HTMLElement).querySelector(
@@ -1346,7 +1872,7 @@ describe('ListPage', () => {
         other?.focus();
 
         fixture.componentInstance.stepQuantity(lower('ln-2', 1));
-        settle(fixture);
+        await settle(fixture);
 
         expect(document.activeElement).toBe(other);
       });
@@ -1382,10 +1908,10 @@ describe('ListPage', () => {
        * Lowers ln-2 to 0, raises it again through the search, and lowers it a second
        * time, so the same sentence waits for its gap in an emptied region.
        */
-      const repeatWaiting = (fixture: ComponentFixture<ListPage>) => {
+      const repeatWaiting = async (fixture: ComponentFixture<ListPage>) => {
         const page = fixture.componentInstance;
         page.stepQuantity(lower('ln-2', 1));
-        settle(fixture);
+        await settle(fixture);
         expect(region(fixture)).toBe('list.line.hiddenAtZero');
 
         page.onComposerQuery('banan');
@@ -1401,9 +1927,12 @@ describe('ListPage', () => {
         expect(page.announcement()).toBe('list.line.hiddenAtZero');
 
         page.stepQuantity(lower('ln-2', 1));
-        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
         // Emptied in the render that takes the row away and filled a moment later,
-        // so a screen reader hears a change.
+        // so a screen reader hears a change. The trash is written at once (velista
+        // 0199): only its answer is awaited, and no timer runs.
+        for (let turn = 0; turn < 10; turn += 1) {
+          await Promise.resolve();
+        }
         fixture.detectChanges();
         fixture.detectChanges();
         expect(region(fixture)).toBe('');
@@ -1413,7 +1942,7 @@ describe('ListPage', () => {
         const { fixture } = await three();
         jest.useFakeTimers();
 
-        repeatWaiting(fixture);
+        await repeatWaiting(fixture);
         jest.advanceTimersByTime(1_000);
         fixture.detectChanges();
         expect(region(fixture)).toBe('list.line.hiddenAtZero');
@@ -1423,7 +1952,7 @@ describe('ListPage', () => {
         const { fixture } = await three();
         jest.useFakeTimers();
 
-        repeatWaiting(fixture);
+        await repeatWaiting(fixture);
         fixture.destroy();
         jest.advanceTimersByTime(1_000);
 
@@ -1435,7 +1964,7 @@ describe('ListPage', () => {
         jest.useFakeTimers();
         const page = fixture.componentInstance;
         page.stepQuantity(lower('ln-1', 2));
-        settle(fixture);
+        await settle(fixture);
         expect(page.announcement()).toBe('list.line.hiddenAtZero');
 
         // Both runs are written on the same beat: the first is the same sentence
@@ -1443,7 +1972,7 @@ describe('ListPage', () => {
         const set = jest.spyOn(page['_announcement'], 'set');
         page.stepQuantity(lower('ln-2', 1));
         page.stepQuantity(lower('ln-3', 3));
-        settle(fixture);
+        await settle(fixture);
         const said = set.mock.calls.length;
         expect(page.announcement()).toBe('list.line.hiddenAtZero');
 
@@ -1459,7 +1988,7 @@ describe('ListPage', () => {
           .mockResolvedValue({ state: 'failed', added: 0 } as never);
         const page = fixture.componentInstance;
 
-        repeatWaiting(fixture);
+        await repeatWaiting(fixture);
         await page.loadOlderTrips();
         expect(page.announcement()).toBe('list.trips.olderFailed');
 
@@ -1480,7 +2009,7 @@ describe('ListPage', () => {
         jest.useFakeTimers();
 
         fixture.componentInstance.stepQuantity(lower('ln-1', 1));
-        settle(fixture);
+        await settle(fixture);
 
         expect(query(fixture, '.state-title')?.textContent?.trim()).toBe(
           'list.view.none'
@@ -1616,12 +2145,12 @@ describe('ListPage', () => {
           ?.focus();
 
         fixture.componentInstance.stepQuantity(lower('ln-2', 1));
-        settle(fixture);
+        await settle(fixture);
         expect(rowOf(fixture, 'ln-2')).not.toBeNull();
         expect(fixture.componentInstance.announcement()).toBe('');
 
         release();
-        for (let turn = 0; turn < 5; turn += 1) {
+        for (let turn = 0; turn < 10; turn += 1) {
           await Promise.resolve();
         }
         fixture.detectChanges();
@@ -1699,7 +2228,7 @@ describe('ListPage', () => {
         jest.useFakeTimers();
 
         page.stepQuantity(lower('ln-2', 1));
-        settle(fixture);
+        await settle(fixture);
 
         expect(page.drawnLines().map((row) => [row.id, row.quantity])).toEqual([
           ['ln-2', 0],
@@ -4438,7 +4967,8 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
         lineId: 'eggs',
         step: { from: 1, to: 0, repeat: false },
       });
-      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      // The trash is written at once and its row goes with the answer (velista 0199).
+      await jest.advanceTimersByTimeAsync(QUANTITY_STEP_QUIET_MS);
       fixture.detectChanges();
       fixture.detectChanges();
     } finally {
@@ -4476,7 +5006,8 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
         lineId: 'eggs',
         step: { from: 1, to: 0, repeat: false },
       });
-      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      // The trash is written at once and its row goes with the answer (velista 0199).
+      await jest.advanceTimersByTimeAsync(QUANTITY_STEP_QUIET_MS);
       fixture.detectChanges();
       fixture.detectChanges();
     } finally {

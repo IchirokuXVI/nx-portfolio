@@ -204,7 +204,8 @@ describeIntegration('a settle keeps the line it lowers (real Postgres)', () => {
       context,
       lines,
       listAccess,
-      events as never
+      events as never,
+      dataSource
     );
 
     const zone = await dataSource.getRepository(Zone).save(

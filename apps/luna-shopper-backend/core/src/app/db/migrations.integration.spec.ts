@@ -105,8 +105,8 @@ describeIntegration('core schema (real Postgres)', () => {
       [list[0].id]
     );
     await dataSource.query(
-      `INSERT INTO "line_settlements" ("lineId", "listId", "outcome", "quantity", "settledByUserId", "settledAt")
-       VALUES ($1, $2, 'BOUGHT', 2, gen_random_uuid(), now())`,
+      `INSERT INTO "line_settlements" ("lineId", "listId", "outcome", "quantity", "applied", "settledByUserId", "settledAt")
+       VALUES ($1, $2, 'BOUGHT', 2, 2, gen_random_uuid(), now())`,
       [line.id, list[0].id]
     );
 

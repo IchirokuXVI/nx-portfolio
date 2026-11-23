@@ -241,15 +241,15 @@ describeIntegration('an account deletion in core (real Postgres)', () => {
     );
     const onListPage = await insert(
       `INSERT INTO "line_settlements"
-         ("lineId", "listId", "outcome", "quantity", "settledByUserId", "settledAt")
-       VALUES ($1, $2, 'BOUGHT', 1, $3, now())`,
+         ("lineId", "listId", "outcome", "quantity", "applied", "settledByUserId", "settledAt")
+       VALUES ($1, $2, 'BOUGHT', 1, 1, $3, now())`,
       [theirLine, listA, person]
     );
     const fromBasket = await insert(
       `INSERT INTO "line_settlements"
-         ("lineId", "listId", "outcome", "quantity", "settledByParticipantId",
-          "settledAt", "basketId")
-       VALUES ($1, $2, 'BOUGHT', 1, $3, now(), $4)`,
+         ("lineId", "listId", "outcome", "quantity", "applied",
+          "settledByParticipantId", "settledAt", "basketId")
+       VALUES ($1, $2, 'BOUGHT', 1, 1, $3, now(), $4)`,
       [theirLine, listA, seat, friendsBasket]
     );
 

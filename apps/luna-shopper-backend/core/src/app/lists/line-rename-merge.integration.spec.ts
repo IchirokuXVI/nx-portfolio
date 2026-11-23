@@ -521,6 +521,7 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
           itemId: null,
           outcome: SettlementOutcome.BOUGHT,
           quantity: 1,
+          applied: 1,
           settledByUserId: ids.owner,
           settledByParticipantId: null,
           settledAt: new Date(),

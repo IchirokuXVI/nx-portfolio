@@ -146,6 +146,8 @@ export interface BasketRowEntryView {
   canWrite: boolean;
   left: number;
   bought: number;
+  /** As {@link BasketEntryPatch.asked}. */
+  asked: number;
   /**
    * Units of this line bought lately through **another** basket, or through no
    * basket (plan 0188). Zero when there are none.
@@ -239,6 +241,15 @@ export interface BasketEntryPatch {
   unit: LineUnit;
   left: number;
   bought: number;
+  /**
+   * What the line asks of this basket: `left` plus the units of this basket's
+   * buys that met the ask, computed, never stored (plan 0274).
+   *
+   * Not `bought + left`: a buy above the ask lowers the line only by what it
+   * asked, so the units bought above the ask are `bought - asked + left`. The
+   * row's `asked` is the sum of its entries' own.
+   */
+  asked: number;
   boughtElsewhere: number;
   state: BasketRowState;
   approvalStatus: LineApprovalStatus;
@@ -284,7 +295,11 @@ export interface BasketRowView {
   unit: LineUnit;
   left: number;
   bought: number;
-  /** `bought + left`, computed, never stored. */
+  /**
+   * `left` plus the units of this basket's buys that met the ask, computed,
+   * never stored (plan 0274). The units bought above the ask are
+   * `bought - asked + left`.
+   */
   asked: number;
   /**
    * The sum of the entries' `boughtElsewhere` (plan 0188): units somebody bought
@@ -923,7 +938,17 @@ export interface SetBasketRowDemandRequest {
    * asks for it again.
    */
   lineId: string;
-  /** What that list asks for from now on. */
+  /**
+   * What that list asks for from now on: its **whole** ask, the entry's
+   * {@link BasketEntryPatch.asked}, which is what the line still holds plus
+   * what this basket's buys met of it (plan 0274). Never what is left after
+   * those buys.
+   *
+   * An ask below what the buys met leaves the line at 0 and makes the
+   * difference units bought above the ask. No ceiling of its own: the line
+   * after the write is held to `LINE_QUANTITY_MAX`, so the largest ask
+   * is that plus what this basket bought of the line.
+   */
   quantity: number;
   /**
    * The unit {@link quantity} and {@link from} are in (plan 0246, section
@@ -931,7 +956,11 @@ export interface SetBasketRowDemandRequest {
    * line's, as a delta's is.
    */
   unit: LineUnit;
-  /** That entry's `left` as the client drew it. */
+  /**
+   * That entry's `left` as the client drew it: what the line itself held, not
+   * the ask. A settle, a revert or another write that moved the line since is
+   * refused with `stale_quantity`.
+   */
   from: number;
 }
 
