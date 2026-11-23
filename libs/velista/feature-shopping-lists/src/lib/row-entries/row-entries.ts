@@ -2,16 +2,21 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
+  DOCUMENT,
+  ElementRef,
   inject,
   input,
   output,
   signal,
+  viewChildren,
 } from '@angular/core';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
+import { ListRowsStore } from '@portfolio/velista/data-access';
 import {
   QUANTITY_SNAP_POINTS,
   type BasketListRef,
@@ -24,6 +29,7 @@ import { exactAmount } from '@portfolio/velista/platform';
 import {
   AmountFigure,
   ChevronDownIcon,
+  QuantityReel,
   QuantityStepper,
 } from '@portfolio/velista/ui';
 
@@ -109,6 +115,23 @@ export type OtherListsState =
  * one revert of that line once the presses stop. On a finished trip the number is
  * drawn without a control; a row with nothing left keeps its steppers.
  *
+ * ## In the compact view it is the reel (velista `0204`)
+ *
+ * The view comes from `ListRowsStore`. In the compact view each buy control, here
+ * and in "Bought for another list", is the reel of velista `0203` with the same
+ * value, unit, step and snap points, and no typing. With the list's ask as its
+ * target it colours every number by where it stands, on the pill and on the tape.
+ * A reel reports once, when it closes, and that step is marked `closed` so the
+ * sheet writes it at once rather than after the quiet beat.
+ *
+ * **A press outside an open reel closes it first**, in the capture phase on the
+ * document, as the due row and the zone list row do on their own rows. The reel
+ * sends its amount only when it closes, and a touch drag never focuses it, so
+ * without this a press on "Got the other N" right after a drag would settle on the
+ * amount from before it, and a press on another list's reel or on the scrim would
+ * leave the step to the idle timer or to the teardown. Closed here, the step is in
+ * the sheet's run and sent before the press does anything else.
+ *
  * ## Lists and amounts
  *
  * At the right of the heading, opening the detailed view of the row's lists. It
@@ -126,7 +149,13 @@ export type OtherListsState =
  */
 @Component({
   selector: 'lib-row-entries',
-  imports: [AmountFigure, ChevronDownIcon, QuantityStepper, RokuTranslatorPipe],
+  imports: [
+    AmountFigure,
+    ChevronDownIcon,
+    QuantityReel,
+    QuantityStepper,
+    RokuTranslatorPipe,
+  ],
   templateUrl: './row-entries.html',
   styleUrl: './row-entries.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -134,6 +163,10 @@ export type OtherListsState =
 export class RowEntries {
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
+  private readonly _layout = inject(ListRowsStore).layout;
+
+  /** Whether the buy controls are reels: the compact view (velista `0202`, `0204`). */
+  protected readonly compact = computed(() => this._layout() === 'compact');
 
   readonly row = input.required<BasketRow>();
 
@@ -194,16 +227,22 @@ export class RowEntries {
   /** "Lists and amounts" (velista `0200`). */
   readonly listsOpened = output<void>();
 
-  /** One step of what was bought for one list's line, on every press, key and typed commit. */
+  /**
+   * One step of what was bought for one list's line, on every press, key and typed
+   * commit. `closed` marks the one step of a reel that closed (velista `0204`),
+   * which the sheet sends at once, as it sends a typed amount.
+   */
   readonly bought = output<{
     readonly lineId: string;
     readonly step: QuantityStep;
+    readonly closed?: true;
   }>();
 
-  /** One step of a buy for a list that does not ask yet. */
+  /** One step of a buy for a list that does not ask yet, marked as {@link bought} is. */
   readonly boughtOther = output<{
     readonly list: BasketProductList;
     readonly step: QuantityStep;
+    readonly closed?: true;
   }>();
 
   /** The read failed and the reader asked again. */
@@ -275,6 +314,46 @@ export class RowEntries {
 
   protected onBoughtOther(list: BasketProductList, step: QuantityStep): void {
     this.boughtOther.emit({ list, step });
+  }
+
+  /** The one step of a reel that closed, which the sheet writes at once. */
+  protected onReeled(lineId: string, step: QuantityStep): void {
+    this.bought.emit({ lineId, step, closed: true });
+  }
+
+  protected onReeledOther(list: BasketProductList, step: QuantityStep): void {
+    this.boughtOther.emit({ list, step, closed: true });
+  }
+
+  private readonly _reels = viewChildren(QuantityReel);
+  private readonly _reelEls = viewChildren(QuantityReel, { read: ElementRef });
+
+  constructor() {
+    // A press anywhere outside an open reel closes it first: see the class's
+    // compact view section. On the document, because the settle actions, the scrim
+    // and the other lists' reels are all outside the reel that is open, and in the
+    // capture phase, so the step is in the sheet's run before the press reaches what
+    // it landed on.
+    const doc = inject(DOCUMENT);
+    const onPress = (event: Event) => this._closeReelsOnPress(event);
+    doc.addEventListener('pointerdown', onPress, true);
+    inject(DestroyRef).onDestroy(() =>
+      doc.removeEventListener('pointerdown', onPress, true)
+    );
+  }
+
+  private _closeReelsOnPress(event: Event): void {
+    const elements = this._reelEls();
+    this._reels().forEach((reel, index) => {
+      if (!reel.open()) {
+        return;
+      }
+      const element = elements[index]?.nativeElement as HTMLElement | undefined;
+      if (element !== undefined && element.contains(event.target as Node)) {
+        return;
+      }
+      reel.close();
+    });
   }
 
   /** The server's `demandEditable`, as the detailed view reads it (velista `0200`). */

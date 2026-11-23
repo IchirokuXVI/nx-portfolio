@@ -187,6 +187,68 @@
   }
 }
 
+// A reel with a target (velista 0204): a colour says where a number stands against
+// it and nothing else. Below it the normal text colour, at it the success colour,
+// above it the quiet amber, for the pill and for every number on the tape, selected
+// or not. The selected number is told apart by size and weight only: the current one
+// keeps its larger bold figure, and the neighbours drop to the regular weight. Last,
+// so these win over the zero pill's muted text and the untargeted tape above.
+:host(.targeted) {
+  .pill,
+  .current,
+  .neighbour {
+    color: var(--app-text-primary);
+  }
+
+  .neighbour .figure {
+    font-weight: 400;
+  }
+
+  .reached {
+    color: var(--app-status-success-fg);
+  }
+
+  .over {
+    color: var(--app-action-quiet-fg);
+  }
+
+  .pill.reached .symbol,
+  .pill.over .symbol {
+    color: inherit;
+  }
+}
+
+// A reel that takes no drag looks it: a reader's amount on the zone list, or every
+// reel of the basket row sheet while a write is in flight. The locked stepper's look
+// (velista 0200): no raised fill, the hairline kept so the box does not move, and
+// the number and its unit in muted text at their usual size and weight. A status
+// colour stays, so a reached or an over amount does not blink while a write runs.
+// Last, so it wins over the targeted reel's normal text colour.
+:host(.readonly) .pill {
+  background: transparent;
+  border-color: var(--app-border-subtle);
+  color: var(--app-text-muted);
+
+  .symbol {
+    color: var(--app-text-muted);
+  }
+}
+
+:host(.readonly.targeted) .pill {
+  &.reached {
+    color: var(--app-status-success-fg);
+  }
+
+  &.over {
+    color: var(--app-action-quiet-fg);
+  }
+
+  &.reached .symbol,
+  &.over .symbol {
+    color: inherit;
+  }
+}
+
 // Somebody who has asked not to be moved gets the number and none of the motion. The
 // control still works; it simply arrives rather than travels.
 @media (prefers-reduced-motion: reduce) {

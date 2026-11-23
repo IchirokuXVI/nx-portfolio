@@ -217,6 +217,21 @@ describe('contrast', () => {
       }
     );
 
+    // Velista `0204`: the same two colours on a reel of the row sheet, on its resting
+    // pill (the raised surface) and on its open tape (the overlay), where a number
+    // takes them while it moves. Named, so a change to either names the sheet's reel.
+    describe.each(['--app-surface-raised', '--app-surface-overlay'])(
+      "a buy reel's number on %s",
+      (surface) => {
+        it.each(['--app-status-success-fg', '--app-action-quiet-fg'])(
+          `%s reaches ${TEXT}:1`,
+          (text) => {
+            expect(ratio(text, surface, theme)).toBeGreaterThanOrEqual(TEXT);
+          }
+        );
+      }
+    );
+
     // Rule T2: never place white or light text on an action fill. `--app-action-fg`
     // exists so this cannot be gotten wrong by accident, and this is what proves
     // it across every state of the button, not just its resting one.

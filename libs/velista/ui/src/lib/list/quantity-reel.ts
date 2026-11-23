@@ -11,7 +11,10 @@ import {
   untracked,
   type OnDestroy,
 } from '@angular/core';
-import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuLocaleStore,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   canStepUp,
   isMeasured,
@@ -103,6 +106,17 @@ import { classifyReelGesture } from './quantity-reel-gesture';
  * whatever it holds, so every reel of a list sits in one column. The number is drawn
  * over its unit from the short form ("1,5" over "kg"); a count has no unit and its
  * number sits centred. The spinbutton's value text keeps the whole words.
+ *
+ * ## With a target, a colour is a status and never the selection (velista `0204`)
+ *
+ * A reel given a {@link target} (the basket row sheet, where it is the list's ask)
+ * colours every number it draws by where that number stands: the normal text colour
+ * below the target, the success colour at it, the quiet amber above it. That holds
+ * for the resting number and for each number on the tape, selected or not, so amber
+ * means only "more than asked". The selected number is told apart by its size and its
+ * weight alone, larger and bold; its neighbours are smaller and regular. A reel with no
+ * target draws as velista `0203` drew it: the selected number in the quiet amber and
+ * its neighbours muted.
  */
 @Component({
   selector: 'lib-quantity-reel',
@@ -117,7 +131,8 @@ import { classifyReelGesture } from './quantity-reel-gesture';
     '[attr.aria-label]': 'label()',
     '[attr.aria-valuenow]': 'shown()',
     // The words of a weight or a volume ("750 g"), where the raw number would read
-    // as grams nobody can picture. Absent for a count, whose number is its words.
+    // as grams nobody can picture, with the status after them on a reel with a
+    // target. Absent for a count with no status, whose number is its words.
     '[attr.aria-valuetext]': 'valueText()',
     '[attr.aria-valuemin]': 'min()',
     '[attr.aria-valuemax]': 'max()',
@@ -135,6 +150,7 @@ import { classifyReelGesture } from './quantity-reel-gesture';
     '[class.open]': 'open()',
     '[class.readonly]': 'readonly()',
     '[class.took]': 'took()',
+    '[class.targeted]': 'target() !== null',
   },
 })
 export class QuantityReel implements OnDestroy {
@@ -197,6 +213,13 @@ export class QuantityReel implements OnDestroy {
   readonly took = input(false);
 
   /**
+   * The amount the numbers are measured against (velista `0204`): on the basket row
+   * sheet, what the list asks for. Null for no colour, which is every reel outside
+   * that sheet. See the class's "With a target" section for what each number takes.
+   */
+  readonly target = input<number | null>(null);
+
+  /**
    * The lowest number the reel goes to: a line's floor of 0, or 1 on a due row,
    * where adding nothing is not an add (velista `0089`).
    */
@@ -225,6 +248,10 @@ export class QuantityReel implements OnDestroy {
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
   /** Optional, so a count drawn where no translator is provided still draws. */
   private readonly _localeStore = inject(RokuLocaleStore, { optional: true });
+  /** For the status words of a reel with a target; optional for the same reason. */
+  private readonly _translator = inject(RokuTranslatorService, {
+    optional: true,
+  });
 
   private readonly _locale = computed(
     () => this._localeStore?.locale() ?? 'en'
@@ -270,12 +297,27 @@ export class QuantityReel implements OnDestroy {
   /** The number and its unit apart, as the pill and the tape's middle draw them. */
   readonly figure = computed(() => this.figureOf(this.shown()));
 
-  /** `aria-valuetext`: the whole words of a weight or a volume, nothing for a count. */
-  readonly valueText = computed(() =>
-    !isMeasured(this.unit())
-      ? null
-      : formatAmount(this.shown(), this.unit(), this._locale())
-  );
+  /**
+   * `aria-valuetext`: the whole words of a weight or a volume, nothing for a count.
+   *
+   * With a {@link target}, the status follows the amount in the words the stepper's
+   * live region uses ("3, reached", "750 g, more than asked"), for a count as well:
+   * the colour is the only other place it shows, and a screen reader cannot see it.
+   * Below the target, or with none, the words are the amount's alone.
+   */
+  readonly valueText = computed(() => {
+    const shown = this.shown();
+    const reach = this.reachOf(shown);
+    const measured = isMeasured(this.unit());
+    if (reach === null || this._translator === null) {
+      return measured ? formatAmount(shown, this.unit(), this._locale()) : null;
+    }
+
+    // Read so the words follow a language switch and the first load of the keys.
+    this._translator.loaded();
+    const amount = formatAmount(shown, this.unit(), this._locale());
+    return `${amount}, ${this._translator.t(`amount.${reach}`)}`;
+  });
 
   /**
    * The number to the left of the current one, or null at the floor.
@@ -300,6 +342,24 @@ export class QuantityReel implements OnDestroy {
    */
   figureOf(value: number): AmountWords {
     return shortAmount(value, this.unit(), this._locale());
+  }
+
+  /**
+   * Where a number stands against {@link target}: `reached` at it, `over` above it,
+   * null below it or with no target. As the stepper reads it (velista `0201`): a
+   * target of 0 is never reached, so nothing is green for a list that asks nothing,
+   * and any amount above it is over.
+   */
+  reachOf(value: number): 'reached' | 'over' | null {
+    const target = this.target();
+    if (target === null) {
+      return null;
+    }
+    return value > target
+      ? 'over'
+      : value === target && target > 0
+        ? 'reached'
+        : null;
   }
 
   constructor() {

@@ -1,3 +1,5 @@
+> **PR:** [#1088](https://github.com/IchirokuXVI/nx-portfolio/pull/1088)
+
 # 0204: the basket row sheet records buys with the reel in the compact view
 
 > Decided on 2026-11-22. In the compact view of velista `0202`, the basket row sheet draws
