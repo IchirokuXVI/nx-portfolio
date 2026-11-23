@@ -1,6 +1,5 @@
 import {
   catalogName,
-  isMeasured,
   lineAmount,
   lineAmountProductOf,
   lineShownProduct,
@@ -401,7 +400,6 @@ function rowProduct(
     // piece, and no price without one, a price per kilo with its "/ kg", or the
     // price. A product the catalog has not named is priced by its offer alone.
     price: perUnitOf(
-      line,
       priceWords(offer, item, catalog.locale, catalog.translate),
       catalog
     ),
@@ -418,17 +416,16 @@ function rowProduct(
  * `0198`): a pack's price and a kilo piece's piece price read "1,20 € / u", as a
  * price by the kilo reads "2,50 € / kg". The catalog keeps its bare price.
  *
- * Only on a line that counts pieces. A line that counts grams or millilitres of a
- * pack or a kilo piece keeps the bare price: "/ u" there would name a basis that is
- * not what the line counts, and the plan's action boundary leaves that case to the
- * owner.
+ * Also on a line that counts grams or millilitres of a pack or a kilo piece (the
+ * owner's ruling of 2026-11-23): the price drawn there is still the price of one
+ * pack or piece, so a 500 g pack of rice on a line of 1200 g reads "1,20 € / u".
+ * A product sold by the kilo or the litre keeps its "/ kg" or "/ L".
  */
 function perUnitOf(
-  line: Line,
   price: PriceWords | null,
   catalog: ListStateCatalog
 ): PriceWords | null {
-  if (price === null || price.per !== null || isMeasured(line.unit)) {
+  if (price === null || price.per !== null) {
     return price;
   }
   return { amount: price.amount, per: catalog.translate('list.row.perUnit') };

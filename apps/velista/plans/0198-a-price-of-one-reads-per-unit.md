@@ -8,6 +8,9 @@
 > reads "2,50 € / kg". The owner's ruling: the price of one reads "1,20 € / u", like the
 > kilo.
 >
+> Amended on 2026-11-23: a line that counts grams or millilitres of a pack or a piece reads
+> / u too, since the price drawn is the price of one.
+>
 > Independent of every other plan of this round; it can be built and released alone. Both
 > row layouts read the same builder, so the change shows in both, and in the layouts of
 > velista `0202` with no further work.
@@ -58,8 +61,8 @@ price.
 
 ### Action boundaries
 
-- Stop and ask if a row draws "/ u" for anything that is not the price of one of what the
-  line counts.
+- Stop and ask if a row draws "/ u" for anything that is not the price of one pack or one
+  piece, whatever unit the line counts in.
 
 ### Progress evidence
 

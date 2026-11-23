@@ -338,6 +338,17 @@ describe('selectListState', () => {
           approxWeight: null,
         }),
       ],
+      // A pack weighed in grams: a 500 g pack of rice at 1,20 €.
+      ['rice', item('rice', 'Arroz redondo', 1.2, { size: 500, unit: 'GRAM' })],
+      // Sold by the litre, with no size (velista 0182): loose olive oil.
+      [
+        'oil',
+        item('oil', 'Aceite de oliva a granel', 5.38, {
+          size: null,
+          unit: 'LITER',
+          approxWeight: null,
+        }),
+      ],
     ]);
 
     function catalog(
@@ -672,7 +683,17 @@ describe('selectListState', () => {
         expect(priceOf({ content: 'Pilas', itemIds: ['battery'] })).toBeNull();
       });
 
-      it('leaves the piece price bare on a line that counts grams, which is not what it is per', () => {
+      it('reads "/ u" on a line that counts grams, since the price drawn is one pack or piece (ruling of 2026-11-23)', () => {
+        // A pack counted in grams: 1200 g of a 500 g pack still draws one pack.
+        expect(
+          priceOf({
+            content: 'Arroz',
+            itemIds: ['rice'],
+            quantity: 1200,
+            unit: 'GRAM',
+          })
+        ).toEqual({ amount: money(1.2), per: PER_UNIT });
+        // A kilo piece counted in grams draws its piece price.
         expect(
           priceOf({
             content: 'Queso',
@@ -680,7 +701,21 @@ describe('selectListState', () => {
             quantity: 1500,
             unit: 'GRAM',
           })
-        ).toEqual({ amount: money(20.94), per: null });
+        ).toEqual({ amount: money(20.94), per: PER_UNIT });
+      });
+
+      it('keeps "/ L" on a product sold by the litre', () => {
+        expect(
+          priceOf({
+            content: 'Aceite',
+            itemIds: ['oil'],
+            quantity: 2000,
+            unit: 'MILLILITER',
+          })
+        ).toEqual({ amount: money(5.38), per: 'catalog.per.LITER' });
+        expect(
+          priceOf({ content: 'Aceite', itemIds: ['oil'], unit: 'UNIT' })
+        ).toEqual({ amount: money(5.38), per: 'catalog.per.LITER' });
       });
 
       it('reads "/ u" after the price in both layouts and in the accessible name', () => {
