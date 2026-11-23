@@ -1,3 +1,5 @@
+> **PR:** [#1083](https://github.com/IchirokuXVI/nx-portfolio/pull/1083)
+
 # 0200: a basket row has a detailed view of its lists
 
 > Decided on 2026-11-22, replacing the menu this plan first described (merged in PR #1061,

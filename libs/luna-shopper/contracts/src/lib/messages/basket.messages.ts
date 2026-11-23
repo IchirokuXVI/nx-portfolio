@@ -1000,6 +1000,75 @@ export interface AddBasketLineRequest {
 }
 
 /**
+ * Record a buy of the row's product for a covered list that does not ask for
+ * it, making that list's line at zero when it has none (plan 0273).
+ *
+ * One transaction: the line, when one is made, and one `BOUGHT` settlement of
+ * {@link quantity} on it, written as a settle writes one. The line's quantity
+ * stays at zero. Any failure writes nothing. Afterwards the line is an entry of
+ * the row, and a plus or a minus on it is the plain settle and revert with
+ * `lineIds: [lineId]`.
+ *
+ * Account participants only, who hold `WRITE` on {@link targetListId}
+ * themselves; a list the basket does not cover answers 404.
+ */
+export interface BuyForListBasketRequest {
+  basketId: string;
+  participantId: string;
+  /** The actor's own account. A guest reaches the route and is refused. */
+  userId: string;
+  /** A line of the row as the client drew it, which the answer is read for. */
+  rowKey: string;
+  /** The covered list the buy is for. */
+  targetListId: string;
+  /**
+   * That list's line of the product, from `basket.productLists`, when it has
+   * one. It must be on {@link targetListId}, hold the row's product, and not
+   * be an entry of the row, which answers 409 `basket_line_already_in_row`.
+   * Absent, the list's line of the product is found as the list's add finds
+   * it, and made at zero when there is none.
+   */
+  lineId?: string;
+  /**
+   * The row's product as the gateway read it, the one {@link paid},
+   * {@link itemSnapshot} and {@link content} describe; null when the gateway
+   * read none. Written by the gateway, never by a client. Core reads the row's
+   * product again and refuses with 409 `conflict`, writing nothing, when it is
+   * another, so a price and a name are never recorded for the wrong product.
+   */
+  expectedItemId: string | null;
+  /** Units bought, a whole number from 1 to `LINE_QUANTITY_MAX`. */
+  quantity: number;
+  /** What {@link quantity} counts, the row's. */
+  unit: LineUnit;
+  /**
+   * The product's name in the actor's language, else in any language catalog
+   * holds, which a line made here carries with `named: false`. Written by the
+   * gateway from catalog, never by a client. Absent when catalog named it in
+   * no language or did not answer: a line that has to be made then answers
+   * 409 `basket_product_has_no_name`, or 503 `catalog_unavailable` when
+   * {@link catalogUnanswered} says catalog did not answer.
+   *
+   * There is no product field (plan 0273, amended on 2026-11-22): the product
+   * is the row's, which core reads from {@link rowKey}, and a row with no
+   * product answers 409 `basket_row_has_no_product`.
+   */
+  content?: string;
+  /**
+   * True when catalog did not answer for the product's name, by its budget
+   * or by a failure (plan 0273, amended on 2026-11-22). Written by the
+   * gateway. A line that has to be made then answers 503
+   * `catalog_unavailable` and nothing is written; a line the list already
+   * holds is bought on as before, since it needs no name.
+   */
+  catalogUnanswered?: boolean;
+  /** As {@link SettleBasketRowRequest.paid}: written by the gateway. */
+  paid?: SettlementPaid;
+  /** As {@link SettleBasketRowRequest.itemSnapshot}: written by the gateway. */
+  itemSnapshot?: ItemSnapshot | null;
+}
+
+/**
  * Put a row off for now, or take that back (plan 0137, section 5).
  *
  * One shape for both directions, because they are one gesture aimed twice: the
@@ -1170,6 +1239,8 @@ export const BASKET_PATTERNS = {
   /** The covered lists that can still take a product (plan 0201, section 5). */
   productLists: 'basket.productLists',
   rowSettle: 'basket.row.settle',
+  /** A buy for a list that does not ask, in one write with its line (plan 0273). */
+  rowBuyForList: 'basket.row.buyForList',
   rowRevert: 'basket.row.revert',
   rowDemand: 'basket.row.demand',
   rowRename: 'basket.row.rename',

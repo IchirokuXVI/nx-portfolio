@@ -9,8 +9,8 @@
   margin-block-start: var(--app-space-3);
 }
 
-// "Asked for on 3 lists", sitting on a hairline, with "Change for all lists" at
-// the other end of the same row (velista 0140, section 1).
+// "Asked for on 3 lists", sitting on a hairline, with "Lists and amounts" at the
+// other end of the same row (velista 0200).
 .head {
   display: flex;
   align-items: center;
@@ -81,9 +81,9 @@
   flex: none;
 }
 
-// "Change for all lists": a text action, the quiet action colour, as the mock
+// "Lists and amounts": a text action, the quiet action colour, as the mock
 // draws it. The heading's whole row is tall enough to be its target.
-.change-all {
+.lists-open {
   @include shared.tap-target;
 
   flex: none;
@@ -105,43 +105,6 @@
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
     outline-offset: var(--app-focus-ring-offset);
   }
-}
-
-// Change, before the amount: the swap icon in a square touch target with the edge
-// and the raised surface it had as a word, as the mock draws it (velista 0190).
-.change {
-  @include shared.tap-target;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  inline-size: var(--app-touch-target);
-  block-size: var(--app-touch-target);
-  padding: 0;
-  border: 1px solid var(--app-border-subtle);
-  border-radius: var(--app-radius-md);
-  background: var(--app-surface-raised);
-  font-family: inherit;
-  font-size: var(--app-text-sm);
-  font-weight: 600;
-  color: var(--app-text-primary);
-  cursor: pointer;
-
-  &:disabled {
-    opacity: 0.55;
-    cursor: default;
-  }
-
-  &:focus-visible {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
-  }
-}
-
-// The swap glyph, at the size the row's own swap draws.
-.change-glyph {
-  font-size: var(--app-icon-md);
 }
 
 // A number where the stepper would be, for a list whose ask cannot change from

@@ -24,7 +24,6 @@ import {
   AmountFigure,
   ChevronDownIcon,
   QuantityStepper,
-  SwapIcon,
 } from '@portfolio/velista/ui';
 
 /** One list that asks for the row, as it is drawn. */
@@ -51,10 +50,8 @@ interface DrawnEntry {
   readonly label: string;
   /** What the buttons and the settled amount name: the list, "Compra semanal". */
   readonly name: string;
-  /** Change is drawn on this entry (velista `0140`, section 1). */
+  /** The sheet may change this entry's product (velista `0140`, section 1). */
   readonly changeable: boolean;
-  /** Change's accessible name, which names the list. */
-  readonly changeLabel: string;
 }
 
 /** One list that does not ask yet, as it is drawn under the disclosure. */
@@ -99,12 +96,13 @@ export type OtherListsState =
  * the sheet gathers them and saves once the presses stop, and hands back what
  * each stepper draws while a run is open.
  *
- * ## Change
+ * ## Lists and amounts
  *
- * Before the amount, on each entry the sheet names as changeable (velista
- * `0140`, section 1): the swap icon, with no word, named after the list. "Change
- * for all lists" closes the heading's row once two entries or more have it. Both
- * only say so: the sheet opens the change.
+ * The product of a list is not changed here (velista `0200`): "Lists and
+ * amounts" closes the heading's row and opens the detailed view of the row's
+ * lists, where "Change" is. It is drawn when one entry or more is changeable or
+ * has an ask the reader may change, so a guest who can change nothing is not
+ * sent to a page of numbers to read. It only says so: the sheet opens the view.
  *
  * ## Add it to another list
  *
@@ -116,13 +114,7 @@ export type OtherListsState =
  */
 @Component({
   selector: 'lib-row-entries',
-  imports: [
-    AmountFigure,
-    ChevronDownIcon,
-    QuantityStepper,
-    RokuTranslatorPipe,
-    SwapIcon,
-  ],
+  imports: [AmountFigure, ChevronDownIcon, QuantityStepper, RokuTranslatorPipe],
   templateUrl: './row-entries.html',
   styleUrl: './row-entries.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -175,16 +167,14 @@ export class RowEntries {
   readonly others = input<OtherListsState | null>(null);
 
   /**
-   * The lines whose product the reader may change from here (velista `0140`,
-   * section 1). The sheet decides, because it knows the reader and the row.
+   * The lines whose product the reader may change (velista `0140`, section 1),
+   * in the detailed view. The sheet decides, because it knows the reader and the
+   * row. Here it only decides whether "Lists and amounts" is drawn.
    */
   readonly changeable = input<ReadonlySet<string>>(new Set());
 
-  /** Change on one entry, by its line. */
-  readonly changed = output<string>();
-
-  /** "Change for all lists". */
-  readonly changedAll = output<void>();
+  /** "Lists and amounts" (velista `0200`). */
+  readonly listsOpened = output<void>();
 
   /** One step of one list's ask, on every press, key and typed commit. */
   readonly demanded = output<{
@@ -219,11 +209,12 @@ export class RowEntries {
     })
   );
 
-  /** "Change for all lists" is drawn when Change is drawn on two entries or more. */
-  protected readonly changesAll = computed(
-    () =>
-      this.row().entries.filter((entry) => this.changeable().has(entry.lineId))
-        .length >= 2
+  /**
+   * "Lists and amounts" is drawn when one entry or more is changeable or has an
+   * ask the reader may change (velista `0200`, target state 2).
+   */
+  protected readonly opensLists = computed(() =>
+    this.entries().some((entry) => entry.editable || entry.changeable)
   );
 
   /** Whether the disclosure is drawn: there is a read, and it did not answer none. */
@@ -332,14 +323,6 @@ export class RowEntries {
             }),
       name: list,
       changeable: this.changeable().has(entry.lineId),
-      changeLabel: this._translator.t(
-        'basket.change.oneLabel',
-        undefined,
-        locale,
-        {
-          name: list,
-        }
-      ),
     };
   }
 }

@@ -138,9 +138,8 @@
       -->
       @if (row(); as held) {
         <lib-row-entries
-          (changed)="changeLine($event)"
-          (changedAll)="changeAll()"
           (demanded)="stepDemand($event)"
+          (listsOpened)="openLists()"
           (raised)="stepRaise($event)"
           (retry)="retryOthers()"
           [busy]="busy()"

@@ -320,11 +320,18 @@ describe('what a settle with no shop records (plan 0202, section 2)', () => {
       }
     );
 
-    it.each([
-      ['catalog throws', 'throws' as const],
-      ['the product is absent from the answer', [] as ItemView[]],
-    ])('when %s', async (_name, items) => {
-      const w = build({ items });
+    it('when catalog throws, and says catalog did not answer (plan 0273)', async () => {
+      const w = build({ items: 'throws' });
+
+      expect(await w.service.choose(input())).toEqual({
+        paid: null,
+        itemSnapshot: null,
+        unanswered: true,
+      });
+    });
+
+    it('when the product is absent from the answer, which is an answer', async () => {
+      const w = build({ items: [] });
 
       expect(await w.service.choose(input())).toEqual({
         paid: null,
@@ -438,11 +445,18 @@ describe('what a settle at a shop records (plan 0202, section 2)', () => {
     });
   });
 
-  it.each([
-    ['catalog throws', 'throws' as const],
-    ['the product is absent from the answer', [] as ItemView[]],
-  ])('records nothing at all when %s', async (_name, items) => {
-    const w = build({ items });
+  it('records nothing at all when catalog throws, and says catalog did not answer (plan 0273)', async () => {
+    const w = build({ items: 'throws' });
+
+    expect(await w.service.choose(atShop())).toEqual({
+      paid: null,
+      itemSnapshot: null,
+      unanswered: true,
+    });
+  });
+
+  it('records nothing at all when the product is absent from the answer', async () => {
+    const w = build({ items: [] });
 
     expect(await w.service.choose(atShop())).toEqual({
       paid: null,
@@ -794,7 +808,12 @@ describe('the budget of a settle (plan 0143, section 4.5)', () => {
         expect(settled).toBe(false);
         jest.advanceTimersByTime(1);
 
-        expect(await pending).toEqual({ paid: null, itemSnapshot: null });
+        // A buy that must make a line reads this as "try again" (plan 0273).
+        expect(await pending).toEqual({
+          paid: null,
+          itemSnapshot: null,
+          unanswered: true,
+        });
       } finally {
         jest.useRealTimers();
       }
@@ -824,7 +843,11 @@ describe('the budget of a settle (plan 0143, section 4.5)', () => {
       const pending = w.service.choose(atShop());
       await jest.advanceTimersByTimeAsync(SETTLE_PRICE_BUDGET_MS);
 
-      expect(await pending).toEqual({ paid: null, itemSnapshot: null });
+      expect(await pending).toEqual({
+        paid: null,
+        itemSnapshot: null,
+        unanswered: true,
+      });
     } finally {
       jest.useRealTimers();
     }

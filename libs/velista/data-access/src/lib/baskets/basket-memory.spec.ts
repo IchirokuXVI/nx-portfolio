@@ -770,6 +770,29 @@ describe('BasketMemory: what a list asks for', () => {
     expect(milk.entries[1].left).toBe(1);
   });
 
+  it('reads `quantity` as the whole ask, leaving what was bought (backend 0274)', async () => {
+    const memory = new BasketMemory();
+    const before = rowOf(await rowsOf(memory), 'Milk');
+    await memory.settle(BASKET, await targetOf(memory, before.rowKey), {
+      outcome: 'BOUGHT',
+      quantity: 1,
+      from: before.left,
+    });
+    const bought = rowOf(await rowsOf(memory), 'Milk').entries[0];
+    expect([bought.bought, bought.left, bought.asked]).toEqual([1, 1, 2]);
+
+    await memory.setDemand(BASKET, {
+      lineId: bought.lineId,
+      quantity: 4,
+      from: bought.left,
+    });
+
+    const after = rowOf(await rowsOf(memory), 'Milk').entries[0];
+    expect(after.asked).toBe(4);
+    expect(after.bought).toBe(1);
+    expect(after.left).toBe(3);
+  });
+
   it('refuses a `from` that is not where the entry stands', async () => {
     const memory = new BasketMemory();
     expect(
