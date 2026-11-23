@@ -1,3 +1,5 @@
+> **PR:** [#1084](https://github.com/IchirokuXVI/nx-portfolio/pull/1084)
+
 # 0202: a view picker chooses the default or the compact view
 
 > Decided on 2026-11-22. Velista `0191` added a second way to draw a zone list row, chosen
