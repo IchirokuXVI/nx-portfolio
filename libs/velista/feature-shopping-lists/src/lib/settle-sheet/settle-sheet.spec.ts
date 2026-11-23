@@ -2908,7 +2908,9 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
         By.css('.others lib-quantity-stepper')
       ).componentInstance as QuantityStepper;
       expect(stepper.value()).toBe(0);
-      expect(stepper.target()).toBeNull();
+      // Measured against 0, what this list asks on this row, never against the
+      // ask of its line in another row (velista 0204 review).
+      expect(stepper.target()).toBe(0);
     });
 
     it('moves a later run from the entry the first buy made', async () => {
@@ -3555,32 +3557,231 @@ describe('SettleSheet: the reels of the compact view (velista 0204)', () => {
     expect(buys(store)).toEqual([['zl1', 4]]);
   });
 
-  it('writes the drag first when a settle action is pressed right after it, once', async () => {
-    const { fixture, store } = await render({ compact: true });
+  /**
+   * A store whose buy of one line lands as the server's would: the line and the row
+   * both gain what was bought and lose it from what is left. So "Got the other N"
+   * reads its N off the row the buy left, and a spec can tell a settle computed
+   * after the buy from one computed before it.
+   */
+  function applyBuys(store: Awaited<ReturnType<typeof render>>['store']): {
+    order: string[];
+  } {
     const order: string[] = [];
     store.settle.mockImplementation(
-      async (_rowKey: string, _body: unknown, lineId?: string) => {
+      async (
+        rowKey: string,
+        body: { quantity: number },
+        lineId?: string
+      ): Promise<BasketRowResult> => {
         order.push(lineId === undefined ? 'settle' : `buy:${lineId}`);
-        return landed();
+        const held = store.rowFor(rowKey) ?? line();
+        if (lineId === undefined) {
+          return { entries: [], skippedCount: 0 };
+        }
+        const entries = held.entries.map((one) =>
+          one.lineId === lineId
+            ? {
+                ...one,
+                bought: one.bought + body.quantity,
+                left: Math.max(0, one.left - body.quantity),
+              }
+            : one
+        );
+        const bought = held.bought + body.quantity;
+        const left = Math.max(0, held.left - body.quantity);
+        store.rows.set(
+          store.rows().map((row) =>
+            row.rowKey === held.rowKey
+              ? {
+                  ...row,
+                  entries,
+                  bought,
+                  left,
+                  state: left === 0 ? 'BOUGHT' : 'PARTLY',
+                }
+              : row
+          )
+        );
+        return { entries, skippedCount: 0 };
       }
     );
-    jest.useFakeTimers();
+    return { order };
+  }
 
-    drag(fixture, reels(fixture)[0], 2);
-    const primary = (fixture.nativeElement as HTMLElement).querySelector(
+  /** A row asking 5 in all: 3 for the first list, 2 for the second. */
+  const askingFive = () =>
+    line({
+      left: 5,
+      asked: 5,
+      entries: [entry('l1', 'zl1', 3), entry('l2', 'zl2', 2)],
+    });
+
+  /** Every settle of the whole row, as `[quantity, from]`. */
+  const rowSettles = (store: Awaited<ReturnType<typeof render>>['store']) =>
+    store.settle.mock.calls
+      .filter((call) => call[2] === undefined)
+      .map((call) => [call[1].quantity, call[1].from]);
+
+  const primaryOf = (fixture: ComponentFixture<SettleSheet>) =>
+    (fixture.nativeElement as HTMLElement).querySelector(
       '.actions .primary'
     ) as HTMLButtonElement;
+
+  it('writes the drag first when "Got the other N" is pressed right after it, and N is what the buy left', async () => {
+    const { fixture, store } = await render({
+      compact: true,
+      lines: [askingFive()],
+    });
+    const { order } = applyBuys(store);
+    jest.useFakeTimers();
+
+    drag(fixture, reels(fixture)[0], 3);
+    const primary = primaryOf(fixture);
+    pressOn(primary);
+    primary.click();
+    await settleWrites();
+
+    expect(order).toEqual(['buy:zl1', 'settle']);
+    expect(buys(store)).toEqual([['zl1', 3]]);
+    // The other 2, not 5: N was read after the buy landed, and the 3 just bought
+    // are not bought a second time.
+    expect(rowSettles(store)).toEqual([[2, 2]]);
+
+    // The reel's own idle timer has nothing left to send.
+    jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS + QUANTITY_STEP_QUIET_MS);
+    await settleWrites();
+    expect(buys(store)).toEqual([['zl1', 3]]);
+    expect(rowSettles(store)).toHaveLength(1);
+  });
+
+  it('sends a drag still under the thumb when a settle starts, once, before the settle', async () => {
+    const { fixture, store } = await render({
+      compact: true,
+      lines: [askingFive()],
+    });
+    const { order } = applyBuys(store);
+    jest.useFakeTimers();
+
+    const [reel] = reels(fixture);
+    const x = -2 * QUANTITY_REEL_PX_PER_UNIT;
+    reel.dispatchEvent(pointer('pointerdown', 0));
+    reel.dispatchEvent(pointer('pointermove', x));
+    fixture.detectChanges();
+
+    const primary = primaryOf(fixture);
     pressOn(primary);
     primary.click();
     await settleWrites();
 
     expect(order).toEqual(['buy:zl1', 'settle']);
     expect(buys(store)).toEqual([['zl1', 2]]);
+    expect(rowSettles(store)).toEqual([[3, 3]]);
 
-    // The reel's own idle timer has nothing left to send.
+    // The thumb lifting afterwards, and the beat after it, send nothing more.
+    reel.dispatchEvent(pointer('pointerup', x));
     jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS + QUANTITY_STEP_QUIET_MS);
     await settleWrites();
     expect(buys(store)).toEqual([['zl1', 2]]);
+    expect(rowSettles(store)).toHaveLength(1);
+  });
+
+  it('swaps the reels for steppers, and back, when the view changes with the sheet open', async () => {
+    const { fixture } = await render({ compact: true });
+    const steppers = () =>
+      fixture.debugElement.queryAll(By.css('lib-quantity-stepper.ask-amount'));
+    expect(reels(fixture)).toHaveLength(2);
+    expect(steppers()).toHaveLength(0);
+
+    const rows = TestBed.inject(ListRowsStore);
+    rows.setLayout('default');
+    fixture.detectChanges();
+    expect(reels(fixture)).toHaveLength(0);
+    expect(steppers()).toHaveLength(2);
+
+    rows.setLayout('compact');
+    fixture.detectChanges();
+    expect(reels(fixture)).toHaveLength(2);
+    expect(steppers()).toHaveLength(0);
+  });
+
+  describe('Bought for another list', () => {
+    const MILK: BasketProduct = {
+      id: 'i-whole',
+      quantityStep: null,
+      name: { en: 'Whole milk', es: 'Leche entera' },
+      brand: 'Hacendado',
+      size: null,
+      unit: null,
+      imageUrl: null,
+      offer: null,
+      offers: [],
+      atShop: null,
+      productGroupId: null,
+      categories: [],
+      sectionIds: null,
+      approxWeight: null,
+    };
+    const PANTRY: BasketProductList = {
+      listId: 'l-pantry',
+      listName: 'Pantry',
+      zoneId: 'z1',
+      zoneName: 'Home',
+      lineId: 'zl9',
+      lineName: 'Leche',
+      quantity: 0,
+    };
+
+    it('calls buyForList once with the dragged amount when its reel closes', async () => {
+      const milk = () => line({ productId: MILK.id });
+      const { fixture, store } = await render({
+        compact: true,
+        lines: [milk()],
+        products: new Map([[MILK.id, MILK]]),
+        productLists: [PANTRY],
+        served: [
+          ref('l1', 'Weekly shop'),
+          ref('l2', 'Flat'),
+          ref('l-pantry', 'Pantry'),
+        ],
+      });
+      store.buyForList.mockImplementation(async () => {
+        const made = entry('l-pantry', 'zl9', 0, { bought: 3, asked: 0 });
+        const held = milk();
+        store.rows.set([{ ...held, entries: [...held.entries, made] }]);
+        return { entries: [made], skippedCount: 0 };
+      });
+      (
+        (fixture.nativeElement as HTMLElement).querySelector(
+          '.disclosure'
+        ) as HTMLButtonElement
+      ).click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      jest.useFakeTimers();
+
+      const other = (fixture.nativeElement as HTMLElement).querySelector(
+        '.others lib-quantity-reel'
+      ) as HTMLElement;
+      drag(fixture, other, 3);
+      expect(store.buyForList).not.toHaveBeenCalled();
+
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      await settleWrites();
+      expect(store.buyForList).toHaveBeenCalledTimes(1);
+      expect(store.buyForList).toHaveBeenCalledWith(
+        LINE_ID,
+        expect.objectContaining({
+          targetListId: 'l-pantry',
+          lineId: 'zl9',
+          quantity: 3,
+        })
+      );
+
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS + QUANTITY_STEP_QUIET_MS);
+      await settleWrites();
+      expect(store.buyForList).toHaveBeenCalledTimes(1);
+      expect(buys(store)).toEqual([]);
+    });
   });
 
   it('writes the drag once when the sheet is closed right after it, by its scrim', async () => {

@@ -11,7 +11,10 @@ import {
   untracked,
   type OnDestroy,
 } from '@angular/core';
-import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuLocaleStore,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   canStepUp,
   isMeasured,
@@ -128,7 +131,8 @@ import { classifyReelGesture } from './quantity-reel-gesture';
     '[attr.aria-label]': 'label()',
     '[attr.aria-valuenow]': 'shown()',
     // The words of a weight or a volume ("750 g"), where the raw number would read
-    // as grams nobody can picture. Absent for a count, whose number is its words.
+    // as grams nobody can picture, with the status after them on a reel with a
+    // target. Absent for a count with no status, whose number is its words.
     '[attr.aria-valuetext]': 'valueText()',
     '[attr.aria-valuemin]': 'min()',
     '[attr.aria-valuemax]': 'max()',
@@ -244,6 +248,10 @@ export class QuantityReel implements OnDestroy {
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
   /** Optional, so a count drawn where no translator is provided still draws. */
   private readonly _localeStore = inject(RokuLocaleStore, { optional: true });
+  /** For the status words of a reel with a target; optional for the same reason. */
+  private readonly _translator = inject(RokuTranslatorService, {
+    optional: true,
+  });
 
   private readonly _locale = computed(
     () => this._localeStore?.locale() ?? 'en'
@@ -289,12 +297,27 @@ export class QuantityReel implements OnDestroy {
   /** The number and its unit apart, as the pill and the tape's middle draw them. */
   readonly figure = computed(() => this.figureOf(this.shown()));
 
-  /** `aria-valuetext`: the whole words of a weight or a volume, nothing for a count. */
-  readonly valueText = computed(() =>
-    !isMeasured(this.unit())
-      ? null
-      : formatAmount(this.shown(), this.unit(), this._locale())
-  );
+  /**
+   * `aria-valuetext`: the whole words of a weight or a volume, nothing for a count.
+   *
+   * With a {@link target}, the status follows the amount in the words the stepper's
+   * live region uses ("3, reached", "750 g, more than asked"), for a count as well:
+   * the colour is the only other place it shows, and a screen reader cannot see it.
+   * Below the target, or with none, the words are the amount's alone.
+   */
+  readonly valueText = computed(() => {
+    const shown = this.shown();
+    const reach = this.reachOf(shown);
+    const measured = isMeasured(this.unit());
+    if (reach === null || this._translator === null) {
+      return measured ? formatAmount(shown, this.unit(), this._locale()) : null;
+    }
+
+    // Read so the words follow a language switch and the first load of the keys.
+    this._translator.loaded();
+    const amount = formatAmount(shown, this.unit(), this._locale());
+    return `${amount}, ${this._translator.t(`amount.${reach}`)}`;
+  });
 
   /**
    * The number to the left of the current one, or null at the floor.

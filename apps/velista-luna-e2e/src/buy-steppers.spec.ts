@@ -228,8 +228,12 @@ test.describe('the buy reels of a row sheet in the compact view (velista 0204)',
       }
     });
 
-    // The sheet rises into place: measure the reel once nothing moves.
-    await page.waitForFunction(() => document.getAnimations().length === 0);
+    // The sheet rises into place: measure the reel once its rise has ended. Only the
+    // panel's own animations (the dialog is the panel that carries `sheet-rise`), so
+    // an endless one elsewhere on the page, a spinner, cannot hold this up.
+    await dialog.evaluate((panel) =>
+      Promise.all(panel.getAnimations().map((animation) => animation.finished))
+    );
     const box = await field.boundingBox();
     if (box === null) throw new Error('the reel has no box');
     const y = box.y + box.height / 2;

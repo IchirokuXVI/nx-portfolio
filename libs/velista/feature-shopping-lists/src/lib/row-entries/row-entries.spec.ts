@@ -635,7 +635,7 @@ describe('RowEntries: Bought for another list (velista 0201, target state 7)', (
     ]);
   });
 
-  it('starts each stepper at 0, with no target and no snaps input (spec 8)', async () => {
+  it('starts each stepper at 0, with a target of 0 and no snaps input (spec 8)', async () => {
     const fixture = await render(row([entry()]), {
       others: { state: 'ready', lists: [{ ...PANTRY, quantity: 4 }] },
     });
@@ -646,9 +646,33 @@ describe('RowEntries: Bought for another list (velista 0201, target state 7)', (
       ?.componentInstance as QuantityStepper;
 
     expect(stepper.value()).toBe(0);
-    expect(stepper.target()).toBeNull();
+    // The list asks nothing, so its target is 0: any buy is above it.
+    expect(stepper.target()).toBe(0);
     // The default, so only the stop at 1000 applies.
     expect(stepper.snaps()).toEqual([1000]);
+  });
+
+  it('draws 0 plain and a list stepped to 1 in amber, never green', async () => {
+    const fixture = await render(row([entry()]), {
+      others: { state: 'ready', lists: [PANTRY] },
+    });
+    open(fixture);
+    const held = fixture.debugElement
+      .queryAll(By.directive(QuantityStepper))
+      .find((one) => one.nativeElement.closest('.others') !== null);
+    const element = held?.nativeElement as HTMLElement;
+    expect(element.classList.contains('is-over')).toBe(false);
+    expect(element.classList.contains('is-reached')).toBe(false);
+
+    // The run the sheet holds for the list after one press of its plus.
+    fixture.componentRef.setInput(
+      'pendingOthers',
+      new Map([[PANTRY.listId, 1]])
+    );
+    fixture.detectChanges();
+    expect((held?.componentInstance as QuantityStepper).value()).toBe(1);
+    expect(element.classList.contains('is-over')).toBe(true);
+    expect(element.classList.contains('is-reached')).toBe(false);
   });
 
   it('emits a buy step per press, starting at 0', async () => {
@@ -817,7 +841,7 @@ describe('RowEntries: the reel in the compact view (velista 0204)', () => {
     expect(bought).toHaveBeenCalledTimes(1);
   });
 
-  it('draws a reel from 0 for each list under "Bought for another list", with no target and no snaps input', async () => {
+  it('draws a reel from 0 for each list under "Bought for another list", with a target of 0 and no snaps input', async () => {
     const fixture = await render(row([entry()]), {
       compact: true,
       step: 250,
@@ -831,7 +855,14 @@ describe('RowEntries: the reel in the compact view (velista 0204)', () => {
     const reel = held.componentInstance as QuantityReel;
     expect(reel.value()).toBe(0);
     expect(reel.min()).toBe(0);
-    expect(reel.target()).toBeNull();
+    expect(reel.target()).toBe(0);
+    // 0 is plain, and the 1 the tape offers is amber: a list asking nothing is
+    // never green.
+    const pillOf = (at: HTMLElement) =>
+      at.querySelector('.pill') as HTMLElement;
+    const reelHost = held.nativeElement as HTMLElement;
+    expect(pillOf(reelHost).classList.contains('over')).toBe(false);
+    expect(pillOf(reelHost).classList.contains('reached')).toBe(false);
     // The default, so only the stop at 1000 applies.
     expect(reel.snaps()).toEqual(QUANTITY_SNAP_POINTS);
     expect(
@@ -841,6 +872,8 @@ describe('RowEntries: the reel in the compact view (velista 0204)', () => {
     const host = held.nativeElement as HTMLElement;
     host.dispatchEvent(pointer('pointerdown', 0));
     host.dispatchEvent(pointer('pointermove', -QUANTITY_REEL_PX_PER_UNIT));
+    fixture.detectChanges();
+    expect(tape(host)).toEqual(['0:plain', '1:over', '2:over']);
     host.dispatchEvent(pointer('pointerup', -QUANTITY_REEL_PX_PER_UNIT));
     jest.runOnlyPendingTimers();
 

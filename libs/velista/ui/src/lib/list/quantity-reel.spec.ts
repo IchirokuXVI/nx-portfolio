@@ -1,6 +1,9 @@
 import { Component, signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
+import {
+  provideRokuTranslatorTesting,
+  RokuLocaleStore,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   QUANTITY_REEL_IDLE_MS,
   QUANTITY_REEL_PX_PER_UNIT,
@@ -70,6 +73,8 @@ async function render(
     snaps?: readonly number[];
     locale?: string;
     target?: number | null;
+    /** Provide the testing translator, whose words are the keys themselves. */
+    translated?: boolean;
   } = {}
 ): Promise<{
   fixture: ComponentFixture<QuantityReel>;
@@ -81,15 +86,17 @@ async function render(
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [QuantityReel],
-    providers:
-      options.locale === undefined
+    providers: [
+      ...(options.translated ? provideRokuTranslatorTesting() : []),
+      ...(options.locale === undefined
         ? []
         : [
             {
               provide: RokuLocaleStore,
               useValue: { locale: signal(options.locale) },
             },
-          ],
+          ]),
+    ],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(QuantityReel);
@@ -1382,6 +1389,117 @@ describe('QuantityReel', () => {
       const current = /\n\n\.current \{([\s\S]*?)\n\}/.exec(styles)?.[1] ?? '';
       expect(current).toContain('color: var(--app-action-quiet-fg)');
       expect(current).toContain('font-weight: 700');
+    });
+
+    describe('what the spinbutton says of the status', () => {
+      it('says the count, then "reached" at the target and "more than asked" above it', async () => {
+        const { fixture, host } = await render(2, {
+          target: 3,
+          translated: true,
+        });
+
+        // Below the target a count is its own words, as before.
+        expect(host.hasAttribute('aria-valuetext')).toBe(false);
+
+        fixture.componentRef.setInput('value', 3);
+        fixture.detectChanges();
+        expect(host.getAttribute('aria-valuetext')).toBe('3, amount.reached');
+
+        fixture.componentRef.setInput('value', 4);
+        fixture.detectChanges();
+        expect(host.getAttribute('aria-valuetext')).toBe('4, amount.over');
+      });
+
+      it('says the status while the tape moves, not only at rest', async () => {
+        const { fixture, host } = await render(2, {
+          target: 3,
+          translated: true,
+        });
+
+        host.dispatchEvent(pointer('pointerdown', 0));
+        host.dispatchEvent(pointer('pointermove', -QUANTITY_REEL_PX_PER_UNIT));
+        fixture.detectChanges();
+
+        expect(host.getAttribute('aria-valuetext')).toBe('3, amount.reached');
+      });
+
+      it('puts the status after the whole words of a weight', async () => {
+        const { fixture, host } = await render(750, {
+          unit: 'GRAM',
+          target: 750,
+          translated: true,
+        });
+
+        expect(host.getAttribute('aria-valuetext')).toBe(
+          '750 g, amount.reached'
+        );
+
+        fixture.componentRef.setInput('value', 500);
+        fixture.detectChanges();
+        expect(host.getAttribute('aria-valuetext')).toBe('500 g');
+      });
+
+      it('says a list asking nothing is over at 1 and nothing at 0', async () => {
+        const { fixture, host } = await render(0, {
+          target: 0,
+          translated: true,
+        });
+
+        expect(host.hasAttribute('aria-valuetext')).toBe(false);
+
+        fixture.componentRef.setInput('value', 1);
+        fixture.detectChanges();
+        expect(host.getAttribute('aria-valuetext')).toBe('1, amount.over');
+      });
+
+      it('says exactly what it said before with no target', async () => {
+        const count = await render(4, { translated: true });
+        expect(count.host.hasAttribute('aria-valuetext')).toBe(false);
+
+        const weight = await render(1500, {
+          unit: 'GRAM',
+          locale: 'es',
+          translated: true,
+        });
+        expect(weight.host.getAttribute('aria-valuetext')).toBe('1,5 kg');
+      });
+    });
+  });
+
+  describe('looking inert when it takes no drag', () => {
+    it('the stylesheet: no raised fill, the hairline kept, muted text, status colours kept', () => {
+      const styles = readFileSync(
+        join(__dirname, 'quantity-reel.scss'),
+        'utf8'
+      ).replace(/\r\n/g, '\n');
+      const inert =
+        /\n:host\(\.readonly\) \.pill \{([\s\S]*?)\n\}/.exec(styles)?.[1] ?? '';
+      const targeted =
+        /\n:host\(\.readonly\.targeted\) \.pill \{([\s\S]*?)\n\}/.exec(
+          styles
+        )?.[1] ?? '';
+
+      expect(inert).toContain('background: transparent');
+      // The border keeps its width and only takes the hairline, so the box is the
+      // same size as a live reel's.
+      expect(inert).toContain('border-color: var(--app-border-subtle)');
+      expect(inert).not.toMatch(/\bborder:|inline-size|block-size|padding/);
+      expect(inert).toContain('color: var(--app-text-muted)');
+      expect(targeted).toContain('color: var(--app-status-success-fg)');
+      expect(targeted).toContain('color: var(--app-action-quiet-fg)');
+      // After the targeted block, whose normal text colour it has to win over.
+      expect(styles.indexOf(':host(.readonly) .pill')).toBeGreaterThan(
+        styles.indexOf(':host(.targeted) {')
+      );
+    });
+
+    it('carries the class the look hangs on only while it is read only', async () => {
+      const { fixture, host } = await render(2, { readonly: true });
+      expect(host.classList.contains('readonly')).toBe(true);
+
+      fixture.componentRef.setInput('readonly', false);
+      fixture.detectChanges();
+      expect(host.classList.contains('readonly')).toBe(false);
     });
   });
 });

@@ -132,7 +132,11 @@
                     </span>
                     <span class="row-where">{{ other.where }}</span>
                   </span>
-                  <!-- No ask yet, so no target and no snap point but 1000. -->
+                  <!--
+                    The list asks nothing, so its target is 0: any amount bought for
+                    it is above the ask and amber, and 0 is plain (a target of 0 is
+                    never green). No snap point but 1000.
+                  -->
                   @if (compact()) {
                     <lib-quantity-reel
                       (stepped)="onReeledOther(other.list, $event)"
@@ -140,6 +144,7 @@
                       [min]="0"
                       [readonly]="busy()"
                       [step]="step()"
+                      [target]="0"
                       [unit]="unit()"
                       [value]="other.shown"
                       class="ask-amount"
@@ -152,6 +157,7 @@
                       [min]="0"
                       [name]="other.name"
                       [step]="step()"
+                      [target]="0"
                       [unit]="unit()"
                       [value]="other.shown"
                       class="ask-amount"

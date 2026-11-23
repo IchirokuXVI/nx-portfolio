@@ -218,6 +218,37 @@
   }
 }
 
+// A reel that takes no drag looks it: a reader's amount on the zone list, or every
+// reel of the basket row sheet while a write is in flight. The locked stepper's look
+// (velista 0200): no raised fill, the hairline kept so the box does not move, and
+// the number and its unit in muted text at their usual size and weight. A status
+// colour stays, so a reached or an over amount does not blink while a write runs.
+// Last, so it wins over the targeted reel's normal text colour.
+:host(.readonly) .pill {
+  background: transparent;
+  border-color: var(--app-border-subtle);
+  color: var(--app-text-muted);
+
+  .symbol {
+    color: var(--app-text-muted);
+  }
+}
+
+:host(.readonly.targeted) .pill {
+  &.reached {
+    color: var(--app-status-success-fg);
+  }
+
+  &.over {
+    color: var(--app-action-quiet-fg);
+  }
+
+  &.reached .symbol,
+  &.over .symbol {
+    color: inherit;
+  }
+}
+
 // Somebody who has asked not to be moved gets the number and none of the motion. The
 // control still works; it simply arrives rather than travels.
 @media (prefers-reduced-motion: reduce) {
