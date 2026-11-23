@@ -1343,9 +1343,18 @@ export interface BasketDemandRequest {
    * (velista `0139`, section 3).
    */
   readonly lineId: string;
-  /** What that list asks for from now on. Zero is allowed. */
+  /**
+   * What that list asks for from now on, as a **whole** (backend `0274`): what
+   * the line holds plus what this basket's buys already met of it, the entry's
+   * `asked`, never its `left`. An ask below what the buys met leaves the line at
+   * 0. Zero is allowed.
+   */
   readonly quantity: number;
-  /** The entry's `left` the person was looking at. */
+  /**
+   * The entry's `left` the person was looking at: what the line itself held,
+   * not the ask (backend `0274`). A line that moved since is refused with
+   * `stale_quantity`.
+   */
   readonly from: number;
   /**
    * The unit {@link quantity} and {@link from} are in, the line's (velista

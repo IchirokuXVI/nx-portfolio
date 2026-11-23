@@ -1118,7 +1118,7 @@ describe('AppShellRoutes', () => {
       expect(joinPath.startsWith('shopping-lists')).toBe(false);
     });
 
-    it('offers the twelve sheets over the basket, and no units sheet', () => {
+    it('offers the thirteen sheets over the basket, and no units sheet', () => {
       // Velista `0073`, test 11, `0075`, test 10, and `0078`, test 13. There were
       // six, then four: `lines/:lineId/list` went with the send sheet it drew
       // (`0068`), which folded every list into the units sheet; `lines/:lineId/units`
@@ -1132,6 +1132,8 @@ describe('AppShellRoutes', () => {
       expect(routeAt(basketPath)?.children?.map((route) => route.path)).toEqual(
         [
           'sheet/rows/:rowKey/settle',
+          // The detailed view of a row's lists (velista `0200`).
+          'sheet/rows/:rowKey/lists',
           // Take another product for one list of a row, or for all of them
           // (velista `0140`, section 2). The swap sheet went with it.
           'sheet/rows/:rowKey/change/:lineId',
@@ -1293,7 +1295,7 @@ describe('AppShellRoutes', () => {
       // else, which is a property of the page rather than of the route.
       const sheets = routeAt(basketPath)?.children ?? [];
 
-      expect(sheets).toHaveLength(12);
+      expect(sheets).toHaveLength(13);
       for (const entry of sheets.filter((one) => one.path !== 'sheet/get')) {
         expect(entry.canActivate).toBeUndefined();
       }
@@ -1515,7 +1517,9 @@ describe('the sheets and their exit animation', () => {
     //
     // `0187` added one over a product's page: why Similar products and a line's
     // cheapest mark can name different products.
-    expect(sheets).toHaveLength(73);
+    //
+    // `0200` added the detailed view of a row's lists, over both baskets: two more.
+    expect(sheets).toHaveLength(75);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {

@@ -1,12 +1,15 @@
 import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import {
   RokuTranslatorService,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
-import { LINE_QUANTITY_MAX, type QuantityStep } from '@portfolio/velista/models';
+import {
+  LINE_QUANTITY_MAX,
+  type QuantityStep,
+} from '@portfolio/velista/models';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { QuantityStepper, REFUSED_SHOWN_MS } from './quantity-stepper';
 
 /**
@@ -183,19 +186,22 @@ describe('QuantityStepper (velista 0188)', () => {
         expect(LINE_QUANTITY_MAX).toBe(99_999);
       });
 
-      it.each(['GRAM', 'MILLILITER'])('stops %s plus at 99 950, and never clamps', (unit) => {
-        const h = render({ value: 99_850, unit });
-        h.plus.click();
-        h.plus.click();
-        expect(tos(h)).toEqual([99_900, 99_950]);
-        expect(h.plus.getAttribute('aria-disabled')).toBe('true');
-        h.plus.click();
-        expect(tos(h)).toEqual([99_900, 99_950]);
-        h.set('value', 99_949);
-        expect(h.plus.getAttribute('aria-disabled')).toBeNull();
-        h.set('value', 99_999);
-        expect(h.plus.getAttribute('aria-disabled')).toBe('true');
-      });
+      it.each(['GRAM', 'MILLILITER'])(
+        'stops %s plus at 99 950, and never clamps',
+        (unit) => {
+          const h = render({ value: 99_850, unit });
+          h.plus.click();
+          h.plus.click();
+          expect(tos(h)).toEqual([99_900, 99_950]);
+          expect(h.plus.getAttribute('aria-disabled')).toBe('true');
+          h.plus.click();
+          expect(tos(h)).toEqual([99_900, 99_950]);
+          h.set('value', 99_949);
+          expect(h.plus.getAttribute('aria-disabled')).toBeNull();
+          h.set('value', 99_999);
+          expect(h.plus.getAttribute('aria-disabled')).toBe('true');
+        }
+      );
 
       it('stops a count plus where a step of 50 would pass it', () => {
         const h = render({ value: 99_900 });
@@ -217,15 +223,18 @@ describe('QuantityStepper (velista 0188)', () => {
         expect(tos(count)).toEqual([99_800, 99_850, 99_900, 99_950]);
       });
 
-      it.each(['GRAM', 'UNIT'])('draws a %s line stored above it as it is, plus off and minus on', (unit) => {
-        const h = render({ value: 100_000, unit });
-        expect(h.el.getAttribute('data-value')).toBe('100000');
-        expect(h.el.textContent).toContain('100');
-        expect(h.plus.getAttribute('aria-disabled')).toBe('true');
-        expect(h.minus.getAttribute('aria-disabled')).toBeNull();
-        h.minus.click();
-        expect(tos(h)).toEqual([99_950]);
-      });
+      it.each(['GRAM', 'UNIT'])(
+        'draws a %s line stored above it as it is, plus off and minus on',
+        (unit) => {
+          const h = render({ value: 100_000, unit });
+          expect(h.el.getAttribute('data-value')).toBe('100000');
+          expect(h.el.textContent).toContain('100');
+          expect(h.plus.getAttribute('aria-disabled')).toBe('true');
+          expect(h.minus.getAttribute('aria-disabled')).toBeNull();
+          h.minus.click();
+          expect(tos(h)).toEqual([99_950]);
+        }
+      );
 
       it('says the ceiling as aria-valuemax and takes End to it, for every unit', () => {
         for (const unit of ['UNIT', 'GRAM', 'MILLILITER']) {
@@ -254,6 +263,142 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(h.plus.getAttribute('aria-disabled')).toBe('true');
       h.plus.click();
       expect(h.steps).toEqual([]);
+    });
+  });
+
+  describe('locked, an amount the reader may not change (velista 0200)', () => {
+    /** Every press the host was told of while the stepper was locked. */
+    function disabled(variant: 'row' | 'sheet' | 'sheet-narrow' = 'sheet') {
+      const h = render({ value: 3, locked: true, variant });
+      const pressed: void[] = [];
+      const values: number[] = [];
+      h.fixture.componentInstance.disabledPress.subscribe(() =>
+        pressed.push(undefined)
+      );
+      h.fixture.componentInstance.valueChange.subscribe((value) =>
+        values.push(value)
+      );
+      return { h, pressed, values };
+    }
+
+    it('carries the whole locked state on the host, and a press steps nothing', () => {
+      const { h, values } = disabled();
+      expect(h.el.classList.contains('is-locked')).toBe(true);
+      expect(h.el.classList.contains('is-disabled')).toBe(false);
+      pointerClick(h.plus);
+      pointerClick(h.minus);
+      fire(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(2000);
+      fire(h.plus, 'pointerup');
+      expect(h.steps).toEqual([]);
+      expect(values).toEqual([]);
+    });
+
+    it('draws no disabled attribute, says aria-disabled and stays in the tab order', () => {
+      const { h } = disabled();
+      for (const control of [h.minus, h.plus, field(h)]) {
+        expect(control.hasAttribute('disabled')).toBe(false);
+        expect(control.getAttribute('aria-disabled')).toBe('true');
+        expect(control.tabIndex).toBe(0);
+      }
+      expect(h.el.querySelector('[disabled]')).toBeNull();
+    });
+
+    it('marks the group itself in the row variant', () => {
+      const { h } = disabled('row');
+      expect(
+        h.el.querySelector('[role="group"]')?.getAttribute('aria-disabled')
+      ).toBe('true');
+    });
+
+    it('tells a click, Enter and Space once each, with no step and no value', () => {
+      const { h, pressed, values } = disabled();
+      pointerClick(h.plus);
+      expect(pressed).toHaveLength(1);
+      // Enter and Space on a button reach the button as its own click.
+      keyClick(h.minus);
+      expect(pressed).toHaveLength(2);
+      // The field takes no click from a key, so its keys are told on keydown.
+      const enter = key(h, 'Enter');
+      expect(pressed).toHaveLength(3);
+      expect(enter.defaultPrevented).toBe(true);
+      key(h, ' ');
+      expect(pressed).toHaveLength(4);
+      pointerClick(field(h));
+      expect(pressed).toHaveLength(5);
+      expect(h.steps).toEqual([]);
+      expect(values).toEqual([]);
+    });
+
+    it('tells nothing while it is enabled', () => {
+      const h = render({ value: 3, variant: 'sheet' });
+      const pressed: void[] = [];
+      h.fixture.componentInstance.disabledPress.subscribe(() =>
+        pressed.push(undefined)
+      );
+      pointerClick(h.plus);
+      key(h, 'Enter');
+      expect(pressed).toEqual([]);
+      expect(tos(h)).toEqual([4]);
+    });
+
+    it('names the reason element in aria-describedby on every control', () => {
+      const h = render({
+        value: 3,
+        locked: true,
+        variant: 'sheet',
+        describedBy: 'why-1',
+      });
+      for (const control of [h.minus, h.plus, field(h)]) {
+        expect(control.getAttribute('aria-describedby')).toBe('why-1');
+      }
+    });
+
+    it('draws the bar of minus at 1, never the trash', () => {
+      const h = render({ value: 1, min: 0, locked: true, variant: 'sheet' });
+      expect(h.minus.querySelector('lib-trash-icon')).toBeNull();
+      expect(h.minus.querySelector('.glyph')).not.toBeNull();
+      expect(h.minus.classList.contains('is-clear')).toBe(false);
+    });
+  });
+
+  describe('disabled, a write in flight (as before velista 0200)', () => {
+    it('draws no locked look, names no reason and tells no press', () => {
+      const h = render({
+        value: 3,
+        disabled: true,
+        variant: 'sheet',
+        describedBy: 'why-1',
+      });
+      const pressed: void[] = [];
+      h.fixture.componentInstance.disabledPress.subscribe(() =>
+        pressed.push(undefined)
+      );
+      expect(h.el.classList.contains('is-disabled')).toBe(true);
+      expect(h.el.classList.contains('is-locked')).toBe(false);
+      for (const control of [h.minus, h.plus, field(h)]) {
+        expect(control.getAttribute('aria-disabled')).toBe('true');
+        expect(control.hasAttribute('aria-describedby')).toBe(false);
+      }
+      pointerClick(h.plus);
+      key(h, 'Enter');
+      pointerClick(field(h));
+      expect(pressed).toEqual([]);
+      expect(h.steps).toEqual([]);
+    });
+
+    it('leaves the row group unmarked and the trash at 1, as on dev', () => {
+      const row = render({ value: 3, disabled: true, variant: 'row' });
+      expect(
+        row.el.querySelector('[role="group"]')?.hasAttribute('aria-disabled')
+      ).toBe(false);
+      const one = render({
+        value: 1,
+        min: 0,
+        disabled: true,
+        variant: 'sheet',
+      });
+      expect(one.minus.querySelector('lib-trash-icon')).not.toBeNull();
     });
   });
 
@@ -968,7 +1113,9 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(h.el.querySelector('.symbol')?.textContent).toBe('ml');
       expect(h.steps).toEqual([]);
       key(h, 'Enter');
-      expect(h.steps).toEqual([{ from: 500, to: 1500, repeat: false, typed: true }]);
+      expect(h.steps).toEqual([
+        { from: 500, to: 1500, repeat: false, typed: true },
+      ]);
       expect(field(h).value).toBe('1.5');
       expect(h.el.querySelector('.symbol')?.textContent).toBe('l');
     });
@@ -1014,7 +1161,9 @@ describe('QuantityStepper (velista 0188)', () => {
       const h = render({ value: 750, unit: 'GRAM', variant: 'sheet' });
       type(h, '900');
       h.plus.click();
-      expect(h.steps).toEqual([{ from: 750, to: 900, repeat: false, typed: true }]);
+      expect(h.steps).toEqual([
+        { from: 750, to: 900, repeat: false, typed: true },
+      ]);
     });
 
     describe('a typed weight waits for the end of the edit (the owner, 2026-11-17)', () => {
@@ -1039,13 +1188,7 @@ describe('QuantityStepper (velista 0188)', () => {
             append(h, one);
             seen.push(state(h));
           }
-          expect(seen).toEqual([
-            '2 g',
-            '25 g',
-            '250 g',
-            '2500 g',
-            '25000 g',
-          ]);
+          expect(seen).toEqual(['2 g', '25 g', '250 g', '2500 g', '25000 g']);
           expect(h.steps).toEqual([]);
           key(h, 'Enter');
           expect(h.steps).toEqual([
@@ -1598,7 +1741,12 @@ describe('QuantityStepper (velista 0188)', () => {
       });
 
       it('keeps a typed amount under one step on a step of 50', () => {
-        const h = render({ value: 50, unit: 'GRAM', step: 50, variant: 'sheet' });
+        const h = render({
+          value: 50,
+          unit: 'GRAM',
+          step: 50,
+          variant: 'sheet',
+        });
         type(h, '10');
         key(h, 'Enter');
         expect(tos(h)).toEqual([10]);
@@ -1925,10 +2073,14 @@ describe('QuantityStepper (velista 0188)', () => {
       // The fit test of velista-luna-e2e measures the narrow field: "99,999" in
       // DejaVu Sans, the system font of the CI runner, is 65.6 px at 17 px, more
       // than 72 less 6 on each side (2026-11-20).
-      const scss = readFileSync(join(__dirname, 'quantity-stepper.scss'), 'utf8');
-      const rule = /([^{}]*)\{[^}]*padding-inline:\s*var\(--app-stepper-cell-pad-sheet\)/.exec(
-        scss
+      const scss = readFileSync(
+        join(__dirname, 'quantity-stepper.scss'),
+        'utf8'
       );
+      const rule =
+        /([^{}]*)\{[^}]*padding-inline:\s*var\(--app-stepper-cell-pad-sheet\)/.exec(
+          scss
+        );
       expect(rule?.[1]).toContain(':host(.variant-sheet) .cell');
       expect(rule?.[1]).not.toContain('variant-sheet-narrow');
       expect(scss).toMatch(

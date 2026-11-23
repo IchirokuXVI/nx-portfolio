@@ -25,6 +25,7 @@ export * from './lib/join-page/join-page';
 export * from './lib/more-sheet/more-sheet';
 export * from './lib/people-sheet/people-sheet';
 export * from './lib/row-entries/row-entries';
+export * from './lib/row-lists-sheet/row-lists-sheet';
 export * from './lib/settle-sheet/settle-sheet';
 export * from './lib/share-sheet/share-sheet';
 export * from './lib/shop-picker-sheet/shop-picker-sheet';

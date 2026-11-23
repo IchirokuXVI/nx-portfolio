@@ -147,6 +147,7 @@ export interface RefusalWords {
     '[class.is-readonly]': 'readonly()',
     '[class.is-took]': 'took()',
     '[class.is-disabled]': 'disabled()',
+    '[class.is-locked]': 'locked()',
     '[attr.data-value]': 'value()',
   },
 })
@@ -193,6 +194,20 @@ export class QuantityStepper {
   readonly max = input(LINE_QUANTITY_MAX);
   /** A write is in flight: both buttons and the field ignore input, and say so. */
   readonly disabled = input(false);
+  /**
+   * The reader may not change the amount (velista `0200`). Both buttons and the
+   * field ignore input and say so with `aria-disabled`, never the `disabled`
+   * attribute, so the stepper stays in the tab order. The whole capsule is drawn
+   * disabled, minus draws its bar and never the trash, and a press, Enter or Space
+   * on it is told through {@link disabledPress}, so a host can say why. A write in
+   * flight is {@link disabled}, which draws none of this.
+   */
+  readonly locked = input(false);
+  /**
+   * The id of an element that says why the amount may not change, for the
+   * controls' `aria-describedby` while {@link locked} (velista `0200`), or null.
+   */
+  readonly describedBy = input<string | null>(null);
   /** A reader: the amount alone, no buttons and no outline (decision I). */
   readonly readonly = input(false);
   /** An add just raised this amount (velista `0170`, decision J). */
@@ -202,6 +217,11 @@ export class QuantityStepper {
   readonly valueChange = output<number>();
   /** The same change with where it came from and whether the hold made it. */
   readonly stepped = output<QuantityStep>();
+  /**
+   * A press, Enter or Space on the stepper while it is {@link locked} (velista
+   * `0200`): once per gesture, with no {@link stepped} and no {@link valueChange}.
+   */
+  readonly disabledPress = output<void>();
 
   private readonly _localeStore = inject(RokuLocaleStore, { optional: true });
   private readonly _document = inject(DOCUMENT);
@@ -229,12 +249,16 @@ export class QuantityStepper {
   /**
    * Whether one press of minus takes the amount to 0, where the line leaves its list
    * (the owner's S14): minus then draws a red trash in place of its bar. Never with a
-   * floor above 0 (a due row, the how many step), and never at 0 itself.
+   * floor above 0 (a due row, the how many step), never at 0 itself, and never on
+   * a {@link locked} stepper, whose minus takes no press.
    */
   readonly minusClears = computed(() => {
     const value = this.value();
-    return value > 0 && this._down(value) === 0;
+    return !this.locked() && value > 0 && this._down(value) === 0;
   });
+
+  /** Both buttons and the field ignore input: a write in flight, or a locked amount. */
+  readonly blocked = computed(() => this.disabled() || this.locked());
 
   /** What minus moves at the current amount, in short form words ("25 g", "1", "10"). */
   readonly lessStep = computed(() => {
@@ -435,6 +459,11 @@ export class QuantityStepper {
    */
   press(direction: 1 | -1, event?: MouseEvent): void {
     const pointer = (event?.detail ?? 1) !== 0;
+    if (this.locked()) {
+      // A press, Enter or Space on a locked stepper steps nothing and is told.
+      this.disabledPress.emit();
+      return;
+    }
     if (!pointer) {
       // A key press of a button; a pointer's press cleared it on pointerdown, before
       // the blur that may have said why a typed count was held.
@@ -451,7 +480,7 @@ export class QuantityStepper {
       this._commitDraft();
       return;
     }
-    if (this.disabled() || this._atEnd(direction)) {
+    if (this.blocked() || this._atEnd(direction)) {
       return;
     }
     if (this._commitDraft()) {
@@ -483,7 +512,7 @@ export class QuantityStepper {
     // Down comes before the focus moves, so typed text is still a draft here. The
     // owner's rule: this gesture commits the text only, with no step and no repeat.
     this._draftPress = this.draft() !== null;
-    if (this._draftPress || this.disabled() || this._atEnd(direction)) {
+    if (this._draftPress || this.blocked() || this._atEnd(direction)) {
       return;
     }
     // The pointer stays with the button wherever it goes, for every pointer type:
@@ -550,6 +579,12 @@ export class QuantityStepper {
 
   /** Arrow keys, Home and End on the sheet's field (the APG spinbutton pattern). */
   onFieldKey(event: KeyboardEvent): void {
+    if (this.locked() && (event.key === 'Enter' || event.key === ' ')) {
+      // The field takes no click from a key, so the press is told here.
+      event.preventDefault();
+      this.disabledPress.emit();
+      return;
+    }
     if (event.key === 'Escape' && this._refusal() !== null) {
       // The popover goes, and the Escape goes no further: the sheet stays open.
       event.preventDefault();
@@ -558,7 +593,7 @@ export class QuantityStepper {
       // Typed text stays: a second Escape puts the shown amount back.
       return;
     }
-    if (this.disabled()) {
+    if (this.blocked()) {
       return;
     }
     if (ENDS_THE_EDIT.has(event.key)) {
@@ -597,6 +632,13 @@ export class QuantityStepper {
           (event.target as HTMLInputElement).value = this.words().figure;
         }
         return;
+    }
+  }
+
+  /** A press on the sheet's field while {@link locked} is told once. */
+  onFieldClick(): void {
+    if (this.locked()) {
+      this.disabledPress.emit();
     }
   }
 
@@ -733,7 +775,7 @@ export class QuantityStepper {
   /** One step of the hold: from the current value, so the caller's answer is the base. */
   private _repeat(direction: 1 | -1): void {
     this._holdTimer = null;
-    if (this.disabled()) {
+    if (this.blocked()) {
       this._stopRepeat();
       return;
     }
