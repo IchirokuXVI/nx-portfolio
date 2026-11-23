@@ -37,6 +37,8 @@ import { LineRow, type LineRowAction } from './line-row';
       @for (line of lines(); track line.id) {
         <li
           [attr.data-line-id]="line.id"
+          [class.asked]="askedId() === line.id"
+          [class.flash]="flashing() && askedId() === line.id"
           [class.marked]="markedId() === line.id"
           class="line"
         >
@@ -58,6 +60,14 @@ import { LineRow, type LineRowAction } from './line-row';
             [pending]="pending().get(line.id) ?? null"
             [took]="tookIds().has(line.id)"
           />
+          <!--
+            Where the page's question about the extra already bought is held
+            (velista 0207): the page lays this mark over the row's amount control,
+            and the popover is inserted right after it. Beside the row and not in
+            it, because the row is a button, whose content a screen reader does
+            not see.
+          -->
+          <span aria-hidden="true" class="ask-anchor" data-ask-anchor></span>
         </li>
       }
     </ul>
@@ -105,7 +115,8 @@ export class LineList {
 
   /**
    * The line whose question about the extra already bought is open (velista `0207`),
-   * and whether it is flashing. Only that row draws the layer the flash lights.
+   * and whether it is flashing. Only that row draws the layer the flash lights, and
+   * only its item carries the colour the popover's hairline reads.
    */
   readonly askedId = input<string | null>(null);
   readonly flashing = input(false);

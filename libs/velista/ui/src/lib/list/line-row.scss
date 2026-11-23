@@ -101,21 +101,9 @@
 }
 
 // The flash: three pulses, each 240 ms in, 120 ms held and 240 ms out, 200 ms apart,
-// 2.2 s in all (EXTRA_ASK_FLASH_MS). One clock drives the layer and the popover's
-// hairline, which the popover reads through `--anchored-popover-accent`: the popover
-// is inserted inside this row, so it inherits the colour. Text keeps its colours.
-@property --line-row-ask-accent {
-  syntax: '<color>';
-  inherits: true;
-  initial-value: transparent;
-}
-
-.row.asked.flash {
-  --anchored-popover-accent: var(--line-row-ask-accent);
-
-  animation: ask-accent 2200ms linear both;
-}
-
+// 2.2 s in all (EXTRA_ASK_FLASH_MS). The popover's hairline pulses on the same stops
+// from the list item that holds both, `line-list.scss`, since the popover sits beside
+// the row and not in it. Text keeps its colours.
 .row.asked.flash::before {
   animation: ask-wash 2200ms linear both;
 }
@@ -142,34 +130,8 @@
   }
 }
 
-@keyframes ask-accent {
-  0%,
-  27.273%,
-  36.364%,
-  63.636%,
-  72.727%,
-  100% {
-    --line-row-ask-accent: var(--app-border-subtle);
-  }
-
-  10.909%,
-  16.364%,
-  47.273%,
-  52.727%,
-  83.636%,
-  89.091% {
-    --line-row-ask-accent: var(--app-action-quiet-fg);
-  }
-}
-
-// Nothing pulses: the accent frame holds for as long as the page keeps the flash on.
+// Nothing pulses: the wash holds for as long as the page keeps the flash on.
 @media (prefers-reduced-motion: reduce) {
-  .row.asked.flash {
-    --anchored-popover-accent: var(--app-action-quiet-fg);
-
-    animation: none;
-  }
-
   .row.asked.flash::before {
     opacity: 1;
     animation: none;

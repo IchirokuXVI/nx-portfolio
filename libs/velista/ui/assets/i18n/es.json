@@ -1249,7 +1249,9 @@
       "count": "Contar lo comprado de más",
       "enough": "Con eso basta",
       "units_one": "{{count}} ud",
-      "units_other": "{{count}} uds"
+      "units_other": "{{count}} uds",
+      "boughtByNamedAndOthers": "{{names}} y otras personas ya compraron {{amount}} de más.",
+      "announce": "{{question}} Hay dos respuestas junto a la cantidad de la línea: {{stillNeed}}, o {{keep}}."
     }
   },
   "account": {

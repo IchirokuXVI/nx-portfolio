@@ -19,12 +19,14 @@ let askCount = 0;
  * "Still need" with the amount the person set and "Count the extra" with what is
  * left, or "That's enough" with no amount, each a row to the frame's edges.
  *
- * Focus starts on the second answer, the one that changes nothing. It owns no
- * state: the page decides what each answer does.
+ * Focus starts on the second answer, the one that changes nothing, unless the page
+ * says not to take it: a person still typing in a field keeps the field, and the
+ * page says the question in its polite region instead. It owns no state: the page
+ * decides what each answer does.
  *
- * The popover is inserted in the document right after the row's amount control, so
- * it sits inside the row, whose press opens the line. A press in here stops at this
- * element and never reaches the row.
+ * The popover is inserted in the list item beside the row, never inside the row,
+ * whose press opens the line. A press in here still stops at this element, so
+ * nothing around it hears it as a press on the list.
  */
 @Component({
   selector: 'lib-extra-ask',
@@ -55,6 +57,12 @@ export class ExtraAsk {
   /** The question's id, for the dialog around it to be labelled by. */
   readonly titleId = input(`extra-ask-title-${++askCount}`);
 
+  /**
+   * Whether focus moves to the answer that changes nothing when it opens. False
+   * while the person types in a field, so their keys stay in it.
+   */
+  readonly takeFocus = input(true);
+
   /** "Still need": the line goes to the amount the person set. */
   readonly stillNeed = output<void>();
 
@@ -68,9 +76,11 @@ export class ExtraAsk {
     viewChild.required<ElementRef<HTMLButtonElement>>('keep');
 
   constructor() {
-    afterNextRender(() =>
-      this._keep().nativeElement.focus({ preventScroll: true })
-    );
+    afterNextRender(() => {
+      if (this.takeFocus()) {
+        this._keep().nativeElement.focus({ preventScroll: true });
+      }
+    });
     handleBackWhile(
       () => true,
       () => this.dismissed.emit()

@@ -1,6 +1,8 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import type { LineRowVm } from '@portfolio/velista/models';
+import { join } from 'node:path';
+import { compile } from 'sass';
 import { LineList } from './line-list';
 
 function vm(id: string): LineRowVm {
@@ -114,6 +116,59 @@ describe('LineList layout (velista 0191)', () => {
     expect(drawnRows).toHaveLength(LINES.length);
     expect(drawnRows.every((row) => row.classList.contains('compact'))).toBe(
       true
+    );
+  });
+});
+
+/**
+ * Velista `0207`: the question about the extra already bought is held beside the
+ * row, not in it. The row is a button, whose content a screen reader does not see,
+ * so each item carries a mark of its own for the popover to be inserted after, and
+ * the item carries the colour of the popover's hairline while it flashes.
+ */
+describe('LineList: where the question about the extra is held (velista 0207)', () => {
+  it('gives each item a mark outside the row, hidden from a screen reader', () => {
+    const fixture = render();
+    for (const item of rows(fixture)) {
+      const mark = item.querySelector<HTMLElement>(
+        ':scope > [data-ask-anchor]'
+      );
+      expect(mark).not.toBeNull();
+      expect(mark?.getAttribute('aria-hidden')).toBe('true');
+      expect(mark?.closest('[role="button"]')).toBeNull();
+    }
+  });
+
+  it('marks the asked item, and flashes only it', () => {
+    const fixture = render();
+    fixture.componentRef.setInput('askedId', 'b');
+    fixture.componentRef.setInput('flashing', true);
+    fixture.detectChanges();
+
+    expect(rows(fixture).map((row) => row.className)).toEqual([
+      'line',
+      'line asked flash',
+      'line',
+    ]);
+  });
+
+  it('pulses the hairline on the row wash clock, and holds it still under reduced motion (spec 12)', () => {
+    const css = compile(join(__dirname, 'line-list.scss')).css;
+    const rules = [...css.matchAll(/([^{}]*)\{([^{}]*)\}/g)].map((match) => ({
+      selector: match[1].replace(/\s+/g, ' ').trim(),
+      body: match[2],
+    }));
+    const flash = rules
+      .filter((one) => one.selector === '.line.asked.flash')
+      .map((one) => one.body);
+
+    expect(flash[0]).toMatch(
+      /--anchored-popover-accent:\s*var\(--line-list-ask-accent\);/
+    );
+    expect(flash[0]).toMatch(/animation:\s*ask-accent 2200ms linear both;/);
+    // The reduced motion frame: nothing animates, the hairline held in the accent.
+    expect(css).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.line\.asked\.flash\s*\{[^}]*--anchored-popover-accent:\s*var\(--app-action-quiet-fg\);[^}]*animation:\s*none;/
     );
   });
 });

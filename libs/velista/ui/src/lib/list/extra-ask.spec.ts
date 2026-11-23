@@ -22,7 +22,8 @@ const ENOUGH: ExtraAskWords = {
 };
 
 async function render(
-  words: ExtraAskWords = WORDS
+  words: ExtraAskWords = WORDS,
+  takeFocus = true
 ): Promise<ComponentFixture<ExtraAsk>> {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
@@ -31,6 +32,7 @@ async function render(
   const fixture = TestBed.createComponent(ExtraAsk);
   fixture.componentRef.setInput('words', words);
   fixture.componentRef.setInput('titleId', 'ask-title');
+  fixture.componentRef.setInput('takeFocus', takeFocus);
   document.body.append(fixture.nativeElement);
   fixture.detectChanges();
   await fixture.whenStable();
@@ -79,6 +81,16 @@ describe('ExtraAsk (velista 0207)', () => {
       const fixture = await render(words);
       expect(document.activeElement).toBe(answers(fixture)[1]);
     }
+  });
+
+  it('leaves focus where it is when told not to take it', async () => {
+    const field = document.createElement('input');
+    document.body.append(field);
+    field.focus();
+
+    await render(WORDS, false);
+
+    expect(document.activeElement).toBe(field);
   });
 
   it('says which answer was pressed, and the back gesture dismisses it', async () => {

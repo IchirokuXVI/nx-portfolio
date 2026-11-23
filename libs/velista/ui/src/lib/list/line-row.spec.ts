@@ -1873,7 +1873,7 @@ describe('LineRow: the question about the extra already bought (velista 0207)', 
     expect(row(fixture).classList).toContain('flash');
   });
 
-  it('pulses three times in 2.2 s, the layer and the popover on one clock, and holds still under reduced motion (spec 12)', () => {
+  it('pulses three times in 2.2 s, and holds still under reduced motion (spec 12)', () => {
     const rules = compiledRules('line-row.scss');
     const body = (selector: string) =>
       rules.filter((one) => one.selector === selector).map((one) => one.body);
@@ -1884,21 +1884,13 @@ describe('LineRow: the question about the extra already bought (velista 0207)', 
     expect(body('.row.asked::before').join('')).toMatch(
       /box-shadow:\s*inset 0 0 0 var\(--app-took-edge-width\) var\(--app-action-quiet-fg\);/
     );
-    const flash = body('.row.asked.flash');
-    // The popover's hairline reads the colour the row's clock animates.
-    expect(flash[0]).toMatch(
-      /--anchored-popover-accent:\s*var\(--line-row-ask-accent\);/
-    );
-    expect(flash[0]).toMatch(/animation:\s*ask-accent 2200ms linear both;/);
-    expect(body('.row.asked.flash::before')[0]).toMatch(
-      /animation:\s*ask-wash 2200ms linear both;/
-    );
-    // Reduced motion: no animation, the frame held, the hairline in the accent.
-    expect(flash[1]).toMatch(/animation:\s*none;/);
-    expect(flash[1]).toMatch(
-      /--anchored-popover-accent:\s*var\(--app-action-quiet-fg\);/
-    );
-    expect(body('.row.asked.flash::before')[1]).toMatch(/opacity:\s*1;/);
+    const wash = body('.row.asked.flash::before');
+    expect(wash[0]).toMatch(/animation:\s*ask-wash 2200ms linear both;/);
+    // Reduced motion: no animation, the wash held.
+    expect(wash[1]).toMatch(/animation:\s*none;/);
+    expect(wash[1]).toMatch(/opacity:\s*1;/);
+    // The popover's hairline is no longer the row's: the popover sits beside it.
+    expect(body('.row.asked.flash')).toEqual([]);
 
     // Three peaks in the keyframes: each pulse in, held and out.
     const peaks = rules.find((one) =>

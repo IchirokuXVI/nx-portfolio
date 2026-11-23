@@ -75,9 +75,13 @@ function answerAmount(
  * A buyer the reader cannot be told about arrives as a null id, and every such
  * buyer is one null entry (backend `0275` after its review), so the number of
  * unknown people is never known: no sentence counts them. "Someone" stands for them
- * alone, and "someone else" beside one person who is named; three entries or more
- * with an unknown among them say "Someone" too, since "3 people" could be too few.
- * A known id whose name does not resolve is one unknown person.
+ * alone, and "someone else" beside one person who is named. Three entries or more
+ * with an unknown among them name up to two of the people who are named, in the
+ * order of `buyers`, and "others" for the rest ("Marta, Luis and others"), since "3
+ * people" could be too few; with nobody named they say "Someone". The reader is not
+ * named there: "You, Luis and others" would need a sentence of its own, so the
+ * reader is one of the others. A known id whose name does not resolve is one
+ * unknown person.
  */
 function boughtSentence(
   buyers: readonly Buyer[],
@@ -86,9 +90,21 @@ function boughtSentence(
   t: ExtraAskTranslate
 ): string {
   if (buyers.length >= 3) {
-    return hasNull
+    if (!hasNull) {
+      return t('list.extra.boughtByMany', { count: buyers.length, amount });
+    }
+    const named = buyers
+      .filter(
+        (buyer): buyer is Extract<Buyer, { kind: 'named' }> =>
+          buyer.kind === 'named'
+      )
+      .slice(0, 2);
+    return named.length === 0
       ? t('list.extra.boughtBySomeone', { amount })
-      : t('list.extra.boughtByMany', { count: buyers.length, amount });
+      : t('list.extra.boughtByNamedAndOthers', {
+          names: named.map((buyer) => buyer.name).join(', '),
+          amount,
+        });
   }
   if (buyers.length === 2) {
     const you = buyers.some((buyer) => buyer.kind === 'you');

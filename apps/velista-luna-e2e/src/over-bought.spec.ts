@@ -30,7 +30,7 @@ import { composerField, signIn } from './support/app';
  * the server's number either way.
  */
 
-const NB =' ';
+const NB = ' ';
 
 function breadRow(page: Page): Locator {
   return page.locator(`li.line[data-line-id="${LINE_BREAD_ID}"]`);
@@ -85,8 +85,8 @@ test.describe('a raise asks whether the extra already bought counts (velista 020
       items: { userId: string; username: string }[];
     }>(`/v1/zones/${ZONE_WEEKLY_ID}/members?limit=100`);
     danaName =
-      members.items.find((member) => member.userId === dana.userId)
-        ?.username ?? '';
+      members.items.find((member) => member.userId === dana.userId)?.username ??
+      '';
     expect(danaName).not.toBe('');
   });
 
@@ -140,9 +140,18 @@ test.describe('a raise asks whether the extra already bought counts (velista 020
     await expect(count).toHaveText(
       new RegExp(`Count the extra\\s*2${NB}units`)
     );
-    await expect(count).toBeFocused();
-    // The row draws the amount set while the question is open.
-    await expect(breadAmount(page)).toHaveAttribute('data-value', '3');
+    // The search field keeps focus, since the stepper's press takes none: the
+    // question is said in the page's polite region, and a key typed goes on into
+    // the field.
+    await expect(composerField(page)).toBeFocused();
+    await expect(page.locator('p.live')).toHaveText(
+      `${danaName} already bought 1 extra. Do you still need 3, or just${NB}2? ` +
+        `Two answers are next to the line's amount: Still need 3${NB}units, ` +
+        `or Count the extra 2${NB}units.`
+    );
+    // The row draws what the line holds while the question is open, so a press on
+    // it steps from there.
+    await expect(breadAmount(page)).toHaveAttribute('data-value', '2');
 
     await count.click();
     await expect(question(page)).toHaveCount(0);

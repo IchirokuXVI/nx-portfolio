@@ -251,11 +251,31 @@ describe('extraAskWords (velista 0207)', () => {
       );
     });
 
-    it('never counts people it cannot count: three entries with an unknown say "Someone"', () => {
+    it('never counts people it cannot count: with an unknown among three entries it names up to two and "others"', () => {
       expect(sentence('es', [marta, luis, nobody])).toBe(
-        'Alguien ya compró 2 de más.'
+        'Marta, Luis y otras personas ya compraron 2 de más.'
       );
       expect(sentence('en', [marta, luis, nobody])).toBe(
+        'Marta, Luis and others already bought 2 extra.'
+      );
+      // One named, in the order of the buyers.
+      expect(sentence('es', [unnamed, luis, nobody])).toBe(
+        'Luis y otras personas ya compraron 2 de más.'
+      );
+      expect(sentence('en', [nobody, luis, unnamed])).toBe(
+        'Luis and others already bought 2 extra.'
+      );
+      // Never more than two names; the reader is one of the others.
+      expect(
+        sentence('en', [{ userId: 'u-ana' }, marta, me, luis, nobody])
+      ).toBe('Marta, Luis and others already bought 2 extra.');
+    });
+
+    it('says "Someone" for three entries or more with an unknown and nobody named', () => {
+      expect(sentence('es', [unnamed, me, nobody])).toBe(
+        'Alguien ya compró 2 de más.'
+      );
+      expect(sentence('en', [unnamed, me, nobody])).toBe(
         'Someone already bought 2 extra.'
       );
     });

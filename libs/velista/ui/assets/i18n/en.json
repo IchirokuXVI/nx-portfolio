@@ -1249,7 +1249,9 @@
       "count": "Count the extra",
       "enough": "That's enough",
       "units_one": "{{count}} unit",
-      "units_other": "{{count}} units"
+      "units_other": "{{count}} units",
+      "boughtByNamedAndOthers": "{{names}} and others already bought {{amount}} extra.",
+      "announce": "{{question}} Two answers are next to the line's amount: {{stillNeed}}, or {{keep}}."
     }
   },
   "account": {

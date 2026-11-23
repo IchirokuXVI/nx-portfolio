@@ -578,7 +578,9 @@
       Does the extra already bought count? (velista 0207.) Asked after a raise of a
       row whose save counted units bought above the ask, pointed at that row's amount
       control and covering neither the row nor the control. Whatever closes it
-      without "Still need" leaves the smaller amount the server already wrote.
+      without "Still need" leaves the smaller amount the server already wrote. Held
+      against the mark beside the row, laid over its control, so it is inserted in
+      the list item and never inside the row, which is a button.
     -->
     @if (extraAsk(); as asked) {
       @if (asked.shown) {
@@ -589,7 +591,7 @@
             [keepInSight]="asked.row"
             [labelledBy]="extraAskTitleId"
             [open]="true"
-            [origin]="asked.anchor"
+            [origin]="asked.origin"
             [pointer]="true"
             [side]="asked.side"
             align="end"
@@ -599,6 +601,7 @@
               (dismissed)="closeExtraAsk('escape')"
               (kept)="keepExtra()"
               (stillNeed)="stillNeedExtra()"
+              [takeFocus]="asked.takeFocus"
               [titleId]="extraAskTitleId"
               [words]="words"
             />
@@ -615,5 +618,5 @@
   open over nothing, and a write from it would only be refused (velista 0156).
 -->
 @if (current.kind === 'loading' || current.kind === 'loaded') {
-  <router-outlet />
+  <router-outlet (activate)="onSheetOpened()" />
 }
