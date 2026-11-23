@@ -430,6 +430,27 @@ describe('RowEntries: each list steps what was bought (velista 0201)', () => {
     expect(buttonNames(fixture)).toEqual(['Compra semanal']);
   });
 
+  // The owner, 2026-11-23: a buy stepped back to 0 takes no line off its list.
+  it('draws the plain minus at 1, never the trash, and still steps to 0', async () => {
+    const fixture = await render(row([entry({ left: 1, bought: 1 })]));
+    const stepped = jest.fn();
+    fixture.componentInstance.bought.subscribe(stepped);
+    const stepper = askAmounts(fixture)[0];
+    const minus = stepper.querySelector<HTMLButtonElement>('button.step.minus');
+
+    expect(stepper.getAttribute('data-value')).toBe('1');
+    expect(entrySteppers(fixture)[0].trashAtZero()).toBe(false);
+    expect(minus?.querySelector('lib-trash-icon')).toBeNull();
+    expect(minus?.querySelector('.glyph')).not.toBeNull();
+    expect(minus?.classList).not.toContain('is-clear');
+    minus?.click();
+    expect(stepped).toHaveBeenCalledWith(
+      expect.objectContaining({
+        step: expect.objectContaining({ from: 1, to: 0 }),
+      })
+    );
+  });
+
   it('is not a live region, because the stepper says the amount itself', async () => {
     const fixture = await render(row([entry()]));
     const section = html(fixture).querySelector('section.entries');
@@ -671,6 +692,9 @@ describe('RowEntries: Bought for another list (velista 0201, target state 7)', (
     );
     fixture.detectChanges();
     expect((held?.componentInstance as QuantityStepper).value()).toBe(1);
+    // The owner, 2026-11-23: the plain minus at 1, never the trash.
+    expect(element.querySelector('button.minus lib-trash-icon')).toBeNull();
+    expect(element.querySelector('button.minus .glyph')).not.toBeNull();
     expect(element.classList.contains('is-over')).toBe(true);
     expect(element.classList.contains('is-reached')).toBe(false);
   });

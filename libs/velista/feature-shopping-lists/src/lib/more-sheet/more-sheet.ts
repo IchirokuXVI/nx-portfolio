@@ -4,6 +4,7 @@ import {
   computed,
   inject,
   signal,
+  viewChild,
 } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import {
@@ -113,10 +114,17 @@ export class MoreSheet {
   /** Whether the View row's choices are open. The sheet stays open under them. */
   protected readonly viewOpen = signal(false);
 
-  /** A view was chosen: the device keeps it, and the sheet stays where it is. */
+  private readonly _shell = viewChild.required(SheetShell);
+
+  /**
+   * A view was chosen: the device keeps it, and the menu closes as the tools row's
+   * picker does after a choice (the owner, 2026-11-23). The shell hands focus back
+   * to what opened the menu, its button on the page, as Escape does.
+   */
   protected chooseView(view: ListRowLayout): void {
     this.viewOpen.set(false);
     this.listRows.setLayout(view);
+    this._shell().requestDismiss();
   }
 
   protected openPeople(): void {

@@ -355,9 +355,16 @@ describe('MoreSheet', () => {
       expect(view?.querySelector('.value')?.textContent).toBe('view.compact');
     });
 
-    it('opens the same choices, writes the one chosen and stays open', async () => {
+    // The owner, 2026-11-23: the menu closes after a choice, as the tools row's
+    // picker does, and focus goes back to the button that opened the menu.
+    it('opens the same choices, writes the one chosen, closes and gives focus back to the menu button', async () => {
+      // The page's menu button, which has focus when the menu opens.
+      const menuButton = document.createElement('button');
+      document.body.append(menuButton);
+      menuButton.focus();
       const { fixture, sheets } = await render();
       document.body.append(fixture.nativeElement as HTMLElement);
+      await fixture.whenStable();
       const view = row(fixture, 'view') as HTMLButtonElement;
 
       view.click();
@@ -381,9 +388,56 @@ describe('MoreSheet', () => {
       expect(TestBed.inject(ListRowsStore).layout()).toBe('compact');
       expect(document.querySelector('[role="menu"]')).toBeNull();
       expect(view.querySelector('.value')?.textContent).toBe('view.compact');
-      expect(document.activeElement).toBe(view);
+      expect(document.activeElement).toBe(menuButton);
       expect(sheets.leaveTo).not.toHaveBeenCalled();
+      expect(sheets.dismiss).toHaveBeenCalledTimes(1);
+      expect(sheets.dismiss).toHaveBeenCalledWith(
+        `/velista/en/shopping-lists/${BASKET_ID}`
+      );
+      (fixture.nativeElement as HTMLElement).remove();
+      menuButton.remove();
+    });
+
+    it('closes after the view already drawn is chosen too', async () => {
+      const { fixture, sheets } = await render();
+      document.body.append(fixture.nativeElement as HTMLElement);
+      const view = row(fixture, 'view') as HTMLButtonElement;
+
+      view.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      document
+        .querySelector<HTMLElement>(
+          '[role="menuitemradio"][data-view="default"]'
+        )
+        ?.click();
+      fixture.detectChanges();
+
+      expect(TestBed.inject(ListRowsStore).layout()).toBe('default');
+      expect(sheets.dismiss).toHaveBeenCalledTimes(1);
+      (fixture.nativeElement as HTMLElement).remove();
+    });
+
+    it('stays open when its choices close with no choice', async () => {
+      const { fixture, sheets } = await render();
+      document.body.append(fixture.nativeElement as HTMLElement);
+      const view = row(fixture, 'view') as HTMLButtonElement;
+
+      view.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      document
+        .querySelector<HTMLElement>('[role="menu"]')
+        ?.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+        );
+      fixture.detectChanges();
+
+      expect(document.querySelector('[role="menu"]')).toBeNull();
       expect(sheets.dismiss).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(view);
       (fixture.nativeElement as HTMLElement).remove();
     });
   });

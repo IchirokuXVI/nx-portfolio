@@ -705,6 +705,19 @@ describe('RowListsSheet (velista 0200)', () => {
     });
   });
 
+  // The owner, 2026-11-23: an ask stepped to 0 keeps the line on its list.
+  it('draws the plain minus at an ask of 1, never the trash', async () => {
+    const { fixture } = await render({ row: row([entry({ asked: 1 })]) });
+    const minus = rowsOf(fixture)[0].querySelector('button.step.minus');
+
+    expect(steppers(fixture)[0].value()).toBe(1);
+    expect(steppers(fixture)[0].trashAtZero()).toBe(false);
+    expect(minus?.querySelector('lib-trash-icon')).toBeNull();
+    expect(minus?.querySelector('.glyph')).not.toBeNull();
+    expect(minus?.classList).not.toContain('is-clear');
+    expect(minus?.getAttribute('aria-disabled')).toBeNull();
+  });
+
   describe('an ask the reader may not change', () => {
     it('opens the popover for a group the reader is not in, and sends nothing', async () => {
       const { fixture, store } = await render();
@@ -723,16 +736,34 @@ describe('RowListsSheet (velista 0200)', () => {
       expect(document.body.textContent).toContain('basket.lists.notInGroup');
     });
 
-    it("says the group's name for the reader's own group", async () => {
+    // The owner, 2026-11-23: a served list is one the reader writes, so the reader
+    // is a member of its group and a right on the list is missing, not membership.
+    it('says only people who manage the list may change it, to a member of its group', async () => {
       const { fixture } = await render({
         echoValues: true,
         row: row([entry({ demandEditable: false })]),
       });
       steppers(fixture)[0].disabledPress.emit();
       fixture.detectChanges();
-      expect(document.body.textContent).toContain(
-        'basket.lists.ownGroup:{"group":"Casa"}'
+      const popover = document.querySelector('.why');
+      expect(popover?.textContent?.trim()).toBe('basket.lists.ownGroup');
+      expect(document.body.textContent).not.toContain(
+        'basket.lists.notInGroup'
       );
+      expect(document.body.textContent).not.toContain('"group"');
+    });
+
+    it('keeps the group text for a list the reader was not served', async () => {
+      const { fixture } = await render({
+        echoValues: true,
+        row: row([entry({ listId: null, demandEditable: false })]),
+      });
+      steppers(fixture)[0].disabledPress.emit();
+      fixture.detectChanges();
+      expect(document.querySelector('.why')?.textContent?.trim()).toBe(
+        'basket.lists.notInGroup'
+      );
+      expect(document.body.textContent).not.toContain('basket.lists.ownGroup');
     });
 
     it('opens on a click, Enter and Space on the stepper itself, and writes nothing', async () => {

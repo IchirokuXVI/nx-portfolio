@@ -561,14 +561,17 @@ export class RowListsSheet {
       !finished &&
       entry.demandEditable &&
       (entry.listId !== null || row.entries.length === 1);
+    // Why the ask is locked (the owner, 2026-11-23). A served list is one the reader
+    // writes, and only an approved member of its group can write a list, so the
+    // reader is a member and a right on the list is missing (to manage it, or to
+    // decide on an approved line), not the membership. Any other list is one this
+    // reader was not served.
     const reason =
       editable || finished
         ? null
         : ref === undefined
           ? this._translator.t('basket.lists.notInGroup', undefined, locale)
-          : this._translator.t('basket.lists.ownGroup', undefined, locale, {
-              group: ref.zoneName,
-            });
+          : this._translator.t('basket.lists.ownGroup', undefined, locale);
     const shown = open ?? entry.asked;
     return {
       lineId: entry.lineId,

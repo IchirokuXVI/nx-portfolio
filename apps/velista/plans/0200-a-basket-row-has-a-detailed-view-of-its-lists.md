@@ -52,6 +52,13 @@
 > `0206`, so **build velista `0206` before this plan**. `0206` can be released alone and
 > earlier.
 >
+> Amended on 2026-11-23: a locked ask tells a reader who is not a member of the list's group
+> "This list belongs to a group you are not in. Only its members can change what it asks
+> for.", and a member "Only people who manage this list can change what it asks for." /
+> "Solo quienes gestionan esta lista pueden cambiar lo que pide." (a served list is one the
+> reader writes, so the reader is a member and a right on the list is missing); and the ask
+> stepper draws the plain minus at 1, never the trash, and still steps to 0.
+>
 > Code anchors, on `dev` at `1c57f0c9c`:
 > `libs/velista/feature-shopping-lists/src/lib/row-entries/row-entries.html` (the head with
 > "Change for all lists", each entry's swap button and stepper);

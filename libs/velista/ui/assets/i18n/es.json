@@ -2182,7 +2182,7 @@
       "bought": "Comprado {{bought}} de {{asked}}",
       "change": "Cambiar",
       "notInGroup": "Esta lista es de un grupo del que no formas parte. Solo sus miembros pueden cambiar lo que pide.",
-      "ownGroup": "Solo los miembros de {{- group}} pueden cambiar lo que pide esta lista."
+      "ownGroup": "Solo quienes gestionan esta lista pueden cambiar lo que pide."
     }
   },
   "getList": {
