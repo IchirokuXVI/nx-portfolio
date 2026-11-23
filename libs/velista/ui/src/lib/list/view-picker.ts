@@ -72,6 +72,7 @@ let choicesCount = 0;
           [attr.data-view-choices]="id"
           class="options"
           role="menu"
+          tabindex="-1"
         >
           @for (view of views; track view) {
             <button
