@@ -20,16 +20,17 @@
     <button
       (click)="press(-1, $event)"
       (contextmenu)="$event.preventDefault()"
-      (pointercancel)="endHold()"
+      (lostpointercapture)="endHold($event)"
+      (pointercancel)="endHold($event)"
       (pointerdown)="startHold(-1, $event)"
-      (pointerleave)="endHold()"
-      (pointerup)="endHold()"
+      (pointerup)="endHold($event)"
       [attr.aria-disabled]="disabled() || minusAtEnd() ? 'true' : null"
       [attr.aria-label]="
         'amount.less' | rokuT: { step: lessStep(), name: name() }
       "
       [class.at-end]="minusAtEnd()"
       [class.is-clear]="minusClears()"
+      #step
       class="step minus"
       type="button"
     >
@@ -81,15 +82,16 @@
     <button
       (click)="press(1, $event)"
       (contextmenu)="$event.preventDefault()"
-      (pointercancel)="endHold()"
+      (lostpointercapture)="endHold($event)"
+      (pointercancel)="endHold($event)"
       (pointerdown)="startHold(1, $event)"
-      (pointerleave)="endHold()"
-      (pointerup)="endHold()"
+      (pointerup)="endHold($event)"
       [attr.aria-disabled]="disabled() || plusAtEnd() ? 'true' : null"
       [attr.aria-label]="
         'amount.more' | rokuT: { step: moreStep(), name: name() }
       "
       [class.at-end]="plusAtEnd()"
+      #step
       class="step plus"
       type="button"
     >

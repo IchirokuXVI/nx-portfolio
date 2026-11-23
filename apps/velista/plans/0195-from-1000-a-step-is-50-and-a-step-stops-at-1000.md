@@ -1,3 +1,5 @@
+> **PR:** [#1068](https://github.com/IchirokuXVI/nx-portfolio/pull/1068)
+
 # 0195: from 1000 a step is 50, and a step stops at 1000
 
 > Decided on 2026-11-22. From 1000 base units the stepper moves by at least 10 today (a

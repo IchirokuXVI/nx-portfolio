@@ -395,7 +395,7 @@ describe('ListsTable', () => {
         {
           listId: 'l1',
           lineId: 'line-milk',
-          step: { from: 2000, to: 2025, repeat: false },
+          step: { from: 2000, to: 2050, repeat: false },
         },
       ]);
       expect(heard.added).toEqual([]);

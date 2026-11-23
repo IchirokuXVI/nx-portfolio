@@ -39,6 +39,64 @@
   animation: hint-in var(--app-motion-fast) var(--app-motion-ease);
 }
 
+// The pointer of a popover about one control (velista 0206), as the board
+// `compact-reel/OverBought.dc.html` draws it (`.ask .ptr`): a square of
+// $pointer-size turned 45 degrees, standing $pointer-outset outside the padding
+// edge that faces the anchor. With the popover 12 px off the row (POINTER_GAP in
+// anchored-popover.ts) its tip lands 3 to 4 px off the row. The only place these
+// numbers live.
+$pointer-size: 12;
+$pointer-outset: 7;
+
+.pop.pointed {
+  position: relative;
+}
+
+// The clip of the choice frame moves inside, so the pointer is drawn outside
+// anything that clips. The inner radius is the frame's less its hairline, which is
+// the curve the outer clip drew.
+.pop.choice.pointed {
+  padding: 0;
+  overflow: visible;
+}
+
+.pop.choice.pointed > .clip {
+  display: flex;
+  flex-direction: column;
+  padding: var(--app-space-3) 0 var(--app-space-2);
+  overflow: hidden;
+  border-radius: calc(var(--app-radius-md) - 1px);
+}
+
+// The popover's own surface with its hairline on the two outer sides, so the
+// pointer and the popover read as one shape. No shadow and no animation of its own.
+.ptr {
+  position: absolute;
+  inline-size: $pointer-size * 1px;
+  block-size: $pointer-size * 1px;
+  background: var(--app-surface-raised);
+  transform: rotate(45deg);
+}
+
+.ptr.up {
+  bottom: -$pointer-outset * 1px;
+  border-right: 1px solid var(--app-border-subtle);
+  border-bottom: 1px solid var(--app-border-subtle);
+}
+
+.ptr.down {
+  top: -$pointer-outset * 1px;
+  border-left: 1px solid var(--app-border-subtle);
+  border-top: 1px solid var(--app-border-subtle);
+}
+
+// The caller's flash (velista 0207): only the hairlines take the colour. With no
+// colour set, the popover's own hairline, so an accent alone draws as no accent.
+.pop.accent,
+.pop.accent > .ptr {
+  border-color: var(--anchored-popover-accent, var(--app-border-subtle));
+}
+
 @keyframes hint-in {
   from {
     opacity: 0;

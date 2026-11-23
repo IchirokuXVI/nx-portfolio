@@ -703,7 +703,7 @@ describe('SuggestionList, the cards', () => {
       ]);
     });
 
-    it('steps and draws a weight line by its unit: 1 kg up to 1,025 kg, down to 975 g (velista 0188)', async () => {
+    it('steps and draws a weight line by its unit: 1 kg up to 1,05 kg, down to 975 g (velista 0188, 0195)', async () => {
       const weighed = [
         { ...holdings[0], quantity: 1000, unit: 'GRAM' as const },
       ];
@@ -720,7 +720,7 @@ describe('SuggestionList, the cards', () => {
       await press(fixture, steps?.[0] ?? null);
 
       expect(changed).toEqual([
-        { holding: weighed[0], from: 1000, to: 1025, repeat: false },
+        { holding: weighed[0], from: 1000, to: 1050, repeat: false },
         { holding: weighed[0], from: 1000, to: 975, repeat: false },
       ]);
     });

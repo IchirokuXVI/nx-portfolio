@@ -449,7 +449,7 @@ describe('RowEntries: who may change what a list asks for', () => {
     expect(demanded.mock.calls.map(([call]) => call)).toEqual([
       { lineId: 'zl-1', step: { from: 1000, to: 1100, repeat: false } },
       // A line the sheet names no step for presses by the default.
-      { lineId: 'zl-2', step: { from: 1000, to: 1025, repeat: false } },
+      { lineId: 'zl-2', step: { from: 1000, to: 1050, repeat: false } },
     ]);
   });
 
