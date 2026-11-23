@@ -8,6 +8,7 @@ import {
   LINK_VISIT_HOURS,
   type Basket,
   type BasketAddLineRequest,
+  type BasketBuyForListRequest,
   type BasketChange,
   type BasketChangeActor,
   type BasketChangeKind,
@@ -516,6 +517,12 @@ interface Settlement {
   readonly outcome: 'BOUGHT' | 'NOT_AVAILABLE';
   /** Zero on a close, which buys nothing. */
   readonly quantity: number;
+  /**
+   * How many of {@link quantity} lowered the line (backend `0274`): the units
+   * that met what the list asked. Absent is all of them, as the migration made
+   * every buy before that plan.
+   */
+  applied?: number;
   readonly by: string;
   readonly at: Date;
   /**
@@ -1334,24 +1341,32 @@ export class BasketMemory implements BasketServiceI {
         break;
       }
       this._moved(act.lineId);
-      if (act.quantity <= left) {
-        left -= act.quantity;
-        act.reverted = true;
+      // Within a buy, its units above the ask go first, and only the applied
+      // units taken go back onto the line (backend `0274`, section 4).
+      const applied = this._appliedOf(act);
+      const taken = Math.min(act.quantity, left);
+      const appliedTaken = Math.max(0, taken - (act.quantity - applied));
+      const line = this._lines.find((held) => held.id === act.lineId);
+      if (line !== undefined) {
+        line.quantity += appliedTaken;
+      }
+      left -= taken;
+      act.reverted = true;
+      if (taken === act.quantity) {
         continue;
       }
       // Part of one settlement comes back, which the server does by splitting it.
-      act.reverted = true;
       this._settlements.push({
         id: (this._settlementId += 1),
         lineId: act.lineId,
         outcome: 'BOUGHT',
-        quantity: act.quantity - left,
+        quantity: act.quantity - taken,
+        applied: applied - appliedTaken,
         by: this.me.id,
         at: act.at,
         ...(act.itemId === undefined ? {} : { itemId: act.itemId }),
         reverted: false,
       });
-      left = 0;
     }
 
     this._announce(target.lineIds, true);
@@ -1453,7 +1468,23 @@ export class BasketMemory implements BasketServiceI {
     }
     this._requireFrom(body.from, entry.left);
 
-    line.quantity = Math.max(0, body.quantity - entry.bought);
+    // What this basket's buys met of the ask stays met; an ask below it lowers
+    // `applied` on the newest buys first, which become units above the ask
+    // (backend `0274`, section 5).
+    const applied = entry.asked - entry.left;
+    line.quantity = Math.max(0, body.quantity - applied);
+    let over = applied - body.quantity;
+    for (const act of this._standing().reverse()) {
+      if (over <= 0) {
+        break;
+      }
+      if (act.lineId !== line.id || act.outcome !== 'BOUGHT') {
+        continue;
+      }
+      const lowered = Math.min(over, this._appliedOf(act));
+      act.applied = this._appliedOf(act) - lowered;
+      over -= lowered;
+    }
     this._moved(line.id);
     this._announce([line.id], true);
     return this._result([line.id]);
@@ -1704,6 +1735,97 @@ export class BasketMemory implements BasketServiceI {
     this._lines.push(line);
     this._announce([line.id], true, false);
     return { ...(await this._result([line.id])), addOutcome: 'created' };
+  }
+
+  /**
+   * Buy the row's product for a list that did not ask for it (backend `0273`).
+   *
+   * The list's line of the product is the one named, else the one it holds, else
+   * one made at quantity 0. The buy is recorded on it with `applied` 0, so the
+   * line keeps asking for nothing. The refusals are the server's: a guest and a
+   * list the reader may not write are 403, a row with no product and a line that
+   * is already an entry of the row are 409. A made line takes the row's words,
+   * where the server takes the catalog's name: this fake names products in one
+   * language only.
+   */
+  async buyForList(
+    _basketId: string,
+    rowKey: string,
+    body: BasketBuyForListRequest
+  ): Promise<BasketRowResult> {
+    this._requireLive();
+    if (this.me.kind === 'GUEST') {
+      throw this._refuse('forbidden', 403, 'Guests cannot add to a list');
+    }
+    if (!LISTS.some((ref) => ref.listId === body.targetListId)) {
+      throw this._refuse('forbidden', 403, 'You cannot write that list');
+    }
+    const row = this._rows().find((held) =>
+      held.entries.some((entry) => entry.lineId === rowKey)
+    );
+    if (row === undefined) {
+      throw this._refuse('not_found', 404, 'No such row on this basket');
+    }
+    const productId = row.productId;
+    if (productId === null) {
+      throw this._refuse(
+        'basket_row_has_no_product',
+        409,
+        'This row has no product'
+      );
+    }
+    this._requireUnit(body.unit, row.unit);
+    if (!Number.isInteger(body.quantity) || body.quantity < 1) {
+      throw this._refuse(
+        'validation_failed',
+        400,
+        'quantity must be a whole number of 1 or more'
+      );
+    }
+
+    const onList = (held: StoredLine) =>
+      !held.deleted &&
+      held.listId === body.targetListId &&
+      held.itemIds.includes(productId);
+    const found =
+      body.lineId === null
+        ? this._lines.find(onList)
+        : this._lines.find((held) => held.id === body.lineId);
+    if (body.lineId !== null && (found === undefined || !onList(found))) {
+      throw this._refuse('not_found', 404, 'That line is not on the list');
+    }
+    if (
+      found !== undefined &&
+      row.entries.some((entry) => entry.lineId === found.id)
+    ) {
+      throw this._refuse(
+        'basket_line_already_in_row',
+        409,
+        'That list already has this product in the basket'
+      );
+    }
+
+    const line: StoredLine = found ?? {
+      id: `zl-${this._lines.length + 1}-buy`,
+      listId: body.targetListId,
+      content: row.content,
+      quantity: 0,
+      unit: row.unit,
+      itemIds: [productId],
+      approved: true,
+      demandEditable: true,
+      deleted: false,
+      skippedAt: null,
+    };
+    if (found === undefined) {
+      this._lines.push(line);
+    }
+    // At quantity 0, the whole buy is above the ask: `applied` 0.
+    this._write(line.id, 'BOUGHT', body.quantity, undefined, productId);
+
+    const lineIds = [...row.entries.map((entry) => entry.lineId), line.id];
+    this._announce(lineIds, true);
+    return this._result(lineIds);
   }
 
   /**
@@ -2102,7 +2224,7 @@ export class BasketMemory implements BasketServiceI {
         unit: anchor.unit ?? 'UNIT',
         left,
         bought,
-        asked: bought + left,
+        asked: entries.reduce((sum, entry) => sum + entry.asked, 0),
         boughtElsewhere,
         state: this._state(lines, left, bought, boughtElsewhere),
         // What a skip leaves behind once its window has passed (backend `0137`).
@@ -2348,9 +2470,13 @@ export class BasketMemory implements BasketServiceI {
 
   /** One entry, with the numbers read off the line and the settlements. */
   private _entry(line: StoredLine): BasketRowEntry {
-    const bought = this._standing()
-      .filter((act) => act.lineId === line.id && act.outcome === 'BOUGHT')
-      .reduce((sum, act) => sum + act.quantity, 0);
+    const buys = this._standing().filter(
+      (act) => act.lineId === line.id && act.outcome === 'BOUGHT'
+    );
+    const bought = buys.reduce((sum, act) => sum + act.quantity, 0);
+    // `left` plus the units of this basket's buys that met the ask (backend
+    // `0274`), so a buy above the ask leaves the ask where it was.
+    const applied = buys.reduce((sum, act) => sum + this._appliedOf(act), 0);
     const boughtElsewhere = this._recentElsewhere()
       .filter((purchase) => purchase.lineId === line.id)
       .reduce((sum, purchase) => sum + purchase.quantity, 0);
@@ -2381,7 +2507,7 @@ export class BasketMemory implements BasketServiceI {
       unit: line.unit ?? 'UNIT',
       left: line.quantity,
       bought,
-      asked: bought + line.quantity,
+      asked: applied + line.quantity,
       boughtElsewhere,
       state: this._entryState(line, bought, boughtElsewhere),
       awaitingApproval: !line.approved,
@@ -2615,11 +2741,20 @@ export class BasketMemory implements BasketServiceI {
     priceScopeId?: string,
     itemId?: string
   ): void {
+    const line =
+      outcome === 'BOUGHT'
+        ? this._lines.find((held) => held.id === lineId)
+        : undefined;
+    // The units that met the ask (backend `0274`): what the line still asked for,
+    // at most. The rest are above it, recorded and never subtracted.
+    const applied =
+      outcome === 'BOUGHT' ? Math.min(quantity, line?.quantity ?? 0) : 0;
     this._settlements.push({
       id: (this._settlementId += 1),
       lineId,
       outcome,
       quantity,
+      applied,
       by: this.me.id,
       at: new Date(),
       ...(priceScopeId === undefined ? {} : { priceScopeId }),
@@ -2627,16 +2762,18 @@ export class BasketMemory implements BasketServiceI {
       reverted: false,
     });
 
-    if (outcome === 'BOUGHT') {
-      const line = this._lines.find((held) => held.id === lineId);
-      if (line !== undefined) {
-        // What the household still asks for goes down by what was bought for it,
-        // never below zero: buying three of a line that says two is allowed, and
-        // the extra unit is recorded rather than subtracted twice.
-        line.quantity = Math.max(0, line.quantity - quantity);
-        this._moved(lineId);
-      }
+    if (line !== undefined) {
+      // What the household still asks for goes down by what was bought for it,
+      // never below zero: buying three of a line that says two is allowed, and
+      // the extra unit is recorded rather than subtracted twice.
+      line.quantity -= applied;
+      this._moved(lineId);
     }
+  }
+
+  /** The units of a buy that met the ask: all of it for a buy made before `0274`. */
+  private _appliedOf(act: Settlement): number {
+    return act.outcome === 'BOUGHT' ? (act.applied ?? act.quantity) : 0;
   }
 
   /**
@@ -2731,7 +2868,8 @@ export class BasketMemory implements BasketServiceI {
     }
     const left = entries.reduce((sum, entry) => sum + entry.left, 0);
     const bought = entries.reduce((sum, entry) => sum + entry.bought, 0);
-    return { ...host, entries, left, bought, asked: left + bought };
+    const asked = entries.reduce((sum, entry) => sum + entry.asked, 0);
+    return { ...host, entries, left, bought, asked };
   }
 
   /**

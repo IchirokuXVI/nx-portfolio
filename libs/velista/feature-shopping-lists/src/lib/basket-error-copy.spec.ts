@@ -240,3 +240,24 @@ describe('basketErrorKey: access that moved on the zone surfaces', () => {
     );
   });
 });
+
+describe('basketErrorKey: a buy for another list (velista 0201, backend 0273)', () => {
+  it.each([
+    ['basket_line_already_in_row', 409, 'basket.entries.buyAlreadyInRow'],
+    ['basket_row_has_no_product', 409, 'basket.entries.buyNoProduct'],
+    ['basket_product_has_no_name', 409, 'basket.entries.buyNoName'],
+    ['catalog_unavailable', 503, 'basket.entries.buyCatalogDown'],
+    ['conflict', 409, 'basket.entries.buyChanged'],
+    ['forbidden', 403, 'basket.error.accessChanged'],
+  ] as const)('says %s as its own sentence', (code, status, key) => {
+    expect(basketErrorKey(gateway(code, status), 'basket.buyForList')).toBe(
+      key
+    );
+  });
+
+  it('keeps the settle’s sentence for a conflict on a settle', () => {
+    expect(basketErrorKey(gateway('conflict', 409), 'basket.settle')).toBe(
+      'basket.error.alreadyFinished'
+    );
+  });
+});

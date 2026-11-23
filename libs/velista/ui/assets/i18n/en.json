@@ -763,7 +763,9 @@
       "wholeGrams": "Grams take no decimals",
       "wholeMilliliters": "Milliliters take no decimals",
       "decimals": "At most three decimals"
-    }
+    },
+    "reached": "reached",
+    "over": "more than asked"
   },
   "list": {
     "header": {
@@ -1977,7 +1979,17 @@
     },
     "entries": {
       "otherList": "Another list",
-      "asks": "asks for {{amount}}"
+      "asks": "asks for {{amount}}",
+      "heading": "What you bought",
+      "otherHeading": "Bought for another list",
+      "boughtLabel": "{{name}}, bought",
+      "boughtPlain": "Bought",
+      "bought": "bought {{amount}}",
+      "buyAlreadyInRow": "That list already has this product here, so step it with the lists above.",
+      "buyNoProduct": "This row has no product, so it cannot be bought for another list.",
+      "buyNoName": "This product has no name yet, so it cannot be added to that list.",
+      "buyCatalogDown": "That did not save. Try again in a moment.",
+      "buyChanged": "Somebody changed this product just now. Look at it again and try once more."
     },
     "row": {
       "boughtOf": "{{bought}} of {{asked}}",

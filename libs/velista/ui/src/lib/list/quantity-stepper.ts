@@ -148,6 +148,8 @@ export interface RefusalWords {
     '[class.is-took]': 'took()',
     '[class.is-disabled]': 'disabled()',
     '[class.is-locked]': 'locked()',
+    '[class.is-reached]': "reach() === 'reached'",
+    '[class.is-over]': "reach() === 'over'",
     '[attr.data-value]': 'value()',
   },
 })
@@ -212,6 +214,14 @@ export class QuantityStepper {
   readonly readonly = input(false);
   /** An add just raised this amount (velista `0170`, decision J). */
   readonly took = input(false);
+  /**
+   * The amount this one is measured against, or null for none (velista `0201`): a
+   * list's ask, beside what was bought for it. At it the number is drawn in the
+   * success colour, above it in the quiet amber, and below it as always, and the
+   * live region says "reached" or "more than asked" after the settled amount. Only
+   * the number takes the colour, never the outline or the symbol.
+   */
+  readonly target = input<number | null>(null);
 
   /** The next amount, on every press, every repeat, every key and every typed commit. */
   readonly valueChange = output<number>();
@@ -259,6 +269,30 @@ export class QuantityStepper {
 
   /** Both buttons and the field ignore input: a write in flight, or a locked amount. */
   readonly blocked = computed(() => this.disabled() || this.locked());
+
+  /**
+   * Where the amount stands against {@link target}: `reached` at it, `over` above
+   * it, null below it or with no target. A target of 0 is never reached, so
+   * nothing is green for a list that asks nothing; any amount above it is over.
+   */
+  readonly reach = computed<'reached' | 'over' | null>(() => {
+    const target = this.target();
+    if (target === null) {
+      return null;
+    }
+    const value = this.value();
+    return value > target
+      ? 'over'
+      : value === target && target > 0
+        ? 'reached'
+        : null;
+  });
+
+  /** The word the live region says after the settled amount, as a key, or null. */
+  readonly reachKey = computed(() => {
+    const reach = this.reach();
+    return reach === null ? null : `amount.${reach}`;
+  });
 
   /** What minus moves at the current amount, in short form words ("25 g", "1", "10"). */
   readonly lessStep = computed(() => {

@@ -181,6 +181,7 @@ function build(
     changeProduct: (id, body) => memory.changeProduct(id, body),
     productLists: (id, itemId) => memory.productLists(id, itemId),
     addLine: (id, body) => memory.addLine(id, body),
+    buyForList: (id, rowKey, body) => memory.buyForList(id, rowKey, body),
     suggest: (id, query) => memory.suggest(id, query),
     changes: (id, ctx, cursor) => memory.changes(id, ctx, cursor),
     acknowledgeChanges: (id, through) => memory.acknowledgeChanges(id, through),
@@ -3323,5 +3324,169 @@ describe('BasketStore: a buy reaches the other phone at once (velista 0143)', ()
       const rows = await twin.getBasketRows('basket-saturday');
       expect(JSON.stringify(rows)).not.toContain('item-yoghurt');
     });
+  });
+});
+
+describe('BasketStore: one list of a row steps what was bought (velista 0201)', () => {
+  it('settles one line, keyed by that line, and keeps the ask of a buy above it', async () => {
+    const sent: unknown[] = [];
+    const memory = new BasketMemory();
+    const { store } = build({
+      getBasket: () => memory.getBasket(),
+      settle: (id, target, body) => {
+        sent.push({ target, body });
+        return memory.settle(id, target, body);
+      },
+    });
+    await store.open('basket-saturday');
+    const milk = rowOf(store, 'Milk');
+    const line = milk.entries[0];
+
+    await store.settle(
+      milk.rowKey,
+      { outcome: 'BOUGHT', quantity: line.left + 1, from: line.left },
+      line.lineId
+    );
+
+    expect(sent).toEqual([
+      {
+        target: { rowKey: line.lineId, lineIds: [line.lineId] },
+        body: {
+          outcome: 'BOUGHT',
+          quantity: line.left + 1,
+          from: line.left,
+          unit: 'UNIT',
+        },
+      },
+    ]);
+    const after = rowOf(store, 'Milk').entries[0];
+    expect(after).toMatchObject({
+      left: 0,
+      bought: line.bought + line.left + 1,
+      asked: line.asked,
+    });
+    expect(rowOf(store, 'Milk').asked).toBe(milk.asked);
+  });
+
+  it('reverts one line, keyed by that line, from its bought', async () => {
+    const sent: unknown[] = [];
+    const memory = new BasketMemory();
+    const { store } = build({
+      getBasket: () => memory.getBasket(),
+      revert: (id, target, body) => {
+        sent.push({ target, body });
+        return memory.revert(id, target, body);
+      },
+    });
+    await store.open('basket-saturday');
+    const milk = rowOf(store, 'Milk');
+    const line = milk.entries[1];
+    await store.settle(
+      milk.rowKey,
+      { outcome: 'BOUGHT', quantity: 1, from: line.left },
+      line.lineId
+    );
+    const bought = rowOf(store, 'Milk').entries[1].bought;
+
+    await store.revert(
+      milk.rowKey,
+      { target: 'UNITS', units: 1, from: bought },
+      line.lineId
+    );
+
+    expect(sent).toEqual([
+      {
+        target: { rowKey: line.lineId, lineIds: [line.lineId] },
+        body: { target: 'UNITS', units: 1, from: bought },
+      },
+    ]);
+    expect(rowOf(store, 'Milk').entries[1]).toMatchObject({
+      bought: bought - 1,
+      left: line.left,
+      asked: line.asked,
+    });
+  });
+
+  it('sends nothing for a line that is not an entry of the row', async () => {
+    const settle = jest.fn();
+    const { store } = build({ settle });
+    await store.open('basket-saturday');
+
+    expect(
+      await store.settle(
+        rowOf(store, 'Milk').rowKey,
+        { outcome: 'BOUGHT', quantity: 1, from: 0 },
+        'zl-unknown'
+      )
+    ).toBeNull();
+    expect(settle).not.toHaveBeenCalled();
+  });
+
+  it("buys for another list in the row's unit, and the list joins the row at an ask of 0", async () => {
+    const sent: unknown[] = [];
+    const memory = new BasketMemory();
+    const { store } = build({
+      getBasket: () => memory.getBasket(),
+      buyForList: (id, rowKey, body) => {
+        sent.push({ rowKey, body });
+        return memory.buyForList(id, rowKey, body);
+      },
+    });
+    await store.open('basket-saturday');
+    const eggs = rowOf(store, 'Eggs');
+    const lists = (await store.productLists(eggs.productId ?? '')) ?? [];
+    const other = lists[0];
+    expect(other).toBeDefined();
+
+    const result = await store.buyForList(eggs.rowKey, {
+      targetListId: other.listId,
+      lineId: other.lineId,
+      quantity: 2,
+    });
+
+    expect(sent).toEqual([
+      {
+        rowKey: eggs.rowKey,
+        body: {
+          targetListId: other.listId,
+          lineId: other.lineId,
+          quantity: 2,
+          unit: 'UNIT',
+        },
+      },
+    ]);
+    expect(result).not.toBeNull();
+    await flush();
+    const joined = rowOf(store, 'Eggs').entries.find(
+      (entry) => entry.listId === other.listId
+    );
+    expect(joined).toMatchObject({ bought: 2, left: 0, asked: 0 });
+  });
+
+  it("reads the basket again when the row's product changed under the buy, and keeps the error", async () => {
+    const memory = new BasketMemory();
+    const getBasket = jest.fn(() => memory.getBasket());
+    const refusal = new GatewayError({
+      code: 'conflict',
+      status: 409,
+      correlationId: 'c-1',
+      detail: 'The row changed',
+    });
+    const { store } = build({
+      getBasket,
+      buyForList: () => Promise.reject(refusal),
+    });
+    await store.open('basket-saturday');
+    const reads = getBasket.mock.calls.length;
+
+    const result = await store.buyForList(rowOf(store, 'Milk').rowKey, {
+      targetListId: 'l-any',
+      lineId: null,
+      quantity: 1,
+    });
+
+    expect(result).toBeNull();
+    expect(store.error()).toBe(refusal);
+    expect(getBasket.mock.calls.length).toBeGreaterThan(reads);
   });
 });

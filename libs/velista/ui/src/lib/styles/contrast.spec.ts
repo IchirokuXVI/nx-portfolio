@@ -205,6 +205,18 @@ describe('contrast', () => {
       }
     );
 
+    // Velista `0201`, colours A: a buy stepper's number in the success colour at the
+    // list's ask and in the quiet amber above it, on the stepper's raised surface,
+    // which is the sheet's too. Named, so a change to either names the row sheet.
+    it.each(['--app-status-success-fg', '--app-action-quiet-fg'])(
+      `a buy stepper's %s number reaches ${TEXT}:1 on the stepper`,
+      (text) => {
+        expect(
+          ratio(text, '--app-surface-raised', theme)
+        ).toBeGreaterThanOrEqual(TEXT);
+      }
+    );
+
     // Rule T2: never place white or light text on an action fill. `--app-action-fg`
     // exists so this cannot be gotten wrong by accident, and this is what proves
     // it across every state of the button, not just its resting one.

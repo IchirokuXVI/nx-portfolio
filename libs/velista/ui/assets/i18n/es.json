@@ -763,7 +763,9 @@
       "wholeGrams": "Los gramos no llevan decimales",
       "wholeMilliliters": "Los mililitros no llevan decimales",
       "decimals": "Como máximo, tres decimales"
-    }
+    },
+    "reached": "lo que se pedía",
+    "over": "más de lo pedido"
   },
   "list": {
     "header": {
@@ -1977,7 +1979,17 @@
     },
     "entries": {
       "otherList": "Otra lista",
-      "asks": "pide {{amount}}"
+      "asks": "pide {{amount}}",
+      "heading": "Lo que has comprado",
+      "otherHeading": "Comprado para otra lista",
+      "boughtLabel": "{{name}}, comprado",
+      "boughtPlain": "Comprado",
+      "bought": "comprado {{amount}}",
+      "buyAlreadyInRow": "Esa lista ya tiene este producto aquí, así que cuéntalo con las listas de arriba.",
+      "buyNoProduct": "Esta fila no tiene producto, así que no se puede comprar para otra lista.",
+      "buyNoName": "Este producto aún no tiene nombre, así que no se puede añadir a esa lista.",
+      "buyCatalogDown": "No se ha guardado. Inténtalo de nuevo en un momento.",
+      "buyChanged": "Alguien acaba de cambiar este producto. Míralo otra vez y vuelve a intentarlo."
     },
     "row": {
       "boughtOf": "{{bought}} de {{asked}}",

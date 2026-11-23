@@ -118,6 +118,8 @@ function patch(
     unit: held.unit,
     left: held.left,
     bought: held.bought,
+    // What a server before backend `0274` meant, unless the case states it.
+    asked: (overrides.left ?? held.left) + (overrides.bought ?? held.bought),
     boughtElsewhere: held.boughtElsewhere,
     state: held.state,
     awaitingApproval: held.awaitingApproval,
@@ -313,6 +315,50 @@ describe('applyBasketPatch', () => {
       state: 'PARTLY',
     });
     expect(next.rows[0].entries.map((held) => held.left)).toEqual([2, 0]);
+  });
+
+  describe('the ask from the wire (velista 0201, spec 11)', () => {
+    const weekly = entry('w', { left: 3, asked: 3 });
+    const one = row('w', [weekly]);
+
+    it('keeps the ask at 3 when a patch says 4 bought of an ask of 3', () => {
+      const next = applied(
+        applyBasketPatch(
+          basket([one]),
+          ['w'],
+          [
+            patch(weekly, {
+              version: 4,
+              left: 0,
+              bought: 4,
+              asked: 3,
+              state: 'DONE',
+              act: BUY,
+            }),
+          ]
+        )
+      );
+      expect(next.rows[0].entries[0].asked).toBe(3);
+      expect(next.rows[0]).toMatchObject({ asked: 3, bought: 4, left: 0 });
+    });
+
+    it('applies a patch with no ask stated as bought plus left', () => {
+      const next = applied(
+        applyBasketPatch(
+          basket([one]),
+          ['w'],
+          [patch(weekly, { version: 4, left: 1, bought: 2, act: BUY })]
+        )
+      );
+      expect(next.rows[0].entries[0].asked).toBe(3);
+    });
+
+    it('is not the same patch when only the ask moved', () => {
+      const next = applied(
+        applyBasketPatch(basket([one]), ['w'], [patch(weekly, { asked: 2 })])
+      );
+      expect(next.rows[0].entries[0].asked).toBe(2);
+    });
   });
 
   it('counts the progress over the rows, as the server does', () => {

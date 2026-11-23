@@ -22,6 +22,7 @@ import {
   type BasketAccessEnded,
   type BasketAddLineRequest,
   type BasketAddress,
+  type BasketBuyForListInput,
   type BasketDemandInput,
   type BasketEntryPatch,
   type BasketListRef,
@@ -1124,12 +1125,16 @@ export class BasketStore {
    */
   async settle(
     rowKey: string,
-    body: BasketSettleInput
+    body: BasketSettleInput,
+    lineId?: string
   ): Promise<BasketRowResult | null> {
     // In the row's unit (velista `0182`): a row is one unit, and the store holds it.
     const unit = this.rowFor(rowKey)?.unit ?? 'UNIT';
-    return this._rowWrite(rowKey, (id, target) =>
-      this._service.settle(id, target, { ...body, unit })
+    return this._rowWrite(
+      rowKey,
+      (id, target) => this._service.settle(id, target, { ...body, unit }),
+      true,
+      lineId
     );
   }
 
@@ -1142,11 +1147,58 @@ export class BasketStore {
    */
   async revert(
     rowKey: string,
-    body: BasketRevertRequest
+    body: BasketRevertRequest,
+    lineId?: string
   ): Promise<BasketRowResult | null> {
-    return this._rowWrite(rowKey, (id, target) =>
-      this._service.revert(id, target, body)
+    return this._rowWrite(
+      rowKey,
+      (id, target) => this._service.revert(id, target, body),
+      true,
+      lineId
     );
+  }
+
+  /**
+   * Buy the row's product for a covered list that did not ask for it (backend
+   * `0273`; velista `0201`, target state 7).
+   *
+   * The answer is folded as an add's is: it carries a line this client may not
+   * hold, which joins the row of its product, and the read that follows names it.
+   * On a refusal the store holds the error as for any write. A `conflict` (the
+   * row's product changed under the request) and `basket_line_already_in_row`
+   * (the list is already among the row's lists) are the world having moved, so the
+   * basket is read again first and the error is put back after it.
+   *
+   * Null without a request for a row this store does not hold.
+   */
+  async buyForList(
+    rowKey: string,
+    body: BasketBuyForListInput
+  ): Promise<BasketRowResult | null> {
+    const row = this.rowFor(rowKey);
+    if (row === null) {
+      return null;
+    }
+    return this._write(row.rowKey, async (id) => {
+      try {
+        const result = await this._service.buyForList(id, row.rowKey, {
+          ...body,
+          unit: row.unit,
+        });
+        // A line the client does not hold yet, which only a read names.
+        this._fold(result, [], false);
+        return result;
+      } catch (error) {
+        if (
+          error instanceof GatewayError &&
+          (error.code === 'conflict' ||
+            error.code === 'basket_line_already_in_row')
+        ) {
+          await this.refresh();
+        }
+        throw error;
+      }
+    });
   }
 
   /**
@@ -1470,13 +1522,22 @@ export class BasketStore {
   private async _rowWrite(
     rowKey: string,
     send: (id: string, target: BasketRowTarget) => Promise<BasketRowResult>,
-    patchable = true
+    patchable = true,
+    lineId?: string
   ): Promise<BasketRowResult | null> {
-    const target = this.targetOf(rowKey);
-    if (target === null) {
+    const whole = this.targetOf(rowKey);
+    if (whole === null) {
       return null;
     }
-    return this._write(target.rowKey, async (id) => {
+    // One line of the row (velista `0201`): the server takes the path's key to be
+    // one of the named lines, so a write on one line is keyed by that line. The
+    // row's own key stays the busy key, so the row is busy while it is out.
+    if (lineId !== undefined && !whole.lineIds.includes(lineId)) {
+      return null;
+    }
+    const target: BasketRowTarget =
+      lineId === undefined ? whole : { rowKey: lineId, lineIds: [lineId] };
+    return this._write(whole.rowKey, async (id) => {
       const result = await send(id, target);
       this._fold(result, target.lineIds, patchable);
       return result;

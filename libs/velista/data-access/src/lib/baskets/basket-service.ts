@@ -3,6 +3,7 @@ import { serviceToken } from '@portfolio/shared/data-access';
 import type {
   Basket,
   BasketAddLineRequest,
+  BasketBuyForListRequest,
   BasketChangePage,
   BasketDemandRequest,
   BasketLinkPreview,
@@ -289,6 +290,21 @@ export interface BasketServiceI {
   addLine(
     basketId: string,
     body: BasketAddLineRequest
+  ): Promise<BasketRowResult>;
+
+  /**
+   * Buy the row's product for a covered list that did not ask for it (`POST
+   * /v1/baskets/:id/rows/:rowKey/buy-for-list`, backend `0273`; velista `0201`).
+   *
+   * One write that finds or makes the list's line at quantity 0 and records the
+   * buy on it, so the list joins the row with an ask of 0. A guest is refused
+   * with `forbidden`, and the sheet never offers it to one. The answer is the
+   * row's lines as a settle answers them, the new one among them.
+   */
+  buyForList(
+    basketId: string,
+    rowKey: string,
+    body: BasketBuyForListRequest
   ): Promise<BasketRowResult>;
 
   /**

@@ -138,17 +138,18 @@
       -->
       @if (row(); as held) {
         <lib-row-entries
-          (demanded)="stepDemand($event)"
+          (bought)="stepBuy($event)"
+          (boughtOther)="stepOther($event)"
           (listsOpened)="openLists()"
-          (raised)="stepRaise($event)"
           (retry)="retryOthers()"
           [busy]="busy()"
+          [buying]="canSettle()"
           [changeable]="changeable()"
           [finished]="basketFinished()"
           [lists]="lists()"
           [others]="others()"
-          [pending]="shownAsks()"
-          [pendingRaises]="shownRaises()"
+          [pending]="shownBuys()"
+          [pendingOthers]="shownOthers()"
           [row]="held"
           [step]="step()"
           [steps]="lineSteps()"
