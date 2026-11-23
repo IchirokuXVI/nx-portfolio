@@ -2788,8 +2788,7 @@ export class ListPage {
       return;
     }
     const column = this._column()?.nativeElement;
-    const parts =
-      column === undefined ? null : extraAskParts(column, lineId);
+    const parts = column === undefined ? null : extraAskParts(column, lineId);
     if (parts === null) {
       // No row of this page draws the line: nothing to point at, nothing asked.
       return;
@@ -2873,7 +2872,10 @@ export class ListPage {
       return;
     }
     const reduced = this._reducedMotion();
-    column.scrollBy?.({ top: scroll, behavior: reduced ? 'instant' : 'smooth' });
+    column.scrollBy?.({
+      top: scroll,
+      behavior: reduced ? 'instant' : 'smooth',
+    });
     if (reduced) {
       show();
       return;
@@ -2916,7 +2918,10 @@ export class ListPage {
       return;
     }
     this._stillNeeded.add(asked.lineId);
-    void this.changeQuantity({ lineId: asked.lineId, delta: asked.extra.counted });
+    void this.changeQuantity({
+      lineId: asked.lineId,
+      delta: asked.extra.counted,
+    });
     this._closeAsk(asked, true);
   }
 
@@ -2931,9 +2936,7 @@ export class ListPage {
    * another line's question. Nothing is sent and the line keeps what is left.
    * Focus goes back to the row's control unless a press took it somewhere else.
    */
-  closeExtraAsk(
-    reason: AnchoredPopoverClose | 'kept' | 'replaced'
-  ): void {
+  closeExtraAsk(reason: AnchoredPopoverClose | 'kept' | 'replaced'): void {
     const asked = this.extraAsk();
     if (asked === null) {
       return;

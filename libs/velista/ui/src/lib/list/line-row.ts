@@ -385,9 +385,7 @@ export class LineRow {
       const open = this._reel()?.open() ?? false;
       if (open !== reelWasOpen) {
         reelWasOpen = open;
-        untracked(() =>
-          this.reelOpened.emit({ lineId: this.line().id, open })
-        );
+        untracked(() => this.reelOpened.emit({ lineId: this.line().id, open }));
       }
     });
 

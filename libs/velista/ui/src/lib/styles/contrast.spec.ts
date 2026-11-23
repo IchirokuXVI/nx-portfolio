@@ -232,6 +232,23 @@ describe('contrast', () => {
       }
     );
 
+    // Velista `0207`: the flash of a row whose raise asks about the extra already
+    // bought lays the quiet amber wash over the row, and text keeps its colours, so
+    // every text colour of the row, the muted one included, clears the floor on the
+    // wash over the page's ground. Named, so a change to the wash names the flash.
+    it.each([
+      '--app-text-primary',
+      '--app-text-secondary',
+      '--app-text-muted',
+      '--app-action-quiet-fg',
+    ])(`a flashed row's %s reaches ${TEXT}:1 on the wash`, (text) => {
+      const wash = over(
+        colour('--app-action-quiet-bg', theme),
+        colour('--app-surface-ground', theme)
+      );
+      expect(contrast(colour(text, theme), wash)).toBeGreaterThanOrEqual(TEXT);
+    });
+
     // Rule T2: never place white or light text on an action fill. `--app-action-fg`
     // exists so this cannot be gotten wrong by accident, and this is what proves
     // it across every state of the button, not just its resting one.

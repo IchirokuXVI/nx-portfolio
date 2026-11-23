@@ -1339,20 +1339,27 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
       const answer = raiseAnswers.shift() ?? {
         extra: { above: 0, counted: 0, buyers: [] },
       };
-      if (raiseHeld !== null) {
-        await raiseHeld;
-      }
+      // The answer comes back after the request went out, as the network's does,
+      // never in the task that sent it.
+      await (raiseHeld ?? Promise.resolve());
       if (outcome === 'failed' || before === undefined) {
         lines.update((current) =>
           current.map((l) => (l.id === lineId && before ? before : l))
         );
         return { state: 'failed' as const, extra: null };
       }
-      const left =
-        answer.quantity ??
-        Math.max(0, before.quantity + delta - (answer.extra?.counted ?? 0));
+      // What was counted comes off what the line holds now, so a write that landed
+      // in between stands, as it does on the server.
+      const counted = answer.extra?.counted ?? 0;
       lines.update((current) =>
-        current.map((l) => (l.id === lineId ? { ...l, quantity: left } : l))
+        current.map((l) =>
+          l.id === lineId
+            ? {
+                ...l,
+                quantity: answer.quantity ?? Math.max(0, l.quantity - counted),
+              }
+            : l
+        )
       );
       return { state: outcome, extra: answer.extra };
     },
