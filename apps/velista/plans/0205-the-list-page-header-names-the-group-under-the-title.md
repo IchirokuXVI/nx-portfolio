@@ -1,3 +1,5 @@
+> **PR:** [#1090](https://github.com/IchirokuXVI/nx-portfolio/pull/1090)
+
 # 0205: the list page header names the group under the title
 
 > Decided on 2026-11-22. The zone list page draws the group of the list ("in Casa") as the
