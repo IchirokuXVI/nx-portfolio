@@ -507,7 +507,8 @@ here. A `details: ALL` walk after this fix repairs part of them:
 
 ## Notes after the build (2026-11-26)
 
-Three hardening items on top of the fix of 2026-11-25 (owner decisions 147, 148 and 150).
+Three hardening items on top of the fix of 2026-11-25 (owner decisions 147, 148 and 150), built
+in [#1107](https://github.com/IchirokuXVI/nx-portfolio/pull/1107).
 
 - **The page's own code is read against the asked one** (decision 147). `parseProductPage` takes
   the code the row asked for and reads the code the page states: the JSON-LD `sku`, else the last
