@@ -796,15 +796,15 @@ test.describe('the basket asks about the extra (velista 0208, stage 4)', () => {
     await groceriesOf(view).locator('button.change').click();
     await expect(page).toHaveURL(/\/sheet\/rows\/[^/]+\/change\/[^/?]+/);
     await changeSheet.locator('button.catalog').click();
-    await expect(page).toHaveURL(/\/lines\/[^/]+\/products/);
+    await expect(page).toHaveURL(/\/lines\/[^/]+\/product(\?.*)?$/);
     await expect(view).toHaveCount(0);
     await page.goBack();
     await expect(page).toHaveURL(/\/sheet\/rows\/[^/]+\/change\/[^/?]+/);
-    await expect(changeSheet).toBeVisible();
+    await expect(changeSheet.locator('button.use')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(changeSheet).toHaveCount(0);
     await expect(page).toHaveURL(/\/sheet\/rows\/[^/]+\/lists(\?.*)?$/);
-    await expect(view).toBeVisible();
+    await expect(groceriesOf(view).locator('button.change')).toBeVisible();
 
     await groceriesOf(view).locator('button.change').click();
     await expect(page).toHaveURL(/\/sheet\/rows\/[^/]+\/change\/[^/?]+/);
