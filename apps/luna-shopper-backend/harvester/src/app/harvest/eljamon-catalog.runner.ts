@@ -237,6 +237,7 @@ export class ElJamonCatalogRunner implements CatalogRunner {
     const walk = new Walk();
     context.countProgressItself();
     const known = knownIds(input);
+    const holdsRow = rowsHeld(input);
 
     // --- 1. The listing ----------------------------------------------------
     await context.setStage('LIST', 'Reading the top level categories');
@@ -273,7 +274,8 @@ export class ElJamonCatalogRunner implements CatalogRunner {
       walk,
       fresh,
       source,
-      silence
+      silence,
+      holdsRow
     );
     for (const disagreement of walk.priceDisagreements) {
       // The listing wins: it is what a shopper sees with the session's postal
@@ -297,7 +299,6 @@ export class ElJamonCatalogRunner implements CatalogRunner {
     );
     const observedAt = new Date();
     const failed = new Set(walk.failedProducts.map((product) => product.code));
-    const holdsRow = rowsHeld(input);
     // The pages never asked for, or cut short by an abort, were counted by
     // nobody: they count as their rows are recorded here.
     await context.report({
@@ -326,7 +327,11 @@ export class ElJamonCatalogRunner implements CatalogRunner {
         report.product(listingOnly(listed.row, observedAt));
       } else {
         // A page that was read was reported then, so no page is at hand here.
-        report.product(observationOf(listed, undefined, observedAt));
+        // A row the chain may hold states no category path, as a failed page
+        // does (plan 0169, notes of 2026-11-25).
+        report.product(
+          observationOf(listed, undefined, observedAt, holdsRow(code))
+        );
       }
     }
 
@@ -379,7 +384,8 @@ export class ElJamonCatalogRunner implements CatalogRunner {
     walk: Walk,
     fresh: readonly ListedRow[],
     source: SupermarketSource,
-    silence: SilentAttempts
+    silence: SilentAttempts,
+    holdsRow: (id: string) => boolean
   ): Promise<DetailStage> {
     const stage: DetailStage = {
       pages: 0,
@@ -439,7 +445,7 @@ export class ElJamonCatalogRunner implements CatalogRunner {
           // price, which the walk read before any page.
           walk.report(
             report,
-            observationOf(listed, product, new Date()),
+            observationOf(listed, product, new Date(), true),
             listed.row.code
           );
           await context.report({ processed: 1 });
@@ -460,14 +466,21 @@ export class ElJamonCatalogRunner implements CatalogRunner {
             url: listed.row.url,
             error: String(error),
           });
-          // Reported now, as the end of the walk reported it: with its top
-          // level category and `DETAIL_FAILED_KEY`, so the next walk reads
-          // its page again (plan 0267). A page that was read before the
-          // failure was reported then, and is not reported twice.
+          // Reported now, with `DETAIL_FAILED_KEY`, so the next walk reads
+          // its page again (plan 0267). It states no category path when the
+          // chain may hold a row for it, so a stored breadcrumb stays (plan
+          // 0169, notes of 2026-11-25); only a row the chain surely holds none
+          // of starts with the top level category. A page that was read
+          // before the failure was reported then, and is not reported twice.
           if (!walk.reported.has(listed.row.code)) {
             walk.report(
               report,
-              observationOf(listed, undefined, new Date()),
+              observationOf(
+                listed,
+                undefined,
+                new Date(),
+                holdsRow(listed.row.code)
+              ),
               listed.row.code
             );
           }
@@ -834,11 +847,20 @@ function rowsHeld(input: CatalogDiscoveryInput): (id: string) => boolean {
  * new row starts with none. Everything else the page gives comes from its
  * JSON-LD, which is the asked product's, and is kept. It is marked like a
  * failed page, so the next `NEW` walk reads its page again for the path.
+ *
+ * **A page that failed states no category path either when `held`**, that is
+ * when the chain may already hold a row for the product (plan 0169, notes of
+ * 2026-11-25). The top level category it used to state replaced a stored
+ * breadcrumb on every `ALL` walk. Only a row the chain surely holds none of
+ * starts with the top level category. Its photo is still stated as null: an
+ * observation must state one (plan 0198), so a failed page of an `ALL` walk
+ * still clears a stored photo.
  */
 function observationOf(
   listed: ListedRow,
   detail: ElJamonProduct | undefined,
-  observedAt: Date
+  observedAt: Date,
+  held: boolean
 ): SourceObservation {
   const size = splitSize(listed.row.description);
   const extra: Record<string, unknown> = {};
@@ -848,14 +870,15 @@ function observationOf(
   if (!detail || detail.contaminated) {
     extra[DETAIL_FAILED_KEY] = true;
   }
-  const categoryPath = detail?.contaminated
-    ? {}
-    : {
-        categoryPath:
-          detail && detail.categoryPath.length > 0
-            ? detail.categoryPath
-            : [listed.category.name],
-      };
+  const categoryPath =
+    detail?.contaminated || (!detail && held)
+      ? {}
+      : {
+          categoryPath:
+            detail && detail.categoryPath.length > 0
+              ? detail.categoryPath
+              : [listed.category.name],
+        };
   return {
     externalId: listed.row.code,
     name: size.name,

@@ -42,7 +42,9 @@ export interface ElJamonProbeOptions {
 /**
  * Four steps against El Jamón (plan 0219, section 3.2): the top level
  * categories, which start the session first, page 1 of the first category,
- * the product that page names first, and the store locator.
+ * the product that page names first, and the store locator. A product page
+ * whose breadcrumb names another product is read once more, which is the one
+ * extra request a probe can make.
  *
  * Page 1 is read by its path and parsed by the walk's own parser, which is
  * the first request `walkCategory` makes. Going through the generator would
@@ -128,10 +130,21 @@ export async function probeElJamon(
     return probe.result(client.requests);
   }
 
+  // A page whose breadcrumb names another product is read once more, as a
+  // run reads it (plan 0169, notes of 2026-11-25), so a guard hit is told
+  // apart from a shop that prints no category.
+  let rereads = 0;
   const product = await probe.step(
     'product',
     row.url,
-    () => client.getProduct(row.url),
+    async () => {
+      const first = await client.getProduct(row.url);
+      if (!first?.contaminated) {
+        return first;
+      }
+      rereads += 1;
+      return client.getProduct(row.url);
+    },
     (value) => {
       if (value === null) {
         return { problems: [`product ${row.code} answered no product`] };
@@ -146,7 +159,12 @@ export async function probeElJamon(
       if (!isPositive(value.price)) {
         problems.push('the product carried no price above zero');
       }
-      if (value.categoryPath.length === 0) {
+      if (value.contaminated) {
+        problems.push(
+          'the page drew its breadcrumb for another product twice, ' +
+            'so its categoryPath was not read'
+        );
+      } else if (value.categoryPath.length === 0) {
         problems.push('the product carried no categoryPath');
       }
       return {
@@ -156,6 +174,7 @@ export async function probeElJamon(
           name: value.name,
           priceCents: cents(value.price),
           categoryPath: value.categoryPath.join(' > '),
+          rereads,
         },
       };
     }

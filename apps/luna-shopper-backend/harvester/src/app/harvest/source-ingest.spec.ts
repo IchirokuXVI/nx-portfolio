@@ -4780,3 +4780,54 @@ describe('SourceIngest, a LIDL week that does not state a stored value (owner de
     expect(counters).toMatchObject({ updated: 1 });
   });
 });
+
+describe('a category path the observation does not state (plan 0169, notes of 2026-11-25)', () => {
+  const session = {
+    supermarketId: CHAIN,
+    defaultPriceScopeId: SCOPE,
+    sourceKind: PriceSourceKind.OFFICIAL_API,
+  };
+
+  /** A full observation with no `categoryPath` at all, as El Jamón sends it. */
+  function unstated(over: Parameters<typeof observation>[0]) {
+    const full = observation(over);
+    delete full.categoryPath;
+    return full;
+  }
+
+  it('leaves the stored path of a held row as it is', async () => {
+    const { ingest, context, saved } = build({
+      rows: [
+        {
+          externalId: 'j-1',
+          name: 'Fiambre york',
+          categoryPath: ['Frescos', 'Charcutería envasada', 'Fiambres'],
+        },
+      ],
+    });
+
+    await ingest.ingest(context, {
+      ...session,
+      observations: [unstated({ externalId: 'j-1', name: 'Fiambre york' })],
+    });
+
+    expect(saved[0].categoryPath).toEqual([
+      'Frescos',
+      'Charcutería envasada',
+      'Fiambres',
+    ]);
+  });
+
+  it('creates a new row with an empty path', async () => {
+    const { ingest, context } = build({});
+
+    const { outcomes, counters } = await ingest.ingest(context, {
+      ...session,
+      observations: [unstated({ externalId: 'j-2', name: 'Tortas de aceite' })],
+    });
+
+    expect(outcomes[0].created).toBe(true);
+    expect(outcomes[0].entry.categoryPath).toEqual([]);
+    expect(counters).toMatchObject({ created: 1 });
+  });
+});

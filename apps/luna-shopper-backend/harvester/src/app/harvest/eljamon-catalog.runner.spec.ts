@@ -605,6 +605,39 @@ describe('ElJamonCatalogRunner', () => {
     expect(bacon?.extra).toEqual({ detailFailed: true });
   });
 
+  it('states no category path for a page that failed on an ALL walk, so the stored one stays (plan 0169, notes of 2026-11-25)', async () => {
+    const ctx = context();
+    const report = new RecordingRunReport();
+    await new TestRunner(storefront).run(
+      ctx,
+      report,
+      { ...input, details: HarvestDetailFetch.ALL },
+      source
+    );
+
+    // An ALL walk is handed no ids, so the chain may hold a row for 102, and
+    // the top level category would replace a stored breadcrumb.
+    const bacon = report.products.find(
+      (product) => product.externalId === '102'
+    );
+    expect(bacon).not.toHaveProperty('categoryPath');
+    expect(bacon?.prices[0].price).toBe(8.95);
+    // The photo is still stated as null: an observation must state one.
+    expect(bacon?.imageUrl).toBeNull();
+    // Still marked, and still counted once as failed.
+    expect(bacon?.extra).toEqual({ detailFailed: true });
+    const written = ctx.setReport.mock.calls[0][0] as Record<string, unknown>;
+    expect(written).toMatchObject({
+      detailFailed: 1,
+      failedProducts: [expect.objectContaining({ code: '102' })],
+    });
+    expect(written['detail']).toMatchObject({ pages: 22, failed: 1 });
+    // The listing's category is only added to the stored paths.
+    expect(
+      report.categoryPathCalls.find((call) => call.externalId === '102')
+    ).toEqual({ externalId: '102', paths: [['FRESCOS']], mode: 'ADD' });
+  });
+
   it('asks for page 2 with a POST, as the listing form does', async () => {
     const runner = new TestRunner(storefront);
     await runner.run(context(), new RecordingRunReport(), input, source);
@@ -1817,7 +1850,7 @@ describe('ElJamonCatalogRunner', () => {
       // see together the rate one session saw.
       expect(admitted()).toBe(shop.sent.length);
       expect(written(ctx)['requests']).toBe(shop.sent.length);
-      // The cost of the sessions is two requests each beyond the listing's.
+      // Each session starts with its own `GET /`, so four sessions are four.
       expect(shop.sent.filter((s) => s.path === '/')).toHaveLength(4);
     });
 

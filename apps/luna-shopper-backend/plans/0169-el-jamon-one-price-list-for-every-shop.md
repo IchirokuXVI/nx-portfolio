@@ -477,9 +477,30 @@ and the name changes of the walk of 2026-11-25 are the listing's, not another pr
 - **An observation may leave `categoryPath` out**, which means "not stated" as for the size
   fields (owner decision 143a): the stored path stays, and a new row gets `[]`. Only El Jamón
   sends it absent.
+- **A product page that fails states no category path either**, when the chain may already hold
+  a row for the product. Before, it stated the listing's top level category, and on a
+  `details: ALL` walk that replaced a stored breadcrumb. A row the chain surely holds none of (a
+  new product on a `NEW` walk) still starts with the top level category. Such a page still
+  states its photo as null, so a failed page of an `ALL` walk still clears a stored photo: an
+  observation must state its photo (plan 0198), and to change that is a change to every chain's
+  observation. Its `detailFailed` mark and its count as failed are as before.
 
 **Other stages.** The listing is serial in one session and stays as it is. The source probe makes
-its four requests one after the other. The price refresh has no El Jamón fetcher, and the store
-discovery reads the locator, which has no session.
+its four requests one after the other, and reads a contaminated product page once more as a run
+does. When the second answer is still contaminated, it reports that cause, not a product with no
+category. The price refresh has no El Jamón fetcher, and the store discovery reads the locator,
+which has no session.
 
-The stored breadcrumbs are not repaired here. A full details walk after this fix rewrites them.
+**What a later walk repairs, and what it does not.** The stored breadcrumbs are not repaired
+here. A `details: ALL` walk after this fix repairs part of them:
+
+- `categoryPath` is rewritten on every listed row whose page reads clean, bound rows and decided
+  rows included: the walk owns the source group of the row, and its status does not change that.
+- `categoryPaths` is replaced only when the listing is whole. One failed listing page or one
+  category that read fewer rows than it printed makes every call an add, and then the wrong path
+  stays in `categoryPaths` beside the right one.
+- A catalog product already created or accepted from a wrong path keeps its catalog category.
+  Category resolution reads the path only when a row is accepted or created, never on a later
+  walk.
+- A row whose path the walk repaired is counted `unchanged` on the run report, because the
+  comparison that decides `updated` does not read `categoryPath`.
