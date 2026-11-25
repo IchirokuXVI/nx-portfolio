@@ -1,3 +1,4 @@
+import { ErrorHandler } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type {
   AbsorbedExtra,
@@ -404,6 +405,8 @@ function setup(world: World) {
     },
   };
 
+  const errors = { handleError: jest.fn() };
+
   TestBed.configureTestingModule({
     providers: [
       CatalogAddStore,
@@ -439,6 +442,7 @@ function setup(world: World) {
           },
         },
       },
+      { provide: ErrorHandler, useValue: errors },
     ],
   });
 
@@ -447,6 +451,8 @@ function setup(world: World) {
   return {
     store,
     calls,
+    /** What the store reported to the app's error handler. */
+    errors,
     addedNamed,
     units,
     ensured,
@@ -2451,6 +2457,87 @@ describe('CatalogAddStore', () => {
       expect(drawn('weekly', 'milk')).toEqual([3]);
       expect(store.failures()).toBe(0);
       expect(store.visit()).toMatchObject([{ lineId: 'old', quantity: 3 }]);
+    });
+
+    it('reports the error of a callback that throws to the app, and still keeps the write', async () => {
+      const { store, server, errors, extraNext } = setup({
+        ...HOME,
+        lines: [line('old', 'weekly', { quantity: 2 })],
+      });
+      await store.ensure();
+      const { options } = gone();
+      extraNext(EXTRA);
+
+      store.step(
+        on('weekly', MILK),
+        'old',
+        { from: 2, to: 3, repeat: false },
+        options
+      );
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      await settled();
+
+      expect(errors.handleError).toHaveBeenCalledTimes(1);
+      expect(errors.handleError.mock.calls[0][0]).toEqual(
+        new Error('NG0911: View has already been destroyed.')
+      );
+      expect(server.get('old')?.quantity).toBe(3);
+      expect(store.failures()).toBe(0);
+    });
+
+    it('hands the answer of a run stepped on from another page to the newest page', async () => {
+      const { store, calls, errors, extraNext } = setup({
+        ...HOME,
+        lines: [line('old', 'weekly', { quantity: 2 })],
+      });
+      await store.ensure();
+      const first: string[] = [];
+      const second: string[] = [];
+      extraNext(EXTRA);
+
+      // The run opens on one page, which goes; the person steps the same line on
+      // another before the quiet beat ends.
+      store.step(
+        on('weekly', MILK),
+        'old',
+        { from: 2, to: 3, repeat: false },
+        { reportExtra: true, onExtra: (report) => first.push(report.lineId) }
+      );
+      store.step(
+        on('weekly', MILK),
+        'old',
+        { from: 3, to: 4, repeat: false },
+        { reportExtra: true, onExtra: (report) => second.push(report.lineId) }
+      );
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      await settled();
+
+      expect(calls).toContain('raise:old:2');
+      expect(first).toEqual([]);
+      expect(second).toEqual(['old']);
+      expect(errors.handleError).not.toHaveBeenCalled();
+    });
+
+    it('sends no report when the newest page of an open run asks for none', async () => {
+      const { store, calls } = setup({
+        ...HOME,
+        lines: [line('old', 'weekly', { quantity: 2 })],
+      });
+      await store.ensure();
+      const heard: string[] = [];
+
+      store.step(
+        on('weekly', MILK),
+        'old',
+        { from: 2, to: 3, repeat: false },
+        { reportExtra: true, onExtra: (report) => heard.push(report.lineId) }
+      );
+      store.step(on('weekly', MILK), 'old', { from: 3, to: 4, repeat: false });
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      await settled();
+
+      expect(calls.some((call) => call.startsWith('raise:'))).toBe(false);
+      expect(heard).toEqual([]);
     });
 
     it('keeps an add whose callback throws, settles it once, and counts no failure', async () => {

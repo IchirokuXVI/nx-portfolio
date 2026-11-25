@@ -960,7 +960,12 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
    */
   const addAnswers: (
     | { readonly state: 'failed'; readonly error: unknown }
-    | { readonly state: 'raised'; readonly lineId: string }
+    | {
+        readonly state: 'raised';
+        readonly lineId: string;
+        /** What the raise took into the ask, answered to an add that asked (`0208`). */
+        readonly extra?: AbsorbedExtra | null;
+      }
     | {
         readonly state: 'alreadyOnList';
         readonly lineIds: readonly string[];
@@ -1059,6 +1064,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
           readonly merged: boolean;
           readonly outcome: AddOutcome;
           readonly alreadyOnList: readonly Line[];
+          readonly extra: AbsorbedExtra | null;
         }
       | { readonly state: 'failed'; readonly error: unknown }
     > => {
@@ -1097,6 +1103,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
             merged: true,
             outcome: 'raised' as const,
             alreadyOnList: [],
+            extra: options?.reportExtra === true ? (next.extra ?? null) : null,
           };
         }
       }
@@ -1114,6 +1121,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
             merged: true,
             outcome: 'alreadyOnList' as const,
             alreadyOnList: met,
+            extra: null,
           };
         }
       }
@@ -1154,6 +1162,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         merged: false,
         outcome: 'created' as const,
         alreadyOnList: [],
+        extra: null,
       };
     },
 
@@ -1176,7 +1185,11 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
     answerAddWith: (
       answer:
         | { readonly state: 'failed'; readonly error: unknown }
-        | { readonly state: 'raised'; readonly lineId: string }
+        | {
+            readonly state: 'raised';
+            readonly lineId: string;
+            readonly extra?: AbsorbedExtra | null;
+          }
         | {
             readonly state: 'alreadyOnList';
             readonly lineIds: readonly string[];

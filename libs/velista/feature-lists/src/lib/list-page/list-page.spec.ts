@@ -66,6 +66,7 @@ import {
 } from '@portfolio/velista/data-access';
 import type {
   AbsorbedExtra,
+  AddLineOptions,
   CatalogItem,
   CatalogSuggestion,
   DueLine,
@@ -108,6 +109,7 @@ import {
   PageHeader,
   TOOK_DURATION_MS,
   TripGroup,
+  type SuggestionHolding,
 } from '@portfolio/velista/ui';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -2373,7 +2375,7 @@ describe('ListPage', () => {
           content: 'Milk',
           quantity: 2,
           // Typed words say the page can ask which line (velista 0170).
-          options: { askIfAmbiguous: true },
+          options: { askIfAmbiguous: true, reportExtra: true },
         },
       ]);
     });
@@ -2388,7 +2390,7 @@ describe('ListPage', () => {
           kind: 'add',
           content: 'Milk',
           quantity: 1,
-          options: { askIfAmbiguous: true },
+          options: { askIfAmbiguous: true, reportExtra: true },
         },
       ]);
     });
@@ -2416,7 +2418,7 @@ describe('ListPage', () => {
           kind: 'add',
           content: 'Milk',
           quantity: 1,
-          options: { askIfAmbiguous: true },
+          options: { askIfAmbiguous: true, reportExtra: true },
         },
       ]);
     });
@@ -2438,7 +2440,7 @@ describe('ListPage', () => {
           quantity: 1,
           itemIds: ['item-a'],
           named: false,
-          options: { askIfAmbiguous: true },
+          options: { askIfAmbiguous: true, reportExtra: true },
         },
       ]);
     });
@@ -3252,7 +3254,7 @@ describe('ListPage', () => {
       expect(lines.calls.at(-1)).toEqual({
         kind: 'add',
         content: 'Leche entera',
-        options: { intoLineId: 'ln-other' },
+        options: { intoLineId: 'ln-other', reportExtra: true },
       });
       expect(choiceRows()).toHaveLength(0);
 
@@ -3324,7 +3326,7 @@ describe('ListPage', () => {
       expect(lines.calls.at(-1)).toEqual({
         kind: 'add',
         content: 'Leche entera',
-        options: { intoLineId: 'ln-other' },
+        options: { intoLineId: 'ln-other', reportExtra: true },
       });
       expect(choiceRows()).toHaveLength(0);
       // The add's own failure, never the list being gone, drawn under the field
@@ -3357,7 +3359,7 @@ describe('ListPage', () => {
       expect(lines.calls.at(-1)).toEqual({
         kind: 'add',
         content: 'Leche entera',
-        options: { intoLineId: 'ln-whole' },
+        options: { intoLineId: 'ln-whole', reportExtra: true },
       });
       expect([...fixture.componentInstance.tookLines()]).toEqual(['ln-whole']);
       expect(fixture.componentInstance.announcement()).toBe(
@@ -3412,7 +3414,7 @@ describe('ListPage', () => {
 
       expect(lines.calls.at(-1)).toMatchObject({
         itemIds: ['item-a'],
-        options: { askIfAmbiguous: true },
+        options: { askIfAmbiguous: true, reportExtra: true },
       });
       // Two lines, and no "A new line" for a product.
       expect(choiceRows()).toHaveLength(2);
@@ -6342,7 +6344,7 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
       ]);
     });
 
-    it("never goes with a catalog card of the results, which is the catalog's", async () => {
+    it('never goes with a card change that names no card, which has nothing to point at', async () => {
       const { fixture, lines } = await render({ lines: ROWS });
       jest.useFakeTimers();
       fixture.componentInstance.changeHolding({
@@ -6905,7 +6907,7 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
       jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
       expect(writes(lines.calls)).toEqual([]);
 
-      // A later run of the catalog card alone is the catalog's.
+      // A later run of a change that names no card leaves nothing to point at.
       fixture.componentInstance.changeHolding({
         holding: { lineId: 'ln-eggs' },
         from: 1,
@@ -7233,6 +7235,327 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
         ]);
         TestBed.resetTestingModule();
       }
+    });
+  });
+
+  /**
+   * Velista `0208`, stage 3 (target states 15 and 16, specs 14 and 15): the zone
+   * list's "Add or find" field. An add that raises a line kept at zero asks on the
+   * raised row, and a catalog card's stepper in the results asks on itself. The
+   * field keeps its focus throughout.
+   */
+  describe('"Add or find" (0208 specs 14 and 15)', () => {
+    const KEPT = [
+      line('ln-eggs', { content: 'Huevos', quantity: 0, position: 1 }),
+      line('ln-milk', { content: 'Leche', quantity: 2, position: 2 }),
+    ];
+    const FOUR: AbsorbedExtra = {
+      above: 3,
+      countable: 1,
+      buyers: [{ userId: MARTA }],
+    };
+
+    const field = (fixture: ComponentFixture<ListPage>) =>
+      (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>(
+        'lib-line-composer input.field'
+      ) as HTMLInputElement;
+
+    const adds = (calls: readonly unknown[]) =>
+      calls.filter((call) => (call as { kind?: string }).kind === 'add') as {
+        readonly options?: AddLineOptions;
+      }[];
+
+    /** Type in the field, which keeps the focus, and press its plus. */
+    async function typeAndSend(
+      fixture: ComponentFixture<ListPage>,
+      text: string
+    ): Promise<void> {
+      const input = field(fixture);
+      input.focus();
+      input.value = text;
+      input.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      (
+        (fixture.nativeElement as HTMLElement).querySelector(
+          'lib-line-composer .send'
+        ) as HTMLButtonElement
+      ).click();
+      fixture.detectChanges();
+    }
+
+    async function raisedByAdd(extra: AbsorbedExtra | null = FOUR) {
+      const rendered = await render({
+        lines: KEPT,
+        names: { [MARTA]: 'Marta' },
+      });
+      await settle(rendered.fixture);
+      // Four asked: the add raises the eggs from 0 to the amount it sets.
+      rendered.lines.answerAddWith({
+        state: 'raised',
+        lineId: 'ln-eggs',
+        extra,
+      });
+      return rendered;
+    }
+
+    it('sends the flag with every add of the field and with a chosen line', async () => {
+      const { fixture, lines } = await raisedByAdd();
+      await typeAndSend(fixture, 'Huevos');
+      await settle(fixture);
+      fixture.componentInstance.addChoice.set({
+        listId: LIST_ID,
+        entry: { content: 'Leche', quantity: undefined } as never,
+        anchor: field(fixture),
+        choice: { lines: [] } as never,
+      });
+      fixture.componentInstance.chooseLine('ln-milk');
+      await settle(fixture);
+
+      expect(adds(lines.calls).map((call) => call.options)).toEqual([
+        { askIfAmbiguous: true, reportExtra: true },
+        { intoLineId: 'ln-milk', reportExtra: true },
+      ]);
+    });
+
+    it('asks on the raised row with Y the line holds, and leaves the focus in the field', async () => {
+      const { fixture } = await raisedByAdd({
+        above: 3,
+        countable: 1,
+        buyers: [{ userId: MARTA }],
+      });
+      await typeAndSend(fixture, 'Huevos');
+      await settle(fixture);
+      await new Promise((resolve) => setTimeout(resolve));
+      fixture.detectChanges();
+
+      const ask = fixture.componentInstance.extraAsk();
+      expect(ask?.lineId).toBe('ln-eggs');
+      expect(ask?.shown).toBe(true);
+      // The add raised the eggs to 1; Z would be 0, the "enough" variant.
+      expect(ask?.quantity).toBe(1);
+      expect(fixture.componentInstance.extraWords()?.keep.words).toBe(
+        'list.extra.enough'
+      );
+      expect(ask?.anchor).toBe(
+        rowOf(fixture, 'ln-eggs')?.querySelector('[data-amount-control]')
+      );
+      // The field keeps the focus, and the question is said, not focused.
+      expect(ask?.takeFocus).toBe(false);
+      expect(document.activeElement).toBe(field(fixture));
+      expect(fixture.componentInstance.extraFlashing()).toBe(true);
+    });
+
+    it('counts through the row like any question, and only "Count the extra" writes', async () => {
+      const { fixture, lines } = await raisedByAdd();
+      await typeAndSend(fixture, 'Huevos');
+      await settle(fixture);
+
+      fixture.componentInstance.answerCount();
+      await settle(fixture);
+
+      expect(counts(lines.calls)).toEqual([
+        { kind: 'countExtra', lineId: 'ln-eggs', amount: 1, expect: 1 },
+      ]);
+    });
+
+    it('asks nothing for a raised row a filter leaves out, and the amount set stands', async () => {
+      const { fixture, lines, view } = await raisedByAdd();
+      view.pickCategory('cat-milk');
+      fixture.detectChanges();
+      await typeAndSend(fixture, 'Huevos');
+      await settle(fixture);
+
+      expect(fixture.componentInstance.extraAsk()).toBeNull();
+      expect(stored(lines, 'ln-eggs')).toBe(1);
+      expect(counts(lines.calls)).toEqual([]);
+    });
+
+    it('asks nothing for an add that made a line or met one already asked for', async () => {
+      for (const answer of [
+        null,
+        { state: 'alreadyOnList' as const, lineIds: ['ln-milk'] },
+      ]) {
+        const { fixture, lines } = await render({
+          lines: KEPT,
+          names: { [MARTA]: 'Marta' },
+        });
+        await settle(fixture);
+        if (answer !== null) {
+          lines.answerAddWith(answer);
+        }
+        await typeAndSend(fixture, answer === null ? 'Pan' : 'Leche');
+        await settle(fixture);
+
+        expect(fixture.componentInstance.extraAsk()).toBeNull();
+        expect(popover(fixture)).toBeUndefined();
+        TestBed.resetTestingModule();
+      }
+    });
+
+    it('asks nothing when the page went before the answer, and never throws or undoes the raise', async () => {
+      const { fixture, lines } = await raisedByAdd();
+      lines.holdAdds();
+      await typeAndSend(fixture, 'Huevos');
+      const host = fixture.debugElement.injector.get(ExtraAskHost);
+      const ask = jest.spyOn(host, 'ask');
+
+      fixture.destroy();
+      lines.releaseAdds();
+      await turns();
+
+      expect(ask).not.toHaveBeenCalled();
+      expect(stored(lines, 'ln-eggs')).toBe(1);
+      expect(counts(lines.calls)).toEqual([]);
+    });
+
+    it('asks nothing when a run of the raised row went out after the add', async () => {
+      const { fixture, lines } = await raisedByAdd();
+      lines.holdAdds();
+      await typeAndSend(fixture, 'Huevos');
+      // A newer write of the same line, sent while the add was out.
+      (
+        fixture.componentInstance as unknown as {
+          _noteSent: (lineId: string) => number;
+        }
+      )._noteSent('ln-eggs');
+      lines.releaseAdds();
+      await settle(fixture);
+
+      expect(fixture.componentInstance.extraAsk()).toBeNull();
+    });
+
+    describe("a catalog card's stepper in the results (0208 spec 15)", () => {
+      const EGGS: CatalogSuggestion = {
+        kind: 'item',
+        item: {
+          id: 'item-eggs',
+          quantityStep: null,
+          name: { es: 'Huevos camperos', en: 'Free range eggs' },
+          brand: 'Hacendado',
+          size: 12,
+          unit: 'UNIT',
+          productGroupId: null,
+          categories: [],
+          offer: null,
+          chainPrices: [],
+          imageUrl: null,
+          packCount: null,
+          unitBasis: null,
+          approxWeight: null,
+        },
+      };
+
+      async function withCard() {
+        const rendered = await render({
+          lines: [
+            line('ln-eggs', {
+              content: 'Huevos',
+              quantity: 1,
+              position: 1,
+              itemIds: ['item-eggs'],
+            }),
+          ],
+          names: { [MARTA]: 'Marta' },
+        });
+        const { fixture } = rendered;
+        await settle(fixture);
+        const input = field(fixture);
+        input.focus();
+        input.value = 'Huevos';
+        input.dispatchEvent(new Event('input'));
+        fixture.componentInstance.suggestions.set([EGGS]);
+        fixture.detectChanges();
+        await settle(fixture);
+        const card = (
+          fixture.nativeElement as HTMLElement
+        ).querySelector<HTMLElement>('.catalog [data-card]') as HTMLElement;
+        const stepper = card.querySelector<HTMLElement>(
+          'li[data-line="ln-eggs"] > lib-quantity-stepper'
+        ) as HTMLElement;
+        return { ...rendered, card, stepper };
+      }
+
+      function stepCard(
+        fixture: ComponentFixture<ListPage>,
+        card: HTMLElement,
+        from: number,
+        to: number
+      ): void {
+        const [holding] = fixture.componentInstance.holdingsOf()(EGGS);
+        jest.useFakeTimers();
+        try {
+          fixture.componentInstance.changeHolding({
+            holding: holding as SuggestionHolding,
+            from,
+            to,
+            repeat: false,
+            cardKey: card.dataset['card'] as string,
+          });
+          jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        } finally {
+          jest.useRealTimers();
+        }
+      }
+
+      it('reports a raise and asks on that card, with the field keeping its focus', async () => {
+        const { fixture, lines, card, stepper } = await withCard();
+        lines.answerNextRaise({ extra: EXTRA });
+
+        stepCard(fixture, card, 1, 2);
+        await settle(fixture);
+
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-eggs', delta: 1, reportExtra: true },
+        ]);
+        const ask = fixture.componentInstance.extraAsk();
+        expect(ask?.shown).toBe(true);
+        expect(ask?.anchor).toBe(stepper);
+        expect(ask?.keepInSight).toBe(card);
+        expect(ask?.side).toBe('below');
+        expect(ask?.quantity).toBe(2);
+        expect(document.activeElement).toBe(field(fixture));
+      });
+
+      it('never reports a lowering', async () => {
+        const { fixture, lines, card } = await withCard();
+        stepCard(fixture, card, 1, 0);
+
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-eggs', delta: -1 },
+        ]);
+      });
+
+      it('asks nothing when the results no longer draw the card, and the amount set stands', async () => {
+        const { fixture, lines, card } = await withCard();
+        lines.answerNextRaise({ extra: EXTRA });
+        lines.holdRaises();
+
+        stepCard(fixture, card, 1, 2);
+        fixture.componentInstance.suggestions.set([]);
+        fixture.detectChanges();
+        lines.releaseRaises();
+        await settle(fixture);
+
+        expect(fixture.componentInstance.extraAsk()).toBeNull();
+        expect(stored(lines, 'ln-eggs')).toBe(2);
+        expect(counts(lines.calls)).toEqual([]);
+      });
+
+      it('asks nothing when the page went before the answer, and keeps the raise', async () => {
+        const { fixture, lines, card } = await withCard();
+        lines.answerNextRaise({ extra: EXTRA });
+        lines.holdRaises();
+        const host = fixture.debugElement.injector.get(ExtraAskHost);
+        const ask = jest.spyOn(host, 'ask');
+
+        stepCard(fixture, card, 1, 2);
+        fixture.destroy();
+        lines.releaseRaises();
+        await turns();
+
+        expect(ask).not.toHaveBeenCalled();
+        expect(stored(lines, 'ln-eggs')).toBe(2);
+      });
     });
   });
 });

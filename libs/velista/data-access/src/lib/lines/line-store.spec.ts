@@ -110,6 +110,8 @@ function service(seed: readonly Line[]) {
   const deltas: { delta: number; unit: string; reportExtra?: true }[] = [];
   /** What the next raise that reports the extra answers it took in (velista `0208`). */
   let extraNext: AbsorbedExtra | null = null;
+  /** What the next add answers it took in, on any outcome (velista `0208`). */
+  let addExtraNext: AbsorbedExtra | null = null;
   /** Every count sent, in order (velista `0208`). */
   const counts: { amount: number; expect: number; unit: string }[] = [];
 
@@ -165,6 +167,8 @@ function service(seed: readonly Line[]) {
       options
     ) => {
       addOptions.push(options);
+      const extra = addExtraNext;
+      addExtraNext = null;
       const met = metNext;
       metNext = null;
       if (met !== null) {
@@ -173,6 +177,7 @@ function service(seed: readonly Line[]) {
           merged: metMerged,
           outcome: 'alreadyOnList' as const,
           alreadyOnList: met,
+          extra,
         };
       }
       const raised = raiseNext;
@@ -183,6 +188,7 @@ function service(seed: readonly Line[]) {
           merged: true,
           outcome: 'raised' as const,
           alreadyOnList: [],
+          extra,
         };
       }
       return {
@@ -197,6 +203,7 @@ function service(seed: readonly Line[]) {
         merged: false,
         outcome: 'created' as const,
         alreadyOnList: [],
+        extra,
       };
     },
     updateLine: async (lineId, { confirmMerge: _confirm, ...changes }) => {
@@ -309,6 +316,9 @@ function service(seed: readonly Line[]) {
     },
     extraNext: (value: AbsorbedExtra | null) => {
       extraNext = value;
+    },
+    addExtraNext: (value: AbsorbedExtra | null) => {
+      addExtraNext = value;
     },
     metNext: (value: readonly Line[], merged = true) => {
       metNext = value;
@@ -584,6 +594,47 @@ describe('LineStore', () => {
       expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['milk', 'bread']);
       expect(store.linesIn(LIST)[0].quantity).toBe(3);
       expect(lines.addOptions).toEqual([{ askIfAmbiguous: true }]);
+    });
+
+    it('hands on what a raise took into the ask, and nothing for any other outcome (velista 0208)', async () => {
+      const EXTRA: AbsorbedExtra = { above: 2, countable: 1, buyers: [] };
+      const { store, lines } = await build([milk()]);
+      await store.load(LIST);
+      const add = () =>
+        store.addLine(
+          LIST,
+          'Leche entera',
+          1,
+          ME,
+          ASKS_FIRST,
+          undefined,
+          undefined,
+          {
+            askIfAmbiguous: true,
+            reportExtra: true,
+          }
+        );
+
+      lines.raiseNext(milk({ quantity: 3, version: 2 }));
+      lines.addExtraNext(EXTRA);
+      expect(await add()).toEqual(
+        expect.objectContaining({ outcome: 'raised', extra: EXTRA })
+      );
+      expect(lines.addOptions.at(-1)).toEqual({
+        askIfAmbiguous: true,
+        reportExtra: true,
+      });
+
+      lines.metNext([milk({ quantity: 3, version: 2 })]);
+      lines.addExtraNext(EXTRA);
+      expect(await add()).toEqual(
+        expect.objectContaining({ outcome: 'alreadyOnList', extra: null })
+      );
+
+      lines.raiseNext(milk({ quantity: 4, version: 3 }));
+      expect(await add()).toEqual(
+        expect.objectContaining({ outcome: 'raised', extra: null })
+      );
     });
 
     it('draws no row before the answer when a loaded line has the typed name', async () => {

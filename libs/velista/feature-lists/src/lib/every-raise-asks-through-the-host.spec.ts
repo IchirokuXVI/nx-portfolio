@@ -9,7 +9,8 @@ import { join, relative, sep } from 'node:path';
  * "Count the extra" is the one answer that writes, so the store's `countExtra` is
  * called only from the `count` an `ExtraAskHost` request carries: written inline in
  * that property, or in a private `_countExtra` that only such a property calls. And
- * each control the plan's target states 11 to 14 name passes `reportExtra`. A text
+ * each control the plan's target states 11 to 14 and 16 name passes `reportExtra`
+ * (stage 3 adds the zone list's "Add or find" field and its cards). A text
  * scan rather than a spec per page, because the rule is about every screen that
  * exists and every one added later.
  */
@@ -136,6 +137,18 @@ describe('every raise reports the extra, and only the question counts it', () =>
       'libs/velista/feature-catalog/src/lib/product-page/product-page.ts',
       /this\._extra\.options\(/,
       4,
+    ],
+    [
+      'the zone list\'s "Add or find", its add and a chosen line (target state 16)',
+      'libs/velista/feature-lists/src/lib/list-page/list-page.ts',
+      /reportExtra: true/,
+      2,
+    ],
+    [
+      'the catalog cards in the results of "Add or find" (target state 16)',
+      'libs/velista/feature-lists/src/lib/list-page/list-page.ts',
+      /this\._runControls\.set\(lineId, \{ card: change\.cardKey \}\)/,
+      1,
     ],
     [
       'the options every catalog raise passes',
