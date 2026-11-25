@@ -360,4 +360,102 @@ test.describe('every control that raises a line asks about the extra (velista 02
       .click();
     await expect(stepper.first()).toHaveAttribute('data-value', '1');
   });
+
+  // Stage 3 (target state 16): the zone list's "Add or find" field and its cards.
+  test("an add through the zone list's field raises the line at 0, brings its row into view and asks there, and the count lowers it", async ({
+    page,
+  }) => {
+    await signIn(page, ALICE_EMAIL);
+    await visitGroceries(page);
+    const field = composerField(page);
+    await field.fill('Bread');
+    const added = answerOf(
+      page,
+      'POST',
+      (pathname) => pathname === `/v1/lists/${LIST_GROCERIES_ID}/lines`
+    );
+    await page
+      .locator('lib-line-composer')
+      .getByRole('button', { name: 'Add', exact: true })
+      .click();
+    const answer = await added;
+    expect(answer.body['outcome']).toBe('raised');
+    expect(answer.body['extra']).toEqual(
+      expect.objectContaining({ above: 3, countable: 1 })
+    );
+
+    const row = page.locator(`li.line[data-line-id="${LINE_BREAD_ID}"]`);
+    await expect(row).toBeInViewport();
+    await expect(question(page).locator('.question')).toHaveText(
+      `${danaName} already bought 3 extra. Do you still need 1, or is that enough?`
+    );
+    // The field keeps its focus: the question is said, not focused.
+    await expect(field).toBeFocused();
+    await expect(row.locator('lib-quantity-stepper')).toHaveAttribute(
+      'data-value',
+      '1'
+    );
+
+    const counted = answerOf(page, 'POST', isCount);
+    await question(page)
+      .getByRole('button', { name: /That's enough/ })
+      .click();
+    expect((await counted).status).toBe(201);
+    await expect(question(page)).toHaveCount(0);
+    expect(
+      (await readLine(alice, LIST_GROCERIES_ID, LINE_BREAD_ID)).quantity
+    ).toBe(0);
+  });
+
+  test("a catalog card's stepper in the zone list's results asks on that card, and Still need keeps the amount", async ({
+    page,
+  }) => {
+    const counts: string[] = [];
+    page.on('request', (request) => {
+      if (
+        request.method() === 'POST' &&
+        isCount(new URL(request.url()).pathname)
+      ) {
+        counts.push(request.postData() ?? '');
+      }
+    });
+    await signIn(page, ALICE_EMAIL);
+    await visitGroceries(page);
+    const field = composerField(page);
+    await field.fill('Bread');
+    const card = page
+      .locator('.catalog lib-product-row')
+      .filter({ has: page.getByText('Bread', { exact: true }) });
+    const stepper = card.locator(
+      `li[data-line="${LINE_BREAD_ID}"] > lib-quantity-stepper`
+    );
+    await expect(stepper).toHaveAttribute('data-value', '0');
+
+    const raised = answerOf(page, 'POST', isQuantity);
+    await stepper.locator('.step.plus').click();
+    const answer = await raised;
+    expect(answer.body['extra']).toEqual(
+      expect.objectContaining({ above: 3, countable: 1 })
+    );
+    await expect(question(page).locator('.question')).toHaveText(
+      `${danaName} already bought 3 extra. Do you still need 1, or is that enough?`
+    );
+    // Pointed at the card's own stepper, below the card.
+    const anchored = await page.evaluate(() => {
+      const ask = document.querySelector('lib-extra-ask');
+      return ask?.closest('li[data-line]')?.getAttribute('data-line') ?? null;
+    });
+    expect(anchored).toBe(LINE_BREAD_ID);
+    await expect(field).toBeFocused();
+
+    await question(page)
+      .getByRole('button', { name: /Still need/ })
+      .click();
+    await expect(question(page)).toHaveCount(0);
+    await expect(stepper).toHaveAttribute('data-value', '1');
+    expect(counts).toEqual([]);
+    expect(
+      (await readLine(alice, LIST_GROCERIES_ID, LINE_BREAD_ID)).quantity
+    ).toBe(1);
+  });
 });
