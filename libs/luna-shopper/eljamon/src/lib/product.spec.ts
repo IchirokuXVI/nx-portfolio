@@ -153,6 +153,98 @@ describe('a page whose session drew its breadcrumb for another product (plan 016
   });
 });
 
+describe('a page that states another product code than the one asked (plan 0169, notes of 2026-11-26)', () => {
+  const clean = fixture('product.html');
+  const ownCode = /"sku":\s*"(\d+)"/.exec(clean)?.[1] ?? '';
+
+  it('reads the captured page as its own product when its code is the asked one', () => {
+    expect(ownCode).toMatch(/^\d+$/);
+    const product = parseProductPage(clean, ownCode);
+    expect(product?.otherProductCode).toBeNull();
+    expect(product?.categoryPath.length).toBeGreaterThan(0);
+  });
+
+  it('names the code the page states, and answers no breadcrumb', () => {
+    const product = parseProductPage(clean, '30050107');
+    expect(product).toMatchObject({
+      code: ownCode,
+      otherProductCode: ownCode,
+      categoryPath: [],
+      // The session parts agree with the JSON-LD: this is a whole page of
+      // another product, not a contaminated one.
+      contaminated: false,
+    });
+  });
+
+  it('reads the code from the JSON-LD url when the page states no sku', () => {
+    const page =
+      '<script type="application/ld+json">{"@type": "Product", ' +
+      '"name": "palomitas saladas, 80g", ' +
+      '"url": "https://www.supermercadoseljamon.com/detalle/-/Producto/palomitas-saladas-80g/33002037"' +
+      '}</script>';
+    expect(parseProductPage(page, '33002037')?.otherProductCode).toBeNull();
+    expect(parseProductPage(page, '33005473')?.otherProductCode).toBe(
+      '33002037'
+    );
+  });
+
+  it('does not mark a page that states no code at all, and reads it as the asked code', () => {
+    const page =
+      '<script type="application/ld+json">{"@type": "Product", ' +
+      '"name": "palomitas saladas, 80g"}</script>';
+    expect(parseProductPage(page, '33002037')).toMatchObject({
+      code: '33002037',
+      otherProductCode: null,
+    });
+    // Asked for nothing, such a page is still no product, as before.
+    expect(parseProductPage(page)).toBeNull();
+  });
+
+  it('marks nothing when no code was asked for', () => {
+    expect(parseProductPage(clean)?.otherProductCode).toBeNull();
+  });
+
+  /** A page whose JSON-LD carries `fields`, written as the shop writes them. */
+  const pageWith = (fields: string): string =>
+    '<script type="application/ld+json">{"@type": "Product", ' +
+    `"name": "palomitas saladas, 80g", ${fields}}</script>`;
+
+  it('reads a numeric sku equal to the asked code as the asked product', () => {
+    expect(
+      parseProductPage(pageWith('"sku": 33002037'), '33002037')
+    ).toMatchObject({ code: '33002037', otherProductCode: null });
+  });
+
+  it('reads a sku with spaces around it as the asked product', () => {
+    expect(
+      parseProductPage(pageWith('"sku": "  33002037 "'), '33002037')
+    ).toMatchObject({ code: '33002037', otherProductCode: null });
+  });
+
+  it('reads a JSON-LD url with a query string as the asked product', () => {
+    const page = pageWith(
+      '"url": "https://www.supermercadoseljamon.com/detalle/-/Producto/palomitas-saladas-80g/33002037?utm=x"'
+    );
+    expect(parseProductPage(page, '33002037')).toMatchObject({
+      code: '33002037',
+      otherProductCode: null,
+    });
+  });
+
+  it('documents the current behaviour: a numeric sku that lost its leading zero reads as another product', () => {
+    // A number cannot carry a leading zero, so `01234567` written as a JSON
+    // number reads as `1234567`. Whether that is the asked product is the
+    // owner's to decide; today the page is marked as another product's.
+    expect(
+      parseProductPage(pageWith('"sku": 1234567'), '01234567')
+    ).toMatchObject({
+      code: '1234567',
+      otherProductCode: '1234567',
+      categoryPath: [],
+    });
+  });
+});
+
 describe('parseBreadcrumb', () => {
   it('reads every level between the first and the last item', () => {
     const html =

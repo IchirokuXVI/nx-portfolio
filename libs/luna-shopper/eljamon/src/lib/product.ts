@@ -13,8 +13,18 @@ import type { ElJamonProduct } from './types';
  *
  * A page with no JSON-LD answers null rather than throwing, so one odd page
  * costs one product and not the run.
+ *
+ * **`askedCode` is the article code the caller asked for** (plan 0169, notes
+ * of 2026-11-26). The page states its own code in the JSON-LD `sku`, or else
+ * in the last segment of the JSON-LD `url`. When that code is another one,
+ * {@link ElJamonProduct.otherProductCode} names it and no breadcrumb is
+ * answered. A page that states no code is not marked for that alone: it reads
+ * as the asked code.
  */
-export function parseProductPage(html: string): ElJamonProduct | null {
+export function parseProductPage(
+  html: string,
+  askedCode?: string
+): ElJamonProduct | null {
   const ld = readJsonLd(html);
   if (!ld) {
     return null;
@@ -22,11 +32,17 @@ export function parseProductPage(html: string): ElJamonProduct | null {
   const offers = (ld['offers'] ?? {}) as Record<string, unknown>;
   const brand = (ld['brand'] ?? {}) as Record<string, unknown>;
   const url = typeof ld['url'] === 'string' ? ld['url'] : '';
-  const code = stringOf(ld['sku']) ?? /\/(\d+)\/?$/.exec(url)?.[1] ?? null;
+  const statedCode =
+    stringOf(ld['sku']) ?? /\/(\d+)\/?$/.exec(url)?.[1] ?? null;
+  const code = statedCode ?? askedCode ?? null;
   const name = stringOf(ld['name']);
   if (!code || !name) {
     return null;
   }
+  const otherProductCode =
+    askedCode !== undefined && statedCode !== null && statedCode !== askedCode
+      ? statedCode
+      : null;
   const price = Number(stringOf(offers['price']));
   // A word that is never a brand reads as no brand (plan 0178), as it does in
   // the listing, so the two readers cannot disagree about one product.
@@ -43,8 +59,10 @@ export function parseProductPage(html: string): ElJamonProduct | null {
     image: stringOf(ld['image']),
     // A breadcrumb that names another product is another product's path, so
     // none is answered rather than a wrong one.
-    categoryPath: contaminated ? [] : parseBreadcrumb(html),
+    categoryPath:
+      contaminated || otherProductCode !== null ? [] : parseBreadcrumb(html),
     contaminated,
+    otherProductCode,
   };
 }
 

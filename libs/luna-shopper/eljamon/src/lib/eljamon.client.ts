@@ -91,6 +91,18 @@ export class ElJamonSessionError extends Error {
 
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
+const POSTAL_CODE_SERVLET = '/delegate/seleccionarCodPostalAjaxServletFood';
+
+/**
+ * Whether a request is one of the two that start a session (section 4): the
+ * home page, or the postal code servlet. A caller that counts answers to
+ * product pages can leave these out (plan 0169, notes of 2026-11-26).
+ */
+export function isElJamonSessionStart(url: string): boolean {
+  const path = new URL(url).pathname;
+  return path === '/' || path === POSTAL_CODE_SERVLET;
+}
+
 const defaultSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -105,6 +117,14 @@ function isRefusal(status: number, attempt: number, retries: number): boolean {
 export class ElJamonClient {
   /** Every request this client sent, retries included. On the run's report. */
   requests = 0;
+  /**
+   * Every request this client sent that got no answer, retries included: a
+   * timeout, a reset connection, a socket hang up. An abort is not counted.
+   * The shop may still answer such a request late and move the session's
+   * current product, so a caller can read this to start a fresh session
+   * (plan 0169, notes of 2026-11-26).
+   */
+  transportFailures = 0;
 
   private readonly baseUrl: string;
   private readonly locatorUrl: string;
@@ -231,10 +251,20 @@ export class ElJamonClient {
   /**
    * One product page, by its absolute URL or its path, or null when the page
    * carries no product JSON-LD.
+   *
+   * With `askedCode`, the code the page states is read against it, and a page
+   * of another product says so in `otherProductCode` (see
+   * {@link parseProductPage}).
    */
-  async getProduct(urlOrPath: string): Promise<ElJamonProduct | null> {
+  async getProduct(
+    urlOrPath: string,
+    askedCode?: string
+  ): Promise<ElJamonProduct | null> {
     await this.ensureSession();
-    return parseProductPage(await this.get(this.absolute(urlOrPath)));
+    return parseProductPage(
+      await this.get(this.absolute(urlOrPath)),
+      askedCode
+    );
   }
 
   /**
@@ -284,7 +314,7 @@ export class ElJamonClient {
       const home = await this.get(`${this.baseUrl}/`);
       const answer = (
         await this.get(
-          `${this.baseUrl}/delegate/seleccionarCodPostalAjaxServletFood` +
+          `${this.baseUrl}${POSTAL_CODE_SERVLET}` +
             `?accion=enviarCodPostal&cp=${encodeURIComponent(this.postalCode)}` +
             '&locale=es'
         )
@@ -388,6 +418,9 @@ export class ElJamonClient {
       } catch (error) {
         // No answer says nothing about a block (plan 0215, section 2).
         this.guard?.inconclusive();
+        if (!this.options.signal?.aborted) {
+          this.transportFailures += 1;
+        }
         if (this.options.signal?.aborted || attempt >= this.retries) {
           throw error;
         }
