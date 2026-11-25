@@ -1,6 +1,6 @@
 {
   "title": "Velista: the compact view and the reel",
-  "lede": "Plans <code>0202</code>, <code>0203</code> and <code>0204</code>. The row of <code>0191</code> with the button stepper becomes the default view; the compact view is the two line row with the reel of <code>0043</code> restored, stepping by today's rule. A picker in the header of the zone list and of the basket chooses between them. Every frame is drawn Day in Spanish and Night in English, at 390 by 844, from the source on <code>dev</code> at <code>e06813139</code> and the reel as it was deleted at <code>d8daa824c^</code>. The lines and prices are sample data. Photos are the Open Food Facts copies from <code>../typeahead/photos</code>, CC BY-SA 3.0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. The design: icon set B and its header button \"2\"; the picker on the zone list header, and on the basket in the tools row and in the basket's menu; the filter button is a funnel, a new icon, on every zone list header and on the basket's tools row; every reel is 52 by 44 with the unit under the number, in every frame and on the open tape; Due rows say only \"Add\". Approved by the owner on 2026-11-22. Round 6 adds the question a raised line asks when units were bought above its ask. Approved by the owner on 2026-11-22; he reviews the wording after the build. Round 7 shows the question on every control that raises a line, with the amount set as the default. Not yet approved.",
+  "lede": "Plans <code>0202</code>, <code>0203</code> and <code>0204</code>. The row of <code>0191</code> with the button stepper becomes the default view; the compact view is the two line row with the reel of <code>0043</code> restored, stepping by today's rule. A picker in the header of the zone list and of the basket chooses between them. Every frame is drawn Day in Spanish and Night in English, at 390 by 844, from the source on <code>dev</code> at <code>e06813139</code> and the reel as it was deleted at <code>d8daa824c^</code>. The lines and prices are sample data. Photos are the Open Food Facts copies from <code>../typeahead/photos</code>, CC BY-SA 3.0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. The design: icon set B and its header button \"2\"; the picker on the zone list header, and on the basket in the tools row and in the basket's menu; the filter button is a funnel, a new icon, on every zone list header and on the basket's tools row; every reel is 52 by 44 with the unit under the number, in every frame and on the open tape; Due rows say only \"Add\". Approved by the owner on 2026-11-22. Round 6 adds the question a raised line asks when units were bought above its ask. Approved by the owner on 2026-11-22; he reviews the wording after the build. Round 7 shows the question on every control that raises a line, with the amount set as the default. Approved by the owner on 2026-11-25.",
   "artboards": [
     {
       "file": "Picker.dc.html",
@@ -104,7 +104,7 @@
       "y": 11880,
       "w": 2962,
       "h": 4630,
-      "title": "Round 7: the question on every control that raises a line, and the amount set stands"
+      "title": "Round 7, final: the question on every control that raises a line, and the amount set stands"
     }
   ],
   "annotations": [
@@ -214,51 +214,65 @@
       "text": "ROUND 6, DECIDED BY THE OWNER (2026-11-22).\n1. Alternative A: one sentence, then two answers. B and C are off the board.\n2. The unit goes on the answers only: \"2 uds\" / \"2 units\", \"1 ud\" / \"1 unit\", with no period. The sentence prints a count bare. A weight keeps its unit everywhere.\n3. The buyer: one name, two names, a head count from three people, \"you\" when the person raising it bought it (also when a guest bought it and the list's owner, whom the buy names, is that person), \"Alguien\" / \"Someone\" with no name (frames 5 and 9 to 12). He reviews these words after the build.\n4. With no answer, the extra counts. Leaving the page, or closing the popover without an answer, drops the question, and the line keeps the amount still needed after the extra: the smaller amount, or 0 when the extra covers it. \"Still need\" is the answer that changes something (frame 6).\n5. After \"Still need\" the line does not ask again while the person stays on the page. A later raise asks again only while extra units remain that nobody counted.\n6. Only the zone list rows ask: the stepper and the reel. The line page and the line sheet do not ask and do not count the extra.\n7. The stepper and the reel print a count bare, as today. The unit rule is for the popover's answers only."
     },
     {
-      "id": "ev-superseded",
+      "id": "ev-decided",
       "x": 3020,
       "y": 11880,
+      "w": 520,
+      "text": "ROUND 7, DECIDED BY THE OWNER (2026-11-25).\n1. The board is final: the question on every control that raises a line, and the amount set stands.\n2. \"Lists and amounts\" asks about every extra, bought through this shopping list or another one. One rule everywhere, with no exception (frame 6).\n3. A line that changed before the answer: \"Count the extra\" is refused and the person is told (frame 10).\n4. An answer that arrives while the control is out of sight but still on the current page: the page scrolls to it and opens the question (frame 11).\n5. An answered question is not asked again for the same extra (frame 8).\n6. The shopping list's \"Add or find\" (frame 7) stays marked as likely to be removed."
+    },
+    {
+      "id": "ev-superseded",
+      "x": 3020,
+      "y": 12264,
       "w": 520,
       "text": "ROUND 7 REPLACES ONE RULE OF ROUND 6.\nThe default drawn on the round 6 board (its frame 6: no answer and leaving keep the smaller amount) is superseded. The amount set now stands; only \"Count the extra\" lowers the line (velista 0208, ruled by the owner on 2026-11-23).\nThe round 6 board stays the record of the popover's look: the frame, the words, the pointer and the flash."
     },
     {
       "id": "ev-focus",
       "x": 3020,
-      "y": 12154,
+      "y": 12538,
       "w": 520,
-      "text": "FOCUS.\nWhen the popover opens, focus is on \"Still need\", the answer that changes nothing; frames 1 to 4, 6, 7 and 8 draw its ring.\nWhen a text field holds focus it keeps it (frame 5): the question opens with no focus move and is announced."
+      "text": "FOCUS.\nWhen the popover opens, focus is on \"Still need\", the answer that changes nothing; frames 1 to 4, 6, 7, 8 and 11 draw its ring.\nWhen a text field holds focus it keeps it (frame 5): the question opens with no focus move and is announced. The notice of frame 10 takes no focus either; it is announced."
     },
     {
       "id": "ev-place",
       "x": 3020,
-      "y": 12362,
+      "y": 12790,
       "w": 520,
-      "text": "WHERE IT GOES.\nThe same popover everywhere: 276 px, end aligned, its pointer on the centre of the control.\nMeasured on every frame of this board: no popover overlaps its control, or the row, card or table row it keeps in sight, and every pointer sits within 0.3 px of its control's centre.\nSides: the sheet above the amount row (Saved stays in sight); the line page below (no room above); a catalog card below the card; the product table above the row (every list stays in sight); the zone list below the row (the field is above); \"Lists and amounts\" above the row."
+      "text": "WHERE IT GOES.\nThe same popover everywhere: 276 px, end aligned, its pointer on the centre of the control.\nMeasured on every frame of this board: no popover overlaps its control, or the row, card or table row it keeps in sight, and every pointer sits within 0.3 px of its control's centre.\nSides: the sheet above the amount row (Saved stays in sight); the line page below (no room above); a catalog card below the card; the product table above the row (every list stays in sight); the zone list below the row (the field is above); \"Lists and amounts\" above the row.\nThe notice of frame 10 takes the place of the question it follows, below the row."
     },
     {
       "id": "ev-basket-open",
       "x": 3020,
-      "y": 12702,
+      "y": 13152,
       "w": 520,
-      "text": "OPEN: WHAT \"LISTS AND AMOUNTS\" ASKS ABOUT (velista 0208, question 1).\nFrame 6 is drawn for reading (a): only another shopping list's extra asks, so the sentence names Marta, who shops on another list.\nUnder reading (b) this shopping list's own extra would ask too, and \"or just 2?\" would not be true there. The wording for this view waits on the owner's answer."
+      "text": "WHAT \"LISTS AND AMOUNTS\" ASKS ABOUT (velista 0208, question 1, decided).\nEvery extra, bought through this shopping list or through another one. One rule everywhere, with no exception.\nFrame 6 names Marta, who shops on another list; extra bought through this same shopping list asks in the same words."
     },
     {
       "id": "ev-basket-add",
       "x": 3020,
-      "y": 12976,
+      "y": 13382,
       "w": 520,
       "text": "LIKELY TO CHANGE AND BE REMOVED (the owner).\nFrame 7, the shopping list's \"Add or find\": for now the app opens the row's \"Lists and amounts\" and asks there. The plan builds it as one removable piece (velista 0208, target state 19)."
     },
     {
       "id": "ev-onscreen",
       "x": 3020,
-      "y": 13184,
+      "y": 13590,
       "w": 520,
-      "text": "STILL ON SCREEN (velista 0208, question 3, drawn for reading (a)).\nIt asks when any part of the control is inside the visible area of its page or sheet and nothing is over it. Otherwise nothing asks and the amount set stands (frame 9). Only the zone list scrolls a line back into view."
+      "text": "STILL ON THE PAGE (velista 0208, question 3, decided).\nWhen the answer arrives and the control is still on the current page or its open sheet, it asks. If the control is out of sight, the page scrolls it into view first, flashes it and opens the question (frame 11). If the control is no longer on the page (the sheet was closed, the person left), nothing asks and the amount set stands (frame 9).\nAlternative weighed and not chosen: show the question only while part of the control is still visible, and otherwise take the default."
+    },
+    {
+      "id": "ev-refused",
+      "x": 3020,
+      "y": 13908,
+      "w": 520,
+      "text": "THE LINE CHANGED BEFORE THE ANSWER (frame 10).\nThe count is refused and the person is told. Proposed words: \"La línea cambió antes de tu respuesta. No se ha contado lo comprado de más.\" / \"The line changed before your answer. The extra was not counted.\"\nThe notice uses the popover's frame and pointer, and the stepper shows the line's current amount."
     },
     {
       "id": "ev-awkward",
       "x": 3020,
-      "y": 13414,
+      "y": 14160,
       "w": 520,
       "text": "WHERE THE BUILT SCREENS MAKE IT AWKWARD.\nThe line sheet: the amount row is second, so above it the popover covers most of the name field and reaches past the sheet's top edge.\n\"Lists and amounts\": the first list sits right under the product, so above it the popover hides the title and the product; below it would hide the other lists' asks.\nThe line page: the stepper sits under the header, so only below works."
     }
