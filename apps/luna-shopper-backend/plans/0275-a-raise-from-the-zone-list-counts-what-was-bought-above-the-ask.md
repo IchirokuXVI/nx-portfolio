@@ -2,9 +2,10 @@
 
 # 0275: a raise from the zone list counts what was bought above the ask
 
-> Superseded in part on 2026-11-23 by backend `0276` (`0276-a-raise-reports-the-extra-and-only-an-answer-counts-it.md`):
-> the default is now the amount the person set, and the extra is counted only on the
-> explicit answer.
+> Superseded in part on 2026-11-23 and 2026-11-25 by backend `0276`
+> (`0276-a-raise-takes-the-extra-into-the-ask-and-only-an-answer-lowers-it.md`): a raise
+> now rises by the whole amount set and takes the extra into the ask, and only the answer
+> "Count the extra" lowers the line.
 >
 > Amended on 2026-11-23 after its review: a buyer is named only when they are a member of
 > the list's group; anyone else is answered as nobody.
