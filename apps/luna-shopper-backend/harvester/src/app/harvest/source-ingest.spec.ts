@@ -4564,6 +4564,51 @@ describe('SourceIngest, a LIDL week that does not state a stored value (owner de
     });
   });
 
+  it('drops the review mark once a later week prints a normal format for the same row', async () => {
+    const { ingest, context, saved } = build({
+      rows: [
+        {
+          externalId: '11672806',
+          name: 'Costillas',
+          sizeFormat: 'aprox..600-800 g',
+          approxWeight: 400,
+          extra: { categorySlug: null, priceBasisToReview: 'aprox..600-800 g' },
+          ...bound,
+        },
+      ],
+    });
+
+    await ingest.ingest(context, {
+      ...session,
+      observations: [
+        observation({
+          externalId: '11672806',
+          name: 'Costillas',
+          sizeFormat: 'Aprox.700 g',
+          soldByWeight: false,
+          approxWeight: 700,
+          // As the runner reports a week with no range: no mark.
+          extra: { categorySlug: null },
+          price: {
+            price: 3.79,
+            currency: 'EUR',
+            unitPrice: null,
+            unitPriceLabel: null,
+            validFrom: null,
+            validUntil: null,
+          },
+        }),
+      ],
+    });
+
+    expect(saved[0]).toMatchObject({
+      sizeFormat: 'Aprox.700 g',
+      approxWeight: 700,
+      extra: { categorySlug: null },
+    });
+    expect(saved[0].extra).not.toHaveProperty('priceBasisToReview');
+  });
+
   it('keeps the stored format, size and unit of a product listed with no price block, and refreshes the rest', async () => {
     const { ingest, context, saved, priceRows, catalog } = build({
       rows: [

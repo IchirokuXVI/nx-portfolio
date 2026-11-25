@@ -435,8 +435,10 @@ stands in for a block that prints none. A range of a unit that is not a weight i
 2026-11-25) or no prefix keeps its figure as the price of the piece, as before decision 141a. The
 row names it for review: `extra.priceBasisToReview` holds the printed range, and the run report
 lists each such product under `pricesToReview` with its id, name and range. The queue shows
-`extra` on the row, and the curation packet carries `extra` to the model, whose prompt says to
-answer `REVIEW` for such an entry. Of the mechanisms that exist, the size doubt of plan `0249`
+`extra` only on the rows it holds, `CANDIDATE` and `UNRESOLVED`, and there inside a collapsed
+block. A bound row that prints an `aprox` range thus gets no review prompt, and only the run
+report's `pricesToReview` names it. The curation packet carries `extra` to the model, whose prompt
+says to answer `REVIEW` for such an entry. Of the mechanisms that exist, the size doubt of plan `0249`
 (admin plan `0072`) does not fit: it records a size its own unit price disproves, and such a row has
 neither a size nor a unit price. What is missing, and left to the owner: the queue has no filter for
 the mark, no run warning names these products (a new warning code would change the contract and
@@ -445,7 +447,10 @@ the OpenAPI document), and the admin run page does not draw `pricesToReview`.
 **A range of any prefix states no weight.** It is two numbers, and neither is the weight of the
 piece, so `approxWeight` is absent, not null, and the weight an `Aprox.` week stored stays on the
 entry. The approximate prefix takes any run of dots and spaces after the word, so `aprox..600-800 g`
-reads as a range and not as a string with no size, which had answered a null weight.
+reads as a range and not as a string with no size, which had answered a null weight. The widened
+prefix also reads a single weight printed with two dots (`aprox..600 g`) as an approximate weight
+of 600 g, where it had read as no size. The kilo pieces release task (`0006`) reads its weights
+through `approxWeightIn`, so it now reads such a format as a weight too.
 
 **What a week does not state stays stored (owner decision 143a).** LIDL prints the format only
 inside a price block, so a week that prices a product nowhere prints no format for it. The source
@@ -458,3 +463,12 @@ new one is created with no size, and a known one has its name, brand, EAN, `cate
 photo address and `extra` rewritten as any week rewrites them. Every path of the product
 (`categoryPaths`, plan `0268`) goes to the sink apart, as before. No migration and no contract
 schema changed.
+
+**A refresh never classifies a price by a stored format.** The one product refresh of plan `0216`
+rebuilds the list row from the stored entry, and a block that prints no format is read with the
+row's. The stored format is an earlier week's, so a row that stored `ca.220-360g` would have its
+figure written as a price per kilo in a later week whose page prints nothing. The refresh thus
+passes no format in that row (`price-refresh.fetchers.ts`, `lidlRowOf`), and its per kilo or to
+review decision reads only what the fetched page prints. The refresh writes prices only, so no
+other field read the stored format. On a walk the fall back is the search row of the same week,
+which stays.

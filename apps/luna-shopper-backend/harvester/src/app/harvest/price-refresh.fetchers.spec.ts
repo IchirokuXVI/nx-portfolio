@@ -186,9 +186,9 @@ describe('price refresh fetchers (plan 0216, section 6)', () => {
      * The same page with its format printed as a range (owner decisions 141a
      * and 144). Constructed, not captured: no committed fixture holds a range
      * week. The flat format holds each string once, so the one `400 g` every
-     * block points at is replaced.
+     * block points at is replaced. Null makes the page print no format.
      */
-    const rangePage = (printed: string): string => {
+    const rangePage = (printed: string | null): string => {
       const flat = fixture('lidl', 'product-short-code.json') as unknown[];
       const at = flat.indexOf('400 g');
       expect(at).toBeGreaterThan(-1);
@@ -219,6 +219,28 @@ describe('price refresh fetchers (plan 0216, section 6)', () => {
       const body = rangePage('aprox..600-800 g');
       const { fetchImpl } = stub(() => ({ status: 200, body }));
       const read = await fetchLidl(request({ fetchImpl, entry: grapes }));
+
+      expect(read.found).toBe(true);
+      if (!read.found) return;
+      expect(read.observation.prices.length).toBeGreaterThan(0);
+      for (const price of read.observation.prices) {
+        expect(price).toMatchObject({
+          price: 1.69,
+          unitPrice: null,
+          unitPriceLabel: null,
+        });
+      }
+    });
+
+    it('never classifies a price by the stored format: a ca. range stored in an earlier week leaves a page that prints none as the piece price', async () => {
+      const body = rangePage(null);
+      const { fetchImpl } = stub(() => ({ status: 200, body }));
+      const read = await fetchLidl(
+        request({
+          fetchImpl,
+          entry: { ...grapes, sizeFormat: 'ca.220-360g' },
+        })
+      );
 
       expect(read.found).toBe(true);
       if (!read.found) return;

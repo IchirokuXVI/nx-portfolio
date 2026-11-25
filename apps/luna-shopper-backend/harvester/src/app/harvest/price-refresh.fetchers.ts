@@ -190,7 +190,12 @@ function lidlRowOf(entry: SourceCatalogEntry, baseUrl: string): LidlListRow {
     // A refresh walks no category and states no path (plan 0268).
     categoryBreadcrumbs: null,
     path: pathOf(entry.url, baseUrl),
-    sizeFormat: entry.sizeFormat,
+    // Never the stored format: a block that prints no format is read with the
+    // row's, and the stored one is an earlier week's. A range stored then would
+    // make this week's figure a price per kilo (owner decisions 141a and 144),
+    // so a refresh classifies a price by what the page prints only. The
+    // observation carries prices only, so nothing else read this field.
+    sizeFormat: null,
     listPrice: null,
     ian: null,
     image: null,

@@ -343,9 +343,6 @@ function observationOf(product: LidlProduct): SourceObservation {
         }
       : {}),
     soldByWeight: false,
-    // The need world path, the one `categoryPath` of the row. Every path of
-    // the product, `categoryPaths`, goes to the sink apart, once the walk
-    // ends (plan 0268, `reportCategoryPaths`).
     categoryPath: product.categoryPath,
     url: product.url,
     // The search row's `image`, else the first of its `imageList` (plan
