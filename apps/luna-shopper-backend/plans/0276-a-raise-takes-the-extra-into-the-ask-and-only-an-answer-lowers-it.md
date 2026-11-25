@@ -1,3 +1,5 @@
+> **PR:** [#1098](https://github.com/IchirokuXVI/nx-portfolio/pull/1098)
+
 # 0276: a raise takes the extra into the ask, and only an answer lowers it
 
 > Decided on 2026-11-23; the owner's final rulings of 2026-11-25 replace the design this
