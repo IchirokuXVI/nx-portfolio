@@ -22,8 +22,9 @@
   <p class="description">{{ 'basket.lists.description' | rokuT }}</p>
 
   <!--
-    The row's product, as the product card's compact row draws it, with "Change
-    for all lists" under it when two lists or more may change.
+    The row's product, as the product card's compact row draws it: the price,
+    and the card's unit price line under it where it says something the price
+    does not. "Change for all lists" under it when two lists or more may change.
   -->
   @if (product(); as top) {
     <div [class.has-all]="changesAll()" class="product">
@@ -41,9 +42,19 @@
       </span>
       @if (top.price; as price) {
         <span class="product-price">
-          <span class="product-amount">{{ price }}</span>
-          @if (top.perKilo; as perKilo) {
-            <span class="product-per">{{ perKilo }}</span>
+          <span class="product-amount"
+            ><span>{{ price.amount }}</span>
+            @if (price.per; as per) {
+              <span class="per">{{ per }}</span>
+            }
+          </span>
+          @if (top.unit; as unit) {
+            <span class="product-unit"
+              ><span>{{ unit.amount }}</span>
+              @if (unit.per; as per) {
+                <span class="per">{{ per }}</span>
+              }
+            </span>
           }
         </span>
       }
@@ -64,12 +75,28 @@
       @for (list of lists(); track list.lineId) {
         <li #rowElement class="row">
           <div class="row-top">
+            <!--
+              The list's reading column: its name, "zone · line", "Bought 2 of
+              3", then "Change product" on its own line where the list may change
+              its product (the mock's placement A). No product line: every list
+              of a row has the row's product.
+            -->
             <span class="row-label">
               <span class="row-name">{{ list.list }}</span>
               @if (list.where; as where) {
                 <span class="row-where">{{ where }}</span>
               }
               <span class="row-bought">{{ list.bought }}</span>
+              @if (list.changeable) {
+                <button
+                  (click)="change(list.lineId)"
+                  [attr.aria-label]="list.changeLabel"
+                  class="change"
+                  type="button"
+                >
+                  {{ 'basket.lists.changeProduct' | rokuT }}
+                </button>
+              }
             </span>
 
             @if (list.finished) {
@@ -133,39 +160,6 @@
               }
             }
           </div>
-
-          <!--
-            The list's product on one line: its picture, its name, then its brand
-            and size, which are never cut. In the quiet amber when it is not the
-            row's product. The line is not a control; "Change" is. A product the
-            client cannot name draws the default icon and the line's own name, so
-            "Change" is still there.
-          -->
-          @if (list.product; as held) {
-            <div [class.differs]="held.differs" class="line-product">
-              <lib-product-picture
-                [imageUrl]="held.imageUrl"
-                [zoom]="held.name"
-                class="line-picture"
-              />
-              <span class="line-text">
-                <span class="line-name">{{ held.name }}</span>
-                @if (held.brandSize; as brandSize) {
-                  <span class="line-brand">{{ brandSize }}</span>
-                }
-              </span>
-              @if (list.changeable) {
-                <button
-                  (click)="change(list.lineId)"
-                  [attr.aria-label]="list.changeLabel"
-                  class="change"
-                  type="button"
-                >
-                  {{ 'basket.lists.change' | rokuT }}
-                </button>
-              }
-            </div>
-          }
         </li>
       }
     </ul>

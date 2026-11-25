@@ -56,7 +56,8 @@
 }
 
 // The row's product: the product card's compact row, a picture of 52 by the two
-// lines of words, the price at the end. "Change for all lists" under the words.
+// lines of words, the price at the end with the card's unit price line under it.
+// "Change for all lists" under the words.
 .product {
   display: grid;
   grid-template-columns: var(--app-product-thumb-size) minmax(0, 1fr) auto;
@@ -99,10 +100,14 @@
   color: var(--app-text-secondary);
 }
 
+// The card's price column (product-row.scss `.price`): one pixel between the
+// price and its unit price line, and one above the price.
 .product-price {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
+  gap: 1px;
+  padding-block-start: 1px;
 }
 
 .product-amount {
@@ -113,15 +118,27 @@
   color: var(--app-text-primary);
 }
 
-.product-per {
+// The card's unit price line (product-row.scss `.unit`): 12 px, muted.
+.product-unit {
   font-size: var(--app-text-xs);
+  line-height: 1.4;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   color: var(--app-text-muted);
 }
 
-// The text actions: "Change for all lists" and each list's "Change", in the quiet
-// action colour, each a full touch target tall.
+// What a price is per ("/ kg", "/ L"), as the card draws it (product-row.scss
+// `.per`): smaller than its number, muted, close after it.
+.per {
+  margin-inline-start: var(--app-space-hair);
+  font-size: var(--app-text-2xs);
+  font-weight: 400;
+  color: var(--app-text-muted);
+  word-spacing: calc(var(--app-space-hair) * -1);
+}
+
+// The text actions: "Change for all lists" and each list's "Change product", in
+// the quiet action colour, each a full touch target tall.
 .change-all,
 .change {
   display: flex;
@@ -147,9 +164,15 @@
   justify-self: start;
 }
 
+// "Change product" on its own line under "Bought 2 of 3", start aligned with the
+// list's name (the mock's placement A). The touch target reaches over the line
+// above and the row's padding below, so the words sit about 6 px under the line
+// of "Bought".
 .change {
-  flex: none;
-  padding-inline-start: var(--app-space-3);
+  align-self: flex-start;
+  margin-block: calc(var(--app-space-3) * -0.75) calc(var(--app-space-3) * -1);
+  line-height: 1.4;
+  white-space: nowrap;
 }
 
 .entries {
@@ -183,10 +206,11 @@
   list-style: none;
 }
 
-// One list: its name block and its ask, then its product on one line.
+// One list: its reading column and its ask. No product line: a basket row is
+// one product, which the block at the top draws.
 .row {
   position: relative;
-  padding-block: var(--app-space-3) var(--app-space-1);
+  padding-block: var(--app-space-3);
   border-block-end: 1px solid var(--app-border-subtle);
 
   &:last-child {
@@ -196,7 +220,7 @@
 
 .row-top {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--app-space-4);
 }
 
@@ -234,9 +258,11 @@
   white-space: nowrap;
 }
 
+// The ask, top aligned with the reading column and pushed down to its middle.
 .anchor {
   display: flex;
   flex: none;
+  margin-block-start: var(--app-space-3);
 }
 
 // A finished trip's ask: the number with its unit, end aligned in the stepper's
@@ -248,6 +274,7 @@
   inline-size: calc(
     var(--app-stepper-button) * 2 + var(--app-stepper-cell-sheet-narrow)
   );
+  margin-block-start: var(--app-space-3);
   color: var(--app-text-secondary);
   text-align: end;
 
@@ -265,46 +292,6 @@ lib-anchored-popover {
 
 .why {
   margin: 0;
-}
-
-// The list's product on one line. The name gives way first, the brand and size
-// never do. Amber where it is not the row's product.
-.line-product {
-  display: flex;
-  align-items: center;
-  gap: var(--app-space-3);
-  min-block-size: var(--app-touch-target);
-}
-
-.line-picture {
-  --app-line-picture-size: calc(var(--app-space-7) + var(--app-space-2));
-  --app-line-picture-radius: var(--app-radius-sm);
-  --app-line-picture-glyph: var(--app-space-5);
-}
-
-.line-text {
-  display: flex;
-  flex: 1;
-  min-inline-size: 0;
-  font-size: var(--app-text-sm);
-  line-height: 1.4;
-  color: var(--app-text-secondary);
-  white-space: nowrap;
-}
-
-.line-product.differs .line-text {
-  color: var(--app-action-quiet-fg);
-}
-
-.line-name {
-  min-inline-size: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.line-brand {
-  flex: none;
-  white-space: pre;
 }
 
 .failed {

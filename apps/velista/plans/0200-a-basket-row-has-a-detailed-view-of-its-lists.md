@@ -59,6 +59,21 @@
 > reader writes, so the reader is a member and a right on the list is missing); and the ask
 > stepper draws the plain minus at 1, never the trash, and still steps to 0.
 >
+> Amended on 2026-11-25 after the owner approved round 5 of the mock (boards `Detail`,
+> `DetailAll`, `LongDetail`, `Popover` and `ChangeChoice`): a basket row is one product, so
+> no list row draws a product line (no picture, no product name, no amber rule); "Change
+> product" / "Cambiar producto" (`basket.lists.changeProduct`) sits on its own line under
+> "Bought 2 of 3", in the list's reading column (placement A), only on a list that may
+> change its product, and replaces the word "Change"; a change of product, for one list or
+> for all of them, closes the change sheet and this view and lands on the shopping list,
+> never back here; and the product block shows the catalog card's unit price line under the
+> price (`unitPriceWords`), hidden where it equals the price in cents and for a product sold
+> by the kilo or the litre. The locked reason for a served list now reads "What this list
+> asks for cannot be changed from this shopping list. Change it on the list itself." / "Lo
+> que pide esta lista no se puede cambiar desde esta lista de la compra. Cámbialo en la
+> propia lista." (`basket.lists.ownGroup`), in place of the words quoted in the amendment
+> of 2026-11-23.
+>
 > Code anchors, on `dev` at `1c57f0c9c`:
 > `libs/velista/feature-shopping-lists/src/lib/row-entries/row-entries.html` (the head with
 > "Change for all lists", each entry's swap button and stepper);

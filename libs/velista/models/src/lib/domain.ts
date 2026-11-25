@@ -466,6 +466,13 @@ export interface ProductOffer {
   /** "EUR/L", "EUR/lv". Text for a human, not a unit to parse. */
   readonly unitPriceLabel: string | null;
   /**
+   * What {@link unitPrice} is counted in, read off the offer itself, or null when
+   * the wire names none. Absent on an offer the client built by hand, which reads
+   * as null. A basket product has no `unitBasis` of its own, so the unit price
+   * line of "Lists and amounts" names the basis of the offer it draws.
+   */
+  readonly unitBasis?: PriceUnitBasis | null;
+  /**
    * The price of a kilo, a litre or one unit of the product, derived by the
    * catalog from the till price and the product's size (backend `0245`). Never
    * derived here. **This is the figure that compares**: two offers are cheaper

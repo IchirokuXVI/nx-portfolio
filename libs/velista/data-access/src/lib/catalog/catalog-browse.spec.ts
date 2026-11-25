@@ -121,6 +121,7 @@ describe('CatalogBrowseApi', () => {
               currency: 'EUR',
               unitPrice: 0.89,
               unitPriceLabel: 'EUR/L',
+              unitBasis: 'LITER',
               comparablePrice: null,
               comparableBasis: null,
               piecePrice: null,

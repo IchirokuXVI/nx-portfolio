@@ -2123,7 +2123,7 @@
       "listLabel": "{{list}}, cantidad de {{name}}: {{amount}}"
     },
     "change": {
-      "oneLabel": "Cambiar el producto en {{name}}",
+      "oneLabel": "Cambiar producto en {{name}}",
       "all": "Cambiar en todas las listas",
       "openLabel": "Hay otro más barato que {{name}}. Cambiar el producto",
       "cheaper": "otro más barato",
@@ -2180,9 +2180,9 @@
       "description": "Aquí cambias la cantidad y el producto de cada lista. Lo que has comprado se apunta en la pantalla anterior.",
       "heading": "Lo que pide cada lista",
       "bought": "Comprado {{bought}} de {{asked}}",
-      "change": "Cambiar",
       "notInGroup": "Esta lista es de un grupo del que no formas parte. Solo sus miembros pueden cambiar lo que pide.",
-      "ownGroup": "Lo que pide esta lista no se puede cambiar desde esta lista de la compra. Cámbialo en la propia lista."
+      "ownGroup": "Lo que pide esta lista no se puede cambiar desde esta lista de la compra. Cámbialo en la propia lista.",
+      "changeProduct": "Cambiar producto"
     }
   },
   "getList": {
