@@ -40,6 +40,7 @@ import {
   lineNameRefused,
   priceWordsText,
   stepAt,
+  type AbsorbedExtra,
   type BasketShop,
   type Line,
   type LineUnit,
@@ -59,6 +60,8 @@ import {
   ChevronRightIcon,
   CloseIcon,
   CommentIcon,
+  ExtraAskHost,
+  ExtraAskPopover,
   LineUnitChip,
   ProductRow,
   QuantityStepper,
@@ -150,10 +153,14 @@ type Step = 'summary' | 'howMany' | 'shop';
     LineGoneNotice,
     BoughtShopPane,
     ProductRow,
+    ExtraAskPopover,
   ],
   templateUrl: './line-detail-sheet.html',
   styleUrl: './line-detail-sheet.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  // The question about the extra already bought (velista `0208`, target state 11),
+  // one for this sheet, gone with it: a sheet closed before the answer asks nothing.
+  providers: [ExtraAskHost],
 })
 export class LineDetailSheet {
   private readonly _lines = inject(LineStore);
@@ -172,6 +179,8 @@ export class LineDetailSheet {
   private readonly _injector = inject(Injector);
   private readonly _boughtShop = inject(BoughtShopMemory);
   private readonly _events = inject(LineSheetEvents);
+  private readonly _extraHost = inject(ExtraAskHost);
+  private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   readonly zoneId = zoneIdOf(this._route);
   readonly listId = listIdOf(this._route);
@@ -548,10 +557,19 @@ export class LineDetailSheet {
     });
   });
 
+  /** Whether the sheet has closed: nothing it asks after that is drawn. */
+  private _closed = false;
+
   constructor() {
+    this._extraHost.connect({
+      readerId: () => this._session.userId(),
+      nameOf: (zoneId, userId) => this._names.nameOf(zoneId, userId),
+    });
     // The announcement ends with the component, however the sheet closed. The route's
     // services are never destroyed, so this is the one hook every exit reaches.
     inject(DestroyRef).onDestroy(() => {
+      // A save that answers after this asks nothing (velista `0208`, target 11).
+      this._closed = true;
       this._stopEditing();
       // The page under it moves focus off a row that left while the sheet was open.
       this._events.closed(this.lineId());
@@ -886,6 +904,11 @@ export class LineDetailSheet {
     }
 
     const quantity = this.amount();
+    // A raise of the amount asks the answer what it took into the ask (velista
+    // `0208`, target state 11). A merge never reports: the merge question opens only
+    // on a refused save, so it and the question about the extra never share one.
+    const raising =
+      scope === 'full' && quantity > line.quantity && !confirmMerge;
     // Only what changed. In `content` scope the quantity is never sent, because the
     // server refuses a body naming it on an approved line even when it is unchanged.
     // The name is `lineNameChange`: text, or the name taken away (velista `0144`).
@@ -893,6 +916,7 @@ export class LineDetailSheet {
       ...(this._nameChange() ?? {}),
       ...(scope === 'full' && quantity !== line.quantity ? { quantity } : {}),
       ...(confirmMerge ? { confirmMerge: true } : {}),
+      ...(raising ? { reportExtra: true } : {}),
     };
 
     this.saving.set(true);
@@ -948,6 +972,88 @@ export class LineDetailSheet {
         injector: this._injector,
       });
     }
+
+    const extra = outcome.extra ?? null;
+    if (raising && extra !== null && outcome.line.id === this.lineId()) {
+      this._askAboutExtra(outcome.line, extra);
+    }
+  }
+
+  /**
+   * A Save that raised the amount answered with something to count (velista
+   * `0208`, target state 11): asked on the amount stepper, above its row (the
+   * board's frame 1), once the fields are drawn at the saved amount, while the sheet
+   * is open and in front. A sheet closed before the answer has no host left, and
+   * the line holds the amount saved.
+   */
+  private _askAboutExtra(line: Line, extra: AbsorbedExtra): void {
+    if (this._closed) {
+      return;
+    }
+    const lineId = line.id;
+    const shown = line.quantity;
+    const stepper = () =>
+      this._host.nativeElement.querySelector<HTMLElement>(
+        '.amount lib-quantity-stepper'
+      );
+    afterNextRender(
+      () =>
+        this._extraHost.ask({
+          lineId,
+          zoneId: this.zoneId(),
+          unit: line.unit,
+          extra,
+          shown,
+          origin: stepper,
+          keepInSight: () =>
+            this._host.nativeElement.querySelector<HTMLElement>('.amount'),
+          side: 'above',
+          count: () => this._countExtra(lineId, extra.countable, shown),
+          inFront: () =>
+            !this._leaving() &&
+            this.merge() === null &&
+            this.step() === 'summary' &&
+            this.gone.reason() === null &&
+            this.lineId() === lineId &&
+            !this.submitting() &&
+            this._document.visibilityState !== 'hidden',
+          // A step of the stepper since the save is a newer amount than Y.
+          current: () => this.amount() === shown,
+        }),
+      { injector: this._injector }
+    );
+  }
+
+  /**
+   * "Count the extra" from the sheet (velista `0208`, target state 4): the store
+   * shows Z at once, and the fields take the line as it then stands, the server's
+   * amount after a refusal and Y back after a failure.
+   */
+  private async _countExtra(
+    lineId: string,
+    amount: number,
+    expect: number
+  ): Promise<'done' | 'stale' | 'failed'> {
+    const counting = this._lines.countExtra(lineId, amount, expect);
+    this._followLine();
+    const outcome = await counting;
+    this._followLine();
+    return outcome === 'counted' ? 'done' : outcome;
+  }
+
+  /** The amount field follows the line, unless the reader has moved it since. */
+  private _followLine(): void {
+    const line = this._line();
+    const shown = this._shown;
+    if (
+      line === undefined ||
+      shown === null ||
+      this.amount() !== shown.quantity
+    ) {
+      return;
+    }
+    this.amount.set(line.quantity);
+    this._shown = { ...shown, quantity: line.quantity };
   }
 
   /** What the name field holds for a line as it stands (velista `0144`). */

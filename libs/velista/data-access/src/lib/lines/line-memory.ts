@@ -263,7 +263,16 @@ export class LineMemory implements LineServiceI {
       listId,
       this._lines(listId).map((held) => (held.id === raised.id ? raised : held))
     );
-    return { line: raised, merged: true, outcome: 'raised', alreadyOnList: [] };
+    return {
+      line: raised,
+      merged: true,
+      outcome: 'raised',
+      alreadyOnList: [],
+      // Zeros, as for a raise by delta: the fixture bought nothing above an ask.
+      ...(options?.reportExtra === true
+        ? { extra: { above: 0, countable: 0, buyers: [] } }
+        : {}),
+    };
   }
 
   /**
@@ -434,6 +443,7 @@ export class LineMemory implements LineServiceI {
       favoriteItemId?: string | null;
       preferredSupermarketId?: string | null;
       confirmMerge?: boolean;
+      reportExtra?: boolean;
     }
   ): Promise<LineUpdateResult> {
     const line = this._lineOrThrow(lineId);
@@ -547,7 +557,18 @@ export class LineMemory implements LineServiceI {
           }
         : {}),
     }));
-    return { line: updated, absorbedLineId: null };
+    // A raise of the quantity in the same unit reports, as on the server (backend
+    // `0276`, section 1). The fixture holds no shopping lists, so nothing was ever
+    // bought above an ask and the report carries zeros, which ask nothing.
+    const raised =
+      changes.reportExtra === true &&
+      updated.unit === line.unit &&
+      updated.quantity > line.quantity;
+    return {
+      line: updated,
+      absorbedLineId: null,
+      extra: raised ? { above: 0, countable: 0, buyers: [] } : null,
+    };
   }
 
   /**

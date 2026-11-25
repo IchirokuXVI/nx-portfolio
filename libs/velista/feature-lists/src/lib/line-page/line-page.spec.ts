@@ -54,6 +54,7 @@ import {
   provideVelistaTesting,
   SheetNavigation,
 } from '@portfolio/velista/platform';
+import { ExtraAskHost } from '@portfolio/velista/ui';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { of } from 'rxjs';
@@ -443,7 +444,7 @@ describe('LinePage', () => {
       await drain(fixture);
 
       expect(lines.calls.filter((call) => call.kind === 'quantity')).toEqual([
-        { kind: 'quantity', lineId: LINE_ID, delta: 3 },
+        { kind: 'quantity', lineId: LINE_ID, delta: 3, reportExtra: true },
       ]);
     });
 
@@ -504,7 +505,8 @@ describe('LinePage', () => {
       // The notice and its "Send it again" are the list page's, so an entry recorded
       // here would surface on a page that never made the write.
       const { fixture, lines } = await render();
-      const addQuantity = jest.spyOn(lines, 'addQuantity');
+      // A raise reports the extra (velista 0208), with no record option either.
+      const raise = jest.spyOn(lines, 'raiseReportingExtra');
       const [, more] = fixture.debugElement
         .queryAll(By.css('lib-quantity-stepper button'))
         .map((element) => element.nativeElement as HTMLButtonElement);
@@ -515,8 +517,64 @@ describe('LinePage', () => {
       jest.useRealTimers();
       await drain(fixture);
 
-      expect(addQuantity).toHaveBeenCalledTimes(1);
-      expect(addQuantity.mock.calls[0]).toEqual([LINE_ID, 1]);
+      expect(raise).toHaveBeenCalledTimes(1);
+      expect(raise.mock.calls[0]).toEqual([LINE_ID, 1]);
+    });
+
+    describe('the question about the extra already bought (velista 0208, target state 12)', () => {
+      const EXTRA = { above: 1, countable: 1, buyers: [{ userId: null }] };
+
+      const raiseOnce = async (fixture: ComponentFixture<LinePage>) => {
+        const [, more] = fixture.debugElement
+          .queryAll(By.css('lib-quantity-stepper button'))
+          .map((element) => element.nativeElement as HTMLButtonElement);
+        jest.useFakeTimers();
+        more.click();
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        jest.useRealTimers();
+        await drain(fixture);
+        await drain(fixture);
+      };
+
+      it('asks on the stepper, below it, and "Count the extra" counts from Y', async () => {
+        const { fixture, lines } = await render();
+        lines.answerNextRaise({ extra: EXTRA });
+
+        await raiseOnce(fixture);
+
+        const host = fixture.debugElement.injector.get(ExtraAskHost);
+        const asked = host.asked();
+        expect(asked?.shown).toBe(true);
+        expect(asked?.quantity).toBe(4);
+        expect(asked?.side).toBe('below');
+        expect(asked?.anchor).toBe(
+          (fixture.nativeElement as HTMLElement).querySelector(
+            '.amount lib-quantity-stepper'
+          )
+        );
+
+        host.answerCount();
+        await drain(fixture);
+        expect(lines.calls.at(-1)).toEqual({
+          kind: 'countExtra',
+          lineId: LINE_ID,
+          amount: 1,
+          expect: 4,
+        });
+      });
+
+      it('asks nothing for a report with nothing to count, nor over a sheet', async () => {
+        const { fixture, lines } = await render();
+        lines.answerNextRaise({
+          extra: { above: 2, countable: 0, buyers: [] },
+        });
+
+        await raiseOnce(fixture);
+
+        expect(
+          fixture.debugElement.injector.get(ExtraAskHost).asked()
+        ).toBeNull();
+      });
     });
 
     it('is a number with no buttons for a reader without DECIDE', async () => {
@@ -704,10 +762,11 @@ describe('LinePage', () => {
         lines: [line({ unit: 'UNIT', quantity: 2 })],
       });
       let answer: (outcome: 'succeeded') => void = () => undefined;
-      jest.spyOn(lines, 'addQuantity').mockImplementation(
+      // The raise of the open run, which reports the extra (velista 0208).
+      jest.spyOn(lines, 'raiseReportingExtra').mockImplementation(
         () =>
           new Promise((resolve) => {
-            answer = resolve;
+            answer = (state) => resolve({ state, extra: null, quantity: 3 });
           })
       );
 

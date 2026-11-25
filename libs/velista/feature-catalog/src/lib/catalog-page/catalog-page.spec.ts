@@ -31,7 +31,7 @@ import {
   type CatalogPriceState,
 } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
-import { AddingBar } from '@portfolio/velista/ui';
+import { AddingBar, ExtraAskHost } from '@portfolio/velista/ui';
 import { BehaviorSubject } from 'rxjs';
 import {
   fakeAdds,
@@ -43,6 +43,9 @@ import {
 import { CATALOG_SEARCH_DEBOUNCE_MS, CatalogPage } from './catalog-page';
 
 /** The oil under its own name, two of it, as the weekly shop held it before. */
+/** Every raise from a card asks for the report of the extra (velista `0208`). */
+const REPORTS = expect.objectContaining({ reportExtra: true });
+
 const OIL_LINE: FakeLine = {
   id: 'line-oil',
   listId: 'list-weekly',
@@ -984,7 +987,9 @@ describe('CatalogPage', () => {
         expect.objectContaining({
           itemId: 'item-oil',
           name: 'Extra virgin olive oil',
-        })
+        }),
+        undefined,
+        REPORTS
       );
       // The line is named after the product, in the reader's language.
       expect(lines.addLineResult).toHaveBeenCalledWith(
@@ -994,7 +999,7 @@ describe('CatalogPage', () => {
         ['item-oil'],
         // Not named: the words are the product's (velista 0144).
         false,
-        undefined,
+        { reportExtra: true },
         'UNIT'
       );
       // The plus stays a plus. The line it made is under the row, with one.
@@ -1170,7 +1175,8 @@ describe('CatalogPage', () => {
           imageUrl: null,
         },
         'line-frying',
-        { from: 1, to: 2, repeat: false }
+        { from: 1, to: 2, repeat: false },
+        REPORTS
       );
       expect(lines.addQuantity).toHaveBeenCalledTimes(1);
       expect(lines.addQuantity).toHaveBeenCalledWith('line-frying', 1, 'UNIT');
@@ -1187,7 +1193,8 @@ describe('CatalogPage', () => {
       expect(step).toHaveBeenLastCalledWith(
         expect.objectContaining({ listId: 'list-weekly', itemId: 'item-oil' }),
         'line-oil',
-        { from: 2, to: 1, repeat: false }
+        { from: 2, to: 1, repeat: false },
+        REPORTS
       );
       expect(lines.addQuantity).toHaveBeenLastCalledWith(
         'line-oil',
@@ -1840,5 +1847,154 @@ describe('CatalogPage', () => {
         'catalog.refused.title'
       );
     });
+  });
+});
+
+describe('CatalogPage: a card that raises a line asks about the extra already bought (velista 0208, target state 13)', () => {
+  const OIL = 'Extra virgin olive oil';
+  const EXTRA = { above: 1, countable: 1, buyers: [{ userId: null }] };
+
+  const extraHost = (fixture: ComponentFixture<CatalogPage>) =>
+    fixture.debugElement.injector.get(ExtraAskHost);
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it("reports the raise of a card's stepper and asks on that stepper, below the card", async () => {
+    const { fixture, lines, adds } = await render('priced', {
+      lines: [OIL_LINE],
+    });
+    adds.reportNext(EXTRA);
+
+    heldLines(fixture, OIL)[0]?.plus?.click();
+    await quiet(fixture);
+    await settle(fixture);
+
+    expect(lines.raiseReportingExtra).toHaveBeenCalledWith(
+      'line-oil',
+      1,
+      'UNIT'
+    );
+    const asked = extraHost(fixture).asked();
+    expect(asked?.shown).toBe(true);
+    expect(asked?.quantity).toBe(3);
+    expect(asked?.side).toBe('below');
+    expect(asked?.anchor).toBe(
+      rowOf(fixture, OIL).querySelector(
+        'li[data-line="line-oil"] > lib-quantity-stepper'
+      )
+    );
+    expect(asked?.keepInSight).toBe(rowOf(fixture, OIL));
+  });
+
+  it('"Count the extra" counts through the store and the card shows Z', async () => {
+    const { fixture, lines, adds } = await render('priced', {
+      lines: [OIL_LINE],
+    });
+    adds.reportNext(EXTRA);
+    heldLines(fixture, OIL)[0]?.plus?.click();
+    await quiet(fixture);
+    await settle(fixture);
+
+    extraHost(fixture).answerCount();
+    await settle(fixture);
+
+    // What it takes off, and what the line must still hold: Y.
+    expect(lines.countExtra.mock.calls[0].slice(0, 3)).toEqual([
+      'line-oil',
+      1,
+      3,
+    ]);
+    expect(heldLines(fixture, OIL)[0]?.quantity).toBe('2');
+  });
+
+  it('a count refused as stale shows the server amount and the stale notice on the card', async () => {
+    const { fixture, lines, adds } = await render('priced', {
+      lines: [OIL_LINE],
+    });
+    adds.reportNext(EXTRA);
+    heldLines(fixture, OIL)[0]?.plus?.click();
+    await quiet(fixture);
+    await settle(fixture);
+    // Somebody else raised the line to 5 while the question was open.
+    await lines.addQuantity('line-oil', 2, 'UNIT');
+
+    extraHost(fixture).answerCount();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(lines.linesHoldingItem).toHaveBeenLastCalledWith('item-oil');
+    expect(heldLines(fixture, OIL)[0]?.quantity).toBe('5');
+    expect(extraHost(fixture).notice()?.key).toBe('list.extra.stale');
+  });
+
+  it('"Still need" sends nothing and the card keeps Y', async () => {
+    const { fixture, lines, adds } = await render('priced', {
+      lines: [OIL_LINE],
+    });
+    adds.reportNext(EXTRA);
+    heldLines(fixture, OIL)[0]?.plus?.click();
+    await quiet(fixture);
+    await settle(fixture);
+
+    extraHost(fixture).answerStillNeed();
+    await settle(fixture);
+
+    expect(lines.countExtra).not.toHaveBeenCalled();
+    expect(heldLines(fixture, OIL)[0]?.quantity).toBe('3');
+  });
+
+  it('asks nothing for a card the results no longer draw', async () => {
+    const { fixture, lines, adds, query } = await render('priced', {
+      lines: [OIL_LINE],
+    });
+    adds.reportNext(EXTRA);
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const raise = lines.raiseReportingExtra.getMockImplementation();
+    lines.raiseReportingExtra.mockImplementationOnce(async (...args) => {
+      await held;
+      return raise?.(...args);
+    });
+
+    heldLines(fixture, OIL)[0]?.plus?.click();
+    await quiet(fixture);
+    // A filter that leaves the card out lands before the answer.
+    query.next(convertToParamMap({ category: 'milk' }));
+    await settle(fixture);
+    jest.advanceTimersByTime(CATALOG_SEARCH_DEBOUNCE_MS);
+    await settle(fixture);
+    release();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(lines.raiseReportingExtra).toHaveBeenCalled();
+    expect(extraHost(fixture).asked()).toBeNull();
+  });
+
+  it('never reports a lowering nor a take back', async () => {
+    const { fixture, lines } = await render('priced', {
+      lines: [OIL_LINE],
+    });
+    const store = TestBed.inject(CatalogAddStore);
+
+    heldLines(fixture, OIL)[0]?.plus?.click();
+    await quiet(fixture);
+    lines.raiseReportingExtra.mockClear();
+    heldLines(fixture, OIL)[0]?.minus?.click();
+    await quiet(fixture);
+    heldLines(fixture, OIL)[0]?.plus?.click();
+    await quiet(fixture);
+    lines.raiseReportingExtra.mockClear();
+    await store.takeBack('line-oil');
+    await settle(fixture);
+
+    expect(lines.raiseReportingExtra).not.toHaveBeenCalled();
+    expect(lines.addQuantity).toHaveBeenLastCalledWith('line-oil', -1, 'UNIT');
   });
 });

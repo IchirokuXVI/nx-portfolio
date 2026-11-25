@@ -37,7 +37,11 @@ import {
   SheetNavigation,
   StorageKeys,
 } from '@portfolio/velista/platform';
-import { QuantityStepper, SheetShell } from '@portfolio/velista/ui';
+import {
+  ExtraAskHost,
+  QuantityStepper,
+  SheetShell,
+} from '@portfolio/velista/ui';
 import { BehaviorSubject } from 'rxjs';
 import { LineDetailSheet } from './line-detail-sheet';
 import { LineSheetEvents } from './line-sheet-events';
@@ -503,6 +507,8 @@ describe('LineDetailSheet', () => {
         kind: 'update',
         lineId: LINE_ID,
         quantity: 5,
+        // A raise asks what it took into the ask (velista 0208).
+        reportExtra: true,
       });
     });
 
@@ -526,6 +532,7 @@ describe('LineDetailSheet', () => {
         kind: 'update',
         lineId: LINE_ID,
         quantity: 7,
+        reportExtra: true,
       });
     });
 
@@ -1398,5 +1405,119 @@ describe('LineDetailSheet: the unit chip (velista 0183)', () => {
       (fixture.nativeElement as HTMLElement).querySelector('.error')
         ?.textContent
     ).toContain('line.unit.notOffered');
+  });
+});
+
+describe('LineDetailSheet: a Save that raises asks about the extra already bought (velista 0208, target state 11)', () => {
+  const EXTRA = { above: 1, countable: 1, buyers: [{ userId: 'user-ana' }] };
+
+  const extraHost = (fixture: ComponentFixture<LineDetailSheet>) =>
+    fixture.debugElement.injector.get(ExtraAskHost);
+
+  const updates = (calls: readonly unknown[]) =>
+    calls.filter((call) => (call as { kind?: string }).kind === 'update');
+
+  it('reports a raised amount and asks on the stepper, above the amount row', async () => {
+    const { fixture, lines } = await render();
+    lines.answerNextUpdate({
+      state: 'succeeded',
+      line: { id: LINE_ID, quantity: 3 },
+      extra: EXTRA,
+    });
+
+    fixture.componentInstance.onAmountChanged(3);
+    fixture.detectChanges();
+    saveButton(fixture)?.click();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(updates(lines.calls)).toEqual([
+      { kind: 'update', lineId: LINE_ID, quantity: 3, reportExtra: true },
+    ]);
+    const asked = extraHost(fixture).asked();
+    expect(asked?.shown).toBe(true);
+    expect(asked?.quantity).toBe(3);
+    expect(asked?.side).toBe('above');
+    const host = fixture.nativeElement as HTMLElement;
+    expect(asked?.anchor).toBe(
+      host.querySelector('.amount lib-quantity-stepper')
+    );
+    expect(asked?.keepInSight).toBe(host.querySelector('.amount'));
+    expect(extraHost(fixture).words()?.question).toContain('list.extra');
+  });
+
+  it('"Count the extra" counts from Y and the stepper shows Z', async () => {
+    const { fixture, lines } = await render();
+    lines.answerNextUpdate({
+      state: 'succeeded',
+      line: { id: LINE_ID, quantity: 3 },
+      extra: EXTRA,
+    });
+    fixture.componentInstance.onAmountChanged(3);
+    fixture.detectChanges();
+    saveButton(fixture)?.click();
+    await settle(fixture);
+    await settle(fixture);
+
+    extraHost(fixture).answerCount();
+    await settle(fixture);
+
+    expect(lines.calls.at(-1)).toEqual({
+      kind: 'countExtra',
+      lineId: LINE_ID,
+      amount: 1,
+      expect: 3,
+    });
+    expect(fixture.componentInstance.amount()).toBe(2);
+  });
+
+  it.each([
+    ['a lowered amount', 1, undefined],
+    ['a rename alone', null, 'Oat milk'],
+  ])('reports nothing for %s', async (_what, amount, name) => {
+    const { fixture, lines } = await render();
+    if (amount !== null) {
+      fixture.componentInstance.onAmountChanged(amount);
+    }
+    if (name !== undefined) {
+      fixture.componentInstance.name.set(name);
+    }
+    fixture.detectChanges();
+    saveButton(fixture)?.click();
+    await settle(fixture);
+
+    const sent = updates(lines.calls);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).not.toHaveProperty('reportExtra');
+    expect(extraHost(fixture).asked()).toBeNull();
+  });
+
+  it('asks nothing once the sheet is gone, and the line holds the amount saved', async () => {
+    const { fixture, lines } = await render();
+    const host = extraHost(fixture);
+    lines.holdWrites();
+    lines.answerNextUpdate({
+      state: 'succeeded',
+      line: { id: LINE_ID, quantity: 3 },
+      extra: EXTRA,
+    });
+    fixture.componentInstance.onAmountChanged(3);
+    fixture.detectChanges();
+    saveButton(fixture)?.click();
+    fixture.detectChanges();
+
+    fixture.destroy();
+    lines.releaseWrites();
+    for (let turn = 0; turn < 20; turn += 1) {
+      await Promise.resolve();
+    }
+
+    expect(host.asked()).toBeNull();
+    expect(lines.linesIn(LIST_ID)[0]?.quantity).toBe(3);
+    expect(
+      lines.calls.filter(
+        (call) => (call as { kind?: string }).kind === 'countExtra'
+      )
+    ).toEqual([]);
   });
 });

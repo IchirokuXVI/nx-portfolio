@@ -619,9 +619,11 @@ test.describe('a weight line on the product page (velista 0187)', () => {
       await expect(count).toHaveAttribute('data-value', '1700');
 
       const response = await written;
+      // A raise asks what it took into the ask (velista 0208, target state 14).
       expect(response.request().postDataJSON()).toEqual({
         delta: 100,
         unit: 'GRAM',
+        reportExtra: true,
       });
       expect(response.ok()).toBe(true);
       // The live region is always there; a refused write fills it.

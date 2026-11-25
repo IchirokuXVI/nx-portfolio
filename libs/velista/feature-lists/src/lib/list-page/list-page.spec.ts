@@ -100,6 +100,7 @@ import {
 import {
   AnchoredPopover,
   DueLineRow,
+  ExtraAskHost,
   LineComposer,
   LineList,
   LineRow,
@@ -6737,6 +6738,29 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
       expect(writes(lines.calls)).toHaveLength(1);
     });
 
+    it('says the same notice a second time, through the polite region that repeats', async () => {
+      const { fixture, lines } = await asked();
+      lines.answerNextCount({ state: 'stale', quantity: 3 });
+      fixture.componentInstance.answerCount();
+      await settle(fixture);
+      expect(fixture.componentInstance.announcement()).toBe('list.extra.stale');
+      fixture.componentInstance.closeExtraNotice();
+
+      // A second raise over new extra, refused the same way.
+      lines.answerNextRaise({ extra: EXTRA });
+      raise(fixture, 'ln-eggs', 3, 4);
+      await settle(fixture);
+      lines.answerNextCount({ state: 'stale', quantity: 5 });
+      jest.useFakeTimers();
+      fixture.componentInstance.answerCount();
+      await turns();
+      // Emptied first, so the same sentence is a change a screen reader hears.
+      expect(fixture.componentInstance.announcement()).toBe('');
+      jest.advanceTimersByTime(1000);
+      jest.useRealTimers();
+      expect(fixture.componentInstance.announcement()).toBe('list.extra.stale');
+    });
+
     it('closes the notice on a press on the notice itself', async () => {
       const { fixture, lines } = await asked();
       lines.answerNextCount({ state: 'stale', quantity: 3 });
@@ -7029,8 +7053,9 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
       // The scroll brings the row into view.
       const scrollBy = jest.fn(() => rowBox.mockReturnValue(box(216, 280)));
       (column as unknown as { scrollBy: jest.Mock }).scrollBy = scrollBy;
+      // The page's ExtraAskHost scrolls it (velista `0208`, target state 10).
       (
-        fixture.componentInstance as unknown as {
+        fixture.debugElement.injector.get(ExtraAskHost) as unknown as {
           _reducedMotion: () => boolean;
         }
       )._reducedMotion = () => reduced;

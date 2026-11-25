@@ -67,14 +67,19 @@ async function openGroceries(page: Page): Promise<void> {
   await expect(breadAmount(page)).toBeVisible();
 }
 
+/** What a raise sent, and what its answer said it took in. */
+interface Raised {
+  readonly sent: Record<string, unknown>;
+  readonly extra: { readonly above: number; readonly countable: number } | null;
+}
+
 /**
  * `presses` of the Bread row's plus, inside one quiet beat, and the one raise they
- * write after it.
+ * write after it: its body, and the `extra` of its answer, so a check that nothing
+ * is asked reads the answer the page handled and not a page that has not handled
+ * it yet.
  */
-async function raiseBread(
-  page: Page,
-  presses = 1
-): Promise<Record<string, unknown>> {
+async function raiseBread(page: Page, presses = 1): Promise<Raised> {
   const written = page.waitForResponse(
     (response) =>
       response.request().method() === 'POST' &&
@@ -87,7 +92,22 @@ async function raiseBread(
   }
   const response = await written;
   expect(response.ok()).toBe(true);
-  return response.request().postDataJSON() as Record<string, unknown>;
+  const body = (await response.json()) as { extra?: Raised['extra'] };
+  return {
+    sent: response.request().postDataJSON() as Record<string, unknown>,
+    extra: body.extra ?? null,
+  };
+}
+
+/**
+ * A raise that asks nothing: its answer offers nothing to count, so the page has
+ * no question to open, and after the answer none is drawn.
+ */
+async function raiseAsksNothing(page: Page, value: string): Promise<void> {
+  const raised = await raiseBread(page);
+  expect(raised.extra?.countable ?? 0).toBe(0);
+  await expect(breadAmount(page)).toHaveAttribute('data-value', value);
+  await expect(question(page)).toHaveCount(0);
 }
 
 /** Every count the page sends, so a spec can say none went. */
@@ -158,14 +178,15 @@ test.describe('a raise takes the extra into the ask and asks whether it counts (
     await openGroceries(page);
     await expect(breadAmount(page)).toHaveAttribute('data-value', '0');
 
-    const sent = await raiseBread(page, 4);
+    const { sent, extra } = await raiseBread(page, 4);
     expect(sent).toEqual({ delta: 4, unit: 'UNIT', reportExtra: true });
+    expect(extra).toEqual(expect.objectContaining({ above: 3, countable: 3 }));
     await expect(question(page).locator('.question')).toHaveText(
       `${danaName} already bought 3 extra. Do you still need 4, or just${NB}1?`
     );
   }
 
-  test('the question opens with the line at the amount set, and a reload before answering keeps it', async ({
+  test('the question opens with the line at the amount set, and the amount set survives a reload', async ({
     page,
   }) => {
     const counts = countsOf(page);
@@ -194,10 +215,7 @@ test.describe('a raise takes the extra into the ask and asks whether it counts (
     expect(counts).toEqual([]);
 
     // The extra is inside the ask now, so the next raise asks nothing.
-    const later = await raiseBread(page);
-    expect(later).toEqual({ delta: 1, unit: 'UNIT', reportExtra: true });
-    await expect(breadAmount(page)).toHaveAttribute('data-value', '5');
-    await expect(question(page)).toHaveCount(0);
+    await raiseAsksNothing(page, '5');
   });
 
   test('"Count the extra" lowers the line to what is left, and a reload reads it', async ({
@@ -230,9 +248,7 @@ test.describe('a raise takes the extra into the ask and asks whether it counts (
     await expect(breadAmount(page)).toHaveAttribute('data-value', '1');
 
     // Nothing is above the ask any more: a raise asks nothing.
-    await raiseBread(page);
-    await expect(breadAmount(page)).toHaveAttribute('data-value', '2');
-    await expect(question(page)).toHaveCount(0);
+    await raiseAsksNothing(page, '2');
   });
 
   test('"Still need" sends nothing and keeps the amount; nobody is asked again until somebody buys above the ask', async ({
@@ -261,9 +277,7 @@ test.describe('a raise takes the extra into the ask and asks whether it counts (
 
     // After a reload, a raise asks nothing.
     await openGroceries(page);
-    await raiseBread(page);
-    await expect(breadAmount(page)).toHaveAttribute('data-value', '5');
-    await expect(question(page)).toHaveCount(0);
+    await raiseAsksNothing(page, '5');
 
     // Nor for another member, in a browser of her own.
     const danaPage = await newVisitor(browser);
@@ -271,9 +285,7 @@ test.describe('a raise takes the extra into the ask and asks whether it counts (
       await danaPage.setViewportSize({ width: 390, height: 844 });
       await signIn(danaPage, DANA_EMAIL);
       await openGroceries(danaPage);
-      await raiseBread(danaPage);
-      await expect(breadAmount(danaPage)).toHaveAttribute('data-value', '6');
-      await expect(question(danaPage)).toHaveCount(0);
+      await raiseAsksNothing(danaPage, '6');
     } finally {
       await danaPage.context().close();
     }

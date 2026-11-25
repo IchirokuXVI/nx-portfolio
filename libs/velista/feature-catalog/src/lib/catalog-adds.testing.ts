@@ -7,7 +7,11 @@ import {
   SessionStore,
   ZONE_SERVICE,
 } from '@portfolio/velista/data-access';
-import type { LineUnit, ListPermission } from '@portfolio/velista/models';
+import type {
+  AbsorbedExtra,
+  LineUnit,
+  ListPermission,
+} from '@portfolio/velista/models';
 import { provideFakeBrowserFacade } from '@portfolio/velista/platform';
 
 /** One list as the store reads it from the list service. */
@@ -71,6 +75,8 @@ export interface FakeAddDoubles {
     linesHoldingItem: jest.Mock;
     addLineResult: jest.Mock;
     addQuantity: jest.Mock;
+    raiseReportingExtra: jest.Mock;
+    countExtra: jest.Mock;
     deleteLine: jest.Mock;
   };
 }
@@ -79,6 +85,8 @@ export interface FakeAdds extends FakeAddDoubles {
   readonly providers: Provider[];
   /** The lines the lists hold now, as the server would answer them. */
   readonly held: () => readonly FakeLine[];
+  /** Stage what the next raise that reports the extra answers (velista `0208`). */
+  readonly reportNext: (extra: AbsorbedExtra) => void;
 }
 
 /** The id the double gives the line an add makes. */
@@ -116,6 +124,8 @@ export function fakeAdds(options: FakeAddsOptions = {}): FakeAdds {
     approvalStatus: 'APPROVED',
     ...line,
   }));
+  /** The reports the next raises answer, in order (velista `0208`). */
+  const reports: AbsorbedExtra[] = [];
   const put = (line: FakeLine): FakeLine => {
     held = held.some((one) => one.id === line.id)
       ? held.map((one) => (one.id === line.id ? line : one))
@@ -225,6 +235,11 @@ export function fakeAdds(options: FakeAddsOptions = {}): FakeAdds {
             merged: true,
             outcome: 'raised' as const,
             alreadyOnList: [],
+            // The report, when the add asked for one (velista `0208`).
+            ...((_options as { reportExtra?: true } | undefined)
+              ?.reportExtra === true
+              ? { extra: reports.shift() ?? NOTHING_ABOVE }
+              : {}),
           };
         }
         return {
@@ -253,6 +268,34 @@ export function fakeAdds(options: FakeAddsOptions = {}): FakeAdds {
       }
       return put({ ...line, quantity: Math.max(0, line.quantity + delta) });
     }),
+    /**
+     * A raise that reports the extra (velista `0208`): the same write as
+     * `addQuantity`, which records it, and the report staged by `reportNext`, or
+     * one with nothing taken in.
+     */
+    raiseReportingExtra: jest.fn(
+      async (lineId: string, delta: number, unit: LineUnit) => {
+        const line = await lines.addQuantity(lineId, delta, unit);
+        return { line, extra: reports.shift() ?? NOTHING_ABOVE };
+      }
+    ),
+    /** "Count the extra": refused as stale when the line no longer holds `expect`. */
+    countExtra: jest.fn(
+      async (lineId: string, amount: number, expect: number) => {
+        const line = held.find((one) => one.id === lineId);
+        if (line === undefined || line.quantity !== expect) {
+          throw new GatewayError({
+            code: 'stale_quantity',
+            status: 409,
+            correlationId: 'fake-adds',
+          });
+        }
+        return {
+          line: put({ ...line, quantity: line.quantity - amount }),
+          counted: amount,
+        };
+      }
+    ),
     deleteLine: jest.fn(async (lineId: string) => {
       held = held.filter((line) => line.id !== lineId);
       return lineId;
@@ -267,12 +310,26 @@ export function fakeAdds(options: FakeAddsOptions = {}): FakeAdds {
     provideFakeBrowserFacade(options.storage ?? new Map()),
     {
       provide: SessionStore,
-      useValue: { isGuest: signal(options.guest === true) },
+      // The reader, whom the question about the extra names "You" (velista `0208`).
+      useValue: {
+        isGuest: signal(options.guest === true),
+        userId: signal<string | null>(null),
+      },
     },
     { provide: ZONE_SERVICE, useValue: zones },
     { provide: LIST_SERVICE, useValue: listService },
     { provide: LINE_SERVICE, useValue: lines },
   ];
 
-  return { ...doubles, providers, held: () => held };
+  return {
+    ...doubles,
+    providers,
+    held: () => held,
+    reportNext: (extra: AbsorbedExtra) => {
+      reports.push(extra);
+    },
+  };
 }
+
+/** A report that took nothing in, which asks nothing. */
+const NOTHING_ABOVE: AbsorbedExtra = { above: 0, countable: 0, buyers: [] };

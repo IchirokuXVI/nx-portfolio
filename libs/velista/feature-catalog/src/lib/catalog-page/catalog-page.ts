@@ -3,12 +3,13 @@ import {
   Component,
   computed,
   DestroyRef,
+  DOCUMENT,
   effect,
+  ElementRef,
   inject,
   signal,
   untracked,
   viewChild,
-  type ElementRef,
 } from '@angular/core';
 import {
   ActivatedRoute,
@@ -64,6 +65,8 @@ import {
   ChoosingBar,
   ClearsField,
   CloseIcon,
+  ExtraAskHost,
+  ExtraAskPopover,
   LeaveQuestion,
   OrderMenu,
   PageHeader,
@@ -72,12 +75,14 @@ import {
   ProductRowSkeleton,
   productRowView,
   SearchIcon,
+  type Band,
   type ProductRowAdd,
   type ProductRowChoice,
   type ProductRowLineStep,
   type ProductRowView,
 } from '@portfolio/velista/ui';
 import { CatalogContext } from '../catalog-context';
+import { catalogExtraAsk } from '../catalog-extra-ask';
 import { routePath } from '../catalog-opener';
 import { categoryChoice } from '../category-choice';
 import { lineProductCard, rebaseProductSet, tickProduct } from '../pick-set';
@@ -223,6 +228,7 @@ function sameIds(a: readonly string[], b: readonly string[]): boolean {
     ChoosingBar,
     ClearsField,
     CloseIcon,
+    ExtraAskPopover,
     LeaveQuestion,
     OrderMenu,
     PageHeader,
@@ -234,7 +240,9 @@ function sameIds(a: readonly string[], b: readonly string[]): boolean {
     RouterOutlet,
     SearchIcon,
   ],
-  providers: [CatalogContext],
+  // The question about the extra already bought on a card (velista `0208`, target
+  // state 13), one for this page, gone with it.
+  providers: [CatalogContext, ExtraAskHost],
   host: { '(document:keydown.escape)': 'onEscape($event)' },
   templateUrl: './catalog-page.html',
   styleUrl: './catalog-page.scss',
@@ -255,6 +263,40 @@ export class CatalogPage {
   private readonly _adds = inject(CatalogAddStore);
   private readonly _pick = inject(ProductPickStore);
   private readonly _pages = inject(PageNavigation);
+  private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly _document = inject(DOCUMENT);
+
+  /**
+   * The question a card's raise asks about the extra already bought (velista
+   * `0208`, target state 13), while no sheet or dialog is over the page.
+   */
+  private readonly _extra = catalogExtraAsk(
+    () =>
+      !this._destroyed &&
+      !this._route.firstChild &&
+      this._document.visibilityState !== 'hidden' &&
+      this._document.querySelector('dialog[open]') === null,
+    () => this._visibleBand()
+  );
+
+  /**
+   * What of the results the person can see: the page's scroll area below its
+   * sticky tools, which the cards pass under. A card under the tools is out of
+   * sight, and its question brings it below them.
+   */
+  private _visibleBand(): Band | null {
+    const page = this._host.nativeElement.querySelector('.page');
+    if (page === null) {
+      return null;
+    }
+    const box = page.getBoundingClientRect();
+    const tools = page.querySelector(':scope > .tools');
+    const height = this._document.defaultView?.innerHeight ?? box.bottom;
+    return {
+      top: Math.max(0, box.top, tools?.getBoundingClientRect().bottom ?? 0),
+      bottom: Math.min(height, box.bottom),
+    };
+  }
 
   protected readonly skeletonRows = SKELETON_ROWS;
 
@@ -1096,19 +1138,53 @@ export class CatalogPage {
       this._products().find((product) => product.id === row.id) ??
       this._itemNames?.nameOf(row.id) ??
       null;
-    void this._adds.add({
-      itemId: row.id,
-      name: row.name,
-      detail: row.summary,
-      imageUrl: row.imageUrl,
-      // A product sold by the kilo is asked for by weight (velista `0182`).
-      unit: row.lineUnit,
-      // At one step of its own (velista `0186`, ruling 43).
-      step: lineStepOf(
-        { unit: row.lineUnit ?? 'UNIT', itemIds: [row.id] },
-        () => record
-      ),
-    });
+    void this._adds.add(
+      {
+        itemId: row.id,
+        name: row.name,
+        detail: row.summary,
+        imageUrl: row.imageUrl,
+        // A product sold by the kilo is asked for by weight (velista `0182`).
+        unit: row.lineUnit,
+        // At one step of its own (velista `0186`, ruling 43).
+        step: lineStepOf(
+          { unit: row.lineUnit ?? 'UNIT', itemIds: [row.id] },
+          () => record
+        ),
+      },
+      undefined,
+      // An add that raised a line asks on the card's plus (velista `0208`).
+      this._extra.options(
+        { itemId: row.id, detail: row.summary, imageUrl: row.imageUrl },
+        {
+          origin: () =>
+            this._card(row.id)?.querySelector<HTMLElement>('.add.control') ??
+            null,
+          keepInSight: () => this._card(row.id),
+          side: 'below',
+        }
+      )
+    );
+  }
+
+  /** A sheet opened over the page: its question goes with no answer (target state 10). */
+  protected onSheetOpened(): void {
+    this._extra.host.drop();
+  }
+
+  /**
+   * The card of a product, while the results draw it. A new search or a filter
+   * that leaves it out takes its question with it (velista `0208`, target state 13).
+   */
+  private _card(itemId: string): HTMLElement | null {
+    return (
+      Array.from(
+        this._host.nativeElement.querySelectorAll<HTMLElement>(
+          'li[data-product] > lib-product-row'
+        )
+      ).find((card) => card.parentElement?.dataset['product'] === itemId) ??
+      null
+    );
   }
 
   /** A press on the stepper of one line under a row. */
@@ -1126,8 +1202,29 @@ export class CatalogPage {
         imageUrl: row.imageUrl,
       },
       step.lineId,
-      step.step
+      step.step,
+      // A raise asks on the card's stepper of that line (velista `0208`).
+      this._extra.options(
+        { itemId: row.id, detail: row.summary, imageUrl: row.imageUrl },
+        {
+          origin: () =>
+            Array.from(
+              this._card(row.id)?.querySelectorAll<HTMLElement>(
+                'li[data-line] > lib-quantity-stepper'
+              ) ?? []
+            ).find(
+              (stepper) =>
+                stepper.parentElement?.dataset['line'] === step.lineId
+            ) ?? null,
+          keepInSight: () => this._card(row.id),
+          side: 'below',
+        }
+      )
     );
+    // A press on the control the question points at is no answer (target state 4).
+    if (this._extra.host.asked()?.lineId === step.lineId) {
+      this._extra.host.close('outside');
+    }
   }
 
   /** The second try after the lists, or the lines of the chosen one, did not load. */
