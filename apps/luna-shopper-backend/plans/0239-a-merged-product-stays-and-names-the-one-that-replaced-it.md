@@ -8,7 +8,8 @@
 
 > Decided by the owner on 2026-10-03: a merge of two products is allowed, and it must be
 > marked as a merge, so that nothing reads it as a delete. "For example by not deleting
-> the old record." This plan is that mark. Backlog plan `0019` needs it, and so does any
+> the old record." This plan is that mark. Backlog plan `0019` needed it (dropped on 2026-11-25 for
+> curation CLI plan `0006`), and so does any
 > curation that happens in a cluster, where shoppers' lists already name the product that
 > goes away.
 >
