@@ -33,6 +33,7 @@ import {
   type BuyForListBasketRequest,
   type CatalogSuggestResponse,
   type ChangeBasketLinesProductRequest,
+  type CountBasketRowExtraRequest,
   type GetBasketMarksRequest,
   type GetBasketProductListsRequest,
   type GetLiveBasketRequest,
@@ -80,6 +81,7 @@ import {
   BasketReadQueryDto,
   BuyForListBasketRowDto,
   ChangeBasketLinesProductDto,
+  CountBasketRowExtraDto,
   RenameBasketRowDto,
   RevertBasketRowDto,
   SetBasketRowDemandDto,
@@ -803,8 +805,49 @@ export class BasketController {
       quantity: dto.quantity,
       unit: dto.unit,
       from: dto.from,
+      // Optional (plan 0276): a raise answers what it took into the ask.
+      reportExtra: dto.reportExtra,
     };
     return this.nats.send<BasketRowResult>(BASKET_PATTERNS.rowDemand, req);
+  }
+
+  /**
+   * "Count the extra" on a row (plan 0276, section 9): lower the line by
+   * what a raise of this row's demand reported. Guarded, throttled and
+   * refused as the demand is; `counted` on the answer says what it took off.
+   */
+  @Post(':id/rows/:rowKey/extra')
+  @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
+  @UseGuards(ParticipantThrottlerGuard)
+  @ApiContractResponse(BASKET_PATTERNS.rowCountExtra, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({
+    auth: true,
+    participant: true,
+    body: true,
+    membership: true,
+    notFound: true,
+    finishedBasket: true,
+    lineUnitMismatch: true,
+    staleQuantity: true,
+  })
+  countExtra(
+    @Participant() participant: BasketParticipantContext,
+    @UuidParam('id') id: string,
+    @Param('rowKey') rowKey: string,
+    @Body() dto: CountBasketRowExtraDto
+  ): Promise<BasketRowResult> {
+    const req: CountBasketRowExtraRequest = {
+      basketId: id,
+      participantId: participant.participantId,
+      rowKey,
+      lineId: dto.lineId,
+      unit: dto.unit,
+      amount: dto.amount,
+      expect: dto.expect,
+    };
+    return this.nats.send<BasketRowResult>(BASKET_PATTERNS.rowCountExtra, req);
   }
 
   /**
@@ -963,6 +1006,8 @@ export class BasketController {
       askIfAmbiguous: dto.askIfAmbiguous,
       intoLineId: dto.intoLineId,
       newLine: dto.newLine,
+      // Optional (plan 0276), as the list's own add takes it.
+      reportExtra: dto.reportExtra,
     };
     return this.nats.send<BasketRowResult>(BASKET_PATTERNS.lineAdd, req);
   }

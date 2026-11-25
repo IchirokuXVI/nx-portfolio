@@ -42,6 +42,7 @@ export type AddBasketLineDto = {
   askIfAmbiguous?: boolean;
   intoLineId?: string;
   newLine?: boolean;
+  reportExtra?: boolean;
 };
 
 /**
@@ -101,6 +102,7 @@ export type AddLineDto = {
   askIfAmbiguous?: boolean;
   intoLineId?: string;
   newLine?: boolean;
+  reportExtra?: boolean;
 };
 
 /**
@@ -109,7 +111,7 @@ export type AddLineDto = {
 export type AddLineQuantityDto = {
   delta: number;
   unit: 'UNIT' | 'GRAM' | 'MILLILITER';
-  countExtra?: boolean;
+  reportExtra?: boolean;
 };
 
 /**
@@ -279,6 +281,25 @@ export type ChangeBasketLinesProductDto = {
   lineIds: string[];
   itemId: string;
   keep: boolean;
+};
+
+/**
+ * `CountBasketRowExtraDto` in the gateway's OpenAPI document.
+ */
+export type CountBasketRowExtraDto = {
+  lineId: string;
+  unit: 'UNIT' | 'GRAM' | 'MILLILITER';
+  amount: number;
+  expect: number;
+};
+
+/**
+ * `CountLineExtraDto` in the gateway's OpenAPI document.
+ */
+export type CountLineExtraDto = {
+  unit: 'UNIT' | 'GRAM' | 'MILLILITER';
+  amount: number;
+  expect: number;
 };
 
 /**
@@ -999,6 +1020,7 @@ export type SetBasketRowDemandDto = {
   quantity: number;
   unit: 'UNIT' | 'GRAM' | 'MILLILITER';
   from: number;
+  reportExtra?: boolean;
 };
 
 /**
@@ -1354,6 +1376,7 @@ export type UpdateLineDto = {
   preferredSupermarketId?: string | null;
   named?: boolean;
   confirmMerge?: boolean;
+  reportExtra?: boolean;
 };
 
 /**
@@ -2548,6 +2571,8 @@ export type BasketBasketRowResult = {
   progress: BasketBasketProgress;
   skippedCount?: number;
   addOutcome?: EnumsAddLineOutcome;
+  extra?: ListAbsorbedExtra;
+  counted?: number;
 };
 
 /**
@@ -5541,6 +5566,15 @@ export type ImpersonationStartImpersonationView = {
 };
 
 /**
+ * `list.AbsorbedExtra` in the gateway's OpenAPI document.
+ */
+export type ListAbsorbedExtra = {
+  above: number;
+  countable: number;
+  buyers: ListExtraBuyer[];
+};
+
+/**
  * `list.AddLineQuantityResult` in the gateway's OpenAPI document.
  */
 export type ListAddLineQuantityResult = {
@@ -5568,7 +5602,7 @@ export type ListAddLineQuantityResult = {
   commentCount: number | null;
   createdAt: string;
   updatedAt: string;
-  extra?: ListCountedExtra;
+  extra?: ListAbsorbedExtra;
 };
 
 /**
@@ -5579,6 +5613,7 @@ export type ListAddLineResult = {
   merged: boolean;
   outcome: EnumsAddLineOutcome;
   alreadyOnList: ListLineView[];
+  extra?: ListAbsorbedExtra;
 };
 
 /**
@@ -5619,18 +5654,40 @@ export type ListCommentView = {
 };
 
 /**
- * `list.CountedExtra` in the gateway's OpenAPI document.
+ * `list.CountLineExtraResult` in the gateway's OpenAPI document.
  */
-export type ListCountedExtra = {
-  above: number;
+export type ListCountLineExtraResult = {
+  id: string;
+  listId: string;
+  content: string;
+  quantity: number;
+  unit: EnumsLineUnit;
+  itemIds: string[];
+  itemSetHash: string | null;
+  productGroupId: string | null;
+  groupItemIds: string[];
+  favoriteItemId: string | null;
+  preferredSupermarketId: string | null;
+  named: boolean;
+  position: number;
+  approvalStatus: EnumsLineApprovalStatus;
+  createdByUserId: string;
+  approvedByUserId: string | null;
+  version: number;
+  boughtCount: number;
+  lastSettlementOutcome: EnumsSettlementOutcome | null;
+  claimed: boolean;
+  claimedByUserId: string | null;
+  commentCount: number | null;
+  createdAt: string;
+  updatedAt: string;
   counted: number;
-  buyers: ListCountedExtraBuyer[];
 };
 
 /**
- * `list.CountedExtraBuyer` in the gateway's OpenAPI document.
+ * `list.ExtraBuyer` in the gateway's OpenAPI document.
  */
-export type ListCountedExtraBuyer = {
+export type ListExtraBuyer = {
   userId: string | null;
 };
 
@@ -5916,6 +5973,7 @@ export type ListUpdateLineResult = {
   createdAt: string;
   updatedAt: string;
   absorbedLineId?: string;
+  extra?: ListAbsorbedExtra;
 };
 
 /**

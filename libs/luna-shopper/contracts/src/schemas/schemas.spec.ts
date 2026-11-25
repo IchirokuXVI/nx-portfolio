@@ -3341,7 +3341,7 @@ describe('a line counts in a unit (plan 0246)', () => {
     expect(validateMessageRequest('line.settle', settle).valid).toBe(false);
   });
 
-  describe('a raise that counts the extra (plan 0275)', () => {
+  describe('a raise takes the extra into the ask (plan 0276, spec 17)', () => {
     const delta = { userId: 'u', lineId: 'l', delta: 2, unit: 'UNIT' };
     const line = {
       id: 'l',
@@ -3369,61 +3369,166 @@ describe('a line counts in a unit (plan 0246)', () => {
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     };
+    const extra = {
+      above: 3,
+      countable: 2,
+      buyers: [{ userId: 'u' }, { userId: null }],
+    };
+    const row = {
+      entries: [],
+      progress: { done: 0, unavailable: 0, total: 0, pending: 0 },
+    };
 
-    it('accepts countExtra as a boolean and nothing else', () => {
-      for (const countExtra of [true, false]) {
+    const requests: [string, Record<string, unknown>][] = [
+      ['line.addQuantity', delta],
+      ['line.update', { userId: 'u', lineId: 'l', quantity: 3 }],
+      ['line.add', { userId: 'u', listId: 'li', content: 'Milk' }],
+      [
+        'basket.line.add',
+        {
+          basketId: 'b',
+          participantId: 'p',
+          userId: 'u',
+          targetListId: 'li',
+          content: 'Milk',
+        },
+      ],
+      [
+        'basket.row.demand',
+        {
+          basketId: 'b',
+          participantId: 'p',
+          rowKey: 'l',
+          lineId: 'l',
+          quantity: 2,
+          unit: 'UNIT',
+          from: 0,
+        },
+      ],
+    ];
+
+    it.each(requests)(
+      '%s takes reportExtra as a boolean and nothing else',
+      (pattern, request) => {
+        for (const reportExtra of [true, false]) {
+          expect(
+            validateMessageRequest(pattern, { ...request, reportExtra }).valid
+          ).toBe(true);
+        }
         expect(
-          validateMessageRequest('line.addQuantity', { ...delta, countExtra })
+          validateMessageRequest(pattern, { ...request, reportExtra: 'true' })
             .valid
-        ).toBe(true);
+        ).toBe(false);
       }
+    );
+
+    it('refuses countExtra on a delta, which no longer exists', () => {
       expect(
         validateMessageRequest('line.addQuantity', {
           ...delta,
-          countExtra: 'true',
+          countExtra: true,
         }).valid
       ).toBe(false);
     });
 
-    it('answers the line with and without extra', () => {
-      expect(validateMessageResponse('line.addQuantity', line).valid).toBe(
-        true
+    it('answers a delta, an edit and an add with and without extra', () => {
+      for (const pattern of ['line.addQuantity', 'line.update']) {
+        expect(validateMessageResponse(pattern, line).valid).toBe(true);
+        expect(validateMessageResponse(pattern, { ...line, extra }).valid).toBe(
+          true
+        );
+        expect(
+          validateMessageResponse(pattern, {
+            ...line,
+            extra: { above: 0, countable: 0, buyers: [] },
+          }).valid
+        ).toBe(true);
+      }
+      const added = {
+        line,
+        merged: true,
+        outcome: 'RAISED',
+        alreadyOnList: [],
+      };
+      expect(validateMessageResponse('line.add', added).valid).toBe(true);
+      expect(
+        validateMessageResponse('line.add', { ...added, extra }).valid
+      ).toBe(true);
+    });
+
+    it('answers a row write with and without extra, and the count with counted', () => {
+      for (const pattern of ['basket.row.demand', 'basket.line.add']) {
+        expect(validateMessageResponse(pattern, row).valid).toBe(true);
+        expect(validateMessageResponse(pattern, { ...row, extra }).valid).toBe(
+          true
+        );
+      }
+      expect(
+        validateMessageResponse('basket.row.countExtra', {
+          ...row,
+          counted: 2,
+        }).valid
+      ).toBe(true);
+    });
+
+    it('refuses an extra that names a participant, misses a field or keeps the old counted', () => {
+      for (const bad of [
+        {
+          above: 1,
+          countable: 1,
+          buyers: [{ userId: 'u', participantId: 'p' }],
+        },
+        { above: 1, buyers: [] },
+        { above: 1, counted: 1, buyers: [] },
+      ]) {
+        expect(
+          validateMessageResponse('line.addQuantity', { ...line, extra: bad })
+            .valid
+        ).toBe(false);
+      }
+    });
+
+    it('takes a count of the line and answers it with counted', () => {
+      const count = {
+        userId: 'u',
+        lineId: 'l',
+        unit: 'UNIT',
+        amount: 2,
+        expect: 4,
+      };
+      expect(validateMessageRequest('line.countExtra', count).valid).toBe(true);
+      for (const missing of ['unit', 'amount', 'expect']) {
+        const partial: Record<string, unknown> = { ...count };
+        delete partial[missing];
+        expect(validateMessageRequest('line.countExtra', partial).valid).toBe(
+          false
+        );
+      }
+      expect(
+        validateMessageRequest('line.countExtra', { ...count, amount: 0 }).valid
+      ).toBe(false);
+      expect(
+        validateMessageRequest('line.countExtra', { ...count, amount: '2' })
+          .valid
+      ).toBe(false);
+      expect(
+        validateMessageResponse('line.countExtra', { ...line, counted: 2 })
+          .valid
+      ).toBe(true);
+      expect(validateMessageResponse('line.countExtra', line).valid).toBe(
+        false
       );
       expect(
-        validateMessageResponse('line.addQuantity', {
-          ...line,
-          extra: {
-            above: 3,
-            counted: 2,
-            buyers: [{ userId: 'u' }, { userId: null }],
-          },
+        validateMessageRequest('basket.row.countExtra', {
+          basketId: 'b',
+          participantId: 'p',
+          rowKey: 'l',
+          lineId: 'l',
+          unit: 'UNIT',
+          amount: 2,
+          expect: 2,
         }).valid
       ).toBe(true);
-      expect(
-        validateMessageResponse('line.addQuantity', {
-          ...line,
-          extra: { above: 0, counted: 0, buyers: [] },
-        }).valid
-      ).toBe(true);
-    });
-
-    it('refuses an extra that names a participant or misses a field', () => {
-      expect(
-        validateMessageResponse('line.addQuantity', {
-          ...line,
-          extra: {
-            above: 1,
-            counted: 1,
-            buyers: [{ userId: 'u', participantId: 'p' }],
-          },
-        }).valid
-      ).toBe(false);
-      expect(
-        validateMessageResponse('line.addQuantity', {
-          ...line,
-          extra: { above: 1, buyers: [] },
-        }).valid
-      ).toBe(false);
     });
   });
 

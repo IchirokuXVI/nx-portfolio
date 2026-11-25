@@ -115,6 +115,9 @@ export class BasketLineAddService {
       // participant is still carried: it is how the change is recognized as this
       // reader's own on their own basket.
       via: opened.via(),
+      // A `RAISED` add takes the extra into the ask either way (plan 0276),
+      // and answers what it took in when asked, as the list's own add does.
+      reportExtra: req.reportExtra,
     });
 
     // No announcement of its own (plan 0139, section 3). The add went through
@@ -132,7 +135,11 @@ export class BasketLineAddService {
       added.outcome === 'ALREADY_ON_LIST' && added.alreadyOnList.length > 0
         ? added.alreadyOnList.map((line) => line.id)
         : [added.line.id];
-    return { ...(await opened.result(lineIds)), addOutcome: added.outcome };
+    return {
+      ...(await opened.result(lineIds)),
+      addOutcome: added.outcome,
+      ...(added.extra ? { extra: added.extra } : {}),
+    };
   }
 
   /**

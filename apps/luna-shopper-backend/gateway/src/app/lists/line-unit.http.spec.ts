@@ -287,14 +287,14 @@ describe('the unit of a line over HTTP (plan 0246)', () => {
       expect(response.status).toBe(400);
     });
 
-    // Plan 0275, spec 10: the zone list's raise asks core to count the extra.
+    // Plan 0276, spec 15: any raise may ask for the report.
     it.each([true, false])(
-      'passes countExtra %s to core',
-      async (countExtra) => {
+      'passes reportExtra %s to core',
+      async (reportExtra) => {
         const response = await send('POST', `lines/${LINE}/quantity`, {
           delta: 2,
           unit: 'GRAM',
-          countExtra,
+          reportExtra,
         });
 
         expect(response.status).toBe(201);
@@ -306,7 +306,7 @@ describe('the unit of a line over HTTP (plan 0246)', () => {
               lineId: LINE,
               delta: 2,
               unit: 'GRAM',
-              countExtra,
+              reportExtra,
             },
           },
         ]);
@@ -316,7 +316,22 @@ describe('the unit of a line over HTTP (plan 0246)', () => {
     // Null too: it is not a JSON boolean, and passing it on would reach core,
     // whose schema refuses it with an error that is not this 400.
     it.each([1, '1', 'true', null])(
-      'answers 400 for countExtra %p, and core hears nothing',
+      'answers 400 for reportExtra %p, and core hears nothing',
+      async (reportExtra) => {
+        const response = await send('POST', `lines/${LINE}/quantity`, {
+          delta: 2,
+          unit: 'GRAM',
+          reportExtra,
+        });
+
+        expect(response.status).toBe(400);
+        expect(coreWrites()).toEqual([]);
+      }
+    );
+
+    // Removed by plan 0276: an unknown field, refused before core hears it.
+    it.each([true, false])(
+      'answers 400 for countExtra %s, which no longer exists',
       async (countExtra) => {
         const response = await send('POST', `lines/${LINE}/quantity`, {
           delta: 2,
@@ -328,6 +343,74 @@ describe('the unit of a line over HTTP (plan 0246)', () => {
         expect(coreWrites()).toEqual([]);
       }
     );
+  });
+
+  describe('POST /v1/lines/:id/extra (plan 0276, spec 16)', () => {
+    it('answers 201 and passes the unit, the amount and expect to core', async () => {
+      const response = await send('POST', `lines/${LINE}/extra`, {
+        unit: 'GRAM',
+        amount: 500,
+        expect: 1500,
+      });
+
+      expect(response.status).toBe(201);
+      expect(coreWrites()).toEqual([
+        {
+          subject: LINE_PATTERNS.countExtra,
+          payload: {
+            userId: 'user-1',
+            lineId: LINE,
+            unit: 'GRAM',
+            amount: 500,
+            expect: 1500,
+          },
+        },
+      ]);
+    });
+
+    it('takes an amount equal to expect', async () => {
+      const response = await send('POST', `lines/${LINE}/extra`, {
+        unit: 'GRAM',
+        amount: 2,
+        expect: 2,
+      });
+
+      expect(response.status).toBe(201);
+    });
+
+    it.each([
+      ['no amount', { unit: 'GRAM', expect: 2 }],
+      ['no expect', { unit: 'GRAM', amount: 2 }],
+      ['no unit', { amount: 2, expect: 2 }],
+      ['an amount of 0', { unit: 'GRAM', amount: 0, expect: 2 }],
+      ['a negative amount', { unit: 'GRAM', amount: -1, expect: 2 }],
+      ['a fractional amount', { unit: 'GRAM', amount: 1.5, expect: 2 }],
+      [
+        'an amount past the ceiling',
+        { unit: 'GRAM', amount: 100_000, expect: 200_000 },
+      ],
+      ['an amount above expect', { unit: 'GRAM', amount: 3, expect: 2 }],
+      ['a negative expect', { unit: 'GRAM', amount: 1, expect: -1 }],
+      ['a fractional expect', { unit: 'GRAM', amount: 1, expect: 2.5 }],
+      [
+        'an amount spelled as a string',
+        { unit: 'GRAM', amount: '2', expect: 2 },
+      ],
+      [
+        'an expect spelled as a string',
+        { unit: 'GRAM', amount: 2, expect: '2' },
+      ],
+      [
+        'a unit that is not one of the three',
+        { unit: 'KILOGRAM', amount: 1, expect: 2 },
+      ],
+      ['an unknown field', { unit: 'GRAM', amount: 1, expect: 2, delta: 1 }],
+    ])('answers 400 for %s, and core hears nothing', async (_, body) => {
+      const response = await send('POST', `lines/${LINE}/extra`, body);
+
+      expect(response.status).toBe(400);
+      expect(coreWrites()).toEqual([]);
+    });
   });
 
   describe('POST /v1/lists/:id/lines', () => {

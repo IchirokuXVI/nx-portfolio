@@ -1,107 +1,66 @@
-import { countAboveAsk, type DemandBuy } from './basket-applied';
+import { absorbAboveAsk, type DemandBuy } from './basket-applied';
 
 /**
- * The count of plan 0275, section 5: the units bought above the ask taken
- * toward a raise, oldest buy first, never raising a buy's `applied` above
- * what it bought. The cases are the plan's table.
+ * The absorption of plan 0276, section 1 (spec 1): every unit bought above the
+ * ask taken into the ask on a raise, each buy's `applied` set to what it
+ * bought, oldest buy first. The cases are the plan's table.
  */
-describe('countAboveAsk (plan 0275)', () => {
+describe('absorbAboveAsk (plan 0276)', () => {
   const buy = (id: string, quantity: number, applied: number): DemandBuy => ({
     id,
     quantity,
     applied,
   });
 
-  const appliedAfter = (
-    buys: readonly DemandBuy[],
-    changes: Map<string, number>
-  ) => buys.map((one) => changes.get(one.id) ?? one.applied);
-
   it.each([
     {
-      name: 'case 1: asks 3, bought 4, a raise of 2',
-      buys: [buy('a', 4, 3)],
-      delta: 2,
-      above: 1,
-      counted: 1,
-      applied: [4],
-    },
-    {
-      name: 'case 2: asks 3, bought 4, a raise of 1',
-      buys: [buy('a', 4, 3)],
-      delta: 1,
-      above: 1,
-      counted: 1,
-      applied: [4],
-    },
-    {
-      name: 'case 6: more above than the raise',
+      name: 'case 1: asks 1, bought 4',
       buys: [buy('a', 4, 1)],
-      delta: 2,
       above: 3,
-      counted: 2,
-      applied: [3],
+      changes: [['a', 4]],
     },
     {
-      name: 'case 7: two baskets, the older buy first',
+      name: 'case 4: asks 3, bought 5',
+      buys: [buy('a', 5, 3)],
+      above: 2,
+      changes: [['a', 5]],
+    },
+    {
+      name: 'case 11: two baskets, the older buy first',
       buys: [buy('a', 4, 3), buy('b', 2, 0)],
-      delta: 2,
       above: 3,
-      counted: 2,
-      applied: [4, 1],
+      changes: [
+        ['a', 4],
+        ['b', 2],
+      ],
     },
     {
-      name: 'case 8: two baskets, a raise past what is above',
-      buys: [buy('a', 4, 3), buy('b', 2, 0)],
-      delta: 4,
-      above: 3,
-      counted: 3,
-      applied: [4, 2],
-    },
-    {
-      name: 'case 9: a weight, 1500 g bought on an ask of 1000 g',
+      name: 'case 16: a weight, 1500 g bought on an ask of 1000 g',
       buys: [buy('a', 1500, 1000)],
-      delta: 1500,
       above: 500,
-      counted: 500,
-      applied: [1500],
+      changes: [['a', 1500]],
     },
     {
-      name: 'case 11: no extra',
-      buys: [buy('a', 2, 2)],
-      delta: 2,
-      above: 0,
-      counted: 0,
-      applied: [2],
+      name: 'a buy with nothing above stays where it is',
+      buys: [buy('a', 2, 2), buy('b', 3, 1)],
+      above: 2,
+      changes: [['b', 3]],
     },
-  ])('$name', ({ buys, delta, above, counted, applied }) => {
-    const count = countAboveAsk(buys, delta);
+  ])('$name', ({ buys, above, changes }) => {
+    const absorption = absorbAboveAsk(buys);
 
-    expect(count.above).toBe(above);
-    expect(count.counted).toBe(counted);
-    expect(appliedAfter(buys, count.changes)).toEqual(applied);
-    // Never above what a buy bought, and only the buys that move are named.
-    for (const one of buys) {
-      expect(appliedAfter([one], count.changes)[0]).toBeLessThanOrEqual(
-        one.quantity
-      );
-    }
-    for (const [id, value] of count.changes) {
-      expect(buys.find((one) => one.id === id)?.applied).not.toBe(value);
-    }
+    expect(absorption.above).toBe(above);
+    expect([...absorption.changes]).toEqual(changes);
   });
 
-  it('counts nothing on a lowering and still says what is above the ask', () => {
-    const count = countAboveAsk([buy('a', 4, 3)], -1);
-
-    expect(count).toEqual({ above: 1, counted: 0, changes: new Map() });
-  });
-
-  it('counts nothing with no buys', () => {
-    expect(countAboveAsk([], 3)).toEqual({
+  it('moves nothing when nothing is above the ask (case 18)', () => {
+    expect(absorbAboveAsk([buy('a', 2, 2)])).toEqual({
       above: 0,
-      counted: 0,
       changes: new Map(),
     });
+  });
+
+  it('moves nothing with no buys', () => {
+    expect(absorbAboveAsk([])).toEqual({ above: 0, changes: new Map() });
   });
 });

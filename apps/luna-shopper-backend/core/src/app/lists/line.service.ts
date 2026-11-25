@@ -17,15 +17,17 @@ import {
   ParticipantKind,
   RealtimeEvent,
   SettlementOutcome,
+  type AbsorbedExtra,
   type AddLineQuantityRequest,
   type AddLineQuantityResult,
   type AddLineRequest,
   type AddLineResult,
   type AddLinesItem,
   type AddLinesRequest,
-  type CountedExtra,
-  type CountedExtraBuyer,
+  type CountLineExtraRequest,
+  type CountLineExtraResult,
   type DeleteLineRequest,
+  type ExtraBuyer,
   type LineAddNeedsChoiceDetails,
   type LineClaim,
   type LineMergeRequiredDetails,
@@ -74,8 +76,8 @@ import {
 import { CoreAuditService } from '../audit/core-audit.service';
 import { BasketAnnouncer } from '../baskets/basket-announcer.service';
 import {
+  absorbAboveAsk,
   buysOf,
-  countAboveAsk,
   type StandingBuy,
 } from '../baskets/basket-applied';
 import {
@@ -130,7 +132,10 @@ import { canChangeDemand } from './list-acts';
 import { toLineView } from './list.mappers';
 import { readLineSettlementSummaries } from './settlement.sql';
 
-/** An open basket that covers the list, as a count reads it (plan 0275). */
+/**
+ * An open basket that covers the list, as the absorption of a raise reads it
+ * (plan 0275, section 3; plan 0276, section 1).
+ */
 interface CountingBasket {
   basketId: string;
   ownerUserId: string;
@@ -140,6 +145,26 @@ interface CountingBasket {
 /** A buy above the ask, with the owner of the basket it was made through. */
 interface CountedBuy extends StandingBuy {
   ownerUserId: string;
+}
+
+/**
+ * What a raise took into the ask (plan 0276, section 1), before anything is
+ * reported: the units, and the buys that held them, oldest first.
+ */
+interface Absorbed {
+  above: number;
+  buys: readonly CountedBuy[];
+}
+
+/** A write that raised nothing, or took nothing in. */
+const NOTHING_ABSORBED: Absorbed = { above: 0, buys: [] };
+
+/** What a raise of {@link LineService.raiseForAdd} wrote and took in. */
+interface RaisedLine {
+  written: WrittenLine;
+  /** The quantity the lock read, before the raise. */
+  from: number;
+  absorbed: Absorbed;
 }
 
 interface LineCursor {
@@ -317,6 +342,11 @@ interface LineEdit {
    * change must name the quantity it starts from, or the edit is refused.
    */
   unit?: LineUnit;
+  /**
+   * Answer what a raise of the quantity took into the ask (plan 0276). Only a
+   * member's edit can ask; the operator path never names it.
+   */
+  reportExtra?: boolean;
 }
 
 /**
@@ -361,7 +391,7 @@ function inUnit(identity: string, unit: LineUnit): string {
  */
 type AddOutcome =
   | { kind: 'CREATED'; line: ListLine }
-  | { kind: 'RAISED'; written: WrittenLine }
+  | { kind: 'RAISED'; written: WrittenLine; extra?: AbsorbedExtra }
   | { kind: 'ALREADY_ON_LIST'; views: LineView[] };
 
 /**
@@ -1225,15 +1255,35 @@ export class LineService {
         // A kept line is raised by the add's amount, or by one step of its own
         // unit when that is not the add's (plan 0260 R4): only a free text add
         // reaches a line of another unit, and its amount was said in pieces.
-        const raise = async (line: ListLine): Promise<AddOutcome> => ({
-          kind: 'RAISED',
-          written: await this.raiseForAdd(
+        //
+        // The raise takes the units bought above the ask into the ask (plan
+        // 0276, section 1). An add learns that it raises only here, under the
+        // lock, so the covering baskets are read through this transaction's
+        // manager, which holds no second connection.
+        const raise = async (line: ListLine): Promise<AddOutcome> => {
+          const raised = await this.raiseForAdd(
             manager,
             line,
             amountOnto(line, unit, quantity),
-            { list: this.listRef(list), actor }
-          ),
-        });
+            { list: this.listRef(list), actor },
+            await this.countersOf(manager, req.listId)
+          );
+          return {
+            kind: 'RAISED',
+            written: raised.written,
+            ...(req.reportExtra === true
+              ? {
+                  extra: await this.reportOf(
+                    manager,
+                    raised.absorbed,
+                    list.zoneId,
+                    raised.from,
+                    raised.written.line.quantity
+                  ),
+                }
+              : {}),
+          };
+        };
         // Met lines are left as they were (A1): read for the answer, with no
         // save, no change record and no event. A line deleted since the read
         // that found it is no line, and with none left the add goes on.
@@ -1339,6 +1389,7 @@ export class LineService {
         merged: true,
         outcome: 'RAISED',
         alreadyOnList: [],
+        ...(outcome.extra ? { extra: outcome.extra } : {}),
       };
     }
 
@@ -1956,14 +2007,25 @@ export class LineService {
         created.push(line);
       }
 
+      // Every raise takes the units bought above the ask into the ask (plan
+      // 0276, section 1), and a batch reports nothing. The covering baskets
+      // are read once, through this transaction's manager, and only when the
+      // batch raises a line.
       const raised = new Map<string, WrittenLine>();
+      const counters =
+        raises.size > 0 ? await this.countersOf(manager, req.listId) : [];
       for (const [lineId, raise] of raises) {
         raised.set(
           lineId,
-          await this.raiseForAdd(manager, raise.line, raise.delta, {
-            list: this.listRef(list),
-            actor,
-          })
+          (
+            await this.raiseForAdd(
+              manager,
+              raise.line,
+              raise.delta,
+              { list: this.listRef(list), actor },
+              counters
+            )
+          ).written
         );
       }
       return { creations, created, slots, raised };
@@ -2611,13 +2673,20 @@ export class LineService {
    * being refused whole. An add is a request for a thing, not a request to write
    * a number, so the failure a caller would get from {@link validateQuantity}
    * here would be about an arithmetic result they never named.
+   *
+   * ## A raise takes the extra into the ask (plan 0276)
+   *
+   * Once the line is written, every unit bought above the ask in the open
+   * baskets that cover the list moves into the ask, under the lock the caller
+   * took on the line. `counters` are those baskets, read by the caller.
    */
   private async raiseForAdd(
     manager: EntityManager,
     line: ListLine,
     added: number,
-    record: { list: ListRef; actor: LineChangeActor }
-  ): Promise<WrittenLine> {
+    record: { list: ListRef; actor: LineChangeActor },
+    counters: readonly CountingBasket[]
+  ): Promise<RaisedLine> {
     // Before the raise, since the change says what the list asked for and what
     // it asks for now. A raise is an **edit** rather than an add (plan 0091 made
     // it one), so the record says `QUANTITY_CHANGED` and not `ADDED`: the line
@@ -2634,7 +2703,11 @@ export class LineService {
       snapshotOf(written.line),
       record.actor
     );
-    return written;
+    const absorbed =
+      written.line.quantity > before.quantity
+        ? await this.absorbExtra(manager, written.line, counters)
+        : NOTHING_ABSORBED;
+    return { written, from: before.quantity, absorbed };
   }
 
   /** A quantity held under the ceiling, for the sums only a merge produces. */
@@ -2847,6 +2920,16 @@ export class LineService {
     this.authorizeEdit(req, line, permissions);
     this.validateUnitEdit(req);
 
+    // An edit that names a quantity may raise the line, and a raise takes the
+    // units bought above the ask into the ask (plan 0276, section 1). The
+    // baskets that cover the list are read out here, through the pool, for
+    // the reason `addQuantity` reads its access out here: the lock is then
+    // held no longer than it was. Their buys are read under the lock.
+    const counters =
+      req.quantity !== undefined
+        ? await this.countersOf(this.dataSource, list.id)
+        : [];
+
     // A new name, as the fold reads it, is a question about the rest of the list
     // and takes the list lock to answer it (plan 0112). A change of case, accents
     // or spacing alone is not, and stays on the path below.
@@ -2861,7 +2944,8 @@ export class LineService {
         req,
         permissions,
         writer,
-        actor
+        actor,
+        counters
       );
     }
 
@@ -2878,13 +2962,14 @@ export class LineService {
     // landed after that read would otherwise be overwritten by a save of the
     // row as it stood before the purchase.
     let unitMoved = false;
-    const written = await writer.transaction(async (manager, record) => {
+    const outcome = await writer.transaction(async (manager, record) => {
       const locked = await this.lockLine(manager, line.id);
       // Asked again of the row the lock read, since its approval may have
       // moved since the check outside.
       this.authorizeEdit(req, locked, permissions);
       assertFrom(req, locked);
       const unitBefore = locked.unit ?? 'UNIT';
+      const from = locked.quantity;
       const prepared = await this.prepareEdit(
         locked,
         list,
@@ -2893,7 +2978,7 @@ export class LineService {
         manager
       );
       unitMoved = (locked.unit ?? 'UNIT') !== unitBefore;
-      return this.writePreparedEdit(
+      const written = await this.writePreparedEdit(
         manager,
         locked,
         list,
@@ -2901,17 +2986,65 @@ export class LineService {
         actor,
         record
       );
+      // Under the same lock, after the line is written (plan 0276, section
+      // 1). A unit change is not a raise: its quantity is in another unit.
+      const raised = !unitMoved && written.line.quantity > from;
+      return {
+        written,
+        ...(await this.absorbOnEdit(manager, {
+          raised,
+          line: written.line,
+          from,
+          counters,
+          zoneId: list.zoneId,
+          report: req.reportExtra === true,
+        })),
+      };
     });
-    return this.announce(
+    const view = this.announce(
       list,
-      written,
+      outcome.written,
       // The quantity alone moved, so the baskets are sent the numbers and do
       // not read again (plan 0204, section 3). A name, a product set, a
       // favourite or a chain is something a room must not carry or core does
       // not hold, and those edits send the ids as before. So is a unit change
-      // (plan 0246 M6): it moves the line to another row.
+      // (plan 0246 M6): it moves the line to another row. Either one tells
+      // every covering basket, so a basket whose ask the raise moved is told.
       movesQuantityAlone(req) && !unitMoved ? 'moved' : 'here'
     );
+    return outcome.extra ? { ...view, extra: outcome.extra } : view;
+  }
+
+  /**
+   * The absorption of an edit that raised the line (plan 0276, section 1),
+   * and its report when the request asked for one.
+   */
+  private async absorbOnEdit(
+    manager: EntityManager,
+    edit: {
+      raised: boolean;
+      line: ListLine;
+      from: number;
+      counters: readonly CountingBasket[];
+      zoneId: string;
+      report: boolean;
+    }
+  ): Promise<{ extra?: AbsorbedExtra }> {
+    if (!edit.raised) {
+      return {};
+    }
+    const absorbed = await this.absorbExtra(manager, edit.line, edit.counters);
+    return edit.report
+      ? {
+          extra: await this.reportOf(
+            manager,
+            absorbed,
+            edit.zoneId,
+            edit.from,
+            edit.line.quantity
+          ),
+        }
+      : {};
   }
 
   /**
@@ -3152,7 +3285,8 @@ export class LineService {
     req: LineEdit,
     permissions: ReadonlySet<ListPermission>,
     writer: LineWriter,
-    actor: LineChangeActor
+    actor: LineChangeActor,
+    counters: readonly CountingBasket[]
   ): Promise<UpdateLineResult> {
     const adopt = req.adoptItemIds ?? [];
     const touchesSet = req.itemIds !== undefined || adopt.length > 0;
@@ -3166,7 +3300,11 @@ export class LineService {
       async (
         manager,
         record
-      ): Promise<{ written: WrittenLine; absorbedLineId?: string }> => {
+      ): Promise<{
+        written: WrittenLine;
+        absorbedLineId?: string;
+        extra?: AbsorbedExtra;
+      }> => {
         const locked = await this.lockList(manager, list.id);
         const line = await manager.getRepository(ListLine).findOne({
           where: { id: lineId },
@@ -3252,7 +3390,22 @@ export class LineService {
             snapshotOf(written.line),
             actor
           );
-          return { written };
+          // A rename that does not merge and raises the quantity is a raise
+          // the person set (plan 0276, section 1); a merge is not, and takes
+          // nothing in. A unit change is not a raise either.
+          return {
+            written,
+            ...(await this.absorbOnEdit(manager, {
+              raised:
+                before.unit === snapshotOf(written.line).unit &&
+                written.line.quantity > before.quantity,
+              line: written.line,
+              from: before.quantity,
+              counters,
+              zoneId: locked.zoneId,
+              report: req.reportExtra === true,
+            })),
+          };
         }
 
         // Two lines of two units never merge (plan 0246 M5): converting needs
@@ -3342,7 +3495,8 @@ export class LineService {
     );
 
     if (outcome.absorbedLineId === undefined) {
-      return this.announce(list, outcome.written);
+      const view = this.announce(list, outcome.written);
+      return outcome.extra ? { ...view, extra: outcome.extra } : view;
     }
     // Section 5: the absorbed line goes first, so a client that applies events
     // in order never draws two lines of one name, then the survivor as it now
@@ -3858,13 +4012,15 @@ export class LineService {
    * remove. Routing it through the same code costs nothing, because that code
    * already knows what a reduction means.
    *
-   * ## A raise from the zone list counts the extra first (plan 0275)
+   * ## A raise takes the extra into the ask (plan 0276)
    *
-   * With `countExtra`, the units the open baskets bought above the line's ask
-   * are moved into the ask before the line is raised, oldest buy first, and the
-   * line moves only by the rest. Here and not in the client, because the
-   * person can be gone when the answer comes: what stands when nobody answers
-   * is the smaller amount. A raise counted whole writes no line, only `applied`.
+   * A positive delta raises the line by the whole delta, and then, under the
+   * same lock, moves every unit bought above the ask in the open baskets that
+   * cover the list into the ask ({@link absorbExtra}). So after a raise no
+   * unit is left above any open basket's ask, whatever the caller, and the
+   * line holds the amount the person set. Only "Count the extra"
+   * ({@link countExtra}) lowers the line for the extra afterwards. With
+   * `reportExtra`, the answer says what was taken in.
    */
   async addQuantity(
     req: AddLineQuantityRequest,
@@ -3880,8 +4036,9 @@ export class LineService {
     // Required (plan 0246 M8): an old client holding a weight line would add
     // one gram where it meant one kilo. Refused before anything is read.
     requireLineUnit(req.unit);
-    // A JSON `true` alone (plan 0275); the schema refuses anything else.
-    const counting = req.countExtra === true;
+    const raising = req.delta > 0;
+    // A JSON `true` alone (plan 0276); the schema refuses anything else.
+    const reporting = req.reportExtra === true;
 
     // Resolved **before** the transaction, and not because it is cheaper there.
     // Every repository the access service holds draws its own connection from the
@@ -3897,10 +4054,12 @@ export class LineService {
       found.listId,
       req.userId
     );
-    // The baskets whose buys a count reads, and the scope of each, read out
+    // The baskets whose buys a raise takes in, and the scope of each, read out
     // here for the reason the access is: each is a read through the pool. The
     // buys themselves are read under the lock below.
-    const counters = counting ? await this.countersOf(found.listId) : [];
+    const counters = raising
+      ? await this.countersOf(this.dataSource, found.listId)
+      : [];
 
     const outcome = await this.dataSource.transaction(async (manager) => {
       const repo = manager.getRepository(ListLine);
@@ -3930,9 +4089,6 @@ export class LineService {
         );
       }
 
-      // The quantity the person asked for, which is what the authorization is
-      // asked about with or without a count (plan 0275, section 6): a reader
-      // who may not raise the line may not count either.
       const quantity = this.validateQuantity(line.quantity + req.delta);
       // The request an absolute edit of the same field would have been, so the
       // refusal a caller gets is word for word the one the PATCH gives them.
@@ -3941,25 +4097,10 @@ export class LineService {
         await underLock(manager, line);
       }
 
-      // The buys as they stand at the lock: a settle or a revert of this line
-      // takes the same lock before it writes a settlement, so none can land
-      // between this read and the write below.
-      const extra = counting
-        ? await this.countExtra(manager, counters, line, list.zoneId, req.delta)
-        : undefined;
-      const moved = req.delta - (extra?.counted ?? 0);
-
-      if (moved === 0) {
-        // The whole raise was counted, so the line holds what it held and is
-        // not written: no version, no reopening, no change row, as the
-        // demand's write that moves only the split (plan 0274, section 5).
-        return { written: null, view: await this.viewOf(manager, line), extra };
-      }
-
       // The row as the lock read it, which is the only state a delta can
       // honestly say it moved from.
       const before = snapshotOf(line);
-      line.quantity = line.quantity + moved;
+      line.quantity = quantity;
       this.reopenAfterEdit(line, list, permissions);
       line.version += 1;
 
@@ -3972,31 +4113,133 @@ export class LineService {
         snapshotOf(written.line),
         actorOf(req)
       );
-      return { written, view: written.view, extra };
+
+      // The buys as they stand at the lock: a settle or a revert of this line
+      // takes the same lock before it writes a settlement, so none can land
+      // between this read and the writes of `applied`.
+      if (!raising) {
+        return { written };
+      }
+      const absorbed = await this.absorbExtra(manager, written.line, counters);
+      return {
+        written,
+        extra: reporting
+          ? await this.reportOf(
+              manager,
+              absorbed,
+              list.zoneId,
+              before.quantity,
+              written.line.quantity
+            )
+          : undefined,
+      };
     });
 
-    let view: LineView;
-    if (outcome.written) {
-      // A delta moves the quantity and nothing else (plan 0204, section 3).
-      view = this.announce(list, outcome.written, 'moved');
-    } else {
-      // Only `applied` moved: nothing on the line changed, so the zone hears
-      // nothing, and each covering basket is told what its entries read now,
-      // because the ask of each counted basket moved. No change row was
-      // written, so no marks moved.
-      view = outcome.view;
-      void this.baskets.linesMoved(list.id, [outcome.view.id], false);
+    // A delta moves the quantity and nothing else (plan 0204, section 3). The
+    // announcement tells every covering basket what its entries read now,
+    // which is also every basket whose ask the absorption moved.
+    const view = this.announce(list, outcome.written, 'moved');
+    return outcome.extra ? { ...view, extra: outcome.extra } : view;
+  }
+
+  /**
+   * "Count the extra" (plan 0276, section 7): lower the line by `amount`, the
+   * `countable` a raise's report answered, once the person said the extra
+   * covers the raise.
+   *
+   * Nothing is remembered about the raise, so the server cannot tell that
+   * `amount` is what it answered. It holds the count to the line as the person
+   * saw it: the line the lock reads must hold `expect`, or the count is
+   * refused with `stale_quantity` and writes nothing (the owner's answer 2).
+   * The count is then a lowering the same reader could make with the
+   * stepper, under the same authorization, and it moves no `applied`: the
+   * extra stays inside the ask, and the ask of every basket falls with the
+   * line.
+   *
+   * `options.permissions` replaces the requester's own, for a caller that has
+   * already decided whose they are. The basket's count passes none: it writes
+   * as the basket's owner, whose permissions the access resolves.
+   */
+  async countExtra(
+    req: CountLineExtraRequest,
+    options: { permissions?: ReadonlySet<ListPermission> } = {}
+  ): Promise<CountLineExtraResult> {
+    requireLineUnit(req.unit);
+    const amount = req.amount;
+    if (!Number.isInteger(amount) || amount < 1 || amount > LINE_QUANTITY_MAX) {
+      throw new ValidationException(
+        `amount must be a whole number between 1 and ${LINE_QUANTITY_MAX}`,
+        { messageArgs: { field: 'amount' } }
+      );
     }
-    return outcome.extra ? { ...view, extra: outcome.extra.answer } : view;
+    if (!Number.isInteger(req.expect) || req.expect < 0) {
+      throw new ValidationException('expect must be a whole number', {
+        messageArgs: { field: 'expect' },
+      });
+    }
+    if (amount > req.expect) {
+      // A count can never take the line below zero, so it is refused before
+      // anything is read.
+      throw new ValidationException('amount must be at most expect', {
+        messageArgs: { field: 'amount' },
+      });
+    }
+
+    // Outside the transaction, for the reason `addQuantity` gives.
+    const found = await this.listAccess.getLine(req.lineId);
+    const resolved = await this.listAccess.resolve(found.listId, req.userId);
+    const { list } = resolved;
+    const permissions = options.permissions ?? resolved.permissions;
+
+    const written = await this.dataSource.transaction(async (manager) => {
+      const line = await this.lockLine(manager, req.lineId);
+      assertLineUnit(line, req.unit);
+      if (line.quantity !== req.expect) {
+        throw new StaleQuantityException(
+          'Somebody else changed this while you were looking at it',
+          { messageArgs: { current: line.quantity } }
+        );
+      }
+      const quantity = this.validateQuantity(line.quantity - amount);
+      // Exactly as any lowering of the amount.
+      this.authorizeEdit({ quantity }, line, permissions);
+
+      const before = snapshotOf(line);
+      line.quantity = quantity;
+      this.reopenAfterEdit(line, list, permissions);
+      line.version += 1;
+      const saved = await this.writeEdit(manager, line);
+      await this.changes.edited(
+        manager,
+        this.listRef(list),
+        line.id,
+        before,
+        snapshotOf(saved.line),
+        actorOf(req)
+      );
+      return saved;
+    });
+
+    // As any written delta: `line.updated` to the zone, and the numbers to
+    // every covering basket.
+    return { ...this.announce(list, written, 'moved'), counted: amount };
   }
 
   /**
    * The open baskets that cover a list now, each with the scope its read
    * counts buys in (plan 0275, section 3). `COVERING_BASKETS_SQL` is the
    * announcer's own audience, so a basket is counted exactly when it is told.
+   *
+   * `runner` is the pool, for a caller that reads before its transaction, or
+   * the transaction's manager, for one that learns under the lock that it
+   * raises (plan 0276, section 1): through the manager it holds no second
+   * connection.
    */
-  private async countersOf(listId: string): Promise<CountingBasket[]> {
-    const covering = await this.dataSource.query<CoveringBasket[]>(
+  private async countersOf(
+    runner: DataSource | EntityManager,
+    listId: string
+  ): Promise<CountingBasket[]> {
+    const covering = await runner.query<CoveringBasket[]>(
       COVERING_BASKETS_SQL,
       [listId]
     );
@@ -4008,7 +4251,7 @@ export class LineService {
       counters.push({
         basketId: basket.basketId,
         ownerUserId: basket.ownerUserId,
-        scope: await basketScopeOf(this.dataSource, {
+        scope: await basketScopeOf(runner, {
           id: basket.basketId,
           kind: basket.kind,
         }),
@@ -4018,25 +4261,28 @@ export class LineService {
   }
 
   /**
-   * Count the units above the ask toward a raise, under the line's lock, and
-   * write the `applied` it moves (plan 0275, sections 3 to 5 and 8).
+   * Take every unit bought above the ask into the ask, under the line's lock,
+   * after a raise wrote the line (plan 0276, section 1). The one place that
+   * absorbs.
    *
    * The buys are each counting basket's standing buys of the line in its
    * scope, read with `buysOf`, the demand's own expression, and taken oldest
-   * first across every basket. A lowering counts nothing and still answers
-   * what is above the ask.
+   * first across every basket by `(settledAt, id)`. Each one's `applied`
+   * becomes its `quantity`, so each unit raises the ask of the basket that
+   * bought it.
    *
-   * The baskets were read before the lock, so a basket that finished since
-   * is dropped by the read of its buys, which keeps only open baskets: the
-   * units of a trip that is over are never counted.
+   * The baskets may have been read before the lock, so a basket that finished
+   * since is dropped by the read of its buys, which keeps only open baskets:
+   * the units of a trip that is over are never taken in.
    */
-  private async countExtra(
+  private async absorbExtra(
     manager: EntityManager,
-    counters: readonly CountingBasket[],
     line: ListLine,
-    zoneId: string,
-    delta: number
-  ): Promise<{ counted: number; answer: CountedExtra }> {
+    counters: readonly CountingBasket[]
+  ): Promise<Absorbed> {
+    if (counters.length === 0) {
+      return NOTHING_ABSORBED;
+    }
     const buys: CountedBuy[] = [];
     for (const basket of counters) {
       for (const buy of await buysOf(
@@ -4057,18 +4303,37 @@ export class LineService {
         (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
     );
 
-    const count = countAboveAsk(buys, delta);
+    const absorption = absorbAboveAsk(buys);
     const settlements = manager.getRepository(LineSettlement);
-    for (const [id, applied] of count.changes) {
+    for (const [id, applied] of absorption.changes) {
       await settlements.update({ id }, { applied });
     }
+    return { above: absorption.above, buys };
+  }
+
+  /**
+   * What a raise reports about what it took in (plan 0276, section 6).
+   *
+   * `countable` is bounded by the raise, so a count can never take the line
+   * below where it stood before the raise, and by `above`, so it never takes
+   * off more than the extra covers. `from` is the quantity the lock read and
+   * `to` the quantity written.
+   */
+  private async reportOf(
+    manager: EntityManager,
+    absorbed: Absorbed,
+    zoneId: string,
+    from: number,
+    to: number
+  ): Promise<AbsorbedExtra> {
+    const raisedBy = Math.max(to - Math.max(from, 0), 0);
     return {
-      counted: count.counted,
-      answer: {
-        above: count.above,
-        counted: count.counted,
-        buyers: await this.buyersOf(manager, buys, zoneId),
-      },
+      above: absorbed.above,
+      countable: Math.min(absorbed.above, raisedBy),
+      buyers:
+        absorbed.above === 0
+          ? []
+          : await this.buyersOf(manager, absorbed.buys, zoneId),
     };
   }
 
@@ -4091,7 +4356,7 @@ export class LineService {
     manager: EntityManager,
     buys: readonly CountedBuy[],
     zoneId: string
-  ): Promise<CountedExtraBuyer[]> {
+  ): Promise<ExtraBuyer[]> {
     const ids = [
       ...new Set(
         buys
@@ -4141,7 +4406,7 @@ export class LineService {
     );
 
     const seen = new Set<string>();
-    const buyers: CountedExtraBuyer[] = [];
+    const buyers: ExtraBuyer[] = [];
     for (const buy of buys) {
       const account = accountOf(buy);
       const userId = account !== null && members.has(account) ? account : null;
@@ -4152,20 +4417,6 @@ export class LineService {
       }
     }
     return buyers;
-  }
-
-  /**
-   * The line as it stands, read through the caller's manager for the reason
-   * {@link writeEdit} reads through it, for a write that did not write it.
-   */
-  private async viewOf(
-    manager: EntityManager,
-    line: ListLine
-  ): Promise<LineView> {
-    const items = await this.itemSetOf(line.id, manager);
-    const settlements = await this.settlementsOf(line.id, manager);
-    const claim = await this.claims.claimOf(line.id, manager);
-    return toLineView(line, items, settlements, claim);
   }
 
   /**

@@ -35,6 +35,8 @@ import {
   type CommentAudioView,
   type CommentPage,
   type CommentView,
+  type CountLineExtraRequest,
+  type CountLineExtraResult,
   type LinePage,
   type LineSettlementPage,
   type LineSettlementResult,
@@ -81,6 +83,7 @@ import {
   AddLineQuantityDto,
   AddLinesDto,
   AddVoiceCommentDto,
+  CountLineExtraDto,
   CreateListDto,
   LineQueryDto,
   ListQueryDto,
@@ -457,6 +460,8 @@ export class ListsController {
       askIfAmbiguous: dto.askIfAmbiguous,
       intoLineId: dto.intoLineId,
       newLine: dto.newLine,
+      // Optional (plan 0276): a `RAISED` add answers what it took into the ask.
+      reportExtra: dto.reportExtra,
     });
   }
 
@@ -596,6 +601,8 @@ export class LinesController {
       preferredSupermarketId: dto.preferredSupermarketId,
       named: dto.named,
       confirmMerge: dto.confirmMerge,
+      // Optional (plan 0276): a raise of the quantity answers what it took in.
+      reportExtra: dto.reportExtra,
     });
   }
 
@@ -616,10 +623,11 @@ export class LinesController {
    * bespoke envelope on one route out of ten would be a cost paid by every reader
    * of the API for a subtraction.
    *
-   * With `countExtra: true` (plan 0275), the zone list's raise counts the
-   * units bought above the ask in open shopping lists first, and the answer
-   * carries `extra`: how many were above the ask, how many it counted, and
-   * who bought them, as user ids.
+   * Every raise moves the units bought above the ask in open shopping lists
+   * into the ask, and the line still rises by the whole delta (plan 0276).
+   * With `reportExtra: true` the answer carries `extra`: how many were taken
+   * in, what "Count the extra" would take off, and who bought them, as user
+   * ids.
    */
   @Post(':id/quantity')
   @ApiContractResponse(LINE_PATTERNS.addQuantity, {
@@ -637,9 +645,39 @@ export class LinesController {
       delta: dto.delta,
       // Required (plan 0246 M8), and checked against the line by core.
       unit: dto.unit,
-      // Optional (plan 0275): absent is the plain delta.
-      countExtra: dto.countExtra,
+      // Optional (plan 0276): absent answers the line alone.
+      reportExtra: dto.reportExtra,
     });
+  }
+
+  /**
+   * "Count the extra" (plan 0276, section 8): lower the line by what a
+   * raise's report offered. The actor's own permissions, exactly as any
+   * lowering of the amount, and refused with `stale_quantity` when the line
+   * no longer holds `expect`.
+   */
+  @Post(':id/extra')
+  @ApiContractResponse(LINE_PATTERNS.countExtra, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({
+    body: true,
+    lineUnitMismatch: true,
+    staleQuantity: true,
+  })
+  countExtra(
+    @AuthUser() user: CurrentUser,
+    @UuidParam('id') id: string,
+    @Body() dto: CountLineExtraDto
+  ): Promise<CountLineExtraResult> {
+    const req: CountLineExtraRequest = {
+      userId: user.userId,
+      lineId: id,
+      unit: dto.unit,
+      amount: dto.amount,
+      expect: dto.expect,
+    };
+    return this.nats.send<CountLineExtraResult>(LINE_PATTERNS.countExtra, req);
   }
 
   @Post(':id/approval')

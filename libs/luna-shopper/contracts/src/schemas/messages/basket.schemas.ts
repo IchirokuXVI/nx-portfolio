@@ -97,6 +97,7 @@ export const BASKET_SCHEMA_IDS = {
   buyForListRequest: schemaId('msg/basket.row.buyForList/request'),
   revertRequest: schemaId('msg/basket.row.revert/request'),
   demandRequest: schemaId('msg/basket.row.demand/request'),
+  countExtraRequest: schemaId('msg/basket.row.countExtra/request'),
   renameRequest: schemaId('msg/basket.row.rename/request'),
   skipRequest: schemaId('msg/basket.row.skip/request'),
   addLineRequest: schemaId('msg/basket.line.add/request'),
@@ -547,6 +548,10 @@ const rowResult = object(
     // What the line add did (plan 0260, section 2), absent on every other
     // row write.
     addOutcome: ref(ENUM_IDS.addLineOutcome),
+    // What a raise took into the ask, on a request that asked for it, and
+    // what "Count the extra" took off the line (plan 0276).
+    extra: ref(LIST_SCHEMA_IDS.absorbedExtra),
+    counted: integer({ minimum: 1 }),
   },
   ['entries', 'progress']
 );
@@ -816,8 +821,26 @@ const demandRequest = object(
     // Required, and checked like a delta's (plan 0246, section 3.4).
     unit: ref(ENUM_IDS.lineUnit),
     from: integer({ minimum: 0 }),
+    // Ask for the report of what a raise took into the ask (plan 0276).
+    reportExtra: boolean(),
   },
   ['basketId', 'participantId', 'rowKey', 'lineId', 'quantity', 'unit', 'from']
+);
+
+// "Count the extra" on a row (plan 0276, section 9). `expect` is the entry's
+// `left`, what the line holds, so it has no ceiling.
+const countExtraRequest = object(
+  BASKET_SCHEMA_IDS.countExtraRequest,
+  {
+    basketId: nonEmptyString(),
+    participantId: nonEmptyString(),
+    rowKey: nonEmptyString(),
+    lineId: nonEmptyString(),
+    unit: ref(ENUM_IDS.lineUnit),
+    amount: integer({ minimum: 1, maximum: LINE_QUANTITY_MAX }),
+    expect: integer({ minimum: 0 }),
+  },
+  ['basketId', 'participantId', 'rowKey', 'lineId', 'unit', 'amount', 'expect']
 );
 
 const renameRequest = object(
@@ -868,6 +891,8 @@ const addLineRequest = object(
     askIfAmbiguous: boolean(),
     intoLineId: nonEmptyString(),
     newLine: boolean(),
+    // As the list's own add takes it (plan 0276).
+    reportExtra: boolean(),
   },
   ['basketId', 'participantId', 'userId', 'targetListId', 'content']
 );
@@ -1113,6 +1138,7 @@ export const basketSchemas: JsonSchema[] = [
   buyForListRequest,
   revertRequest,
   demandRequest,
+  countExtraRequest,
   renameRequest,
   // Registered since plan 0201. It was declared and left out of this list, so
   // nothing could check a skip. It now names its lines, which is worth checking.
@@ -1183,6 +1209,10 @@ export const basketMessageContracts: Record<
   },
   [BASKET_PATTERNS.rowDemand]: {
     request: BASKET_SCHEMA_IDS.demandRequest,
+    response: BASKET_SCHEMA_IDS.rowResult,
+  },
+  [BASKET_PATTERNS.rowCountExtra]: {
+    request: BASKET_SCHEMA_IDS.countExtraRequest,
     response: BASKET_SCHEMA_IDS.rowResult,
   },
   [BASKET_PATTERNS.rowRename]: {

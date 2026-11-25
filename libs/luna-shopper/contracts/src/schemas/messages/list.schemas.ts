@@ -33,9 +33,10 @@ export const LIST_SCHEMA_IDS = {
   listAccessView: schemaId('list/ListAccessView'),
   lineView: schemaId('list/LineView'),
   updateLineResult: schemaId('list/UpdateLineResult'),
-  countedExtraBuyer: schemaId('list/CountedExtraBuyer'),
-  countedExtra: schemaId('list/CountedExtra'),
+  extraBuyer: schemaId('list/ExtraBuyer'),
+  absorbedExtra: schemaId('list/AbsorbedExtra'),
   addLineQuantityResult: schemaId('list/AddLineQuantityResult'),
+  countLineExtraResult: schemaId('list/CountLineExtraResult'),
   addLineResult: schemaId('list/AddLineResult'),
   addLineResultList: schemaId('list/AddLineResultList'),
   lineClaimRef: schemaId('list/LineClaimRef'),
@@ -64,6 +65,7 @@ export const LIST_SCHEMA_IDS = {
   addLinesItem: schemaId('list/AddLinesItem'),
   addLinesRequest: schemaId('msg/line.addMany/request'),
   addLineQuantityRequest: schemaId('msg/line.addQuantity/request'),
+  countLineExtraRequest: schemaId('msg/line.countExtra/request'),
   updateLineRequest: schemaId('msg/line.update/request'),
   setApprovalRequest: schemaId('msg/line.setApproval/request'),
   settleLineRequest: schemaId('msg/line.settle/request'),
@@ -252,39 +254,54 @@ const lineView = object(
   lineViewRequired
 );
 
-// What an edit answers: the surviving line, and the line a merge absorbed when
-// there was one (plan 0112, section 6). Optional, and absent when nothing merged.
-const updateLineResult = object(
-  LIST_SCHEMA_IDS.updateLineResult,
-  { ...lineViewProperties, absorbedLineId: nonEmptyString() },
-  lineViewRequired
-);
-
-// What a raise with `countExtra` counted (plan 0275, section 8): the units
-// above the ask before the write, the units it moved into the ask, and who
+// What a raise took into the ask (plan 0276, section 6): the units above the
+// ask it moved in, what "Count the extra" would take off the line, and who
 // bought them, as user ids. Core serves no name, no participant and no basket
 // here; a guest's buy is the owner of the basket the guest bought through.
-const countedExtraBuyer = object(
-  LIST_SCHEMA_IDS.countedExtraBuyer,
+const extraBuyer = object(
+  LIST_SCHEMA_IDS.extraBuyer,
   { userId: nullableString() },
   ['userId']
 );
-const countedExtra = object(
-  LIST_SCHEMA_IDS.countedExtra,
+const absorbedExtra = object(
+  LIST_SCHEMA_IDS.absorbedExtra,
   {
     above: integer({ minimum: 0 }),
-    counted: integer({ minimum: 0 }),
-    buyers: array(ref(LIST_SCHEMA_IDS.countedExtraBuyer)),
+    countable: integer({ minimum: 0 }),
+    buyers: array(ref(LIST_SCHEMA_IDS.extraBuyer)),
   },
-  ['above', 'counted', 'buyers']
+  ['above', 'countable', 'buyers']
 );
+
+// What an edit answers: the surviving line, and the line a merge absorbed when
+// there was one (plan 0112, section 6). Optional, and absent when nothing merged.
+// `extra` only when the request carried `reportExtra: true` and the edit raised
+// the line (plan 0276).
+const updateLineResult = object(
+  LIST_SCHEMA_IDS.updateLineResult,
+  {
+    ...lineViewProperties,
+    absorbedLineId: nonEmptyString(),
+    extra: ref(LIST_SCHEMA_IDS.absorbedExtra),
+  },
+  lineViewRequired
+);
+
 // What a delta answers: the line as it now stands, and `extra` only when the
-// request carried `countExtra: true` (plan 0275). Optional, so every other
-// caller reads the line view it always read.
+// request carried `reportExtra: true` and raised the line (plan 0276).
+// Optional, so every other caller reads the line view it always read.
 const addLineQuantityResult = object(
   LIST_SCHEMA_IDS.addLineQuantityResult,
-  { ...lineViewProperties, extra: ref(LIST_SCHEMA_IDS.countedExtra) },
+  { ...lineViewProperties, extra: ref(LIST_SCHEMA_IDS.absorbedExtra) },
   lineViewRequired
+);
+
+// What "Count the extra" answers (plan 0276, section 7): the line as it now
+// stands, and the units it took off.
+const countLineExtraResult = object(
+  LIST_SCHEMA_IDS.countLineExtraResult,
+  { ...lineViewProperties, counted: integer({ minimum: 1 }) },
+  [...lineViewRequired, 'counted']
 );
 
 // What a settle cost, as the gateway read it (plan 0143, section 4.2).
@@ -515,6 +532,9 @@ const addLineResult = object(
       ...array(ref(LIST_SCHEMA_IDS.lineView)),
       maxItems: LINE_ADD_CHOICE_MAX,
     },
+    // What the raise took into the ask (plan 0276), on a `RAISED` answer to a
+    // request that carried `reportExtra: true`.
+    extra: ref(LIST_SCHEMA_IDS.absorbedExtra),
   },
   ['line', 'merged', 'outcome', 'alreadyOnList']
 );
@@ -624,6 +644,8 @@ const addLineRequest = object(
     askIfAmbiguous: boolean(),
     intoLineId: nonEmptyString(),
     newLine: boolean(),
+    // Ask for the report of what a `RAISED` add took into the ask (plan 0276).
+    reportExtra: boolean(),
   },
   ['userId', 'listId', 'content']
 );
@@ -673,11 +695,24 @@ const addLineQuantityRequest = object(
     // What the line holds, and not a write, so it has no ceiling: a line stored
     // above the ceiling is still stepped down (plan 0262, 2026-11-17).
     expect: integer({ minimum: 0 }),
-    // Optional (plan 0275): the zone list's raise counts the units bought
-    // above the ask first. A JSON boolean only.
-    countExtra: boolean(),
+    // Ask for the report of what the raise took into the ask (plan 0276). The
+    // raise takes it in either way. A JSON boolean only.
+    reportExtra: boolean(),
   },
   ['userId', 'lineId', 'delta', 'unit']
+);
+// "Count the extra" (plan 0276, section 7). `expect` is what the line holds,
+// so it has no ceiling, as on the delta; `amount` is a lowering bounded by it.
+const countLineExtraRequest = object(
+  LIST_SCHEMA_IDS.countLineExtraRequest,
+  {
+    userId: nonEmptyString(),
+    lineId: nonEmptyString(),
+    unit: ref(ENUM_IDS.lineUnit),
+    amount: integer({ minimum: 1, maximum: LINE_QUANTITY_MAX }),
+    expect: integer({ minimum: 0 }),
+  },
+  ['userId', 'lineId', 'unit', 'amount', 'expect']
 );
 const updateLineRequest = object(
   LIST_SCHEMA_IDS.updateLineRequest,
@@ -724,6 +759,9 @@ const updateLineRequest = object(
     // Merge onto the line that already holds the new name (plan 0112, section
     // 2). Anything but `true` refuses such a rename and writes nothing.
     confirmMerge: boolean(),
+    // Ask for the report of what a raise of the quantity took into the ask
+    // (plan 0276).
+    reportExtra: boolean(),
   },
   ['userId', 'lineId']
 );
@@ -1121,9 +1159,10 @@ export const listSchemas: JsonSchema[] = [
   listAccessView,
   lineView,
   updateLineResult,
-  countedExtraBuyer,
-  countedExtra,
+  extraBuyer,
+  absorbedExtra,
   addLineQuantityResult,
+  countLineExtraResult,
   addLineResult,
   addLineResultList,
   lineClaimRef,
@@ -1150,6 +1189,7 @@ export const listSchemas: JsonSchema[] = [
   addLinesItem,
   addLinesRequest,
   addLineQuantityRequest,
+  countLineExtraRequest,
   updateLineRequest,
   setApprovalRequest,
   settleLineRequest,
@@ -1248,6 +1288,10 @@ export const listMessageContracts: Record<
   [LINE_PATTERNS.addQuantity]: {
     request: LIST_SCHEMA_IDS.addLineQuantityRequest,
     response: LIST_SCHEMA_IDS.addLineQuantityResult,
+  },
+  [LINE_PATTERNS.countExtra]: {
+    request: LIST_SCHEMA_IDS.countLineExtraRequest,
+    response: LIST_SCHEMA_IDS.countLineExtraResult,
   },
   [LINE_PATTERNS.setApproval]: {
     request: LIST_SCHEMA_IDS.setApprovalRequest,
