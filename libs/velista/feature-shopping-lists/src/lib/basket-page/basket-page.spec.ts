@@ -6504,16 +6504,23 @@ describe('BasketPage: the basket asks about the extra (velista 0208)', () => {
     const plus = (fixture: ComponentFixture<BasketPage>) =>
       query(fixture, 'lib-line-composer .send') as HTMLButtonElement;
 
-    async function added(extra: AbsorbedExtra | null) {
+    async function added(extra: AbsorbedExtra | null, newLine = false) {
       const rendered = await render({
-        lines: [milkRow({ left: 0, bought: 5, asked: 5 })],
+        // A line at 0 this basket did not draw is new to the client: only the read
+        // the add asks for names its row.
+        lines: newLine ? [] : [milkRow({ left: 0, bought: 5, asked: 5 })],
         served: SERVED,
       });
       const { fixture, store } = rendered;
       const handoff = fixture.debugElement.injector.get(ExtraAskHandoff);
       const raised = milkRow({ left: 2, bought: 5, asked: 7 });
-      store.addLine.mockImplementationOnce(async () => {
+      store.refresh.mockImplementation(async () => {
         store.rows.set([raised]);
+      });
+      store.addLine.mockImplementationOnce(async () => {
+        if (!newLine) {
+          store.rows.set([raised]);
+        }
         return {
           ...rowResult(raised),
           addOutcome: 'raised',
@@ -6556,6 +6563,17 @@ describe('BasketPage: the basket asks about the extra (velista 0208)', () => {
       });
       // Nothing is left for a sheet opened later.
       expect(handoff.take('row-milk')).toBeNull();
+    });
+
+    it('waits for the read that names a line new to this basket, then opens its view', async () => {
+      const { store, held } = await added(OWN, true);
+
+      expect(store.refresh).toHaveBeenCalled();
+      expect(held()).toEqual({
+        rowKey: 'row-milk',
+        lineId: 'zl-1',
+        extra: OWN,
+      });
     });
 
     it('opens nothing for a raise that offers nothing to count', async () => {

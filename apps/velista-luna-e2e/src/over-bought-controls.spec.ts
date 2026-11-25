@@ -661,7 +661,12 @@ test.describe('the basket asks about the extra (velista 0208, stage 4)', () => {
       from: 1,
     });
     await signIn(page, ALICE_EMAIL);
-    const view = await breadLists(page, basketId);
+    // Bought through another shopping list, the row is drawn crossed out and not
+    // as a button, so the view is opened by its address.
+    await page.goto(
+      `/en/shopping-lists/${basketId}/sheet/rows/${LINE_BREAD_ID}/lists`
+    );
+    const view = page.locator('lib-row-lists-sheet');
     const stepper = groceriesOf(view).locator('lib-quantity-stepper');
     await expect(stepper).toHaveAttribute('data-value', '1');
 

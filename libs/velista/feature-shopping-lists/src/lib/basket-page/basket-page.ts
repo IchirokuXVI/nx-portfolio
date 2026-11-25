@@ -156,6 +156,12 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
  * again, as on the list page. Long enough for a screen reader to see the region
  * change, short enough to read as the answer to the press.
  */
+/**
+ * The longest a handed over question waits for the search an add closed to pop its
+ * entry (velista `0208`, target state 19).
+ */
+const SEARCH_SETTLE_MS = 2000;
+
 const REPEAT_SAY_GAP_MS = 150;
 
 /**
@@ -2765,6 +2771,59 @@ export class BasketPage {
   }
 
   /**
+   * An add of "Add or find" raised a line over extra already bought (velista
+   * `0208`, target state 19): the question is asked on the row's "Lists and
+   * amounts". A line at 0 is new to this client, and only the read the add asks
+   * for names its row, so it is waited for. A page gone or covered meanwhile asks
+   * nothing.
+   */
+  private async _askInLists(
+    lineId: string,
+    extra: AbsorbedExtra
+  ): Promise<void> {
+    if (this._store.rowFor(lineId) === null) {
+      await this._store.refresh();
+    }
+    // The add emptied the field, which closes the search by popping its entry: a
+    // sheet pushed before that pop would be the entry it pops.
+    await this._searchSettled();
+    const row = this._store.rowFor(lineId);
+    const column = this._column()?.nativeElement;
+    if (
+      this._gone ||
+      row === null ||
+      column === undefined ||
+      !this._inFront(column)
+    ) {
+      return;
+    }
+    // Velista `0208`, target state 19 (the removable handoff): the question is
+    // asked on the row's "Lists and amounts", which this opens.
+    await this._handoff.send({ rowKey: row.rowKey, lineId, extra }, () =>
+      this._router.navigate(sheetSegments('rows', row.rowKey, 'lists'), {
+        relativeTo: this._route,
+        queryParams: this._search.kept(this._route),
+      })
+    );
+  }
+
+  /**
+   * Until a search the emptied field is closing has popped its entry, at most
+   * {@link SEARCH_SETTLE_MS}: the close runs from an effect, and lands a turn
+   * after the router hears the pop.
+   */
+  private async _searchSettled(): Promise<void> {
+    const until = Date.now() + SEARCH_SETTLE_MS;
+    while (
+      !this._gone &&
+      Date.now() < until &&
+      (this._closing || (this.searchOpen() && !this.typing()))
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+
+  /**
    * Whether the basket page itself is what the person is looking at: no sheet over
    * it (a sheet is a child route), no picker or dialog, and the document not
    * hidden (velista `0208`).
@@ -3121,29 +3180,12 @@ export class BasketPage {
       // this basket already showed.
       this._markTook([line.lineId]);
       const extra = result.extra;
-      const raisedRow = this._store.rowFor(line.lineId);
-      const column = this._column()?.nativeElement;
       if (
         result.addOutcome === 'raised' &&
         extra !== undefined &&
-        extra.countable > 0 &&
-        raisedRow !== null &&
-        column !== undefined &&
-        this._inFront(column)
+        extra.countable > 0
       ) {
-        // Velista `0208`, target state 19 (the removable handoff): the question is
-        // asked on the row's "Lists and amounts", which this opens.
-        void this._handoff.send(
-          { rowKey: raisedRow.rowKey, lineId: line.lineId, extra },
-          () =>
-            this._router.navigate(
-              sheetSegments('rows', raisedRow.rowKey, 'lists'),
-              {
-                relativeTo: this._route,
-                queryParams: this._search.kept(this._route),
-              }
-            )
-        );
+        void this._askInLists(line.lineId, extra);
       }
       const shown = this._shownRow(line.lineId);
       this._say(
