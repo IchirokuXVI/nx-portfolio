@@ -1,6 +1,6 @@
 {
   "title": "Velista: a basket row records buys, and a detailed view of its lists",
-  "lede": "Velista plans <code>0201</code> (the row sheet records what was bought for each list) and <code>0200</code> (a detailed view, <code>rows/:rowKey/lists</code>, holds each list's ask and the change of product), with backend <code>0273</code> behind the first. They ship together, so every frame draws the end state of both. Each board shows Day in English on the left and Night in Spanish on the right. The row sheet gains a heading and one text button where \"Change for all lists\" was; the detailed view is a sheet like the shop picker, with the chevron beside its title. No container, no tint, no banner. The design is layout A with colours A, on the stepper's number only. The detailed view opens on the row's product with \"Change for all lists\" under it; each list shows its own product on one line, in amber when it differs; the word Change at the end of that line is the only control that changes a list's product. A list the reader may not change keeps a stepper disabled as a whole (its border, its number and both ends) that explains itself when pressed. Under its title the detailed view says what it is for, in the sheets' secondary text, on every visit. A guest sees no \"Lists and amounts\". The board marked Today is drawn from the source on <code>dev</code>. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. Approved by the owner on 2026-11-22. Round 5: every list of a row has the same product, so the product line of each list is gone and Change moved. Not yet approved.",
+  "lede": "Velista plans <code>0201</code> (the row sheet records what was bought for each list) and <code>0200</code> (a detailed view, <code>rows/:rowKey/lists</code>, holds each list's ask and the change of product), with backend <code>0273</code> behind the first. They ship together, so every frame draws the end state of both. Each board shows Day in English on the left and Night in Spanish on the right. The row sheet gains a heading and one text button where \"Change for all lists\" was; the detailed view is a sheet like the shop picker, with the chevron beside its title. No container, no tint, no banner. The design is layout A with colours A, on the stepper's number only. The detailed view opens on the row's product, with its price, the unit price line under the price when it differs, and \"Change for all lists\" under it. A basket row is one product, so no list draws a product line; \"Change product\" on its own line under \"Bought 2 of 3\" is the only control that changes one list's product. A list the reader may not change keeps a stepper disabled as a whole (its border, its number and both ends) that explains itself when pressed. Under its title the detailed view says what it is for, in the sheets' secondary text, on every visit. A guest sees no \"Lists and amounts\". The board marked Today is drawn from the source on <code>dev</code>. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. Approved by the owner on 2026-11-22. Round 5, approved by the owner on 2026-11-25 and final: no product line per list, Change product as placement A, the unit price line in the product block, and a change of product closes back to the shopping list.",
   "artboards": [
     {
       "file": "Today.dc.html",
@@ -32,7 +32,7 @@
       "y": 1300,
       "w": 860,
       "h": 872,
-      "title": "0200 frame 2, round 5: no product line per list; Change product on the one list that may change"
+      "title": "0200 frame 2, final: the unit price line shows; Change product on the one list that may change"
     },
     {
       "file": "DetailAll.dc.html",
@@ -40,7 +40,7 @@
       "y": 1300,
       "w": 860,
       "h": 872,
-      "title": "0200 frame 3, round 5: Change for all lists, and Change product on two lists"
+      "title": "0200 frame 3, final: no unit price line (equal to the price); Change for all lists, and Change product on two lists"
     },
     {
       "file": "Popover.dc.html",
@@ -64,7 +64,7 @@
       "y": 2600,
       "w": 860,
       "h": 872,
-      "title": "0200 frame 4, round 5: long names in the detailed view"
+      "title": "0200 frame 4, final: long names in the detailed view"
     },
     {
       "file": "OtherList.dc.html",
@@ -80,7 +80,7 @@
       "y": 4000,
       "w": 1330,
       "h": 720,
-      "title": "Round 5, the choice: where Change product goes (A, B or C)"
+      "title": "Round 5, decided: Change product goes at A (chosen); B and C not chosen"
     }
   ],
   "annotations": [
@@ -117,7 +117,7 @@
       "x": 940,
       "y": 960,
       "w": 420,
-      "text": "0200 TARGET STATE 4. CHANGE, ROUND 5.\nA basket row is always one product: a list that takes another product moves to that product's row. So every list here has the row's product, and no list draws a product line (picture, name, brand and size, amber). Everything else each row shows stays.\nChange for all lists sits under the product, in the block it changes, when two lists or more may change.\nChange product / Cambiar producto (44 px tall) is the only control that opens one list's change sheet, and shows only on a list that may change its product. These boards draw placement A, pending the owner's pick.\nFits 844 px with the description, three lists and the home indicator; nothing scrolls."
+      "text": "0200 TARGET STATE 4. CHANGE, FINAL.\nA basket row is always one product: a list that takes another product moves to that product's row. So every list here has the row's product, and no list draws a product line (picture, name, brand and size, amber). Everything else each row shows stays.\nChange for all lists sits under the product, in the block it changes, when two lists or more may change.\nChange product / Cambiar producto (44 px tall) sits on its own line under Bought 2 of 3, in the list's reading column (placement A, the owner's pick). It is the only control that opens one list's change sheet, and shows only on a list that may change its product; a list that may not change keeps its row one line shorter.\nFits 844 px with the description, three lists and the home indicator; nothing scrolls."
     },
     {
       "id": "pop",
@@ -152,21 +152,21 @@
       "x": 0,
       "y": 3560,
       "w": 420,
-      "text": "ROUND 5: WHERE CHANGE PRODUCT GOES. THE OWNER PICKS A, B OR C.\nThe same two rows in each: Compra semanal may change its product, Básicos may not.\nA. Its own line under Bought 2 of 3, left aligned in the reading column, like Change for all lists under the product. It reads in order: list, where, bought, then the action. Only a row that may change grows.\nB. At the end of the zone · line line. No row grows, but the action takes most of that line, so a long zone is cut sooner, and its 44 px target reaches over the lines around it.\nC. Under the stepper, in the column of controls. Close to the thumb, but it reads as part of the amount, and the row grows as in A.\nRECOMMENDED: A. The action comes where the reader finishes the list, matches where Change for all lists already sits, and never crowds the stepper or cuts the zone."
+      "text": "ROUND 5: WHERE CHANGE PRODUCT GOES. DECIDED: A.\nThe same two rows in each: Compra semanal may change its product, Básicos may not.\nA, chosen. Its own line under Bought 2 of 3, left aligned in the reading column, like Change for all lists under the product. It reads in order: list, where, bought, then the action. Only a row that may change grows. Every other board of this folder draws A.\nB, not chosen. At the end of the zone · line line: too little room for the words, and a long zone is cut sooner.\nC, not chosen. Under the stepper: it reads as part of the amount and looks odd in the column of controls.\nB and C stay here faded, as the alternatives that were compared."
     },
     {
       "id": "after",
       "x": 470,
       "y": 3560,
       "w": 420,
-      "text": "AFTER A CHANGE OF ONE LIST'S PRODUCT.\nThe change closes this view too: the person is back on the shopping list, where the old product's row and the new product's row are both visible. The list now sits on the new row. Nothing returns to Lists and amounts."
+      "text": "AFTER A CHANGE OF PRODUCT, FINAL.\nA change of product closes Lists and amounts as well as the change sheet: the person is back on the shopping list, never on this view. That holds for Change product on one list and for Change for all lists.\nOn the shopping list the old product's row and the new product's row are both visible, and the list now sits on the new row."
     },
     {
       "id": "unitprice",
       "x": 940,
       "y": 3560,
       "w": 420,
-      "text": "UNIT PRICE LINE: THE OWNER HAS NOT DECIDED.\nThe line under the price in the product block (0,92 € / L) stays as drawn until he does."
+      "text": "THE UNIT PRICE LINE, FINAL.\nThe product block shows the catalog card's unit price line under the price: unitPriceWords, drawn as the card's .unit line (text-xs, 12 px, text-muted, tabular figures), the amount then its basis in the card's .per (text-2xs, 11 px, text-muted, 3 px before it). Bases: / kg, / L, / unit (es: / kg, / L, / unidad).\nShown on frame 2: Puleva 1,5 L at 1,79 € shows 1,19 € / L.\nHidden when it would equal the shelf price in cents: Hacendado 1 L at 0,92 € is 0,92 € / L, so frame 3 draws no line. Hidden too for a product sold by the kilo or the litre, whose price already says / kg or / L (the tomato on frame 4). A kilo piece always shows its price per kilo."
     }
   ]
 }
