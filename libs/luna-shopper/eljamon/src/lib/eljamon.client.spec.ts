@@ -301,6 +301,25 @@ describe('ElJamonClient', () => {
     expect(waits[1]).toBeGreaterThanOrEqual(200);
     // Session (2) + two dropped attempts + the one that answered.
     expect(shop.requests).toBe(5);
+    // Both dropped attempts are counted, although a retry then answered, so
+    // the caller can start a fresh session (plan 0169, notes of 2026-11-26).
+    expect(shop.transportFailures).toBe(2);
+  });
+
+  it('counts no transport failure on a 429, which is an answer', async () => {
+    let limited = 0;
+    const site = fakeSite((url) => {
+      if (url.includes('/detalle/') && limited < 1) {
+        limited += 1;
+        return { status: 429, body: '' };
+      }
+      return storefront(url);
+    });
+    const shop = client(site.fetchImpl);
+
+    await shop.getProduct('/detalle/-/Producto/x/1');
+
+    expect(shop.transportFailures).toBe(0);
   });
 
   it('retries a body that breaks off halfway', async () => {
@@ -353,6 +372,7 @@ describe('ElJamonClient', () => {
       'socket hang up'
     );
     expect(shop.requests).toBe(2 + 3);
+    expect(shop.transportFailures).toBe(3);
   });
 
   it('does not retry once the run is aborted', async () => {

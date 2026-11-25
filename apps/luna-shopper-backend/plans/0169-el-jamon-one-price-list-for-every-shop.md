@@ -504,3 +504,31 @@ here. A `details: ALL` walk after this fix repairs part of them:
   walk.
 - A row whose path the walk repaired is counted `unchanged` on the run report, because the
   comparison that decides `updated` does not read `categoryPath`.
+
+## Notes after the build (2026-11-26)
+
+Three hardening items on top of the fix of 2026-11-25 (owner decisions 147, 148 and 150).
+
+- **The page's own code is read against the asked one** (decision 147). `parseProductPage` takes
+  the code the row asked for and reads the code the page states: the JSON-LD `sku`, else the last
+  segment of the JSON-LD `url`. All 29 product pages of the 36 saved pages of 2026-11-25 carry a
+  `sku`, and on every one, the four contaminated ones included, it is the asked product's, as are
+  the canonical link, the `cantidad_<code>` input and the analytics ids. So this check does not
+  catch the session defect; it catches a whole page of another product. Such a page answers
+  `otherProductCode` and no breadcrumb, is read once more on the same session, and one that still
+  states another code fails as a page with no product does: its JSON-LD is another product's, so
+  no field of it is kept, it is named in `failedProducts` and counted in `detailFailed` and
+  `detail.otherProductPages`. A page that states no code reads as the asked code.
+- **A session whose request got no answer is dropped** (decision 148). The client counts every
+  request with no answer (`transportFailures`: a timeout, a reset, a socket hang up, retries
+  included). When a page's work raised that count, the pool does not take the client back, and
+  the next page opens a fresh session (two requests). The report counts them
+  (`detail.droppedSessions`), and `detail.sessions` is then at most `workers` plus that count. An
+  answer to a session start (`/` or the postal code servlet) no longer resets the silent attempts
+  of plan 0253, so a chain that answers its home page and no product page still stops the stage
+  after 20.
+- **One report line when the guard still hit** (decision 150). When `detail.untrustedBreadcrumbs`
+  is above zero, the report's `warnings` list carries one line with the count, the same free
+  form `warnings` the store discovery reports carry. It is not a run warning: no
+  `HarvestWarningCode` names it, and a new code is a contract change. The admin run page draws
+  no report `warnings` field today.
