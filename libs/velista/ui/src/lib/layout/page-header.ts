@@ -22,7 +22,13 @@ import { ChevronLeftIcon, CloseIcon, OfflineIcon } from '../icons/icons';
  * - **H1.** One block size, `--app-header-height`, with the top safe area added as
  *   padding. No input makes it taller or shorter.
  * - **H2.** One title: one line, cut with an ellipsis, in the display face at
- *   `--app-header-title-size`. It is the page's `h1`.
+ *   `--app-header-title-size`. It is the page's `h1`. Amended by the owner on
+ *   2026-11-22 (velista `0205`): under the title the header may draw **one** optional
+ *   subtitle line, in `--app-text-xs` and `--app-text-muted`, one line and cut with an
+ *   ellipsis, inside the same block size (H1 holds). It is a `p` beside the `h1`, so
+ *   the page's heading stays the title. Amended again on 2026-11-23: when enlarged
+ *   text leaves no room for both lines, the subtitle is hidden and only read out, and
+ *   the title stands alone, centred. The stylesheet decides it from the real space.
  * - **H3.** Always a bottom border. No input turns it off.
  * - **H4.** The left end holds a back button or an icon, never neither and never
  *   both. `backLabel` decides: set, the chevron draws; not set, the projected
@@ -36,8 +42,9 @@ import { ChevronLeftIcon, CloseIcon, OfflineIcon } from '../icons/icons';
  * - **H6.** The header never loads. `title` is required, so a page that waits for a
  *   name passes the word for the kind of page (Group, List) until it arrives.
  *
- * A consequence of H1 and H2 together: a header holds **only** a title. A subtitle,
- * a progress line, a logo or a count is page content and goes below it.
+ * A consequence of H1 and H2 together: a header holds **only** a title and at most
+ * that one subtitle line. A progress line, a logo, a count or a second subtitle is
+ * page content and goes below it.
  *
  * ## Plain values in, one event out
  *
@@ -61,6 +68,14 @@ import { ChevronLeftIcon, CloseIcon, OfflineIcon } from '../icons/icons';
 export class PageHeader {
   /** Already translated. The word for the kind of page while the name loads. */
   readonly title = input.required<string>();
+
+  /**
+   * Already translated. The one line under the title (H2, velista `0205`). `null`
+   * draws no line and leaves the header exactly as it is without one. An empty string
+   * draws an empty line of the same height, for a page that will have a subtitle and
+   * does not know it yet, so the title does not move when the words arrive.
+   */
+  readonly subtitle = input<string | null>(null);
 
   /**
    * The accessible name of the back control, already translated. When it is set the

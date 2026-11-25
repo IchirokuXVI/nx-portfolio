@@ -23,7 +23,21 @@
     </span>
   }
 
-  <h1 class="title">{{ title() }}</h1>
+  <!--
+    H2 as amended by velista 0205: the title alone, or the title with one subtitle line
+    under it. The subtitle is a `p` beside the `h1` and not inside it, so the page's
+    heading stays the title. Without a subtitle the `h1` is a child of the row, as it
+    was before the amendment, and nothing about its box changes.
+  -->
+  @let sub = subtitle();
+  @if (sub !== null) {
+    <div class="heading">
+      <h1 class="title">{{ title() }}</h1>
+      <p class="subtitle">{{ sub }}</p>
+    </div>
+  } @else {
+    <h1 class="title">{{ title() }}</h1>
+  }
 
   <div class="actions">
     <!--

@@ -104,6 +104,7 @@ import {
   LineList,
   LineRow,
   ListHeader,
+  PageHeader,
   TOOK_DURATION_MS,
   TripGroup,
 } from '@portfolio/velista/ui';
@@ -257,6 +258,8 @@ interface Options {
   readonly linesError?: unknown;
   /** What the read of the group failed with, on a group that is not cached (velista 0156). */
   readonly zoneError?: unknown;
+  /** The groups the zone store holds, when not the one group of this list. */
+  readonly zones?: readonly MyZone[];
   /** A sheet URL over the page: the route has a child (velista 0156). */
   readonly sheetOpen?: boolean;
   /** What `GET /v1/lists/:id/access` answers (velista `0152`). Nobody by default. */
@@ -269,6 +272,8 @@ async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<ListPage>;
   lines: FakeLineStore;
   lists: FakeListStore;
+  /** The zone store the page reads the group's name from. */
+  zones: ReturnType<typeof fakeZoneStore>;
   realtime: RealtimeMemory;
   storage: Map<string, string>;
   router: {
@@ -302,7 +307,9 @@ async function render(options: Options = {}): Promise<{
 
   const zones =
     options.zoneError === undefined
-      ? fakeZoneStore({ zones: [zone(options.role ?? 'MEMBER')] })
+      ? fakeZoneStore({
+          zones: options.zones ?? [zone(options.role ?? 'MEMBER')],
+        })
       : failedZoneStore(options.zoneError);
   const lists = fakeListStore({
     lists: options.lists ?? [
@@ -490,6 +497,7 @@ async function render(options: Options = {}): Promise<{
     fixture,
     lines,
     lists,
+    zones,
     realtime,
     storage,
     router,
@@ -3950,6 +3958,82 @@ describe('ListPage', () => {
       expect(scrollIntoView).not.toHaveBeenCalled();
       expect(fixture.componentInstance.markedLine()).toBeNull();
     });
+  });
+});
+
+/**
+ * Velista `0205`: the group is the line under the page header's title, and the head
+ * block above the field no longer draws it.
+ */
+describe('ListPage and the group under the title (velista 0205)', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  function subtitle(fixture: ComponentFixture<ListPage>) {
+    return fixture.debugElement
+      .query(By.directive(PageHeader))
+      .componentInstance.subtitle() as string | null;
+  }
+
+  it('passes "in <group>" as the subtitle of the page header', async () => {
+    const { fixture } = await render();
+
+    // The testing translator answers with the key; the next spec reads the name.
+    expect(subtitle(fixture)).toBe('list.header.inGroup');
+    expect(
+      query(fixture, 'lib-page-header .heading p.subtitle')?.textContent?.trim()
+    ).toBe('list.header.inGroup');
+    expect(query(fixture, 'lib-page-header h1')?.textContent?.trim()).toBe(
+      'Weekly shop'
+    );
+  });
+
+  it('reserves an empty line while the group is not known, then fills it', async () => {
+    const { fixture, zones } = await render({ zones: [] });
+
+    expect(subtitle(fixture)).toBe('');
+    const title = query(fixture, 'lib-page-header h1');
+    expect(query(fixture, 'lib-page-header p.subtitle')).not.toBeNull();
+
+    const t = jest.spyOn(TestBed.inject(RokuTranslatorService), 't');
+    zones.upsert(zone());
+    fixture.detectChanges();
+
+    expect(subtitle(fixture)).toBe('list.header.inGroup');
+    const call = t.mock.calls.find(([key]) => key === 'list.header.inGroup');
+    expect(call?.[3]).toEqual({ name: 'Flat 3B' });
+    // The same h1 in the same stack: nothing was redrawn around the title.
+    expect(query(fixture, 'lib-page-header h1')).toBe(title);
+  });
+
+  it('draws no subtitle where there is no list to name a group for', async () => {
+    const { fixture } = await render({
+      zoneError: new GatewayError({
+        code: 'forbidden',
+        status: 403,
+        correlationId: 'cid-403',
+      }),
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(subtitle(fixture)).toBeNull();
+    expect(query(fixture, 'lib-page-header .subtitle')).toBeNull();
+  });
+
+  it('draws no group line in the head block', async () => {
+    const { fixture } = await render();
+
+    const top = query(fixture, '.page-top');
+    expect(top?.querySelector('.in-group')).toBeNull();
+    expect(top?.textContent).not.toContain('list.header.inGroup');
+  });
+
+  it('leaves the head block empty above the field with nobody else here', async () => {
+    const { fixture } = await render();
+
+    const block = query(fixture, '.page-top lib-list-header');
+    expect(block?.classList).toContain('empty');
+    expect(block?.textContent?.trim()).toBe('');
   });
 });
 

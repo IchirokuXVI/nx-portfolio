@@ -19,6 +19,7 @@ import { PageHeaderAction } from './page-header-action';
       (back)="backs = backs + 1"
       [backLabel]="backLabel()"
       [leading]="leading()"
+      [subtitle]="subtitle()"
       [title]="title()"
     >
       <span class="page-icon" pageHeaderIcon>icon</span>
@@ -44,6 +45,7 @@ import { PageHeaderAction } from './page-header-action';
 })
 class Host {
   readonly title = signal('Compra semanal');
+  readonly subtitle = signal<string | null>(null);
   readonly backLabel = signal<string | null>('Back to the group');
   readonly leading = signal<'back' | 'close'>('back');
   readonly hasActions = signal(true);
@@ -198,6 +200,188 @@ describe('PageHeader', () => {
 
     expect(query(fixture, 'h1')).toBe(before);
     expect(before?.textContent?.trim()).toBe('Compra semanal');
+  });
+});
+
+/** The header as every page but the zone list draws it: no subtitle bound at all. */
+@Component({
+  imports: [PageHeader],
+  template: ` <lib-page-header backLabel="Back" title="Compra semanal" /> `,
+})
+class PlainHost {}
+
+/** The element children of the header row, as `tag.class` in order. */
+function rowShape(root: HTMLElement): string[] {
+  return Array.from(root.querySelector('header')?.children ?? []).map(
+    (child) => `${child.tagName.toLowerCase()}.${child.className}`
+  );
+}
+
+/**
+ * Velista `0205`: rule H2 amended. One optional subtitle line under the title, in the
+ * same block. Twenty nine templates draw the header and none passes one, so the case
+ * without a subtitle is held to the DOM it had before the amendment.
+ */
+describe('PageHeader and its subtitle', () => {
+  it('without a subtitle draws the row it drew before velista 0205', async () => {
+    await TestBed.configureTestingModule({
+      imports: [PlainHost, RokuTranslatorTestingModule.forTesting()],
+      providers: [provideVelistaTesting()],
+    }).compileComponents();
+    const plain = TestBed.createComponent(PlainHost);
+    plain.detectChanges();
+    const root = plain.nativeElement as HTMLElement;
+
+    // The back control, the h1 straight in the row, the actions: nothing else.
+    expect(rowShape(root)).toEqual(['button.lead', 'h1.title', 'div.actions']);
+    expect(root.querySelector('.heading, .subtitle, p')).toBeNull();
+  });
+
+  it('a null subtitle is the same row as no subtitle bound', async () => {
+    const fixture = await render();
+
+    expect(rowShape(fixture.nativeElement)).toEqual([
+      'button.lead',
+      'h1.title',
+      'div.actions',
+    ]);
+    expect(query(fixture, '.subtitle')).toBeNull();
+  });
+
+  it('draws the subtitle under the title, as a p outside the h1', async () => {
+    const fixture = await render();
+    fixture.componentInstance.subtitle.set('in Casa');
+    fixture.detectChanges();
+
+    expect(rowShape(fixture.nativeElement)).toEqual([
+      'button.lead',
+      'div.heading',
+      'div.actions',
+    ]);
+    const stack = Array.from(query(fixture, '.heading')?.children ?? []);
+    expect(stack.map((child) => child.tagName.toLowerCase())).toEqual([
+      'h1',
+      'p',
+    ]);
+    expect(stack[1].textContent?.trim()).toBe('in Casa');
+    // The page's heading is still the title alone.
+    expect(queryAll(fixture, 'h1')).toHaveLength(1);
+    expect(query(fixture, 'h1')?.textContent?.trim()).toBe('Compra semanal');
+    expect(query(fixture, 'h1 .subtitle')).toBeNull();
+  });
+
+  it('an empty subtitle draws an empty line of the subtitle’s height', async () => {
+    const fixture = await render();
+    fixture.componentInstance.subtitle.set('');
+    fixture.detectChanges();
+
+    const line = query(fixture, '.heading p.subtitle');
+    expect(line).not.toBeNull();
+    expect(line?.textContent?.trim()).toBe('');
+    // jsdom lays nothing out, so the height is read off the rule: one line of the
+    // subtitle's own size and leading, whatever it holds. In `em`, so an enlarged text
+    // enlarges the reserved line as it enlarges the words, and the empty line and the
+    // filled one fit the block, or do not, at the same text size.
+    const rule = stylesheet().match(/\.subtitle\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(rule).toContain('font-size: var(--app-text-xs)');
+    expect(rule).toContain('min-block-size: 1.4em');
+    expect(rule).toContain('line-height: 1.4');
+  });
+
+  it('is one muted line in the small size, cut with an ellipsis', () => {
+    const rule = stylesheet().match(/\.subtitle\s*\{[^}]*\}/)?.[0] ?? '';
+
+    expect(rule).toContain('font-size: var(--app-text-xs)');
+    expect(rule).toContain('color: var(--app-text-muted)');
+    expect(rule).toContain('white-space: nowrap');
+    expect(rule).toContain('text-overflow: ellipsis');
+  });
+
+  it('H1: the block size is the same rule with or without a subtitle', () => {
+    const sheet = stylesheet();
+    const header = sheet.match(/\.header\s*\{[^}]*\}/)?.[0] ?? '';
+    const heading = sheet.match(/\.heading\s*\{[^}]*\}/)?.[0] ?? '';
+
+    expect(header).toContain(
+      'block-size: calc(var(--app-header-height) + var(--app-safe-top))'
+    );
+    // The stack is centred in the row and takes the row's height: it sets no size of
+    // its own, so it can never make the header taller.
+    expect(heading).toContain('justify-content: center');
+    expect(heading).toContain('align-self: stretch');
+    expect(heading).not.toMatch(/block-size|height/);
+  });
+
+  it('keeps the h1 when the subtitle arrives on a title that was waiting', async () => {
+    const fixture = await render();
+    fixture.componentInstance.subtitle.set('');
+    fixture.componentInstance.title.set('List');
+    fixture.detectChanges();
+    const before = query(fixture, 'h1');
+
+    fixture.componentInstance.title.set('Compra semanal');
+    fixture.componentInstance.subtitle.set('in Casa');
+    fixture.detectChanges();
+
+    expect(query(fixture, 'h1')).toBe(before);
+    expect(query(fixture, '.subtitle')?.textContent?.trim()).toBe('in Casa');
+  });
+});
+
+/**
+ * The owner's ruling of 2026-11-23 (velista `0205`, amended): when enlarged text leaves
+ * no room for both lines in the 64 px block, the subtitle is hidden and only read out.
+ * The browser decides it from the real space, so jsdom, which lays nothing out, reads
+ * the rule that decides it. The walk in the plan's progress evidence measures it.
+ */
+describe('PageHeader and a subtitle that does not fit', () => {
+  function heading(): string {
+    return stylesheet().match(/\.heading\s*\{[^}]*\}/)?.[0] ?? '';
+  }
+
+  it('both fit: the two lines share one column of the row', () => {
+    const rule = heading();
+
+    // One column first, wrapping only when the next line does not fit its height.
+    expect(rule).toContain('flex-flow: column wrap');
+    expect(rule).toContain('justify-content: center');
+    // Every line is the stack's full width, so a wrapped line starts a new column
+    // beside the first and never squeezes in next to the title.
+    const lines = stylesheet().match(/>\s*\*\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(lines).toContain('inline-size: 100%');
+    expect(lines).toContain('flex: none');
+  });
+
+  it('not both: the subtitle wraps whole out of view, never cut, and the title is centred alone', () => {
+    const rule = heading();
+
+    // The second column lies past the stack's end edge, and the clip hides it whole.
+    expect(rule).toContain('overflow: clip');
+    // No scroll container to scroll the hidden column into view: `hidden` is only the
+    // fallback written before `clip`.
+    expect(rule.indexOf('overflow: hidden')).toBeLessThan(
+      rule.indexOf('overflow: clip')
+    );
+    // The stack is exactly the row's height, so the title alone in its column sits
+    // where `align-items: center` puts the h1 of a page with no subtitle.
+    expect(rule).toContain('align-self: stretch');
+    expect(stylesheet()).toMatch(/\.header\s*\{[^}]*align-items: center/);
+  });
+
+  it('not both: the hidden subtitle is still in the DOM and the accessibility tree', async () => {
+    const fixture = await render();
+    fixture.componentInstance.subtitle.set('in Casa');
+    fixture.detectChanges();
+
+    const line = query(fixture, '.heading p.subtitle');
+    expect(line?.textContent?.trim()).toBe('in Casa');
+    // Clipped by the stack, never removed from what a screen reader reads.
+    for (const el of [line, query(fixture, '.heading')]) {
+      expect(el?.hasAttribute('aria-hidden')).toBe(false);
+      expect(el?.hasAttribute('hidden')).toBe(false);
+    }
+    const rule = stylesheet().match(/\.subtitle\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(rule).not.toMatch(/display|visibility/);
   });
 });
 

@@ -1,3 +1,5 @@
+> **PR:** [#1090](https://github.com/IchirokuXVI/nx-portfolio/pull/1090)
+
 # 0205: the list page header names the group under the title
 
 > Decided on 2026-11-22. The zone list page draws the group of the list ("in Casa") as the
@@ -5,6 +7,9 @@
 > owner moves it into the page header: the title stays the list's name ("Compra semanal"),
 > and under it, smaller, the group ("in Casa"). The head block loses a line, and the list
 > gets that room.
+>
+> Amended on 2026-11-23: when enlarged text leaves no room for both lines in the 64 px header,
+> the group line is hidden and only read out.
 >
 > Amends velista `0130`, rule H2 and its consequence ("a header holds only a title; a
 > subtitle ... is page content and goes below it"): a header may now hold one optional
@@ -52,6 +57,11 @@ page for the group ("in Casa"), removing that line from the head block.
    line, cut with an ellipsis. Both fit in the 64 px block; the block's size does not change.
    The subtitle is a `p` beside the `h1`, not inside it, so the page's heading stays the list
    name.
+   When enlarged text leaves no room for both lines in the 64 px block, the subtitle is
+   hidden and only read out: the title is shown alone, centred as on a page with no
+   subtitle, the block stays 64 px, and no subtitle is ever shown clipped or in part. The
+   decision follows the real space (the stylesheet wraps a line that does not fit out of
+   view), not a guessed text size, and an empty reserved line is hidden by the same rule.
 2. **No jump.** A page that will have a subtitle can reserve its line while it loads (an
    empty string draws an empty line of the same height), so the title does not move when the
    group arrives. The list page passes `''` until `zoneName` is known, and null when the list
@@ -79,8 +89,9 @@ page for the group ("in Casa"), removing that line from the head block.
 
 ### Action boundaries
 
-- Stop and ask if the title and the subtitle do not fit the 64 px block at the largest text
-  size the app supports.
+- At a text size where the title and the subtitle do not both fit the 64 px block, the
+  subtitle is hidden and only read out (the owner's ruling of 2026-11-23); the block never
+  grows.
 
 ### Progress evidence
 
@@ -95,6 +106,8 @@ group name, of a cold arrival, and of the home page header unchanged.
 2. An empty subtitle draws an empty line of the subtitle's height.
 3. The list page passes "in Casa" as the subtitle, and `lib-list-header` draws no group line.
 4. The head block with nobody else here and a live list is empty above the field.
+5. The subtitle shows when both lines fit the block; when they do not, it is hidden whole,
+   the title is centred alone, and the subtitle is still in the accessibility tree.
 
 ## 2. Acceptance criteria
 
