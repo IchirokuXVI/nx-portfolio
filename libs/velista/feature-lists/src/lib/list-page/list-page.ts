@@ -54,6 +54,7 @@ import {
   ZoneStore,
 } from '@portfolio/velista/data-access';
 import {
+  type AbsorbedExtra,
   addChoiceName,
   type AddChoice as AddChoiceQuestion,
   type AddChoiceRow,
@@ -62,7 +63,6 @@ import {
   addUnitRefusalKey,
   APP_BASE_PATH,
   type CatalogSuggestion,
-  type CountedExtra,
   DUE_LINE_ADDS_ON_STEP,
   EXTRA_ASK_FLASH_MS,
   type Line,
@@ -123,6 +123,7 @@ import {
   DueLineRow,
   ErrorState,
   ExtraAsk,
+  ExtraAskNotice,
   extraAskWords,
   type ExtraAskWords,
   FilterIcon,
@@ -221,12 +222,19 @@ const RECONNECT_AFTER_RESUME_MS = 15_000;
  */
 const EXTRA_ASK_SCROLL_WAIT_MS = 700;
 
-/** The open question about the extra already bought (velista `0207`). */
+/**
+ * The open question about the extra already bought (velista `0207`, `0208`). It
+ * holds its own request until it closes, and nothing outlives it (velista `0208`,
+ * target state 6).
+ */
 interface ExtraAskState {
   readonly lineId: string;
-  readonly extra: CountedExtra;
-  /** What the answer left, Z, which the row's control shows while it is open. */
-  readonly left: number;
+  readonly extra: AbsorbedExtra;
+  /**
+   * Y: what the answered line holds, what the row's control shows, and what "Still
+   * need" or no answer leaves. A count expects the line to still hold it.
+   */
+  readonly quantity: number;
   readonly unit: Line['unit'];
   readonly row: HTMLElement;
   /** The row's amount control, which a press closes the question from. */
@@ -245,6 +253,38 @@ interface ExtraAskState {
    * field, whose keys would otherwise answer it.
    */
   readonly takeFocus: boolean;
+}
+
+/** A raise's report and the quantity of the line it answered, Y. */
+interface ExtraReport {
+  readonly extra: AbsorbedExtra;
+  readonly quantity: number;
+}
+
+/**
+ * What a count that wrote nothing says in the question's place (velista `0208`,
+ * target state 4), held against the same row, until the next touch.
+ */
+interface ExtraNoticeState {
+  readonly lineId: string;
+  readonly key: 'list.extra.stale' | 'list.extra.countFailed';
+  readonly row: HTMLElement;
+  readonly anchor: HTMLElement;
+  readonly origin: HTMLElement;
+  readonly side: AnchoredPopoverSide;
+}
+
+/** Whether the row, its control and the mark the popover is held against are drawn. */
+function connected(parts: {
+  readonly row: HTMLElement;
+  readonly anchor: HTMLElement;
+  readonly origin: HTMLElement;
+}): boolean {
+  return (
+    parts.row.isConnected &&
+    parts.anchor.isConnected &&
+    parts.origin.isConnected
+  );
 }
 
 /**
@@ -340,6 +380,7 @@ function listReturnKey(listId: string): string {
     DueLineRow,
     ErrorState,
     ExtraAsk,
+    ExtraAskNotice,
     FilterIcon,
     GearIcon,
     LineComposer,
@@ -1341,11 +1382,12 @@ export class ListPage {
     );
     this.dismissDropped(id);
     if (replay !== null && replay !== undefined) {
-      // A raise that counted the extra counts it again (velista `0207`).
+      // A raise that reported the extra reports it again, and its answer may ask
+      // (velista `0208`, target state 2).
       await this.changeQuantity({
         lineId: replay.lineId,
         delta: replay.delta,
-        countExtra: replay.countExtra === true,
+        reportExtra: replay.reportExtra === true,
       });
     }
   }
@@ -1403,16 +1445,16 @@ export class ListPage {
 
     // The question about the extra is about one row (velista `0207`). A row or a
     // control that is no longer drawn, after a switch of view, a delete or another
-    // list, takes it down with the smaller amount, as a press outside would.
+    // list, takes it down with no answer, as a press outside would: the line keeps
+    // the amount set (velista `0208`). Its notice goes the same way.
     afterRenderEffect(() => {
       const asked = this.extraAsk();
-      if (
-        asked !== null &&
-        (!asked.row.isConnected ||
-          !asked.anchor.isConnected ||
-          !asked.origin.isConnected)
-      ) {
+      if (asked !== null && !connected(asked)) {
         untracked(() => this.closeExtraAsk('detach'));
+      }
+      const notice = this.extraNotice();
+      if (notice !== null && !connected(notice)) {
+        untracked(() => this.closeExtraNotice());
       }
     });
     inject(DestroyRef).onDestroy(() => {
@@ -1972,16 +2014,12 @@ export class ListPage {
   private readonly _held = computed<ReadonlySet<string>>(() => {
     const lingering = this._lingering();
     const clearing = this._clearing();
-    // A row whose question about the extra is open stays where it was, even at the 0
-    // the count left (velista `0207`, target 8), and so does one whose control was
-    // pressed while it was open, until the run that press began is written.
-    const asked = [this.extraAsk()?.lineId, this._askPressed()].filter(
-      (id): id is string => id !== undefined && id !== null
-    );
-    if (lingering.size === 0 && asked.length === 0) {
+    // No hold for the question about the extra (velista `0208`, target state 7): a
+    // raise leaves the line at the amount set, which is never 0.
+    if (lingering.size === 0) {
       return clearing;
     }
-    return new Set([...clearing, ...lingering, ...asked]);
+    return new Set([...clearing, ...lingering]);
   });
 
   /**
@@ -2037,21 +2075,21 @@ export class ListPage {
    * search draws stays at 0 and leaves nothing.
    */
   private _writeRun(lineId: string, delta: number): void {
-    // Every raise of a row counts the extra already bought (velista `0207`), the
-    // teardown's and the hidden page's included, unless "Still need" was the answer
-    // on this visit. A lowering never counts and never asks.
+    // Every raise of a row asks the answer to report the extra it took into the ask
+    // (velista `0208`, target state 2), the hidden page's included. The teardown's
+    // never does: nobody is left to ask, and the server takes the extra in anyway.
+    // A lowering never reports and never asks.
     // A run a catalog card of the results made alone is the catalog's, which keeps
     // its call as it is. The flag goes when the net raise came from the row's
     // control: a run both the row and a card stepped sends it, because the row was
     // part of it, though some of its presses were the card's.
     const fromRow = this._rowRuns.delete(lineId);
-    const countExtra = fromRow && delta > 0 && !this._stillNeeded.has(lineId);
     if (this._teardown.destroying) {
       // A number the person watched move is written, and that is all.
-      void this.changeQuantity({ lineId, delta, countExtra });
-      this._releaseAskPressed(lineId);
+      void this.changeQuantity({ lineId, delta });
       return;
     }
+    const reportExtra = fromRow && delta > 0;
 
     const column = this._column()?.nativeElement;
     const drawn = this._inToBuy(lineId);
@@ -2062,10 +2100,7 @@ export class ListPage {
     // Locked before the store patches the 0, so the row is never hidden for a frame.
     const trashed = this._trashed === lineId;
     const answered = trashed ? this._lock(lineId) : null;
-    const written = this.changeQuantity({ lineId, delta, countExtra });
-    // The press that closed the line's question began this run, which the store has
-    // patched now: the row no longer needs holding.
-    this._releaseAskPressed(lineId);
+    const written = this.changeQuantity({ lineId, delta, reportExtra });
     // Unlocked as soon as the write answers, whatever it said, and before anything
     // below reads whether the row is still drawn.
     const writing = answered !== null ? written.finally(answered) : written;
@@ -2268,10 +2303,9 @@ export class ListPage {
       this._rowRuns.delete(lineId);
     }
     this.quantityRuns.step(lineId, step);
-    // A press on the control of the line whose question is open closes it, and
-    // steps from what the control shows, the amount the line holds (target 9).
+    // A press on the control of the line whose question is open closes it with no
+    // answer, and steps from what the control shows, Y (velista `0208`, target 4).
     if (this.extraAsk()?.lineId === lineId) {
-      this._askPressed.set(lineId);
       this.closeExtraAsk('outside');
     }
     return true;
@@ -2292,10 +2326,11 @@ export class ListPage {
     lineId: string;
     delta: number;
     /**
-     * A raise of a zone list row, which counts the extra already bought (velista
-     * `0207`): the store sends `countExtra`, and an answer that counted some asks.
+     * A raise of a zone list row, which asks the answer to report the extra it took
+     * into the ask (velista `0208`): the store sends `reportExtra`, and an answer
+     * with something countable asks.
      */
-    countExtra?: boolean;
+    reportExtra?: boolean;
   }): Promise<boolean> {
     const page = this.loaded();
     if (page !== null && !page.abilities.canDecide) {
@@ -2306,15 +2341,22 @@ export class ListPage {
 
     // Only this page's writes are written down if the network drops them, because
     // only this page draws the notice (velista `0159`).
-    if (event.countExtra === true && event.delta > 0) {
-      const answer = await this._lines.raiseCountingExtra(
+    if (event.reportExtra === true && event.delta > 0) {
+      const answer = await this._lines.raiseReportingExtra(
         event.lineId,
         event.delta,
         { reportDropped: true }
       );
       this._afterWrite(answer.state, event.lineId, 'lines.write');
-      if (answer.state === 'succeeded' && answer.extra !== null) {
-        this._extraAnswered(event.lineId, sent, answer.extra);
+      if (
+        answer.state === 'succeeded' &&
+        answer.extra !== null &&
+        answer.quantity !== null
+      ) {
+        this._extraAnswered(event.lineId, sent, {
+          extra: answer.extra,
+          quantity: answer.quantity,
+        });
       }
       return answer.state === 'succeeded';
     }
@@ -2692,15 +2734,21 @@ export class ListPage {
   }
 
   /**
-   * The question a raise of a zone list row asks when the server counted units
-   * bought above the ask toward it (velista `0207`), while it is open: the line, what
-   * the answer counted, the amount it left (Z) and the amount the person set (Y), the
-   * row and its amount control the popover is held against, and whether the page has
-   * brought the row into view and drawn the popover yet. The row is held where it
-   * was from the moment the question is decided, so a line the extra covers is not
-   * hidden under it.
+   * The question a raise of a zone list row asks when the raise took units bought
+   * above the ask into the ask (velista `0207`, `0208`), while it is open: the line,
+   * the report, the amount the line holds (Y), the row and its amount control the
+   * popover is held against, and whether the page has brought the row into view and
+   * drawn the popover yet. No row is held for it: the raise left the line at the
+   * amount set, which the row shows.
    */
   readonly extraAsk = signal<ExtraAskState | null>(null);
+
+  /**
+   * What a "Count the extra" that wrote nothing says in the question's place
+   * (velista `0208`, target state 4), until the next touch anywhere, Escape or
+   * leaving.
+   */
+  readonly extraNotice = signal<ExtraNoticeState | null>(null);
 
   /** Whether the open question and its row are flashing (target 12). */
   readonly extraFlashing = signal(false);
@@ -2714,7 +2762,11 @@ export class ListPage {
     return asked?.shown ? asked.lineId : null;
   });
 
-  /** What the open question says, in the page's language (targets 5 and 6). */
+  /**
+   * What the open question says, in the page's language (velista `0207`, targets 5
+   * and 6; velista `0208`, target state 3): Y is what the line holds, Z what "Count
+   * the extra" would leave, and X the extra the raise took in.
+   */
   readonly extraWords = computed<ExtraAskWords | null>(() => {
     const asked = this.extraAsk();
     if (asked === null) {
@@ -2726,7 +2778,8 @@ export class ListPage {
     const zoneId = this.zoneId();
     return extraAskWords({
       extra: asked.extra,
-      left: asked.left,
+      shown: asked.quantity,
+      after: asked.quantity - asked.extra.countable,
       unit: asked.unit,
       locale,
       readerId: this._session.userId(),
@@ -2735,13 +2788,15 @@ export class ListPage {
     });
   });
 
-  /**
-   * The lines whose question was answered "Still need" on this visit (target 10),
-   * once that raise was written. Their raises never count the extra again, so they
-   * never ask again while the person stays on the page. A "Still need" whose write
-   * failed adds nothing: the line stays at what is left and may ask again.
-   */
-  private readonly _stillNeeded = new Set<string>();
+  /** The notice's sentence, in the page's language. */
+  readonly extraNoticeWords = computed<string | null>(() => {
+    const notice = this.extraNotice();
+    if (notice === null) {
+      return null;
+    }
+    this._translator.loaded();
+    return this._translator.t(notice.key, undefined, this._locale());
+  });
 
   /**
    * The lines whose open run a row's stepper or reel stepped (target 1). The mark
@@ -2751,24 +2806,17 @@ export class ListPage {
   private readonly _rowRuns = new Set<string>();
 
   /**
-   * The line whose control was pressed while its question was open (target 9),
-   * held where it was until the run that press began is written: a line the extra
-   * covered is at 0 and would otherwise be hidden under the finger.
-   */
-  private readonly _askPressed = signal<string | null>(null);
-
-  /**
    * The newest write sent for each line, numbered, so an answer can tell whether a
    * newer run of the same line went out after it (target 3).
    */
   private readonly _sentRuns = new Map<string, number>();
   private _sentCount = 0;
 
-  /** An answer that counted the extra while the line's reel was up (target 3). */
+  /** An answer with something countable while the line's reel was up (target 3). */
   private _waitingAsk: {
     readonly lineId: string;
     readonly sent: number;
-    readonly extra: CountedExtra;
+    readonly report: ExtraReport;
   } | null = null;
 
   private _flashTimer: ReturnType<typeof setTimeout> | null = null;
@@ -2779,12 +2827,6 @@ export class ListPage {
   private readonly _reducedMotion = this._browser.matchMedia(
     '(prefers-reduced-motion: reduce)'
   );
-
-  private _releaseAskPressed(lineId: string): void {
-    if (this._askPressed() === lineId) {
-      this._askPressed.set(null);
-    }
-  }
 
   /** Number a write of a line, and drop a waiting question it replaces. */
   private _noteSent(lineId: string): number {
@@ -2800,8 +2842,8 @@ export class ListPage {
    * Whether the list page itself is what the person is looking at: no sheet over it
    * (a sheet is a child route, so the page is not the route's leaf), no dialog, no
    * other popover of the page, and the document not hidden. A question that comes
-   * while any of these is in front is dropped, and the line keeps the smaller
-   * amount, as when the person leaves the page.
+   * while any of these is in front is dropped, and the line keeps the amount set,
+   * as when the person leaves the page.
    */
   private _inFront(column: HTMLElement): boolean {
     const doc = column.ownerDocument;
@@ -2814,20 +2856,22 @@ export class ListPage {
   }
 
   /**
-   * A raise of a row answered with what it counted (target 3). It asks when the
-   * server counted something, the page is not going away and is in front, no newer
-   * run of the line is open or was sent after this one, and the line's control is
-   * at rest: a reel whose tape is up asks once it closes, unless that close sends a
-   * run.
+   * A raise of a row answered with its report (velista `0207`, target 3; velista
+   * `0208`, target 3). It asks when the raise took in something "Count the extra"
+   * could take off (`countable > 0`; a report with only `above` offers nothing to
+   * count), the page is not going away and is in front, no newer run of the line is
+   * open or was sent after this one, and the line's control is at rest: a reel
+   * whose tape is up asks once it closes, unless that close sends a run.
    */
   private _extraAnswered(
     lineId: string,
     sent: number,
-    extra: CountedExtra,
+    report: ExtraReport,
     reelChecked = false
   ): void {
     if (
-      extra.counted <= 0 ||
+      report.extra.countable <= 0 ||
+      report.extra.countable > report.quantity ||
       this._teardown.destroying ||
       this._sentRuns.get(lineId) !== sent ||
       this.quantityRuns.pending().has(lineId)
@@ -2844,36 +2888,33 @@ export class ListPage {
       return;
     }
     if (!reelChecked && parts.anchor.matches('lib-quantity-reel.open')) {
-      this._waitingAsk = { lineId, sent, extra };
+      this._waitingAsk = { lineId, sent, report };
       return;
     }
-    this._ask(lineId, extra, parts, column);
+    this._ask(lineId, report, parts, column);
   }
 
   /** A row's reel went up or came down; a waiting question asks once it is down. */
   onReelOpened(event: { lineId: string; open: boolean }): void {
     if (event.open) {
-      // A press on the reel of the asked row is a press on its control (target 9).
+      // A press on the reel of the asked row is a press on its control: no answer.
       if (this.extraAsk()?.lineId === event.lineId) {
-        this._askPressed.set(event.lineId);
         this.closeExtraAsk('outside');
       }
       return;
     }
-    // The reel's dialled value, if any, was written before its tape came down.
-    this._releaseAskPressed(event.lineId);
     const waiting = this._waitingAsk;
     if (waiting === null || waiting.lineId !== event.lineId) {
       return;
     }
     this._waitingAsk = null;
-    this._extraAnswered(waiting.lineId, waiting.sent, waiting.extra, true);
+    this._extraAnswered(waiting.lineId, waiting.sent, waiting.report, true);
   }
 
   /**
    * A sheet opened over the page (velista `0207`): a question waiting for its row to
-   * scroll back, or one already open, is dropped, and its line keeps the smaller
-   * amount.
+   * scroll back, or one already open, is dropped with no answer, and its line keeps
+   * the amount set. A notice goes too.
    */
   onSheetOpened(): void {
     const asked = this.extraAsk();
@@ -2881,19 +2922,20 @@ export class ListPage {
     if (asked !== null) {
       this._closeAsk(asked, false);
     }
+    this.closeExtraNotice();
   }
 
   /**
    * Open the question on a row (targets 4, 7, 11 and 12). Another line's open
-   * question closes first, its line at the smaller amount. A row not wholly in view
-   * is scrolled to first, at the side that leaves room for the popover, smoothly or
-   * at once under reduced motion; the popover opens once the scroll has ended and
-   * the row is in view. A person who scrolls the row away meanwhile gets one more
-   * scroll's end to bring it back; after that the question is dropped.
+   * question closes first, with no answer. A row not wholly in view is scrolled to
+   * first, at the side that leaves room for the popover, smoothly or at once under
+   * reduced motion; the popover opens once the scroll has ended and the row is in
+   * view. A person who scrolls the row away meanwhile gets one more scroll's end to
+   * bring it back; after that the question is dropped.
    */
   private _ask(
     lineId: string,
-    extra: CountedExtra,
+    report: ExtraReport,
     parts: {
       readonly row: HTMLElement;
       readonly anchor: HTMLElement;
@@ -2908,13 +2950,14 @@ export class ListPage {
     if (this.extraAsk() !== null) {
       this.closeExtraAsk('replaced');
     }
+    this.closeExtraNotice();
     const height = column.ownerDocument.defaultView?.innerHeight ?? Infinity;
     const band = visibleBand(column, height);
     const scroll = scrollToShow(band, parts.row.getBoundingClientRect());
     const state: ExtraAskState = {
       lineId,
-      extra,
-      left: line.quantity,
+      extra: report.extra,
+      quantity: report.quantity,
       unit: line.unit,
       row: parts.row,
       anchor: parts.anchor,
@@ -2938,7 +2981,7 @@ export class ListPage {
       const now = visibleBand(column, height);
       if (scrollToShow(now, state.row.getBoundingClientRect()) !== 0) {
         // Out of view after the scroll: the person scrolled by hand. One more end
-        // of a scroll, then the smaller amount stands.
+        // of a scroll, then the amount set stands with no answer.
         if (retried) {
           this._closeAsk(state, false);
           return;
@@ -3036,53 +3079,124 @@ export class ListPage {
   }
 
   /**
-   * "Still need" (target 9): one more raise by what was counted, without the flag,
-   * as any row's write is sent. Once that write succeeds the line will not ask again
-   * on this visit; if it fails the row stays at what is left with the usual failed
-   * note.
+   * "Still need" (velista `0208`, target state 4): the popover closes and nothing is
+   * sent, because the raise already wrote this outcome. The line keeps Y.
    */
-  stillNeedExtra(): void {
+  answerStillNeed(): void {
+    const asked = this.extraAsk();
+    if (asked !== null) {
+      this._closeAsk(asked, true);
+    }
+  }
+
+  /**
+   * "Count the extra" or "That's enough" (velista `0208`, target state 4), the one
+   * answer that writes: the line is lowered by what the report made countable,
+   * expecting it to still hold Y, and the control shows Z at once. A line that moved
+   * in between is refused (`stale_quantity`): nothing is counted, the row shows the
+   * server's amount, and the notice says so where the question was. Any other
+   * failure puts Y back and says that nothing was counted.
+   */
+  answerCount(): void {
     const asked = this.extraAsk();
     if (asked === null) {
       return;
     }
-    void this.changeQuantity({
-      lineId: asked.lineId,
-      delta: asked.extra.counted,
-    }).then((succeeded) => {
-      if (succeeded) {
-        this._stillNeeded.add(asked.lineId);
+    const counting = this._closeAsk(asked, true, () =>
+      this._lines.countExtra(
+        asked.lineId,
+        asked.extra.countable,
+        asked.quantity
+      )
+    );
+    void counting?.then((outcome) => {
+      if (outcome !== 'counted') {
+        this._noticeOn(
+          asked.lineId,
+          outcome === 'stale' ? 'list.extra.stale' : 'list.extra.countFailed'
+        );
       }
     });
-    this._closeAsk(asked, true);
-  }
-
-  /** "Count the extra" or "That's enough": nothing is sent, the smaller amount stands. */
-  keepExtra(): void {
-    this.closeExtraAsk('kept');
   }
 
   /**
-   * The question closed without "Still need": Escape, a press outside it, the back
-   * gesture, its answer that changes nothing, a press on its row's control, or
-   * another line's question. Nothing is sent and the line keeps what is left.
-   * Focus goes back to the row's control unless a press took it somewhere else.
+   * The question closed with no answer: Escape, a press outside it, the back
+   * gesture, a press on its row's control, the row going away, or another line's
+   * question. Nothing is sent and the line keeps Y. Focus goes back to the row's
+   * control unless a press took it somewhere else.
    */
-  closeExtraAsk(reason: AnchoredPopoverClose | 'kept' | 'replaced'): void {
+  closeExtraAsk(reason: AnchoredPopoverClose | 'replaced'): void {
     const asked = this.extraAsk();
     if (asked === null) {
       return;
     }
-    this._closeAsk(asked, reason === 'escape' || reason === 'kept');
+    this._closeAsk(asked, reason === 'escape');
+  }
+
+  /** Take the notice down: the next touch, Escape, leaving, or its row going away. */
+  closeExtraNotice(): void {
+    if (this.extraNotice() !== null) {
+      this.extraNotice.set(null);
+    }
   }
 
   /**
-   * Take the question down. A line the extra covered leaves To buy now, as any line
-   * at 0 (velista `0192`): said in the page's polite region, and focus that was in
-   * its row moves to the next one. Focus goes back to the row's control only from
-   * the question itself or from nowhere: a person typing in a field keeps it.
+   * Say a count's outcome where the question was (velista `0208`, target state 4):
+   * in the page's polite region, and in the same anchored frame with its pointer on
+   * the row's control, once the row is drawn again at the amount the store holds.
+   * A row that is not drawn, or a page with something in front, gets the sentence
+   * alone.
    */
-  private _closeAsk(asked: ExtraAskState, focusBack: boolean): void {
+  private _noticeOn(lineId: string, key: ExtraNoticeState['key']): void {
+    if (this._teardown.destroying) {
+      return;
+    }
+    this._announce(this._translator.t(key));
+    afterNextRender(
+      () => {
+        const column = this._column()?.nativeElement;
+        if (
+          this._teardown.destroying ||
+          column === undefined ||
+          this.extraAsk() !== null ||
+          !this._inFront(column)
+        ) {
+          return;
+        }
+        const parts = extraAskParts(column, lineId);
+        if (parts === null) {
+          return;
+        }
+        const height =
+          column.ownerDocument.defaultView?.innerHeight ?? Infinity;
+        placeOver(parts.origin, parts.anchor);
+        this.extraNotice.set({
+          lineId,
+          key,
+          ...parts,
+          side: sideIn(
+            visibleBand(column, height),
+            parts.row.getBoundingClientRect()
+          ),
+        });
+      },
+      { injector: this._injector }
+    );
+  }
+
+  /**
+   * Take the question down. `change`, an answer's write, runs once focus has been
+   * read and before the row is checked, so a count that takes the line to 0 leaves
+   * To buy as any line at 0 does (velista `0192`): said in the page's polite region,
+   * and focus that was in its row moves to the next one. Focus goes back to the
+   * row's control only from the question itself or from nowhere: a person typing in
+   * a field keeps it.
+   */
+  private _closeAsk<T>(
+    asked: ExtraAskState,
+    focusBack: boolean,
+    change?: () => T
+  ): T | undefined {
     const column = this._column()?.nativeElement;
     const drawn = this._inToBuy(asked.lineId);
     const leaving =
@@ -3101,14 +3215,15 @@ export class ListPage {
     }
     this.extraFlashing.set(false);
     this.extraAsk.set(null);
+    const changed = change?.();
 
     const line = this._lineById().get(asked.lineId);
     if (drawn && line !== undefined && !this._inToBuy(asked.lineId)) {
       this._afterLeaving(line, leaving, column);
-      return;
+      return changed;
     }
     if (!focusBack || !fromAsk || column === undefined) {
-      return;
+      return changed;
     }
     afterNextRender(
       () => {
@@ -3123,6 +3238,7 @@ export class ListPage {
       },
       { injector: this._injector }
     );
+    return changed;
   }
 
   /**

@@ -1,4 +1,4 @@
-import type { CountedExtra, LineUnit } from '@portfolio/velista/models';
+import type { AbsorbedExtra, LineUnit } from '@portfolio/velista/models';
 import en from '../../../assets/i18n/en.json';
 import es from '../../../assets/i18n/es.json';
 import { extraAskWords, type ExtraAskTranslate } from './extra-ask-words';
@@ -45,13 +45,14 @@ const READER = 'u-me';
 
 function words(
   locale: 'en' | 'es',
-  extra: CountedExtra,
-  left: number,
+  extra: AbsorbedExtra,
+  after: number,
   unit: LineUnit = 'UNIT'
 ) {
   return extraAskWords({
     extra,
-    left,
+    shown: after + extra.countable,
+    after,
     unit,
     locale,
     readerId: READER,
@@ -67,9 +68,53 @@ const nobody = { userId: null };
 /** Somebody this build has no name for, by an id it was told. */
 const unnamed = { userId: 'u-gone' };
 
+describe('extraAskWords under the owner rule (velista 0208, spec 3)', () => {
+  const ask = (
+    locale: 'en' | 'es',
+    extra: AbsorbedExtra,
+    shown: number,
+    after: number
+  ) =>
+    extraAskWords({
+      extra,
+      shown,
+      after,
+      unit: 'UNIT',
+      locale,
+      readerId: READER,
+      nameOf: (userId) => NAMES[userId] ?? null,
+      t: translatorOf(locale === 'en' ? en : es),
+    });
+
+  it('asks about Y, what the line holds, and Z, what the count leaves: set to 4 over 3 extra', () => {
+    const extra = { above: 3, countable: 3, buyers: [marta] };
+    const english = ask('en', extra, 4, 1);
+    expect(english.question).toBe(
+      `Marta already bought 3 extra. Do you still need 4, or just${NB}1?`
+    );
+    expect(english.stillNeed.amount).toBe(`4${NB}units`);
+    expect(english.keep.amount).toBe(`1${NB}unit`);
+    expect(ask('es', extra, 4, 1).question).toBe(
+      `Marta ya compró 3 de más. ¿Sigues necesitando 4 o solo${NB}1?`
+    );
+  });
+
+  it('says X, the extra taken in, even where the count takes off less (backend 0276, case 8)', () => {
+    const extra = { above: 3, countable: 2, buyers: [marta] };
+    const english = ask('en', extra, 2, 0);
+    expect(english.question).toBe(
+      'Marta already bought 3 extra. Do you still need 2, or is that enough?'
+    );
+    expect(english.keep).toEqual({ words: "That's enough", amount: null });
+    expect(ask('es', extra, 2, 0).question).toBe(
+      'Marta ya compró 3 de más. ¿Sigues necesitando 2 o con eso basta?'
+    );
+  });
+});
+
 describe('extraAskWords (velista 0207)', () => {
   describe('one buyer, something left', () => {
-    const extra = { above: 1, counted: 1, buyers: [marta] };
+    const extra = { above: 1, countable: 1, buyers: [marta] };
 
     it('names the buyer and asks about the amount set and what is left', () => {
       expect(words('es', extra, 1).question).toBe(
@@ -101,7 +146,7 @@ describe('extraAskWords (velista 0207)', () => {
   });
 
   describe('the extra covers the raise', () => {
-    const extra = { above: 1, counted: 1, buyers: [marta] };
+    const extra = { above: 1, countable: 1, buyers: [marta] };
 
     it('never prints 0: it asks whether that is enough', () => {
       expect(words('es', extra, 0).question).toBe(
@@ -127,7 +172,7 @@ describe('extraAskWords (velista 0207)', () => {
   });
 
   describe('a weight', () => {
-    const extra = { above: 500, counted: 500, buyers: [marta] };
+    const extra = { above: 500, countable: 500, buyers: [marta] };
 
     it('carries its unit everywhere, in its short form', () => {
       const spanish = words('es', extra, 1000, 'GRAM');
@@ -149,10 +194,10 @@ describe('extraAskWords (velista 0207)', () => {
   describe('who is named', () => {
     const sentence = (
       locale: 'en' | 'es',
-      buyers: CountedExtra['buyers'],
+      buyers: AbsorbedExtra['buyers'],
       above = 2
     ) =>
-      words(locale, { above, counted: 1, buyers }, 1).question.split(
+      words(locale, { above, countable: 1, buyers }, 1).question.split(
         /(?<=\.) /
       )[0];
 
@@ -237,15 +282,18 @@ describe('extraAskWords (velista 0207)', () => {
     it('counts three buyers or more, every one of them known', () => {
       const three = words(
         'es',
-        { above: 2, counted: 2, buyers: [marta, luis, me] },
+        { above: 2, countable: 2, buyers: [marta, luis, me] },
         1
       );
       expect(three.question).toBe(
         `3 personas ya compraron 2 de más. ¿Sigues necesitando 3 o solo${NB}1?`
       );
       expect(
-        words('en', { above: 2, counted: 2, buyers: [marta, luis, unnamed] }, 1)
-          .question
+        words(
+          'en',
+          { above: 2, countable: 2, buyers: [marta, luis, unnamed] },
+          1
+        ).question
       ).toBe(
         `3 people already bought 2 extra. Do you still need 3, or just${NB}1?`
       );

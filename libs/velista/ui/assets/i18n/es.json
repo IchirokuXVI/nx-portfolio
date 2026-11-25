@@ -1251,7 +1251,9 @@
       "units_one": "{{count}} ud",
       "units_other": "{{count}} uds",
       "boughtByNamedAndOthers": "{{names}} y otras personas ya compraron {{amount}} de más.",
-      "announce": "{{question}} Hay dos respuestas junto a la cantidad de la línea: {{stillNeed}}, o {{keep}}."
+      "announce": "{{question}} Hay dos respuestas junto a la cantidad de la línea: {{stillNeed}}, o {{keep}}.",
+      "stale": "La cantidad cambió mientras tanto, así que no se contó nada.",
+      "countFailed": "No se contó nada. Inténtalo otra vez."
     }
   },
   "account": {

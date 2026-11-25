@@ -53,11 +53,14 @@ export interface DroppedWriteReplay {
    */
   readonly unit?: LineUnit;
   /**
-   * Whether the dropped write was a zone list raise that counted the extra already
-   * bought (velista `0207`), so the write sent again counts it too. Absent on every
-   * other write.
+   * Whether the dropped write was a zone list raise that reported the extra it took
+   * into the ask (velista `0208`), so the write sent again reports it too and may
+   * ask. Absent on every other write. An entry an older build wrote with the flag
+   * of velista `0207` is sent again as a plain raise. "Count the extra" is never recorded
+   * here: a count sent again later would lower a line on numbers the person no
+   * longer sees.
    */
-  readonly countExtra?: boolean;
+  readonly reportExtra?: boolean;
 }
 
 /**
@@ -214,8 +217,8 @@ function isReplay(value: unknown): value is DroppedWriteReplay {
     delta !== 0 &&
     (replay['unit'] === undefined ||
       LINE_UNITS.includes(replay['unit'] as LineUnit)) &&
-    (replay['countExtra'] === undefined ||
-      typeof replay['countExtra'] === 'boolean')
+    (replay['reportExtra'] === undefined ||
+      typeof replay['reportExtra'] === 'boolean')
   );
 }
 

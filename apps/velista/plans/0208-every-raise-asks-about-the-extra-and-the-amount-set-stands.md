@@ -1,3 +1,5 @@
+> **PR:** [#1099](https://github.com/IchirokuXVI/nx-portfolio/pull/1099) stage 1
+
 # 0208: every raise asks about the extra, and the amount set stands
 
 > Decided on 2026-11-23; the owner's final rulings of 2026-11-25 replace the design this

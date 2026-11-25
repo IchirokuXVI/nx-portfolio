@@ -1,10 +1,10 @@
 import { inject } from '@angular/core';
 import { serviceToken } from '@portfolio/shared/data-access';
 import type {
+  AbsorbedExtra,
   AddLineOptions,
   AddOutcome,
   AlsoOnVm,
-  CountedExtra,
   ItemLists,
   Line,
   LineApprovalStatus,
@@ -186,18 +186,32 @@ export interface LineServiceI {
   addQuantity(lineId: string, delta: number, unit: LineUnit): Promise<Line>;
 
   /**
-   * {@link addQuantity} with `countExtra: true` (backend `0275`, velista `0207`): the
-   * units bought above the ask in open shopping lists count toward the raise first,
-   * and the line moves only by the rest. The zone list's rows are its one caller.
+   * {@link addQuantity} with `reportExtra: true` (backend `0276`, velista `0208`). The
+   * line rises by the whole delta, and the raise takes every unit bought above the
+   * ask in open shopping lists into the ask, as every raise does; the flag only adds
+   * the report. The zone list's rows are its one caller.
    *
-   * `extra` is what the answer says was counted, or null when the answer carried no
+   * `extra` is what the answer says was taken in, or null when the answer carried no
    * `extra` this build can read, which asks nothing.
    */
-  raiseCountingExtra(
+  raiseReportingExtra(
     lineId: string,
     delta: number,
     unit: LineUnit
-  ): Promise<{ readonly line: Line; readonly extra: CountedExtra | null }>;
+  ): Promise<{ readonly line: Line; readonly extra: AbsorbedExtra | null }>;
+
+  /**
+   * "Count the extra" (`POST /v1/lines/:id/extra`, backend `0276`): take `amount`,
+   * the `countable` a raise answered, off the line, which must still hold `expect`,
+   * the quantity that raise answered. A line that moved in between is refused with
+   * `stale_quantity` and nothing is written.
+   */
+  countExtra(
+    lineId: string,
+    amount: number,
+    expect: number,
+    unit: LineUnit
+  ): Promise<{ readonly line: Line; readonly counted: number | null }>;
 
   /**
    * Say what happened to a line on a trip (`POST /v1/lines/:id/settle`).

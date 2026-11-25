@@ -210,28 +210,49 @@ export interface AddLineQuantityRequest {
    */
   readonly unit: LineUnit;
   /**
-   * Count the units bought above the ask in open shopping lists toward this raise
-   * (backend `0275`, velista `0207`). Only the zone list's rows send it, and only
+   * Ask the answer to say what this raise took into the ask (backend `0276`, velista
+   * `0208`): every raise moves the units bought above the ask in open shopping lists
+   * into the ask anyway, and the flag adds who bought them and what "Count the
+   * extra" would take off the line. Only the zone list's rows send it, and only
    * with a positive delta.
    */
-  readonly countExtra?: boolean;
+  readonly reportExtra?: boolean;
+}
+
+/** One buyer of the extra a raise took in (backend `0276`). */
+export interface ExtraBuyer {
+  /**
+   * A null id is somebody this reader cannot be told about (a person outside the
+   * list's group, or an account that is gone); every such buyer is one null entry,
+   * so the count of unknown people is never known.
+   */
+  readonly userId: string | null;
 }
 
 /**
- * What a raise with `countExtra` counted (backend `0275`, velista `0207`): how much
- * was above the ask before the write, how much of it the write moved into the ask,
- * and who bought it, in the line's unit.
+ * What a raise with `reportExtra` took into the ask (backend `0276`, velista
+ * `0208`), in the line's unit. `above` is the extra the raise moved into the ask,
+ * `countable` what "Count the extra" would take off the line (never more than
+ * `above`, nor than the raise), and `buyers` who bought the extra, one entry per
+ * buyer in the order of their oldest buy.
  */
-export interface CountedExtra {
+export interface AbsorbedExtra {
   readonly above: number;
-  readonly counted: number;
-  /**
-   * One entry per buyer, in the order of their oldest buy. A null id is somebody
-   * this reader cannot be told about (a person outside the list's group, or an
-   * account that is gone); every such buyer is one null entry, so the count of
-   * unknown people is never known.
-   */
-  readonly buyers: readonly { readonly userId: string | null }[];
+  readonly countable: number;
+  readonly buyers: readonly ExtraBuyer[];
+}
+
+/**
+ * "Count the extra" (`POST /v1/lines/:id/extra`, backend `0276`): take `amount` off
+ * the line. The line must still hold `expect`, or the server refuses with
+ * `stale_quantity` and writes nothing.
+ */
+export interface CountLineExtraRequest {
+  readonly unit: LineUnit;
+  /** The `countable` the raise answered. */
+  readonly amount: number;
+  /** The quantity the raise answered, which the line must still hold. */
+  readonly expect: number;
 }
 
 /**
