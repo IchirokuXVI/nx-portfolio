@@ -1,6 +1,6 @@
 import {
   isMeasured,
-  type CountedExtra,
+  type AbsorbedExtra,
   type LineUnit,
 } from '@portfolio/velista/models';
 import { formatAmount, shortAmount } from '@portfolio/velista/platform';
@@ -147,25 +147,29 @@ function boughtSentence(
 }
 
 /**
- * The question a raise of a zone list row asks when the server counted units bought
- * above the ask (velista `0207`, target states 4 to 6).
+ * The question a raise asks when it took units bought above the ask into the ask
+ * (velista `0207`, target states 4 to 6; velista `0208`, target state 3).
  *
- * `left` is the answered line's amount, what is still needed after the count (Z);
- * the amount the person set is `left + extra.counted` (Y), read from the answer and
- * not from the run, so a write of somebody else's that landed in between stands.
- * Nothing ever prints 0: with nothing left the question asks whether that is enough.
+ * `shown` (Y) is the number the control shows after "Still need", which is also
+ * what it shows with no answer; `after` (Z) is the number it shows after "Count the
+ * extra". Both come from the answer and not from the run, so a write of somebody
+ * else's that landed in between stands. `extra.above` (X) is the extra the raise
+ * took in. Nothing ever prints 0: with nothing left after the count the question
+ * asks whether that is enough.
  */
 export function extraAskWords(input: {
-  readonly extra: CountedExtra;
-  readonly left: number;
+  readonly extra: AbsorbedExtra;
+  readonly shown: number;
+  readonly after: number;
   readonly unit: LineUnit;
   readonly locale: string;
   readonly readerId: string | null;
   readonly nameOf: (userId: string) => string | null;
   readonly t: ExtraAskTranslate;
 }): ExtraAskWords {
-  const { extra, left, unit, locale, readerId, nameOf, t } = input;
-  const asked = left + extra.counted;
+  const { extra, unit, locale, readerId, nameOf, t } = input;
+  const asked = input.shown;
+  const left = input.after;
 
   const buyers = extra.buyers.map((buyer): Buyer => {
     if (buyer.userId !== null && buyer.userId === readerId) {

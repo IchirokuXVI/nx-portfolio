@@ -260,51 +260,90 @@ describe('LineApi, the unit on every write (velista 0182)', () => {
     expect((await done).unit).toBe('GRAM');
   });
 
-  describe('a raise that counts the extra already bought (velista 0207)', () => {
+  describe('a raise that reports the extra it took in (velista 0208, spec 2)', () => {
     const EXTRA = {
-      above: 1,
-      counted: 1,
+      above: 3,
+      countable: 2,
       buyers: [{ userId: 'u-marta' }, { userId: null }],
     };
 
     it('sends the flag with the delta and the unit, and the plain raise does not', async () => {
-      const raised = api.raiseCountingExtra('ln-1', 2, 'UNIT');
+      const raised = api.raiseReportingExtra('ln-1', 2, 'UNIT');
       const req = next();
       expect(req.request.url).toBe(`${GATEWAY}/v1/lines/ln-1/quantity`);
       expect(req.request.body).toEqual({
         delta: 2,
         unit: 'UNIT',
-        countExtra: true,
+        reportExtra: true,
       });
-      req.flush({ ...LINE, quantity: 1, unit: 'UNIT', extra: EXTRA });
+      req.flush({ ...LINE, quantity: 2, unit: 'UNIT', extra: EXTRA });
       const answer = await raised;
-      expect(answer.line.quantity).toBe(1);
+      expect(answer.line.quantity).toBe(2);
       expect(answer.extra).toEqual(EXTRA);
 
       const plain = api.addQuantity('ln-1', 2, 'UNIT');
       const second = next();
+      expect('reportExtra' in second.request.body).toBe(false);
       expect('countExtra' in second.request.body).toBe(false);
       second.flush(LINE);
       await plain;
     });
 
+    it('maps a report of zeros as it is, which asks nothing', async () => {
+      const raised = api.raiseReportingExtra('ln-1', 1, 'UNIT');
+      next().flush({
+        ...LINE,
+        unit: 'UNIT',
+        extra: { above: 0, countable: 0, buyers: [] },
+      });
+      expect((await raised).extra).toEqual({
+        above: 0,
+        countable: 0,
+        buyers: [],
+      });
+    });
+
     it.each([
       ['no extra', undefined],
       ['an extra that is not an object', 'one'],
-      ['a negative count', { ...EXTRA, above: -1 }],
-      ['a count that is not whole', { ...EXTRA, counted: 0.5 }],
-      ['a count as a string', { ...EXTRA, counted: '1' }],
-      ['more counted than was above', { ...EXTRA, above: 1, counted: 2 }],
+      ['a negative amount above', { ...EXTRA, above: -1 }],
+      ['a negative countable', { ...EXTRA, countable: -1 }],
+      ['a countable that is not whole', { ...EXTRA, countable: 0.5 }],
+      ['a countable as a string', { ...EXTRA, countable: '1' }],
+      ['the old counted in its place', { above: 1, counted: 1, buyers: [] }],
+      ['more countable than was above', { ...EXTRA, above: 1, countable: 2 }],
       ['buyers that are not a list', { ...EXTRA, buyers: 'u-marta' }],
       ['a buyer with no id field', { ...EXTRA, buyers: [{}] }],
       ['a buyer whose id is a number', { ...EXTRA, buyers: [{ userId: 7 }] }],
       ['a buyer that is a string', { ...EXTRA, buyers: ['u-marta'] }],
     ])('maps %s to no question', async (_, extra) => {
-      const raised = api.raiseCountingExtra('ln-1', 2, 'UNIT');
+      const raised = api.raiseReportingExtra('ln-1', 2, 'UNIT');
       next().flush({ ...LINE, unit: 'UNIT', extra });
       const answer = await raised;
       expect(answer.extra).toBeNull();
       expect(answer.line.id).toBe('ln-1');
+    });
+  });
+
+  describe('"Count the extra" (velista 0208, target state 1)', () => {
+    it('posts the unit, the amount and the amount expected to the extra route', async () => {
+      const counted = api.countExtra('ln-1', 3, 4, 'UNIT');
+      const req = next();
+      expect(req.request.method).toBe('POST');
+      expect(req.request.url).toBe(`${GATEWAY}/v1/lines/ln-1/extra`);
+      expect(req.request.body).toEqual({ unit: 'UNIT', amount: 3, expect: 4 });
+      req.flush({ ...LINE, quantity: 1, unit: 'UNIT', counted: 3 });
+      const answer = await counted;
+      expect(answer.line.quantity).toBe(1);
+      expect(answer.counted).toBe(3);
+    });
+
+    it('reads a counted it cannot read as none, and keeps the line', async () => {
+      const counted = api.countExtra('ln-1', 1, 2, 'UNIT');
+      next().flush({ ...LINE, quantity: 1, unit: 'UNIT', counted: '1' });
+      const answer = await counted;
+      expect(answer.counted).toBeNull();
+      expect(answer.line.quantity).toBe(1);
     });
   });
 

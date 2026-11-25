@@ -75,6 +75,7 @@ export * from './lib/list/comment-row';
 export * from './lib/list/drag-releases-field';
 export * from './lib/list/due-line-row';
 export * from './lib/list/extra-ask';
+export * from './lib/list/extra-ask-notice';
 export * from './lib/list/extra-ask-words';
 export * from './lib/list/line-composer';
 export * from './lib/list/line-list';

@@ -587,12 +587,12 @@
     }
 
     <!--
-      Does the extra already bought count? (velista 0207.) Asked after a raise of a
-      row whose save counted units bought above the ask, pointed at that row's amount
-      control and covering neither the row nor the control. Whatever closes it
-      without "Still need" leaves the smaller amount the server already wrote. Held
-      against the mark beside the row, laid over its control, so it is inserted in
-      the list item and never inside the row, which is a button.
+      Does the extra already bought count? (velista 0207, 0208.) Asked after a raise
+      of a row that took units bought above the ask into the ask, pointed at that
+      row's amount control and covering neither the row nor the control. Only "Count
+      the extra" writes: whatever else closes it leaves the amount set, which the raise
+      already wrote. Held against the mark beside the row, laid over its control, so
+      it is inserted in the list item and never inside the row, which is a button.
     -->
     @if (extraAsk(); as asked) {
       @if (asked.shown) {
@@ -611,14 +611,40 @@
           >
             <lib-extra-ask
               (dismissed)="closeExtraAsk('escape')"
-              (kept)="keepExtra()"
-              (stillNeed)="stillNeedExtra()"
+              (kept)="answerCount()"
+              (stillNeed)="answerStillNeed()"
               [takeFocus]="asked.takeFocus"
               [titleId]="extraAskTitleId"
               [words]="words"
             />
           </lib-anchored-popover>
         }
+      }
+    }
+
+    <!--
+      A count that wrote nothing says so in the question's place (velista 0208,
+      target state 4): no buttons and no focus, said in the page's polite region too,
+      and gone on the next touch anywhere, Escape or leaving.
+    -->
+    @if (extraNotice(); as notice) {
+      @if (extraNoticeWords(); as words) {
+        <lib-anchored-popover
+          (closed)="closeExtraNotice()"
+          [keepInSight]="notice.row"
+          [open]="true"
+          [origin]="notice.origin"
+          [pointer]="true"
+          [role]="null"
+          [side]="notice.side"
+          align="end"
+          frame="choice"
+        >
+          <lib-extra-ask-notice
+            (pointerdown)="closeExtraNotice()"
+            [words]="words"
+          />
+        </lib-anchored-popover>
       }
     }
   }

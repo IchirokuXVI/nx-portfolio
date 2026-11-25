@@ -1,11 +1,12 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import type {
+  AbsorbedExtra,
   AddLineOptions,
   AddLineQuantityRequest,
   AddLineRequest,
   AlsoOnVm,
-  CountedExtra,
+  CountLineExtraRequest,
   ItemLists,
   Line,
   LineApprovalStatus,
@@ -22,8 +23,8 @@ import type {
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { operation } from '../auth/http-context';
+import { toAbsorbedExtra, toCounted } from '../mapping/absorbed-extra-mapper';
 import { toAddOutcome } from '../mapping/add-choice-mappers';
-import { toCountedExtra } from '../mapping/counted-extra-mapper';
 import {
   toAlsoOnPlace,
   toDeletedId,
@@ -282,12 +283,12 @@ export class LineApi implements LineServiceI {
     return required(toLine(body), 'lines.addQuantity');
   }
 
-  async raiseCountingExtra(
+  async raiseReportingExtra(
     lineId: string,
     delta: number,
     unit: LineUnit
-  ): Promise<{ readonly line: Line; readonly extra: CountedExtra | null }> {
-    const request: AddLineQuantityRequest = { delta, unit, countExtra: true };
+  ): Promise<{ readonly line: Line; readonly extra: AbsorbedExtra | null }> {
+    const request: AddLineQuantityRequest = { delta, unit, reportExtra: true };
 
     const body = await firstValueFrom(
       this._http.post<unknown>(`${this._line(lineId)}/quantity`, request, {
@@ -295,11 +296,32 @@ export class LineApi implements LineServiceI {
       })
     );
 
-    // The answer is a line view with `extra` beside it (backend `0275`), so the line
+    // The answer is a line view with `extra` beside it (backend `0276`), so the line
     // maps as any other and the extra is read on its own, from `unknown` (rule D4).
     return {
       line: required(toLine(body), 'lines.addQuantity'),
-      extra: isRecord(body) ? toCountedExtra(body['extra']) : null,
+      extra: isRecord(body) ? toAbsorbedExtra(body['extra']) : null,
+    };
+  }
+
+  async countExtra(
+    lineId: string,
+    amount: number,
+    expect: number,
+    unit: LineUnit
+  ): Promise<{ readonly line: Line; readonly counted: number | null }> {
+    const request: CountLineExtraRequest = { unit, amount, expect };
+
+    const body = await firstValueFrom(
+      this._http.post<unknown>(`${this._line(lineId)}/extra`, request, {
+        context: operation('lines.countExtra'),
+      })
+    );
+
+    // A line view with `counted` beside it (backend `0276`, target state 8).
+    return {
+      line: required(toLine(body), 'lines.countExtra'),
+      counted: isRecord(body) ? toCounted(body['counted']) : null,
     };
   }
 

@@ -1251,7 +1251,9 @@
       "units_one": "{{count}} unit",
       "units_other": "{{count}} units",
       "boughtByNamedAndOthers": "{{names}} and others already bought {{amount}} extra.",
-      "announce": "{{question}} Two answers are next to the line's amount: {{stillNeed}}, or {{keep}}."
+      "announce": "{{question}} Two answers are next to the line's amount: {{stillNeed}}, or {{keep}}.",
+      "stale": "The amount changed in the meantime, so nothing was counted.",
+      "countFailed": "Nothing was counted. Try again."
     }
   },
   "account": {

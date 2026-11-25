@@ -14,22 +14,25 @@ import {
   resetAliceWorld,
   type Session,
 } from './support/api';
-import { composerField, signIn } from './support/app';
+import { composerField, newVisitor, signIn } from './support/app';
 
 /**
- * A raise on the zone list asks whether the extra already bought counts (velista
- * `0207`, backend `0275`), against the real backend.
+ * A raise on the zone list takes the extra already bought into the ask and asks
+ * whether it counts (velista `0208` stage 1, backend `0276`), against the real
+ * backend. The owner's example on a list page.
  *
- * Groceries asks one Bread. Dana buys two in a shopping list of her own, so one is
- * above the ask and the line is at 0. Alice raises the line to 2 over the API with
- * no flag, as the line page would, which counts nothing: one unit is still above
- * the ask. Then she presses the plus of the Bread row on the zone list. The raise
- * carries `countExtra`, the server counts the one unit and leaves the line at 2,
- * and the page asks, naming Dana by the name the group knows her by. "Count the
- * extra" keeps the 2; "Still need" puts the line at the 3 she set. A reload reads
- * the server's number either way.
+ * Groceries asks one Bread. Dana buys four in a shopping list of her own, so three
+ * are above the ask and the line is at 0. Alice steps the Bread row of the zone list
+ * from 0 to 4. The raise carries `reportExtra`; the server raises the line to the
+ * 4 she set, takes the three into Dana's ask, and answers what "Count the extra"
+ * would take off: three. The page asks "Dana already bought 3 extra. Do you still
+ * need 4, or just 1?". "Still need" sends nothing and the line stays at 4, as it
+ * does with no answer; "Count the extra" is the one answer that writes, and leaves
+ * 1. Either way the extra is inside the ask, so the next raise asks nothing, until
+ * somebody buys above the ask again.
  */
 
+/** The non breaking space the words join an amount to its unit with. */
 const NB = ' ';
 
 function breadRow(page: Page): Locator {
@@ -44,10 +47,19 @@ function question(page: Page): Locator {
   return page.locator('lib-extra-ask');
 }
 
+function notice(page: Page): Locator {
+  return page.locator('lib-extra-ask-notice');
+}
+
+const isRaise = (pathname: string) =>
+  pathname === `/v1/lines/${LINE_BREAD_ID}/quantity`;
+const isCount = (pathname: string) =>
+  pathname === `/v1/lines/${LINE_BREAD_ID}/extra`;
+
 /**
  * Groceries, searched for Bread. Dana's open trip holds the line, so the list
  * draws it under her trip and not in To buy; the search draws every matching line
- * with its stepper, and those rows are the zone list's own.
+ * with its stepper, at 0 too, and those rows are the zone list's own.
  */
 async function openGroceries(page: Page): Promise<void> {
   await page.goto(`/en/zones/${ZONE_WEEKLY_ID}/lists/${LIST_GROCERIES_ID}`);
@@ -55,28 +67,52 @@ async function openGroceries(page: Page): Promise<void> {
   await expect(breadAmount(page)).toBeVisible();
 }
 
-/** The plus of the Bread row, and the raise it writes after the quiet beat. */
-async function raiseBread(page: Page): Promise<Record<string, unknown>> {
+/**
+ * `presses` of the Bread row's plus, inside one quiet beat, and the one raise they
+ * write after it.
+ */
+async function raiseBread(
+  page: Page,
+  presses = 1
+): Promise<Record<string, unknown>> {
   const written = page.waitForResponse(
     (response) =>
       response.request().method() === 'POST' &&
-      new URL(response.url()).pathname ===
-        `/v1/lines/${LINE_BREAD_ID}/quantity`,
+      isRaise(new URL(response.url()).pathname),
     { timeout: 10_000 }
   );
-  await breadAmount(page).locator('.step.plus').click();
+  const plus = breadAmount(page).locator('.step.plus');
+  for (let press = 0; press < presses; press += 1) {
+    await plus.click();
+  }
   const response = await written;
   expect(response.ok()).toBe(true);
   return response.request().postDataJSON() as Record<string, unknown>;
 }
 
-test.describe('a raise asks whether the extra already bought counts (velista 0207)', () => {
+/** Every count the page sends, so a spec can say none went. */
+function countsOf(page: Page): string[] {
+  const sent: string[] = [];
+  page.on('request', (request) => {
+    if (
+      request.method() === 'POST' &&
+      isCount(new URL(request.url()).pathname)
+    ) {
+      sent.push(request.postData() ?? '');
+    }
+  });
+  return sent;
+}
+
+test.describe('a raise takes the extra into the ask and asks whether it counts (velista 0208)', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
   let alice: Session;
   let dana: Session;
   /** Dana's name in the group, as the page names a member: her username. */
   let danaName = '';
+  /** Dana's open shopping list, which holds the extra. */
+  let basketId = '';
 
   test.beforeAll(async () => {
     alice = await login(ALICE_EMAIL);
@@ -97,10 +133,7 @@ test.describe('a raise asks whether the extra already bought counts (velista 020
     await dana?.dispose();
   });
 
-  /**
-   * Bread asks 1, Dana buys 2 in a basket of her own, and the line is raised to 2
-   * with no flag: the line at 2, one unit above the ask.
-   */
+  /** Bread asks 1 and Dana buys 4 in a basket of her own: the line at 0, 3 above. */
   test.beforeEach(async () => {
     await finishOpenBaskets(dana);
     await resetAliceWorld(alice);
@@ -108,95 +141,219 @@ test.describe('a raise asks whether the extra already bought counts (velista 020
       sources: [{ zoneId: ZONE_WEEKLY_ID, listId: LIST_GROCERIES_ID }],
       name: `Over bought ${Date.now()}`,
     });
+    basketId = run.basket.id;
     // `from` is what the row asks before the buy, which the server checks.
-    await buyBasketRow(dana, run.basket.id, [LINE_BREAD_ID], {
-      quantity: 2,
+    await buyBasketRow(dana, basketId, [LINE_BREAD_ID], {
+      quantity: 4,
       from: 1,
     });
     expect(
       (await readLine(alice, LIST_GROCERIES_ID, LINE_BREAD_ID)).quantity
     ).toBe(0);
-    await alice.post(`/v1/lines/${LINE_BREAD_ID}/quantity`, {
-      delta: 2,
-      unit: 'UNIT',
-    });
-    expect(
-      (await readLine(alice, LIST_GROCERIES_ID, LINE_BREAD_ID)).quantity
-    ).toBe(2);
   });
 
-  test('"Count the extra" keeps the smaller amount', async ({ page }) => {
+  /** The owner's example: the line set to 4 over 3 extra, and the question on it. */
+  async function askedAtFour(page: Page): Promise<void> {
     await signIn(page, ALICE_EMAIL);
     await openGroceries(page);
+    await expect(breadAmount(page)).toHaveAttribute('data-value', '0');
 
-    const sent = await raiseBread(page);
-    expect(sent).toEqual({ delta: 1, unit: 'UNIT', countExtra: true });
-
+    const sent = await raiseBread(page, 4);
+    expect(sent).toEqual({ delta: 4, unit: 'UNIT', reportExtra: true });
     await expect(question(page).locator('.question')).toHaveText(
-      `${danaName} already bought 1 extra. Do you still need 3, or just${NB}2?`
+      `${danaName} already bought 3 extra. Do you still need 4, or just${NB}1?`
     );
-    const [stillNeed, count] = await question(page).locator('.answer').all();
-    await expect(stillNeed).toHaveText(new RegExp(`Still need\\s*3${NB}units`));
-    await expect(count).toHaveText(
-      new RegExp(`Count the extra\\s*2${NB}units`)
-    );
-    // The search field keeps focus, since the stepper's press takes none: the
-    // question is said in the page's polite region, and a key typed goes on into
-    // the field.
-    await expect(composerField(page)).toBeFocused();
-    await expect(page.locator('p.live')).toHaveText(
-      `${danaName} already bought 1 extra. Do you still need 3, or just${NB}2? ` +
-        `Two answers are next to the line's amount: Still need 3${NB}units, ` +
-        `or Count the extra 2${NB}units.`
-    );
-    // The row draws what the line holds while the question is open, so a press on
-    // it steps from there.
-    await expect(breadAmount(page)).toHaveAttribute('data-value', '2');
+  }
 
-    await count.click();
-    await expect(question(page)).toHaveCount(0);
-    await expect(breadAmount(page)).toHaveAttribute('data-value', '2');
-
-    expect(
-      (await readLine(alice, LIST_GROCERIES_ID, LINE_BREAD_ID)).quantity
-    ).toBe(2);
-    await openGroceries(page);
-    await expect(breadAmount(page)).toHaveAttribute('data-value', '2');
-  });
-
-  test('"Still need" puts the line at the amount set, and the line asks no more', async ({
+  test('the question opens with the line at the amount set, and a reload before answering keeps it', async ({
     page,
   }) => {
-    await signIn(page, ALICE_EMAIL);
-    await openGroceries(page);
+    const counts = countsOf(page);
+    await askedAtFour(page);
 
-    await raiseBread(page);
-    await expect(question(page)).toBeVisible();
-
-    const plain = page.waitForResponse(
-      (response) =>
-        response.request().method() === 'POST' &&
-        new URL(response.url()).pathname ===
-          `/v1/lines/${LINE_BREAD_ID}/quantity`
+    const [stillNeed, count] = await question(page).locator('.answer').all();
+    await expect(stillNeed).toHaveText(new RegExp(`Still need\\s*4${NB}units`));
+    await expect(count).toHaveText(new RegExp(`Count the extra\\s*1${NB}unit`));
+    // The search field keeps focus, since the stepper's press takes none: the
+    // question is said in the page's polite region.
+    await expect(composerField(page)).toBeFocused();
+    await expect(page.locator('p.live')).toHaveText(
+      `${danaName} already bought 3 extra. Do you still need 4, or just${NB}1? ` +
+        `Two answers are next to the line's amount: Still need 4${NB}units, ` +
+        `or Count the extra 1${NB}unit.`
     );
-    await question(page)
-      .getByRole('button', { name: /Still need/ })
-      .click();
-    const answer = await plain;
-    expect(answer.request().postDataJSON()).toEqual({ delta: 1, unit: 'UNIT' });
-    await expect(question(page)).toHaveCount(0);
-    await expect(breadAmount(page)).toHaveAttribute('data-value', '3');
-
-    // A later raise on the same visit sends no flag and asks nothing.
-    const later = await raiseBread(page);
-    expect(later).toEqual({ delta: 1, unit: 'UNIT' });
+    // The control shows the amount set while the question is open: no jump.
     await expect(breadAmount(page)).toHaveAttribute('data-value', '4');
-    await expect(question(page)).toHaveCount(0);
-
     expect(
       (await readLine(alice, LIST_GROCERIES_ID, LINE_BREAD_ID)).quantity
     ).toBe(4);
+
+    // Leaving with no answer: the amount set stands, and nothing was counted.
     await openGroceries(page);
     await expect(breadAmount(page)).toHaveAttribute('data-value', '4');
+    expect(counts).toEqual([]);
+
+    // The extra is inside the ask now, so the next raise asks nothing.
+    const later = await raiseBread(page);
+    expect(later).toEqual({ delta: 1, unit: 'UNIT', reportExtra: true });
+    await expect(breadAmount(page)).toHaveAttribute('data-value', '5');
+    await expect(question(page)).toHaveCount(0);
+  });
+
+  test('"Count the extra" lowers the line to what is left, and a reload reads it', async ({
+    page,
+  }) => {
+    await askedAtFour(page);
+
+    const counted = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        isCount(new URL(response.url()).pathname)
+    );
+    await question(page)
+      .getByRole('button', { name: /Count the extra/ })
+      .click();
+    const answer = await counted;
+    expect(answer.status()).toBe(201);
+    expect(answer.request().postDataJSON()).toEqual({
+      unit: 'UNIT',
+      amount: 3,
+      expect: 4,
+    });
+    await expect(question(page)).toHaveCount(0);
+    await expect(breadAmount(page)).toHaveAttribute('data-value', '1');
+
+    expect(
+      (await readLine(alice, LIST_GROCERIES_ID, LINE_BREAD_ID)).quantity
+    ).toBe(1);
+    await openGroceries(page);
+    await expect(breadAmount(page)).toHaveAttribute('data-value', '1');
+
+    // Nothing is above the ask any more: a raise asks nothing.
+    await raiseBread(page);
+    await expect(breadAmount(page)).toHaveAttribute('data-value', '2');
+    await expect(question(page)).toHaveCount(0);
+  });
+
+  test('"Still need" sends nothing and keeps the amount; nobody is asked again until somebody buys above the ask', async ({
+    page,
+    browser,
+  }) => {
+    const counts = countsOf(page);
+    await askedAtFour(page);
+
+    const quantityWrites: string[] = [];
+    page.on('request', (request) => {
+      if (
+        request.method() === 'POST' &&
+        isRaise(new URL(request.url()).pathname)
+      ) {
+        quantityWrites.push(request.postData() ?? '');
+      }
+    });
+    await question(page)
+      .getByRole('button', { name: /Still need/ })
+      .click();
+    await expect(question(page)).toHaveCount(0);
+    await expect(breadAmount(page)).toHaveAttribute('data-value', '4');
+    expect(quantityWrites).toEqual([]);
+    expect(counts).toEqual([]);
+
+    // After a reload, a raise asks nothing.
+    await openGroceries(page);
+    await raiseBread(page);
+    await expect(breadAmount(page)).toHaveAttribute('data-value', '5');
+    await expect(question(page)).toHaveCount(0);
+
+    // Nor for another member, in a browser of her own.
+    const danaPage = await newVisitor(browser);
+    try {
+      await danaPage.setViewportSize({ width: 390, height: 844 });
+      await signIn(danaPage, DANA_EMAIL);
+      await openGroceries(danaPage);
+      await raiseBread(danaPage);
+      await expect(breadAmount(danaPage)).toHaveAttribute('data-value', '6');
+      await expect(question(danaPage)).toHaveCount(0);
+    } finally {
+      await danaPage.context().close();
+    }
+
+    // Dana buys above her ask again: the line holds 6, so her row has 6 left, and
+    // she buys 8. The line goes to 0 with 2 above, and the next raise asks about
+    // those.
+    const line = await readLine(alice, LIST_GROCERIES_ID, LINE_BREAD_ID);
+    expect(line.quantity).toBe(6);
+    await buyBasketRow(dana, basketId, [LINE_BREAD_ID], {
+      quantity: 8,
+      from: 6,
+    });
+    expect(
+      (await readLine(alice, LIST_GROCERIES_ID, LINE_BREAD_ID)).quantity
+    ).toBe(0);
+    await openGroceries(page);
+    await expect(breadAmount(page)).toHaveAttribute('data-value', '0');
+    await raiseBread(page);
+    await expect(question(page).locator('.question')).toHaveText(
+      `${danaName} already bought 2 extra. Do you still need 1, or is that enough?`
+    );
+    await expect(
+      question(page).getByRole('button', { name: /That's enough/ })
+    ).toBeVisible();
+  });
+
+  test('a count after another member lowered the line says so and shows the current amount', async ({
+    page,
+  }) => {
+    await askedAtFour(page);
+
+    // Dana lowers the line to 3 while the question is open.
+    await dana.post(`/v1/lines/${LINE_BREAD_ID}/quantity`, {
+      delta: -1,
+      unit: 'UNIT',
+    });
+
+    const counted = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        isCount(new URL(response.url()).pathname)
+    );
+    await question(page)
+      .getByRole('button', { name: /Count the extra/ })
+      .click();
+    expect((await counted).status()).toBe(409);
+    await expect(notice(page)).toHaveText(
+      'The amount changed in the meantime, so nothing was counted.'
+    );
+    await expect(breadAmount(page)).toHaveAttribute('data-value', '3');
+    expect(
+      (await readLine(alice, LIST_GROCERIES_ID, LINE_BREAD_ID)).quantity
+    ).toBe(3);
+
+    // A touch on the notice closes it, as one anywhere else does.
+    await notice(page).click();
+    await expect(notice(page)).toHaveCount(0);
+  });
+
+  test('Dana taking back the extra after the raise raises the line by what she took back (backend 0276, case 14)', async ({
+    page,
+  }) => {
+    await askedAtFour(page);
+    await question(page)
+      .getByRole('button', { name: /Still need/ })
+      .click();
+    await expect(breadAmount(page)).toHaveAttribute('data-value', '4');
+
+    // The three units were inside the ask, so taking them back puts them back on
+    // the line: they are needed again.
+    await dana.post(`/v1/baskets/${basketId}/rows/${LINE_BREAD_ID}/revert`, {
+      lineIds: [LINE_BREAD_ID],
+      target: 'UNITS',
+      units: 3,
+      from: 4,
+    });
+    expect(
+      (await readLine(alice, LIST_GROCERIES_ID, LINE_BREAD_ID)).quantity
+    ).toBe(7);
+    await expect(breadAmount(page)).toHaveAttribute('data-value', '7');
   });
 });

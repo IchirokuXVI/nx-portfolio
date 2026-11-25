@@ -65,9 +65,9 @@ import {
   type TripServiceI,
 } from '@portfolio/velista/data-access';
 import type {
+  AbsorbedExtra,
   CatalogItem,
   CatalogSuggestion,
-  CountedExtra,
   DueLine,
   Line,
   LineRowVm,
@@ -400,12 +400,12 @@ async function render(options: Options = {}): Promise<{
                   nextCursor: null,
                 }),
                 ...options.lineWrites,
-                // A row's raise counts the extra (velista `0207`). A spec that
-                // answers only the plain write answers it with nothing counted.
+                // A row's raise reports the extra (velista `0208`). A spec that
+                // answers only the plain write answers it with no report.
                 ...(options.lineWrites?.addQuantity !== undefined &&
-                options.lineWrites.raiseCountingExtra === undefined
+                options.lineWrites.raiseReportingExtra === undefined
                   ? {
-                      raiseCountingExtra: async (
+                      raiseReportingExtra: async (
                         lineId: string,
                         delta: number,
                         unit: LineUnit
@@ -1206,7 +1206,7 @@ describe('ListPage', () => {
 
         jest.advanceTimersByTime(1);
         expect(writes(lines.calls)).toEqual([
-          { kind: 'quantity', lineId: 'ln-1', delta: 75, countExtra: true },
+          { kind: 'quantity', lineId: 'ln-1', delta: 75, reportExtra: true },
         ]);
       });
 
@@ -1252,7 +1252,7 @@ describe('ListPage', () => {
         fixture.destroy();
 
         expect(writes(lines.calls)).toEqual([
-          { kind: 'quantity', lineId: 'ln-1', delta: 2, countExtra: true },
+          { kind: 'quantity', lineId: 'ln-1', delta: 2 },
         ]);
       });
 
@@ -1268,7 +1268,7 @@ describe('ListPage', () => {
         });
 
         expect(writes(lines.calls)).toEqual([
-          { kind: 'quantity', lineId: 'ln-1', delta: 150, countExtra: true },
+          { kind: 'quantity', lineId: 'ln-1', delta: 150, reportExtra: true },
         ]);
         expect(fixture.componentInstance.quantityRuns.pending().size).toBe(0);
         jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
@@ -1306,7 +1306,7 @@ describe('ListPage', () => {
         });
 
         expect(writes(lines.calls)).toEqual([
-          { kind: 'quantity', lineId: 'ln-1', delta: 3, countExtra: true },
+          { kind: 'quantity', lineId: 'ln-1', delta: 3, reportExtra: true },
         ]);
       });
 
@@ -1321,7 +1321,7 @@ describe('ListPage', () => {
 
         // Sent at once, before the sheet reads the line, and not again after.
         expect(writes(lines.calls)).toEqual([
-          { kind: 'quantity', lineId: 'ln-1', delta: 1, countExtra: true },
+          { kind: 'quantity', lineId: 'ln-1', delta: 1, reportExtra: true },
         ]);
         expect(router.navigate).toHaveBeenCalledWith(
           ['sheet', 'lines', 'ln-1', 'detail'],
@@ -5253,7 +5253,7 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
   it('sends no flag for an add of a due row, and asks nothing (velista 0207, spec 18)', async () => {
     const { fixture, lines } = await suggested();
     lines.answerNextRaise({
-      extra: { above: 1, counted: 1, buyers: [{ userId: null }] },
+      extra: { above: 1, countable: 1, buyers: [{ userId: null }] },
     });
 
     addButton(fixture, 'eggs').click();
@@ -6172,24 +6172,29 @@ describe('ListPage: the two views (velista 0191, 0202)', () => {
 
     fixture.destroy();
 
+    // The reel's close reaches the page before the page's own teardown hook, so
+    // the step goes as a row's raise does, with the flag (velista `0208`); its
+    // answer finds the page gone and asks nothing.
     expect(writes(lines.calls)).toEqual([
-      { kind: 'quantity', lineId: 'ln-milk', delta: 2, countExtra: true },
+      { kind: 'quantity', lineId: 'ln-milk', delta: 2, reportExtra: true },
     ]);
     jest.useRealTimers();
   });
 });
 
 /**
- * Velista `0207`: a raise of a zone list row counts the units already bought above
- * the ask (backend `0275`), and when the answer says it counted some, the page asks
- * whether they count, in a popover pointed at the row's amount control. What stands
- * when nobody answers is the smaller amount the server already wrote.
+ * Velista `0207` and `0208`: every raise of a zone list row takes the units bought
+ * above the ask into the ask (backend `0276`) and rises by the whole amount set; the
+ * row reports it, and when the report offers something to count the page asks
+ * whether the extra counts, in a popover pointed at the row's amount control. What
+ * stands when nobody answers is the amount set, which the raise already wrote; only
+ * "Count the extra" writes.
  */
-describe('ListPage: a raise asks whether the extra already bought counts (velista 0207)', () => {
+describe('ListPage: a raise asks whether the extra already bought counts (velista 0207, 0208)', () => {
   const MARTA = 'u-marta';
-  const EXTRA: CountedExtra = {
+  const EXTRA: AbsorbedExtra = {
     above: 1,
-    counted: 1,
+    countable: 1,
     buyers: [{ userId: MARTA }],
   };
   const COMPACT = new Map([
@@ -6220,6 +6225,9 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
 
   const writes = (calls: readonly unknown[]) =>
     calls.filter((call) => (call as { kind?: string }).kind === 'quantity');
+
+  const counts = (calls: readonly unknown[]) =>
+    calls.filter((call) => (call as { kind?: string }).kind === 'countExtra');
 
   const rowOf = (fixture: ComponentFixture<ListPage>, id: string) =>
     (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(
@@ -6254,10 +6262,15 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
     }
   }
 
+  /**
+   * The eggs, at 1, raised to `to` with the report staged: the line holds `to`
+   * after the raise, Y, unless the answer names another amount.
+   */
   async function asked(
     options: {
-      readonly extra?: CountedExtra;
-      readonly left?: number;
+      readonly extra?: AbsorbedExtra;
+      readonly to?: number;
+      readonly quantity?: number;
       readonly storage?: Map<string, string>;
     } = {}
   ) {
@@ -6269,9 +6282,9 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
     await settle(rendered.fixture);
     rendered.lines.answerNextRaise({
       extra: options.extra ?? EXTRA,
-      ...(options.left === undefined ? {} : { quantity: options.left }),
+      ...(options.quantity === undefined ? {} : { quantity: options.quantity }),
     });
-    raise(rendered.fixture, 'ln-eggs', 1, 2);
+    raise(rendered.fixture, 'ln-eggs', 1, options.to ?? 2);
     await settle(rendered.fixture);
     return rendered;
   }
@@ -6281,14 +6294,14 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
     jest.restoreAllMocks();
   });
 
-  describe('the flag (spec 1)', () => {
+  describe('the flag (0208 spec 1)', () => {
     it('goes with a run that raises, and not with one that lowers', async () => {
       const { fixture, lines } = await render({ lines: ROWS });
       raise(fixture, 'ln-eggs', 1, 3);
       raise(fixture, 'ln-milk', 2, 1);
 
       expect(writes(lines.calls)).toEqual([
-        { kind: 'quantity', lineId: 'ln-eggs', delta: 2, countExtra: true },
+        { kind: 'quantity', lineId: 'ln-eggs', delta: 2, reportExtra: true },
         { kind: 'quantity', lineId: 'ln-milk', delta: -1 },
       ]);
     });
@@ -6301,18 +6314,18 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
       fixture.componentInstance.reelQuantity(press('ln-eggs', 1, 4));
 
       expect(writes(lines.calls)).toEqual([
-        { kind: 'quantity', lineId: 'ln-eggs', delta: 3, countExtra: true },
+        { kind: 'quantity', lineId: 'ln-eggs', delta: 3, reportExtra: true },
       ]);
     });
 
-    it('goes with the write of a page that goes away', async () => {
+    it('never goes with the write of a page that goes away, where nobody is left to ask', async () => {
       const { fixture, lines } = await render({ lines: ROWS });
       jest.useFakeTimers();
       fixture.componentInstance.stepQuantity(press('ln-eggs', 1, 2));
       fixture.destroy();
 
       expect(writes(lines.calls)).toEqual([
-        { kind: 'quantity', lineId: 'ln-eggs', delta: 1, countExtra: true },
+        { kind: 'quantity', lineId: 'ln-eggs', delta: 1 },
       ]);
     });
 
@@ -6324,7 +6337,7 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
       document.dispatchEvent(new Event('visibilitychange'));
 
       expect(writes(lines.calls)).toEqual([
-        { kind: 'quantity', lineId: 'ln-milk', delta: 1, countExtra: true },
+        { kind: 'quantity', lineId: 'ln-milk', delta: 1, reportExtra: true },
       ]);
     });
 
@@ -6345,14 +6358,54 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
     });
   });
 
-  describe('when it asks (specs 4 and 5)', () => {
-    it('asks nothing when nothing was counted', async () => {
+  describe('when it asks (0208 spec 3)', () => {
+    it('asks nothing when the report offers nothing to count, also with extra above', async () => {
+      for (const extra of [
+        { above: 0, countable: 0, buyers: [] },
+        { above: 2, countable: 0, buyers: [{ userId: MARTA }] },
+      ]) {
+        const { fixture } = await asked({ extra });
+
+        expect(fixture.componentInstance.extraAsk()).toBeNull();
+        expect(popover(fixture)).toBeUndefined();
+        TestBed.resetTestingModule();
+      }
+    });
+
+    it('asks about Y, the amount the line holds, and Z, Y less what is countable', async () => {
+      const { fixture, lines } = await asked({
+        extra: { above: 3, countable: 3, buyers: [{ userId: MARTA }] },
+        to: 4,
+      });
+
+      expect(stored(lines, 'ln-eggs')).toBe(4);
+      expect(fixture.componentInstance.extraAsk()?.quantity).toBe(4);
+      const words = fixture.componentInstance.extraWords();
+      expect(words?.question).toContain('list.extra.boughtBy');
+      expect(words?.question).toContain('list.extra.ask');
+      expect(words?.question).not.toContain('list.extra.askEnough');
+      expect(words?.keep.words).toBe('list.extra.count');
+      expect(words?.keep.amount).not.toBeNull();
+    });
+
+    it('asks whether that is enough when Z is 0', async () => {
       const { fixture } = await asked({
-        extra: { above: 0, counted: 0, buyers: [] },
+        extra: { above: 3, countable: 2, buyers: [{ userId: MARTA }] },
+        to: 2,
+      });
+
+      const words = fixture.componentInstance.extraWords();
+      expect(words?.question).toContain('list.extra.askEnough');
+      expect(words?.keep).toEqual({ words: 'list.extra.enough', amount: null });
+    });
+
+    it('asks nothing for a report it cannot use: more countable than the line holds', async () => {
+      const { fixture } = await asked({
+        extra: { above: 5, countable: 5, buyers: [] },
+        to: 2,
       });
 
       expect(fixture.componentInstance.extraAsk()).toBeNull();
-      expect(popover(fixture)).toBeUndefined();
     });
 
     it('opens a pointer on the stepper of the default view, keeping the row in sight', async () => {
@@ -6371,9 +6424,6 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
       expect(fixture.componentInstance.extraAsk()?.anchor).toBe(
         row?.querySelector('lib-quantity-stepper')
       );
-      expect(fixture.componentInstance.extraWords()?.question).toContain(
-        'list.extra.boughtBy'
-      );
     });
 
     it('lays the mark over the control and draws the dialog outside the row, which is a button', async () => {
@@ -6385,22 +6435,18 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
       await settle(fixture);
       const item = rowOf(fixture, 'ln-eggs') as HTMLElement;
       const control = item.querySelector('lib-quantity-stepper') as HTMLElement;
-      jest
-        .spyOn(item, 'getBoundingClientRect')
-        .mockReturnValue({
-          top: 300,
-          left: 0,
-          width: 390,
-          height: 64,
-        } as DOMRect);
-      jest
-        .spyOn(control, 'getBoundingClientRect')
-        .mockReturnValue({
-          top: 312,
-          left: 262,
-          width: 112,
-          height: 40,
-        } as DOMRect);
+      jest.spyOn(item, 'getBoundingClientRect').mockReturnValue({
+        top: 300,
+        left: 0,
+        width: 390,
+        height: 64,
+      } as DOMRect);
+      jest.spyOn(control, 'getBoundingClientRect').mockReturnValue({
+        top: 312,
+        left: 262,
+        width: 112,
+        height: 40,
+      } as DOMRect);
       lines.answerNextRaise({ extra: EXTRA });
       raise(fixture, 'ln-eggs', 1, 2);
       await settle(fixture);
@@ -6431,7 +6477,7 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
     });
 
     it.each(['line', 'filter'] as const)(
-      'asks nothing over the %s sheet opened inside the quiet beat, and the smaller amount stands',
+      'asks nothing over the %s sheet opened inside the quiet beat, and the amount set stands',
       async (sheet) => {
         const { fixture, lines, activatedRoute } = await render({
           lines: ROWS,
@@ -6459,16 +6505,17 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
         await settle(fixture);
 
         expect(writes(lines.calls)).toEqual([
-          { kind: 'quantity', lineId: 'ln-eggs', delta: 1, countExtra: true },
+          { kind: 'quantity', lineId: 'ln-eggs', delta: 1, reportExtra: true },
         ]);
+        expect(counts(lines.calls)).toEqual([]);
         expect(fixture.componentInstance.extraAsk()).toBeNull();
         expect(popover(fixture)).toBeUndefined();
         expect(document.querySelector('lib-extra-ask')).toBeNull();
-        expect(stored(lines, 'ln-eggs')).toBe(1);
+        expect(stored(lines, 'ln-eggs')).toBe(2);
       }
     );
 
-    it('drops an open question when a sheet opens over the page', async () => {
+    it('drops an open question when a sheet opens over the page, sending nothing', async () => {
       const { fixture, lines } = await asked();
       const before = writes(lines.calls).length;
 
@@ -6477,7 +6524,8 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
 
       expect(fixture.componentInstance.extraAsk()).toBeNull();
       expect(writes(lines.calls)).toHaveLength(before);
-      expect(stored(lines, 'ln-eggs')).toBe(1);
+      expect(counts(lines.calls)).toEqual([]);
+      expect(stored(lines, 'ln-eggs')).toBe(2);
     });
 
     it('drops the question of a run that a newer run of the same line followed', async () => {
@@ -6493,7 +6541,7 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
       lines.releaseRaises();
       await settle(fixture);
 
-      // The second answer counted nothing and asks nothing; the first is stale.
+      // The second answer offers nothing to count and asks nothing; the first is stale.
       expect(writes(lines.calls)).toHaveLength(2);
       expect(fixture.componentInstance.extraAsk()).toBeNull();
     });
@@ -6544,7 +6592,7 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
       lines.releaseRaises();
       await settle(fixture);
 
-      fixture.componentInstance.reelQuantity(press('ln-eggs', 1, 3));
+      fixture.componentInstance.reelQuantity(press('ln-eggs', 2, 3));
       reel?.classList.remove('open');
       fixture.componentInstance.onReelOpened({
         lineId: 'ln-eggs',
@@ -6556,207 +6604,239 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
     });
   });
 
-  describe('the answers (specs 8, 9, 10, 14 and 20)', () => {
-    it('draws the row where it was at the amount it really holds, Z, while the question names Y and Z', async () => {
+  describe('the control while it is open (0208 spec 8)', () => {
+    it('shows the amount the person stepped to, which the store holds, and no second number', async () => {
       const { fixture, lines } = await asked();
 
-      // The board draws Y on the control while it is open; the build draws what the
-      // line holds, so what is shown and what a press steps from agree.
-      expect(stored(lines, 'ln-eggs')).toBe(1);
-      expect(drawn(fixture, 'ln-eggs')).toBe('1');
-      expect(fixture.componentInstance.extraWords()?.stillNeed.amount).toBe(
-        'list.extra.units'
-      );
-      expect(fixture.componentInstance.extraAsk()?.left).toBe(1);
+      expect(stored(lines, 'ln-eggs')).toBe(2);
+      expect(drawn(fixture, 'ln-eggs')).toBe('2');
+      expect(fixture.componentInstance.extraAsk()?.quantity).toBe(2);
     });
 
-    it('keeps a row the extra covers drawn while asked, and hides it after, as any line at 0', async () => {
-      const { fixture } = await asked({ left: 0 });
-      expect(rowOf(fixture, 'ln-eggs')).not.toBeNull();
-      expect(fixture.componentInstance.extraWords()?.keep.amount).toBeNull();
+    it('never holds a row for the question', async () => {
+      const { fixture } = await asked();
+      const held = (
+        fixture.componentInstance as unknown as {
+          _held: () => ReadonlySet<string>;
+        }
+      )._held();
+      expect(held.has('ln-eggs')).toBe(false);
+    });
+  });
 
+  describe('"Still need" (0208 spec 4)', () => {
+    it('sends nothing and leaves Y', async () => {
+      const { fixture, lines } = await asked();
+      const before = writes(lines.calls).length;
+
+      fixture.componentInstance.answerStillNeed();
+      await settle(fixture);
+
+      expect(writes(lines.calls)).toHaveLength(before);
+      expect(counts(lines.calls)).toEqual([]);
+      expect(fixture.componentInstance.extraAsk()).toBeNull();
+      expect(stored(lines, 'ln-eggs')).toBe(2);
+      expect(drawn(fixture, 'ln-eggs')).toBe('2');
+    });
+
+    it('remembers nothing: the next raise reports again and asks only if the answer offers something', async () => {
+      const { fixture, lines } = await asked();
+      fixture.componentInstance.answerStillNeed();
+      await settle(fixture);
+
+      // The extra is inside the ask now, so the server reports nothing countable.
+      raise(fixture, 'ln-eggs', 2, 3);
+      await settle(fixture);
+      expect(writes(lines.calls).at(-1)).toEqual({
+        kind: 'quantity',
+        lineId: 'ln-eggs',
+        delta: 1,
+        reportExtra: true,
+      });
+      expect(fixture.componentInstance.extraAsk()).toBeNull();
+
+      // Somebody bought above the ask again: the next raise asks.
+      lines.answerNextRaise({ extra: EXTRA });
+      raise(fixture, 'ln-eggs', 3, 4);
+      await settle(fixture);
+      expect(fixture.componentInstance.extraAsk()?.lineId).toBe('ln-eggs');
+    });
+  });
+
+  describe('"Count the extra" (0208 spec 5)', () => {
+    it('sends the count of what was countable, expecting Y, and shows Z at once', async () => {
+      const { fixture, lines } = await asked();
+      lines.holdCounts();
+
+      fixture.componentInstance.answerCount();
+      fixture.detectChanges();
+
+      expect(counts(lines.calls)).toEqual([
+        { kind: 'countExtra', lineId: 'ln-eggs', amount: 1, expect: 2 },
+      ]);
+      expect(fixture.componentInstance.extraAsk()).toBeNull();
+      expect(drawn(fixture, 'ln-eggs')).toBe('1');
+
+      lines.releaseCounts();
+      await settle(fixture);
+      expect(stored(lines, 'ln-eggs')).toBe(1);
+      expect(fixture.componentInstance.extraNotice()).toBeNull();
+      // Never a raise, and no second one.
+      expect(writes(lines.calls)).toHaveLength(1);
+    });
+
+    it('"That\'s enough" counts too, and a line the count takes to 0 leaves To buy as any line at 0', async () => {
+      const { fixture, lines } = await asked({
+        extra: { above: 3, countable: 2, buyers: [{ userId: MARTA }] },
+      });
+      expect(fixture.componentInstance.extraWords()?.keep.amount).toBeNull();
       // Nothing is said while the question is open.
       expect(fixture.componentInstance.announcement()).toBe('');
 
-      fixture.componentInstance.keepExtra();
+      fixture.componentInstance.answerCount();
       await settle(fixture);
 
+      expect(counts(lines.calls)).toEqual([
+        { kind: 'countExtra', lineId: 'ln-eggs', amount: 2, expect: 2 },
+      ]);
+      expect(stored(lines, 'ln-eggs')).toBe(0);
       expect(rowOf(fixture, 'ln-eggs')).toBeNull();
       expect(fixture.componentInstance.announcement()).toBe(
         'list.line.hiddenAtZero'
       );
     });
 
-    it('starts focus on the answer that changes nothing', async () => {
-      const { fixture } = await asked();
-      await new Promise((resolve) => setTimeout(resolve));
-      fixture.detectChanges();
+    it('on stale_quantity shows the server amount and the stale notice on the control, which closes on the next touch', async () => {
+      const { fixture, lines } = await asked();
+      lines.answerNextCount({ state: 'stale', quantity: 3 });
 
-      const buttons = Array.from(
-        document.querySelectorAll<HTMLButtonElement>('lib-extra-ask .answer')
+      fixture.componentInstance.answerCount();
+      await settle(fixture);
+      await settle(fixture);
+
+      expect(stored(lines, 'ln-eggs')).toBe(3);
+      expect(drawn(fixture, 'ln-eggs')).toBe('3');
+      expect(fixture.componentInstance.announcement()).toBe('list.extra.stale');
+      expect(fixture.componentInstance.extraNotice()?.key).toBe(
+        'list.extra.stale'
       );
-      expect(buttons).toHaveLength(2);
-      expect(document.activeElement).toBe(buttons[1]);
-      expect(fixture.componentInstance.announcement()).toBe('');
+      const shown = popover(fixture);
+      expect(shown?.role()).toBeNull();
+      expect(shown?.pointer()).toBe(true);
+      expect(shown?.origin()).toBe(
+        rowOf(fixture, 'ln-eggs')?.querySelector(':scope > [data-ask-anchor]')
+      );
+      const notice = document.querySelector('lib-extra-ask-notice');
+      expect(notice?.textContent).toContain('list.extra.stale');
+      expect(notice?.querySelector('button')).toBeNull();
+
+      // A press anywhere outside closes it, as does one on the notice itself.
+      shown?.closed.emit('outside');
+      await settle(fixture);
+      expect(fixture.componentInstance.extraNotice()).toBeNull();
+      expect(writes(lines.calls)).toHaveLength(1);
     });
 
-    it('moves focus from the row and from nowhere, as the owner ruled', async () => {
-      const rendered = await render({
-        lines: ROWS,
-        names: { [MARTA]: 'Marta' },
-      });
-      const { fixture, lines } = rendered;
+    it('closes the notice on a press on the notice itself', async () => {
+      const { fixture, lines } = await asked();
+      lines.answerNextCount({ state: 'stale', quantity: 3 });
+      fixture.componentInstance.answerCount();
       await settle(fixture);
-      rowOf(fixture, 'ln-eggs')
-        ?.querySelector<HTMLElement>('[data-line-row]')
-        ?.focus();
-      lines.answerNextRaise({ extra: EXTRA });
-      raise(fixture, 'ln-eggs', 1, 2);
       await settle(fixture);
-      await new Promise((resolve) => setTimeout(resolve));
-      fixture.detectChanges();
 
-      expect(fixture.componentInstance.extraAsk()?.takeFocus).toBe(true);
-      expect(document.activeElement).toBe(
-        document.querySelectorAll('lib-extra-ask .answer')[1]
-      );
+      document
+        .querySelector('lib-extra-ask-notice')
+        ?.dispatchEvent(new Event('pointerdown'));
+      await settle(fixture);
+      expect(fixture.componentInstance.extraNotice()).toBeNull();
     });
 
-    it('leaves focus in a field being typed in, and says the question politely', async () => {
-      const rendered = await render({
-        lines: ROWS,
-        names: { [MARTA]: 'Marta' },
-      });
-      const { fixture, lines } = rendered;
-      await settle(fixture);
-      const field = document.createElement('input');
-      field.type = 'search';
-      (fixture.nativeElement as HTMLElement).append(field);
-      field.focus();
-      lines.answerNextRaise({ extra: EXTRA });
-      raise(fixture, 'ln-eggs', 1, 2);
-      await settle(fixture);
-      await new Promise((resolve) => setTimeout(resolve));
-      fixture.detectChanges();
+    it('on any other failure puts Y back and says nothing was counted', async () => {
+      const { fixture, lines } = await asked();
+      lines.answerNextCount({ state: 'failed' });
 
-      expect(fixture.componentInstance.extraAsk()?.shown).toBe(true);
-      expect(fixture.componentInstance.extraAsk()?.takeFocus).toBe(false);
-      expect(document.activeElement).toBe(field);
-      expect(document.querySelector('lib-extra-ask')).not.toBeNull();
+      fixture.componentInstance.answerCount();
+      await settle(fixture);
+      await settle(fixture);
+
+      expect(stored(lines, 'ln-eggs')).toBe(2);
+      expect(drawn(fixture, 'ln-eggs')).toBe('2');
       expect(fixture.componentInstance.announcement()).toBe(
-        'list.extra.announce'
+        'list.extra.countFailed'
       );
-
-      // Escape from the field closes it and leaves focus in the field.
-      fixture.componentInstance.closeExtraAsk('escape');
-      await settle(fixture);
-      expect(document.activeElement).toBe(field);
-      field.remove();
+      expect(fixture.componentInstance.extraNotice()?.key).toBe(
+        'list.extra.countFailed'
+      );
     });
 
-    it.each(['kept', 'escape', 'outside'] as const)(
-      'sends nothing on %s, and the row shows what is left',
+    it('takes the notice down when a sheet opens', async () => {
+      const { fixture, lines } = await asked();
+      lines.answerNextCount({ state: 'failed' });
+      fixture.componentInstance.answerCount();
+      await settle(fixture);
+      await settle(fixture);
+
+      fixture.componentInstance.onSheetOpened();
+      expect(fixture.componentInstance.extraNotice()).toBeNull();
+    });
+  });
+
+  describe('no answer (0208 spec 6)', () => {
+    it.each(['escape', 'outside', 'detach', 'replaced'] as const)(
+      'sends nothing on %s, and the row shows Y',
       async (how) => {
         const { fixture, lines } = await asked();
         const before = writes(lines.calls).length;
 
-        if (how === 'kept') {
-          fixture.componentInstance.keepExtra();
-        } else {
-          fixture.componentInstance.closeExtraAsk(how);
-        }
+        fixture.componentInstance.closeExtraAsk(how);
         await settle(fixture);
 
         expect(writes(lines.calls)).toHaveLength(before);
+        expect(counts(lines.calls)).toEqual([]);
         expect(fixture.componentInstance.extraAsk()).toBeNull();
-        expect(drawn(fixture, 'ln-eggs')).toBe('1');
+        expect(drawn(fixture, 'ln-eggs')).toBe('2');
       }
     );
 
-    it('"Still need" sends one raise by what was counted without the flag, and the line asks no more on this visit', async () => {
+    it('sends nothing when the page is left with the question open', async () => {
       const { fixture, lines } = await asked();
+      const before = writes(lines.calls).length;
 
-      fixture.componentInstance.stillNeedExtra();
-      await settle(fixture);
+      fixture.destroy();
 
-      expect(writes(lines.calls).at(-1)).toEqual({
-        kind: 'quantity',
-        lineId: 'ln-eggs',
-        delta: 1,
-      });
-      expect(fixture.componentInstance.extraAsk()).toBeNull();
+      expect(writes(lines.calls)).toHaveLength(before);
+      expect(counts(lines.calls)).toEqual([]);
       expect(stored(lines, 'ln-eggs')).toBe(2);
-
-      lines.answerNextRaise({ extra: EXTRA });
-      raise(fixture, 'ln-eggs', 2, 3);
-      await settle(fixture);
-
-      expect(writes(lines.calls).at(-1)).toEqual({
-        kind: 'quantity',
-        lineId: 'ln-eggs',
-        delta: 1,
-      });
-      expect(fixture.componentInstance.extraAsk()).toBeNull();
     });
 
-    it('"Still need" whose write fails leaves the row at what is left, and the line may ask again', async () => {
-      const { fixture, lines } = await asked();
-      lines.setWriteOutcome('failed');
-
-      fixture.componentInstance.stillNeedExtra();
-      await settle(fixture);
-
-      expect(stored(lines, 'ln-eggs')).toBe(1);
-      expect(fixture.componentInstance.extraAsk()).toBeNull();
-
-      lines.setWriteOutcome('succeeded');
-      lines.answerNextRaise({ extra: EXTRA });
-      raise(fixture, 'ln-eggs', 1, 2);
-      await settle(fixture);
-
-      expect(writes(lines.calls).at(-1)).toEqual({
-        kind: 'quantity',
-        lineId: 'ln-eggs',
-        delta: 1,
-        countExtra: true,
-      });
-      expect(fixture.componentInstance.extraAsk()?.lineId).toBe('ln-eggs');
-    });
-  });
-
-  describe('presses and other questions (specs 15 and 16)', () => {
-    it('a plus while it is open closes it, sends nothing for it, and steps from Z, shown and sent', async () => {
+    it('a plus while it is open closes it, sends no count, and steps from Y', async () => {
       const { fixture, lines } = await asked();
       const before = writes(lines.calls).length;
       jest.useFakeTimers();
 
-      // The control shows 1, what the line holds, and its plus steps from there.
-      expect(drawn(fixture, 'ln-eggs')).toBe('1');
-      fixture.componentInstance.stepQuantity(press('ln-eggs', 1, 2));
+      expect(drawn(fixture, 'ln-eggs')).toBe('2');
+      fixture.componentInstance.stepQuantity(press('ln-eggs', 2, 3));
       fixture.detectChanges();
 
       expect(fixture.componentInstance.extraAsk()).toBeNull();
-      expect(
-        fixture.componentInstance.quantityRuns.pending().get('ln-eggs')
-      ).toBe(2);
-      expect(drawn(fixture, 'ln-eggs')).toBe('2');
+      expect(drawn(fixture, 'ln-eggs')).toBe('3');
 
       jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
       jest.useRealTimers();
       await settle(fixture);
 
       expect(writes(lines.calls).slice(before)).toEqual([
-        { kind: 'quantity', lineId: 'ln-eggs', delta: 1, countExtra: true },
+        { kind: 'quantity', lineId: 'ln-eggs', delta: 1, reportExtra: true },
       ]);
-      expect(stored(lines, 'ln-eggs')).toBe(2);
+      expect(counts(lines.calls)).toEqual([]);
+      expect(stored(lines, 'ln-eggs')).toBe(3);
     });
 
-    it('a minus while it is open steps down from Z', async () => {
-      const { fixture, lines } = await asked({ left: 2 });
+    it('a minus while it is open steps down from Y', async () => {
+      const { fixture, lines } = await asked();
       const before = writes(lines.calls).length;
       jest.useFakeTimers();
 
-      expect(drawn(fixture, 'ln-eggs')).toBe('2');
       fixture.componentInstance.stepQuantity(press('ln-eggs', 2, 1));
       fixture.detectChanges();
       expect(fixture.componentInstance.extraAsk()).toBeNull();
@@ -6776,10 +6856,10 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
       const { fixture, lines } = await asked({ storage: COMPACT });
       const before = writes(lines.calls).length;
 
-      // The tape goes up from Z, 1, and comes down on 4.
+      // The tape goes up from Y, 2, and comes down on 4.
       fixture.componentInstance.onReelOpened({ lineId: 'ln-eggs', open: true });
       expect(fixture.componentInstance.extraAsk()).toBeNull();
-      fixture.componentInstance.reelQuantity(press('ln-eggs', 1, 4));
+      fixture.componentInstance.reelQuantity(press('ln-eggs', 2, 4));
       fixture.componentInstance.onReelOpened({
         lineId: 'ln-eggs',
         open: false,
@@ -6787,7 +6867,7 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
       await settle(fixture);
 
       expect(writes(lines.calls).slice(before)).toEqual([
-        { kind: 'quantity', lineId: 'ln-eggs', delta: 3, countExtra: true },
+        { kind: 'quantity', lineId: 'ln-eggs', delta: 2, reportExtra: true },
       ]);
       expect(stored(lines, 'ln-eggs')).toBe(4);
     });
@@ -6828,25 +6908,95 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
       jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
 
       expect(writes(lines.calls)).toEqual([
-        { kind: 'quantity', lineId: 'ln-eggs', delta: 2, countExtra: true },
+        { kind: 'quantity', lineId: 'ln-eggs', delta: 2, reportExtra: true },
       ]);
     });
 
-    it("a second line's question replaces the first, which keeps what is left", async () => {
+    it("a second line's question replaces the first, which keeps Y and sends nothing", async () => {
       const { fixture, lines } = await asked();
       lines.answerNextRaise({ extra: EXTRA });
       raise(fixture, 'ln-milk', 2, 3);
       await settle(fixture);
 
       expect(fixture.componentInstance.extraAsk()?.lineId).toBe('ln-milk');
-      expect(stored(lines, 'ln-eggs')).toBe(1);
+      expect(stored(lines, 'ln-eggs')).toBe(2);
+      expect(counts(lines.calls)).toEqual([]);
       expect(
         fixture.debugElement.queryAll(By.directive(AnchoredPopover))
       ).toHaveLength(1);
     });
   });
 
-  describe('the scroll and the flash (specs 11 and 12)', () => {
+  describe('focus (0208 spec 7)', () => {
+    it('starts on "Still need", the answer that changes nothing', async () => {
+      const { fixture } = await asked();
+      await new Promise((resolve) => setTimeout(resolve));
+      fixture.detectChanges();
+
+      const buttons = Array.from(
+        document.querySelectorAll<HTMLButtonElement>('lib-extra-ask .answer')
+      );
+      expect(buttons).toHaveLength(2);
+      expect(document.activeElement).toBe(buttons[0]);
+      expect(fixture.componentInstance.announcement()).toBe('');
+    });
+
+    it('moves focus from the row and from nowhere, as the owner ruled', async () => {
+      const rendered = await render({
+        lines: ROWS,
+        names: { [MARTA]: 'Marta' },
+      });
+      const { fixture, lines } = rendered;
+      await settle(fixture);
+      rowOf(fixture, 'ln-eggs')
+        ?.querySelector<HTMLElement>('[data-line-row]')
+        ?.focus();
+      lines.answerNextRaise({ extra: EXTRA });
+      raise(fixture, 'ln-eggs', 1, 2);
+      await settle(fixture);
+      await new Promise((resolve) => setTimeout(resolve));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.extraAsk()?.takeFocus).toBe(true);
+      expect(document.activeElement).toBe(
+        document.querySelectorAll('lib-extra-ask .answer')[0]
+      );
+    });
+
+    it('leaves focus in a field being typed in, and says the question politely', async () => {
+      const rendered = await render({
+        lines: ROWS,
+        names: { [MARTA]: 'Marta' },
+      });
+      const { fixture, lines } = rendered;
+      await settle(fixture);
+      const field = document.createElement('input');
+      field.type = 'search';
+      (fixture.nativeElement as HTMLElement).append(field);
+      field.focus();
+      lines.answerNextRaise({ extra: EXTRA });
+      raise(fixture, 'ln-eggs', 1, 2);
+      await settle(fixture);
+      await new Promise((resolve) => setTimeout(resolve));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.extraAsk()?.shown).toBe(true);
+      expect(fixture.componentInstance.extraAsk()?.takeFocus).toBe(false);
+      expect(document.activeElement).toBe(field);
+      expect(document.querySelector('lib-extra-ask')).not.toBeNull();
+      expect(fixture.componentInstance.announcement()).toBe(
+        'list.extra.announce'
+      );
+
+      // Escape from the field closes it and leaves focus in the field.
+      fixture.componentInstance.closeExtraAsk('escape');
+      await settle(fixture);
+      expect(document.activeElement).toBe(field);
+      field.remove();
+    });
+  });
+
+  describe('the scroll and the flash (0207 specs 11 and 12)', () => {
     const box = (top: number, bottom: number) =>
       ({
         top,
@@ -6904,7 +7054,7 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
       expect(popover(fixture)).toBeDefined();
     });
 
-    it('waits one more scroll end for a row the person scrolled away, then drops the question', async () => {
+    it('waits one more scroll end for a row the person scrolled away, then drops the question and the amount set stands', async () => {
       const { fixture, lines, column, rowBox } = await outOfView(false);
       // The person scrolls by hand while the page brings the row back.
       rowBox.mockReturnValue(box(800, 864));
@@ -6917,7 +7067,8 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
       await settle(fixture);
       expect(fixture.componentInstance.extraAsk()).toBeNull();
       expect(popover(fixture)).toBeUndefined();
-      expect(stored(lines, 'ln-eggs')).toBe(1);
+      expect(stored(lines, 'ln-eggs')).toBe(2);
+      expect(counts(lines.calls)).toEqual([]);
     });
 
     it('asks after the second scroll end when the person brought the row back', async () => {
@@ -7003,37 +7154,60 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
     });
   });
 
-  it('asks after a dropped raise with the flag is sent again (spec 19)', async () => {
-    const { fixture, lines } = await render({
-      lines: ROWS,
-      names: { [MARTA]: 'Marta' },
-      dropped: [
-        {
-          page: `list:${LIST_ID}`,
-          subject: overlayKey('ln-eggs', 'quantity'),
+  describe('a dropped raise sent again (0208 spec 1)', () => {
+    const dropped = (replay: Record<string, unknown>) => [
+      {
+        page: `list:${LIST_ID}`,
+        subject: overlayKey('ln-eggs', 'quantity'),
+        lineId: 'ln-eggs',
+        key: 'list.dropped.quantity',
+        args: { name: 'Huevos', delta: '+1', unit: 'UNIT' },
+        replay: {
+          kind: 'line-quantity' as const,
           lineId: 'ln-eggs',
-          key: 'list.dropped.quantity',
-          args: { name: 'Huevos', delta: '+1', unit: 'UNIT' },
-          replay: {
-            kind: 'line-quantity',
-            lineId: 'ln-eggs',
-            delta: 1,
-            unit: 'UNIT',
-            countExtra: true,
-          },
+          delta: 1,
+          unit: 'UNIT' as const,
+          ...replay,
         },
-      ],
+      },
+    ];
+
+    it('carries the flag when the dropped write did, and may ask', async () => {
+      const { fixture, lines } = await render({
+        lines: ROWS,
+        names: { [MARTA]: 'Marta' },
+        dropped: dropped({ reportExtra: true }),
+      });
+      await settle(fixture);
+      lines.answerNextRaise({ extra: EXTRA });
+      const id = fixture.componentInstance.droppedNotices()[0].id;
+
+      await fixture.componentInstance.resendDropped(id);
+      await settle(fixture);
+
+      expect(writes(lines.calls)).toEqual([
+        { kind: 'quantity', lineId: 'ln-eggs', delta: 1, reportExtra: true },
+      ]);
+      expect(fixture.componentInstance.extraAsk()?.lineId).toBe('ln-eggs');
     });
-    await settle(fixture);
-    lines.answerNextRaise({ extra: EXTRA });
-    const id = fixture.componentInstance.droppedNotices()[0].id;
 
-    await fixture.componentInstance.resendDropped(id);
-    await settle(fixture);
+    it('carries no flag when the dropped write had none, nor for the flag of an older build', async () => {
+      for (const replay of [{}, { countExtra: true }]) {
+        const { fixture, lines } = await render({
+          lines: ROWS,
+          dropped: dropped(replay),
+        });
+        await settle(fixture);
+        const id = fixture.componentInstance.droppedNotices()[0].id;
 
-    expect(writes(lines.calls)).toEqual([
-      { kind: 'quantity', lineId: 'ln-eggs', delta: 1, countExtra: true },
-    ]);
-    expect(fixture.componentInstance.extraAsk()?.lineId).toBe('ln-eggs');
+        await fixture.componentInstance.resendDropped(id);
+        await settle(fixture);
+
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-eggs', delta: 1 },
+        ]);
+        TestBed.resetTestingModule();
+      }
+    });
   });
 });

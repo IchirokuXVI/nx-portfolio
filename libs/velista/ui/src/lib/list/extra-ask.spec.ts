@@ -5,8 +5,9 @@ import type { ExtraAskWords } from './extra-ask-words';
 
 /**
  * The question about the extra already bought (velista `0207`): the two sentences
- * as its title, "Still need" then the answer that changes nothing, focus on that
- * one (spec 14), and no press reaching the row it sits in.
+ * as its title, "Still need" then "Count the extra", focus on "Still need", the
+ * answer that changes nothing (velista `0208`, target state 5), and no press
+ * reaching the row it sits in.
  */
 const WORDS: ExtraAskWords = {
   question: 'Marta already bought 1 extra. Do you still need 2, or just 1?',
@@ -76,10 +77,10 @@ describe('ExtraAsk (velista 0207)', () => {
     expect(keep.querySelector('.amount')).toBeNull();
   });
 
-  it('puts focus on the answer that changes nothing, never on "Still need" (spec 14)', async () => {
+  it('puts focus on "Still need", the answer that changes nothing, never on the count (velista 0208, spec 7)', async () => {
     for (const words of [WORDS, ENOUGH]) {
       const fixture = await render(words);
-      expect(document.activeElement).toBe(answers(fixture)[1]);
+      expect(document.activeElement).toBe(answers(fixture)[0]);
     }
   });
 

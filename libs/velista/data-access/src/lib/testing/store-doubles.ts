@@ -1,11 +1,11 @@
 import { computed, signal, type Provider } from '@angular/core';
 import type {
+  AbsorbedExtra,
   AddLineOptions,
   AddPostalCodeRequest,
   BasketSummary,
   CatalogItem,
   Comment,
-  CountedExtra,
   Identity,
   Line,
   LineApprovalStatus,
@@ -801,8 +801,15 @@ export type LineWriteCall =
       readonly kind: 'quantity';
       readonly lineId: string;
       readonly delta: number;
-      /** Present only on a zone list raise that counted the extra (velista `0207`). */
-      readonly countExtra?: true;
+      /** Present only on a zone list raise that reports the extra (velista `0208`). */
+      readonly reportExtra?: true;
+    }
+  /** "Count the extra" (velista `0208`), with what it took off and what it expected. */
+  | {
+      readonly kind: 'countExtra';
+      readonly lineId: string;
+      readonly amount: number;
+      readonly expect: number;
     }
   /** A settle, with what it claimed happened. */
   | {
@@ -961,16 +968,28 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
   let addHeld: Promise<void> | null = null;
   let releaseAdd: (() => void) | null = null;
   /**
-   * The answers the next raises that count the extra give, in order (velista
-   * `0207`): what was counted, and the amount the line is left at, which defaults to
-   * the line's amount plus the delta less what was counted. With none staged, nothing
-   * is counted, as the memory service answers.
+   * The answers the next raises that report the extra give, in order (velista
+   * `0208`): what was taken in, and the amount the line holds, which defaults to the
+   * line's amount plus the delta, as on the server (backend `0276`). With none
+   * staged, nothing was above, as the memory service answers.
    */
   const raiseAnswers: {
-    readonly extra: CountedExtra | null;
+    readonly extra: AbsorbedExtra | null;
     readonly quantity?: number;
   }[] = [];
-  /** Holds every raise that counts the extra until released. */
+  /**
+   * The answers the next counts give, in order (velista `0208`): counted, refused as
+   * stale with the amount the server holds, or failed. With none staged, counted.
+   */
+  const countAnswers: (
+    | { readonly state: 'counted' }
+    | { readonly state: 'stale'; readonly quantity: number }
+    | { readonly state: 'failed' }
+  )[] = [];
+  /** Holds every count until released. */
+  let countHeld: Promise<void> | null = null;
+  let releaseCount: (() => void) | null = null;
+  /** Holds every raise that reports the extra until released. */
   let raiseHeld: Promise<void> | null = null;
   let releaseRaise: (() => void) | null = null;
 
@@ -1323,11 +1342,11 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
     },
 
     /**
-     * A zone list raise (velista `0207`): recorded with its flag, patched at once as
+     * A zone list raise (velista `0208`): recorded with its flag, patched at once as
      * the real store does, then patched again from the staged answer.
      */
-    raiseCountingExtra: async (lineId: string, delta: number) => {
-      calls.push({ kind: 'quantity', lineId, delta, countExtra: true });
+    raiseReportingExtra: async (lineId: string, delta: number) => {
+      calls.push({ kind: 'quantity', lineId, delta, reportExtra: true });
       const before = lines().find((l) => l.id === lineId);
       lines.update((current) =>
         current.map((l) =>
@@ -1337,7 +1356,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         )
       );
       const answer = raiseAnswers.shift() ?? {
-        extra: { above: 0, counted: 0, buyers: [] },
+        extra: { above: 0, countable: 0, buyers: [] },
       };
       // The answer comes back after the request went out, as the network's does,
       // never in the task that sent it.
@@ -1346,22 +1365,48 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         lines.update((current) =>
           current.map((l) => (l.id === lineId && before ? before : l))
         );
-        return { state: 'failed' as const, extra: null };
+        return { state: 'failed' as const, extra: null, quantity: null };
       }
-      // What was counted comes off what the line holds now, so a write that landed
-      // in between stands, as it does on the server.
-      const counted = answer.extra?.counted ?? 0;
-      lines.update((current) =>
-        current.map((l) =>
-          l.id === lineId
-            ? {
-                ...l,
-                quantity: answer.quantity ?? Math.max(0, l.quantity - counted),
-              }
-            : l
-        )
-      );
-      return { state: outcome, extra: answer.extra };
+      // The line holds what it holds now, plus the delta, unless the answer names
+      // another amount (somebody else's write that landed in between).
+      if (answer.quantity !== undefined) {
+        const quantity = answer.quantity;
+        lines.update((current) =>
+          current.map((l) => (l.id === lineId ? { ...l, quantity } : l))
+        );
+      }
+      const held = lines().find((l) => l.id === lineId)?.quantity ?? null;
+      return { state: outcome, extra: answer.extra, quantity: held };
+    },
+
+    /**
+     * "Count the extra" (velista `0208`): recorded, patched at once to `expect -
+     * amount` as the real store does, then settled by the staged answer: counted, a
+     * stale refusal that leaves the server's amount, or a failure that puts the line
+     * back.
+     */
+    countExtra: async (lineId: string, amount: number, expect: number) => {
+      calls.push({ kind: 'countExtra', lineId, amount, expect });
+      const before = lines().find((l) => l.id === lineId);
+      if (before === undefined) {
+        return 'failed' as const;
+      }
+      const set = (quantity: number) =>
+        lines.update((current) =>
+          current.map((l) => (l.id === lineId ? { ...l, quantity } : l))
+        );
+      set(expect - amount);
+      const answer = countAnswers.shift() ?? { state: 'counted' as const };
+      await (countHeld ?? Promise.resolve());
+      if (answer.state === 'stale') {
+        set(answer.quantity);
+        return 'stale' as const;
+      }
+      if (answer.state === 'failed') {
+        set(before.quantity);
+        return 'failed' as const;
+      }
+      return 'counted' as const;
     },
 
     settle: async (
@@ -1538,7 +1583,21 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
     answerNextRaise: (answer: (typeof raiseAnswers)[number]) => {
       raiseAnswers.push(answer);
     },
-    /** Keep every raise that counts the extra in flight until `releaseRaises`. */
+    answerNextCount: (answer: (typeof countAnswers)[number]) => {
+      countAnswers.push(answer);
+    },
+    /** Keep every count in flight until `releaseCounts`. */
+    holdCounts: () => {
+      countHeld = new Promise<void>((resolve) => {
+        releaseCount = resolve;
+      });
+    },
+    releaseCounts: () => {
+      countHeld = null;
+      releaseCount?.();
+      releaseCount = null;
+    },
+    /** Keep every raise that reports the extra in flight until `releaseRaises`. */
     holdRaises: () => {
       raiseHeld = new Promise<void>((resolve) => {
         releaseRaise = resolve;
