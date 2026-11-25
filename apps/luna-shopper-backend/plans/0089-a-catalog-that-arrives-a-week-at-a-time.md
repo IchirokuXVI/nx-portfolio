@@ -2,7 +2,9 @@
 > and the research), [#248](https://github.com/IchirokuXVI/nx-portfolio/pull/248)
 > (the `REGION` rename and the price granularity it settles),
 > [#254](https://github.com/IchirokuXVI/nx-portfolio/pull/254) (the library, the
-> two runners and the store discovery dispatch)
+> two runners and the store discovery dispatch),
+> [#1104](https://github.com/IchirokuXVI/nx-portfolio/pull/1104) (owner decision
+> 141a, the notes after the build)
 
 # 0089 A catalog that arrives a week at a time
 
