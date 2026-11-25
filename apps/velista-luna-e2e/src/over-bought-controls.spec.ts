@@ -379,7 +379,7 @@ test.describe('every control that raises a line asks about the extra (velista 02
       .getByRole('button', { name: 'Add', exact: true })
       .click();
     const answer = await added;
-    expect(answer.body['outcome']).toBe('raised');
+    expect(answer.body['outcome']).toBe('RAISED');
     expect(answer.body['extra']).toEqual(
       expect.objectContaining({ above: 3, countable: 1 })
     );
