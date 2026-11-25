@@ -170,18 +170,31 @@
 #ab-Today .pdet { font-size: 14px; line-height: 1.4; color: var(--t2); }
 #ab-Today .pprice { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding-top: 1px; }
 #ab-Today .amt { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--t); }
-#ab-Today .per { font-size: 12px; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-Today .unit { font-size: 12px; line-height: 1.4; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-Today .per { margin-left: 3px; font-size: 11px; font-weight: 400; color: var(--t3); word-spacing: -3px; }
 #ab-Today .allp { grid-column: 2 / -1; justify-self: start; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
 #ab-Today .prod.noall { padding-bottom: 12px; }
 #ab-Today .drow { position: relative; padding: 10px 0 2px; border-bottom: 1px solid var(--b1); }
 #ab-Today .drow:last-child { border-bottom: 0; }
 #ab-Today .dtop { display: flex; align-items: center; gap: 12px; }
-#ab-Today .pl { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 2px 0 2px; }
-#ab-Today .plt { flex: 1; display: flex; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--t2); white-space: nowrap; }
-#ab-Today .pln { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-#ab-Today .plb { flex: none; white-space: pre; }
-#ab-Today .pl.diff .plt { color: var(--q); }
-#ab-Today .plc { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 0 0 8px; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-Today .drow { padding: 10px 0 10px; }
+#ab-Today .drow .dtop { align-items: flex-start; }
+#ab-Today .drow .anchor { margin-top: 8px; }
+#ab-Today .drow .ctl .anchor { margin-top: 8px; }
+#ab-Today .cp { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; line-height: 1.4; font-weight: 600; color: var(--q); white-space: nowrap; }
+#ab-Today .cp.a { margin: -4px 0 -10px; align-self: flex-start; }
+#ab-Today .whl { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+#ab-Today .whl .wh { flex: 0 1 auto; min-width: 0; }
+#ab-Today .cp.b { position: relative; min-height: 0; font-size: 14px; line-height: 18px; }
+#ab-Today .cp.b::after { content: ''; position: absolute; left: -4px; right: -4px; top: -13px; bottom: -13px; }
+#ab-Today .ctl { flex: none; display: flex; flex-direction: column; align-items: center; }
+#ab-Today .cp.c { margin: -2px 0 -10px; }
+#ab-Today .crop { width: 390px; box-sizing: border-box; padding: 4px 16px 8px; border-radius: 22px; background: var(--r); }
+#ab-Today .crop .entries { margin-top: 0; }
+#ab-Today .pick { margin: 0 0 12px; font-size: 16px; line-height: 1.4; font-weight: 600; color: #f7f8fc; }
+#ab-Today .gap { height: 32px; }
+#ab-Today .col.rejected .crop { opacity: 0.5; }
+#ab-Today .col.rejected .pick { color: #98a0bb; }
 #ab-Today .disc { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0; border: 0; border-bottom: 1px solid var(--b1); background: transparent; font-size: 16px; color: var(--t); text-align: left; }
 #ab-Today .disc span { flex: 1; }
 #ab-Today .disc i { flex: none; width: 20px; height: 20px; display: flex; color: var(--t2); }
@@ -288,18 +301,31 @@
 #ab-RowSheet .pdet { font-size: 14px; line-height: 1.4; color: var(--t2); }
 #ab-RowSheet .pprice { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding-top: 1px; }
 #ab-RowSheet .amt { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--t); }
-#ab-RowSheet .per { font-size: 12px; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-RowSheet .unit { font-size: 12px; line-height: 1.4; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-RowSheet .per { margin-left: 3px; font-size: 11px; font-weight: 400; color: var(--t3); word-spacing: -3px; }
 #ab-RowSheet .allp { grid-column: 2 / -1; justify-self: start; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
 #ab-RowSheet .prod.noall { padding-bottom: 12px; }
 #ab-RowSheet .drow { position: relative; padding: 10px 0 2px; border-bottom: 1px solid var(--b1); }
 #ab-RowSheet .drow:last-child { border-bottom: 0; }
 #ab-RowSheet .dtop { display: flex; align-items: center; gap: 12px; }
-#ab-RowSheet .pl { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 2px 0 2px; }
-#ab-RowSheet .plt { flex: 1; display: flex; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--t2); white-space: nowrap; }
-#ab-RowSheet .pln { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-#ab-RowSheet .plb { flex: none; white-space: pre; }
-#ab-RowSheet .pl.diff .plt { color: var(--q); }
-#ab-RowSheet .plc { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 0 0 8px; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-RowSheet .drow { padding: 10px 0 10px; }
+#ab-RowSheet .drow .dtop { align-items: flex-start; }
+#ab-RowSheet .drow .anchor { margin-top: 8px; }
+#ab-RowSheet .drow .ctl .anchor { margin-top: 8px; }
+#ab-RowSheet .cp { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; line-height: 1.4; font-weight: 600; color: var(--q); white-space: nowrap; }
+#ab-RowSheet .cp.a { margin: -4px 0 -10px; align-self: flex-start; }
+#ab-RowSheet .whl { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+#ab-RowSheet .whl .wh { flex: 0 1 auto; min-width: 0; }
+#ab-RowSheet .cp.b { position: relative; min-height: 0; font-size: 14px; line-height: 18px; }
+#ab-RowSheet .cp.b::after { content: ''; position: absolute; left: -4px; right: -4px; top: -13px; bottom: -13px; }
+#ab-RowSheet .ctl { flex: none; display: flex; flex-direction: column; align-items: center; }
+#ab-RowSheet .cp.c { margin: -2px 0 -10px; }
+#ab-RowSheet .crop { width: 390px; box-sizing: border-box; padding: 4px 16px 8px; border-radius: 22px; background: var(--r); }
+#ab-RowSheet .crop .entries { margin-top: 0; }
+#ab-RowSheet .pick { margin: 0 0 12px; font-size: 16px; line-height: 1.4; font-weight: 600; color: #f7f8fc; }
+#ab-RowSheet .gap { height: 32px; }
+#ab-RowSheet .col.rejected .crop { opacity: 0.5; }
+#ab-RowSheet .col.rejected .pick { color: #98a0bb; }
 #ab-RowSheet .disc { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0; border: 0; border-bottom: 1px solid var(--b1); background: transparent; font-size: 16px; color: var(--t); text-align: left; }
 #ab-RowSheet .disc span { flex: 1; }
 #ab-RowSheet .disc i { flex: none; width: 20px; height: 20px; display: flex; color: var(--t2); }
@@ -406,18 +432,31 @@
 #ab-Guest .pdet { font-size: 14px; line-height: 1.4; color: var(--t2); }
 #ab-Guest .pprice { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding-top: 1px; }
 #ab-Guest .amt { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--t); }
-#ab-Guest .per { font-size: 12px; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-Guest .unit { font-size: 12px; line-height: 1.4; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-Guest .per { margin-left: 3px; font-size: 11px; font-weight: 400; color: var(--t3); word-spacing: -3px; }
 #ab-Guest .allp { grid-column: 2 / -1; justify-self: start; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
 #ab-Guest .prod.noall { padding-bottom: 12px; }
 #ab-Guest .drow { position: relative; padding: 10px 0 2px; border-bottom: 1px solid var(--b1); }
 #ab-Guest .drow:last-child { border-bottom: 0; }
 #ab-Guest .dtop { display: flex; align-items: center; gap: 12px; }
-#ab-Guest .pl { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 2px 0 2px; }
-#ab-Guest .plt { flex: 1; display: flex; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--t2); white-space: nowrap; }
-#ab-Guest .pln { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-#ab-Guest .plb { flex: none; white-space: pre; }
-#ab-Guest .pl.diff .plt { color: var(--q); }
-#ab-Guest .plc { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 0 0 8px; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-Guest .drow { padding: 10px 0 10px; }
+#ab-Guest .drow .dtop { align-items: flex-start; }
+#ab-Guest .drow .anchor { margin-top: 8px; }
+#ab-Guest .drow .ctl .anchor { margin-top: 8px; }
+#ab-Guest .cp { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; line-height: 1.4; font-weight: 600; color: var(--q); white-space: nowrap; }
+#ab-Guest .cp.a { margin: -4px 0 -10px; align-self: flex-start; }
+#ab-Guest .whl { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+#ab-Guest .whl .wh { flex: 0 1 auto; min-width: 0; }
+#ab-Guest .cp.b { position: relative; min-height: 0; font-size: 14px; line-height: 18px; }
+#ab-Guest .cp.b::after { content: ''; position: absolute; left: -4px; right: -4px; top: -13px; bottom: -13px; }
+#ab-Guest .ctl { flex: none; display: flex; flex-direction: column; align-items: center; }
+#ab-Guest .cp.c { margin: -2px 0 -10px; }
+#ab-Guest .crop { width: 390px; box-sizing: border-box; padding: 4px 16px 8px; border-radius: 22px; background: var(--r); }
+#ab-Guest .crop .entries { margin-top: 0; }
+#ab-Guest .pick { margin: 0 0 12px; font-size: 16px; line-height: 1.4; font-weight: 600; color: #f7f8fc; }
+#ab-Guest .gap { height: 32px; }
+#ab-Guest .col.rejected .crop { opacity: 0.5; }
+#ab-Guest .col.rejected .pick { color: #98a0bb; }
 #ab-Guest .disc { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0; border: 0; border-bottom: 1px solid var(--b1); background: transparent; font-size: 16px; color: var(--t); text-align: left; }
 #ab-Guest .disc span { flex: 1; }
 #ab-Guest .disc i { flex: none; width: 20px; height: 20px; display: flex; color: var(--t2); }
@@ -524,18 +563,31 @@
 #ab-Detail .pdet { font-size: 14px; line-height: 1.4; color: var(--t2); }
 #ab-Detail .pprice { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding-top: 1px; }
 #ab-Detail .amt { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--t); }
-#ab-Detail .per { font-size: 12px; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-Detail .unit { font-size: 12px; line-height: 1.4; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-Detail .per { margin-left: 3px; font-size: 11px; font-weight: 400; color: var(--t3); word-spacing: -3px; }
 #ab-Detail .allp { grid-column: 2 / -1; justify-self: start; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
 #ab-Detail .prod.noall { padding-bottom: 12px; }
 #ab-Detail .drow { position: relative; padding: 10px 0 2px; border-bottom: 1px solid var(--b1); }
 #ab-Detail .drow:last-child { border-bottom: 0; }
 #ab-Detail .dtop { display: flex; align-items: center; gap: 12px; }
-#ab-Detail .pl { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 2px 0 2px; }
-#ab-Detail .plt { flex: 1; display: flex; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--t2); white-space: nowrap; }
-#ab-Detail .pln { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-#ab-Detail .plb { flex: none; white-space: pre; }
-#ab-Detail .pl.diff .plt { color: var(--q); }
-#ab-Detail .plc { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 0 0 8px; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-Detail .drow { padding: 10px 0 10px; }
+#ab-Detail .drow .dtop { align-items: flex-start; }
+#ab-Detail .drow .anchor { margin-top: 8px; }
+#ab-Detail .drow .ctl .anchor { margin-top: 8px; }
+#ab-Detail .cp { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; line-height: 1.4; font-weight: 600; color: var(--q); white-space: nowrap; }
+#ab-Detail .cp.a { margin: -4px 0 -10px; align-self: flex-start; }
+#ab-Detail .whl { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+#ab-Detail .whl .wh { flex: 0 1 auto; min-width: 0; }
+#ab-Detail .cp.b { position: relative; min-height: 0; font-size: 14px; line-height: 18px; }
+#ab-Detail .cp.b::after { content: ''; position: absolute; left: -4px; right: -4px; top: -13px; bottom: -13px; }
+#ab-Detail .ctl { flex: none; display: flex; flex-direction: column; align-items: center; }
+#ab-Detail .cp.c { margin: -2px 0 -10px; }
+#ab-Detail .crop { width: 390px; box-sizing: border-box; padding: 4px 16px 8px; border-radius: 22px; background: var(--r); }
+#ab-Detail .crop .entries { margin-top: 0; }
+#ab-Detail .pick { margin: 0 0 12px; font-size: 16px; line-height: 1.4; font-weight: 600; color: #f7f8fc; }
+#ab-Detail .gap { height: 32px; }
+#ab-Detail .col.rejected .crop { opacity: 0.5; }
+#ab-Detail .col.rejected .pick { color: #98a0bb; }
 #ab-Detail .disc { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0; border: 0; border-bottom: 1px solid var(--b1); background: transparent; font-size: 16px; color: var(--t); text-align: left; }
 #ab-Detail .disc span { flex: 1; }
 #ab-Detail .disc i { flex: none; width: 20px; height: 20px; display: flex; color: var(--t2); }
@@ -642,18 +694,31 @@
 #ab-DetailAll .pdet { font-size: 14px; line-height: 1.4; color: var(--t2); }
 #ab-DetailAll .pprice { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding-top: 1px; }
 #ab-DetailAll .amt { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--t); }
-#ab-DetailAll .per { font-size: 12px; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-DetailAll .unit { font-size: 12px; line-height: 1.4; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-DetailAll .per { margin-left: 3px; font-size: 11px; font-weight: 400; color: var(--t3); word-spacing: -3px; }
 #ab-DetailAll .allp { grid-column: 2 / -1; justify-self: start; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
 #ab-DetailAll .prod.noall { padding-bottom: 12px; }
 #ab-DetailAll .drow { position: relative; padding: 10px 0 2px; border-bottom: 1px solid var(--b1); }
 #ab-DetailAll .drow:last-child { border-bottom: 0; }
 #ab-DetailAll .dtop { display: flex; align-items: center; gap: 12px; }
-#ab-DetailAll .pl { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 2px 0 2px; }
-#ab-DetailAll .plt { flex: 1; display: flex; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--t2); white-space: nowrap; }
-#ab-DetailAll .pln { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-#ab-DetailAll .plb { flex: none; white-space: pre; }
-#ab-DetailAll .pl.diff .plt { color: var(--q); }
-#ab-DetailAll .plc { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 0 0 8px; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-DetailAll .drow { padding: 10px 0 10px; }
+#ab-DetailAll .drow .dtop { align-items: flex-start; }
+#ab-DetailAll .drow .anchor { margin-top: 8px; }
+#ab-DetailAll .drow .ctl .anchor { margin-top: 8px; }
+#ab-DetailAll .cp { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; line-height: 1.4; font-weight: 600; color: var(--q); white-space: nowrap; }
+#ab-DetailAll .cp.a { margin: -4px 0 -10px; align-self: flex-start; }
+#ab-DetailAll .whl { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+#ab-DetailAll .whl .wh { flex: 0 1 auto; min-width: 0; }
+#ab-DetailAll .cp.b { position: relative; min-height: 0; font-size: 14px; line-height: 18px; }
+#ab-DetailAll .cp.b::after { content: ''; position: absolute; left: -4px; right: -4px; top: -13px; bottom: -13px; }
+#ab-DetailAll .ctl { flex: none; display: flex; flex-direction: column; align-items: center; }
+#ab-DetailAll .cp.c { margin: -2px 0 -10px; }
+#ab-DetailAll .crop { width: 390px; box-sizing: border-box; padding: 4px 16px 8px; border-radius: 22px; background: var(--r); }
+#ab-DetailAll .crop .entries { margin-top: 0; }
+#ab-DetailAll .pick { margin: 0 0 12px; font-size: 16px; line-height: 1.4; font-weight: 600; color: #f7f8fc; }
+#ab-DetailAll .gap { height: 32px; }
+#ab-DetailAll .col.rejected .crop { opacity: 0.5; }
+#ab-DetailAll .col.rejected .pick { color: #98a0bb; }
 #ab-DetailAll .disc { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0; border: 0; border-bottom: 1px solid var(--b1); background: transparent; font-size: 16px; color: var(--t); text-align: left; }
 #ab-DetailAll .disc span { flex: 1; }
 #ab-DetailAll .disc i { flex: none; width: 20px; height: 20px; display: flex; color: var(--t2); }
@@ -760,18 +825,31 @@
 #ab-Popover .pdet { font-size: 14px; line-height: 1.4; color: var(--t2); }
 #ab-Popover .pprice { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding-top: 1px; }
 #ab-Popover .amt { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--t); }
-#ab-Popover .per { font-size: 12px; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-Popover .unit { font-size: 12px; line-height: 1.4; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-Popover .per { margin-left: 3px; font-size: 11px; font-weight: 400; color: var(--t3); word-spacing: -3px; }
 #ab-Popover .allp { grid-column: 2 / -1; justify-self: start; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
 #ab-Popover .prod.noall { padding-bottom: 12px; }
 #ab-Popover .drow { position: relative; padding: 10px 0 2px; border-bottom: 1px solid var(--b1); }
 #ab-Popover .drow:last-child { border-bottom: 0; }
 #ab-Popover .dtop { display: flex; align-items: center; gap: 12px; }
-#ab-Popover .pl { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 2px 0 2px; }
-#ab-Popover .plt { flex: 1; display: flex; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--t2); white-space: nowrap; }
-#ab-Popover .pln { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-#ab-Popover .plb { flex: none; white-space: pre; }
-#ab-Popover .pl.diff .plt { color: var(--q); }
-#ab-Popover .plc { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 0 0 8px; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-Popover .drow { padding: 10px 0 10px; }
+#ab-Popover .drow .dtop { align-items: flex-start; }
+#ab-Popover .drow .anchor { margin-top: 8px; }
+#ab-Popover .drow .ctl .anchor { margin-top: 8px; }
+#ab-Popover .cp { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; line-height: 1.4; font-weight: 600; color: var(--q); white-space: nowrap; }
+#ab-Popover .cp.a { margin: -4px 0 -10px; align-self: flex-start; }
+#ab-Popover .whl { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+#ab-Popover .whl .wh { flex: 0 1 auto; min-width: 0; }
+#ab-Popover .cp.b { position: relative; min-height: 0; font-size: 14px; line-height: 18px; }
+#ab-Popover .cp.b::after { content: ''; position: absolute; left: -4px; right: -4px; top: -13px; bottom: -13px; }
+#ab-Popover .ctl { flex: none; display: flex; flex-direction: column; align-items: center; }
+#ab-Popover .cp.c { margin: -2px 0 -10px; }
+#ab-Popover .crop { width: 390px; box-sizing: border-box; padding: 4px 16px 8px; border-radius: 22px; background: var(--r); }
+#ab-Popover .crop .entries { margin-top: 0; }
+#ab-Popover .pick { margin: 0 0 12px; font-size: 16px; line-height: 1.4; font-weight: 600; color: #f7f8fc; }
+#ab-Popover .gap { height: 32px; }
+#ab-Popover .col.rejected .crop { opacity: 0.5; }
+#ab-Popover .col.rejected .pick { color: #98a0bb; }
 #ab-Popover .disc { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0; border: 0; border-bottom: 1px solid var(--b1); background: transparent; font-size: 16px; color: var(--t); text-align: left; }
 #ab-Popover .disc span { flex: 1; }
 #ab-Popover .disc i { flex: none; width: 20px; height: 20px; display: flex; color: var(--t2); }
@@ -878,18 +956,31 @@
 #ab-LongName .pdet { font-size: 14px; line-height: 1.4; color: var(--t2); }
 #ab-LongName .pprice { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding-top: 1px; }
 #ab-LongName .amt { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--t); }
-#ab-LongName .per { font-size: 12px; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-LongName .unit { font-size: 12px; line-height: 1.4; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-LongName .per { margin-left: 3px; font-size: 11px; font-weight: 400; color: var(--t3); word-spacing: -3px; }
 #ab-LongName .allp { grid-column: 2 / -1; justify-self: start; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
 #ab-LongName .prod.noall { padding-bottom: 12px; }
 #ab-LongName .drow { position: relative; padding: 10px 0 2px; border-bottom: 1px solid var(--b1); }
 #ab-LongName .drow:last-child { border-bottom: 0; }
 #ab-LongName .dtop { display: flex; align-items: center; gap: 12px; }
-#ab-LongName .pl { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 2px 0 2px; }
-#ab-LongName .plt { flex: 1; display: flex; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--t2); white-space: nowrap; }
-#ab-LongName .pln { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-#ab-LongName .plb { flex: none; white-space: pre; }
-#ab-LongName .pl.diff .plt { color: var(--q); }
-#ab-LongName .plc { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 0 0 8px; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-LongName .drow { padding: 10px 0 10px; }
+#ab-LongName .drow .dtop { align-items: flex-start; }
+#ab-LongName .drow .anchor { margin-top: 8px; }
+#ab-LongName .drow .ctl .anchor { margin-top: 8px; }
+#ab-LongName .cp { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; line-height: 1.4; font-weight: 600; color: var(--q); white-space: nowrap; }
+#ab-LongName .cp.a { margin: -4px 0 -10px; align-self: flex-start; }
+#ab-LongName .whl { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+#ab-LongName .whl .wh { flex: 0 1 auto; min-width: 0; }
+#ab-LongName .cp.b { position: relative; min-height: 0; font-size: 14px; line-height: 18px; }
+#ab-LongName .cp.b::after { content: ''; position: absolute; left: -4px; right: -4px; top: -13px; bottom: -13px; }
+#ab-LongName .ctl { flex: none; display: flex; flex-direction: column; align-items: center; }
+#ab-LongName .cp.c { margin: -2px 0 -10px; }
+#ab-LongName .crop { width: 390px; box-sizing: border-box; padding: 4px 16px 8px; border-radius: 22px; background: var(--r); }
+#ab-LongName .crop .entries { margin-top: 0; }
+#ab-LongName .pick { margin: 0 0 12px; font-size: 16px; line-height: 1.4; font-weight: 600; color: #f7f8fc; }
+#ab-LongName .gap { height: 32px; }
+#ab-LongName .col.rejected .crop { opacity: 0.5; }
+#ab-LongName .col.rejected .pick { color: #98a0bb; }
 #ab-LongName .disc { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0; border: 0; border-bottom: 1px solid var(--b1); background: transparent; font-size: 16px; color: var(--t); text-align: left; }
 #ab-LongName .disc span { flex: 1; }
 #ab-LongName .disc i { flex: none; width: 20px; height: 20px; display: flex; color: var(--t2); }
@@ -996,18 +1087,31 @@
 #ab-LongDetail .pdet { font-size: 14px; line-height: 1.4; color: var(--t2); }
 #ab-LongDetail .pprice { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding-top: 1px; }
 #ab-LongDetail .amt { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--t); }
-#ab-LongDetail .per { font-size: 12px; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-LongDetail .unit { font-size: 12px; line-height: 1.4; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-LongDetail .per { margin-left: 3px; font-size: 11px; font-weight: 400; color: var(--t3); word-spacing: -3px; }
 #ab-LongDetail .allp { grid-column: 2 / -1; justify-self: start; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
 #ab-LongDetail .prod.noall { padding-bottom: 12px; }
 #ab-LongDetail .drow { position: relative; padding: 10px 0 2px; border-bottom: 1px solid var(--b1); }
 #ab-LongDetail .drow:last-child { border-bottom: 0; }
 #ab-LongDetail .dtop { display: flex; align-items: center; gap: 12px; }
-#ab-LongDetail .pl { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 2px 0 2px; }
-#ab-LongDetail .plt { flex: 1; display: flex; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--t2); white-space: nowrap; }
-#ab-LongDetail .pln { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-#ab-LongDetail .plb { flex: none; white-space: pre; }
-#ab-LongDetail .pl.diff .plt { color: var(--q); }
-#ab-LongDetail .plc { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 0 0 8px; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-LongDetail .drow { padding: 10px 0 10px; }
+#ab-LongDetail .drow .dtop { align-items: flex-start; }
+#ab-LongDetail .drow .anchor { margin-top: 8px; }
+#ab-LongDetail .drow .ctl .anchor { margin-top: 8px; }
+#ab-LongDetail .cp { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; line-height: 1.4; font-weight: 600; color: var(--q); white-space: nowrap; }
+#ab-LongDetail .cp.a { margin: -4px 0 -10px; align-self: flex-start; }
+#ab-LongDetail .whl { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+#ab-LongDetail .whl .wh { flex: 0 1 auto; min-width: 0; }
+#ab-LongDetail .cp.b { position: relative; min-height: 0; font-size: 14px; line-height: 18px; }
+#ab-LongDetail .cp.b::after { content: ''; position: absolute; left: -4px; right: -4px; top: -13px; bottom: -13px; }
+#ab-LongDetail .ctl { flex: none; display: flex; flex-direction: column; align-items: center; }
+#ab-LongDetail .cp.c { margin: -2px 0 -10px; }
+#ab-LongDetail .crop { width: 390px; box-sizing: border-box; padding: 4px 16px 8px; border-radius: 22px; background: var(--r); }
+#ab-LongDetail .crop .entries { margin-top: 0; }
+#ab-LongDetail .pick { margin: 0 0 12px; font-size: 16px; line-height: 1.4; font-weight: 600; color: #f7f8fc; }
+#ab-LongDetail .gap { height: 32px; }
+#ab-LongDetail .col.rejected .crop { opacity: 0.5; }
+#ab-LongDetail .col.rejected .pick { color: #98a0bb; }
 #ab-LongDetail .disc { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0; border: 0; border-bottom: 1px solid var(--b1); background: transparent; font-size: 16px; color: var(--t); text-align: left; }
 #ab-LongDetail .disc span { flex: 1; }
 #ab-LongDetail .disc i { flex: none; width: 20px; height: 20px; display: flex; color: var(--t2); }
@@ -1114,18 +1218,31 @@
 #ab-OtherList .pdet { font-size: 14px; line-height: 1.4; color: var(--t2); }
 #ab-OtherList .pprice { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding-top: 1px; }
 #ab-OtherList .amt { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--t); }
-#ab-OtherList .per { font-size: 12px; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-OtherList .unit { font-size: 12px; line-height: 1.4; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-OtherList .per { margin-left: 3px; font-size: 11px; font-weight: 400; color: var(--t3); word-spacing: -3px; }
 #ab-OtherList .allp { grid-column: 2 / -1; justify-self: start; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
 #ab-OtherList .prod.noall { padding-bottom: 12px; }
 #ab-OtherList .drow { position: relative; padding: 10px 0 2px; border-bottom: 1px solid var(--b1); }
 #ab-OtherList .drow:last-child { border-bottom: 0; }
 #ab-OtherList .dtop { display: flex; align-items: center; gap: 12px; }
-#ab-OtherList .pl { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 2px 0 2px; }
-#ab-OtherList .plt { flex: 1; display: flex; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--t2); white-space: nowrap; }
-#ab-OtherList .pln { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-#ab-OtherList .plb { flex: none; white-space: pre; }
-#ab-OtherList .pl.diff .plt { color: var(--q); }
-#ab-OtherList .plc { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 0 0 8px; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-OtherList .drow { padding: 10px 0 10px; }
+#ab-OtherList .drow .dtop { align-items: flex-start; }
+#ab-OtherList .drow .anchor { margin-top: 8px; }
+#ab-OtherList .drow .ctl .anchor { margin-top: 8px; }
+#ab-OtherList .cp { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; line-height: 1.4; font-weight: 600; color: var(--q); white-space: nowrap; }
+#ab-OtherList .cp.a { margin: -4px 0 -10px; align-self: flex-start; }
+#ab-OtherList .whl { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+#ab-OtherList .whl .wh { flex: 0 1 auto; min-width: 0; }
+#ab-OtherList .cp.b { position: relative; min-height: 0; font-size: 14px; line-height: 18px; }
+#ab-OtherList .cp.b::after { content: ''; position: absolute; left: -4px; right: -4px; top: -13px; bottom: -13px; }
+#ab-OtherList .ctl { flex: none; display: flex; flex-direction: column; align-items: center; }
+#ab-OtherList .cp.c { margin: -2px 0 -10px; }
+#ab-OtherList .crop { width: 390px; box-sizing: border-box; padding: 4px 16px 8px; border-radius: 22px; background: var(--r); }
+#ab-OtherList .crop .entries { margin-top: 0; }
+#ab-OtherList .pick { margin: 0 0 12px; font-size: 16px; line-height: 1.4; font-weight: 600; color: #f7f8fc; }
+#ab-OtherList .gap { height: 32px; }
+#ab-OtherList .col.rejected .crop { opacity: 0.5; }
+#ab-OtherList .col.rejected .pick { color: #98a0bb; }
 #ab-OtherList .disc { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0; border: 0; border-bottom: 1px solid var(--b1); background: transparent; font-size: 16px; color: var(--t); text-align: left; }
 #ab-OtherList .disc span { flex: 1; }
 #ab-OtherList .disc i { flex: none; width: 20px; height: 20px; display: flex; color: var(--t2); }
@@ -1133,11 +1250,142 @@
 #ab-OtherList .actions { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; }
 #ab-OtherList .primary { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; padding: 8px 12px; border: 0; border-radius: 12px; background: var(--act); color: var(--on-act); font-size: 16px; font-weight: 600; }
 #ab-OtherList .quiet { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; padding: 4px; border: 0; background: transparent; font-size: 14px; color: var(--t3); }
+#ab-ChangeChoice .pair { display: flex; gap: 80px; align-items: flex-start; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+#ab-ChangeChoice .col { flex: none; width: 390px; }
+#ab-ChangeChoice .tag { height: 28px; margin: 0; font-size: 12px; line-height: 16px; color: #98a0bb; }
+#ab-ChangeChoice .day { --g: #f7f8fc; --r: #ffffff; --o: #ffffff; --s: #eef0f7;
+  --t: #11141f; --t2: #525a78; --t3: #616a8a;
+  --b1: #dde1ed; --b2: #6f7899;
+  --act: #ffb454; --on-act: #0a0c14; --q: #8a5a12;
+  --ok: #047857; --focus: #2563eb;
+  --scrim: rgba(17, 20, 31, 0.42);
+  --shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  --e2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.10);
+  color-scheme: light; }
+#ab-ChangeChoice .night { --g: #0a0c14; --r: #161a28; --o: #1a1e2e; --s: #11141f;
+  --t: #f7f8fc; --t2: #c2c8db; --t3: #98a0bb;
+  --b1: rgba(255, 255, 255, 0.08); --b2: rgba(255, 255, 255, 0.35);
+  --act: #ffb454; --on-act: #0a0c14; --q: #ffb454;
+  --ok: #34d399; --focus: #60a5fa;
+  --scrim: rgba(10, 12, 20, 0.74);
+  --shadow: 0 -18px 40px rgba(10, 12, 20, 0.42);
+  --e2: inset 0 1px 0 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(10, 12, 20, 0.55);
+  color-scheme: dark; }
+#ab-ChangeChoice .vel { color: var(--t); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+#ab-ChangeChoice .vel button { font-family: inherit; cursor: pointer; }
+#ab-ChangeChoice .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; background: var(--g); }
+#ab-ChangeChoice .ph { height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid var(--b1); }
+#ab-ChangeChoice .ph i { width: 24px; height: 24px; display: flex; color: var(--t); }
+#ab-ChangeChoice .ph b { font-family: Marcellus, Georgia, serif; font-size: 20px; font-weight: 400; letter-spacing: 0.05em; }
+#ab-ChangeChoice .prow { display: flex; align-items: center; gap: 12px; height: 60px; box-sizing: border-box; padding: 0 16px; border-bottom: 1px solid var(--b1); }
+#ab-ChangeChoice .prow .dot { width: 26px; height: 26px; flex: none; box-sizing: border-box; border: 1.5px solid var(--b2); border-radius: 999px; }
+#ab-ChangeChoice .prow span { flex: 1; font-size: 16px; }
+#ab-ChangeChoice .prow em { font-style: normal; font-size: 16px; font-weight: 600; }
+#ab-ChangeChoice .scrim { position: absolute; inset: 0; background: var(--scrim); }
+#ab-ChangeChoice .home { position: absolute; z-index: 3; left: 50%; bottom: 8px; width: 134px; height: 5px; margin-left: -67px; border-radius: 999px; background: var(--t); }
+#ab-ChangeChoice .sheet { position: absolute; left: 0; right: 0; bottom: 0; box-sizing: border-box; padding: 0 16px 54px; border-radius: 22px 22px 0 0; background: var(--r); box-shadow: var(--shadow); }
+#ab-ChangeChoice .handle { width: 48px; height: 5px; margin: 10px auto 16px; border-radius: 999px; background: var(--b1); }
+#ab-ChangeChoice .title { margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 1.2; font-weight: 400; color: var(--t); text-wrap: balance; }
+#ab-ChangeChoice .sub { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+#ab-ChangeChoice .happened { margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); }
+#ab-ChangeChoice .shead { display: flex; align-items: center; gap: 4px; margin-left: -10px; }
+#ab-ChangeChoice .back { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; background: transparent; color: var(--t2); }
+#ab-ChangeChoice .back i { width: 24px; height: 24px; display: flex; }
+#ab-ChangeChoice .shead .title { flex: 1; min-width: 0; }
+#ab-ChangeChoice .shead + .sub { margin-top: 0; }
+#ab-ChangeChoice .entries { margin-top: 8px; }
+#ab-ChangeChoice .head { display: flex; align-items: center; gap: 8px; min-height: 44px; border-bottom: 1px solid var(--b1); }
+#ab-ChangeChoice .head h3 { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 600; color: var(--t2); }
+#ab-ChangeChoice .all { flex: none; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); white-space: nowrap; }
+#ab-ChangeChoice .rows { margin: 0; padding: 0; list-style: none; }
+#ab-ChangeChoice .row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 4px 0; border-bottom: 1px solid var(--b1); }
+#ab-ChangeChoice .lbl { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#ab-ChangeChoice .nm { display: flex; min-width: 0; font-size: 16px; line-height: 1.5; color: var(--t); white-space: nowrap; }
+#ab-ChangeChoice .nmt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ab-ChangeChoice .ask { flex: none; white-space: pre; color: var(--t2); font-variant-numeric: tabular-nums; }
+#ab-ChangeChoice .wh { overflow: hidden; font-size: 12px; line-height: 1.5; color: var(--t2); text-overflow: ellipsis; white-space: nowrap; }
+#ab-ChangeChoice .got { font-size: 14px; line-height: 1.5; color: var(--t2); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-ChangeChoice .change { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--b1); border-radius: 12px; background: var(--r); color: var(--t); }
+#ab-ChangeChoice .change i { width: 20px; height: 20px; display: flex; }
+#ab-ChangeChoice .stp { flex: none; display: inline-grid; grid-template-columns: 48px 72px 48px; height: 48px; border-radius: 999px; background: var(--r); box-shadow: inset 0 0 0 1px var(--b2); }
+#ab-ChangeChoice .stp.wide { grid-template-columns: 48px 95px 48px; }
+#ab-ChangeChoice .sb { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; color: var(--t); }
+#ab-ChangeChoice .sb.end { opacity: 0.35; }
+#ab-ChangeChoice .g { position: relative; display: block; width: 14px; height: 14px; }
+#ab-ChangeChoice .g::before { content: ''; position: absolute; left: 0; top: 6px; width: 14px; height: 2px; border-radius: 1px; background: currentColor; }
+#ab-ChangeChoice .plus .g::after { content: ''; position: absolute; left: 6px; top: 0; width: 2px; height: 14px; border-radius: 1px; background: currentColor; }
+#ab-ChangeChoice .cell { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 0; padding: 0 4px; overflow: hidden; white-space: nowrap; }
+#ab-ChangeChoice .fig { font-size: 18px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--t); }
+#ab-ChangeChoice .fig.unit { font-size: 16px; }
+#ab-ChangeChoice .sym { font-size: 12px; line-height: 1; color: var(--t2); }
+#ab-ChangeChoice .stp.zero .fig { color: var(--t2); }
+#ab-ChangeChoice .stp.reached .fig { color: var(--ok); }
+#ab-ChangeChoice .stp.over .fig { color: var(--q); }
+#ab-ChangeChoice .stp.ring-ok { box-shadow: inset 0 0 0 2px var(--ok); }
+#ab-ChangeChoice .stp.ring-over { box-shadow: inset 0 0 0 2px var(--q); }
+#ab-ChangeChoice .ask.reached { color: var(--ok); }
+#ab-ChangeChoice .ask.over { color: var(--q); }
+#ab-ChangeChoice .rnum { flex: none; display: flex; justify-content: flex-end; align-items: center; width: 168px; height: 48px; font-size: 16px; color: var(--t2); font-variant-numeric: tabular-nums; }
+#ab-ChangeChoice .rnum.wide { width: 191px; }
+#ab-ChangeChoice .stp.dis { background: transparent; box-shadow: inset 0 0 0 1px var(--b1); }
+#ab-ChangeChoice .stp.dis .sb { color: var(--t3); opacity: 0.6; }
+#ab-ChangeChoice .stp.dis .fig { color: var(--t3); }
+#ab-ChangeChoice .stp.dis .sym { color: var(--t3); }
+#ab-ChangeChoice .desc { margin: 0; font-size: 14px; line-height: 1.5; color: var(--t2); text-wrap: pretty; }
+#ab-ChangeChoice .anchor { position: relative; flex: none; display: flex; }
+#ab-ChangeChoice .pop { position: absolute; z-index: 5; right: 0; bottom: calc(100% + 8px); box-sizing: border-box; width: 280px; padding: 12px; border: 1px solid var(--b1); border-radius: 12px; background: var(--o); box-shadow: var(--e2); color: var(--t2); font-size: 12px; line-height: 1.4; }
+#ab-ChangeChoice .pop p { margin: 0; }
+#ab-ChangeChoice .pop p + p { margin-top: 8px; }
+#ab-ChangeChoice .pic { box-sizing: border-box; flex: none; display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; padding: 0; overflow: hidden; border: 1px solid var(--b1); border-radius: 10px; background: var(--o); cursor: zoom-in; }
+#ab-ChangeChoice .pic img { display: block; width: 100%; height: 100%; object-fit: contain; }
+#ab-ChangeChoice .pic.none { background: var(--s); color: var(--t3); cursor: default; }
+#ab-ChangeChoice .pic.none i { width: 24px; height: 24px; display: flex; }
+#ab-ChangeChoice .pic.sm { width: 28px; height: 28px; border-radius: 8px; }
+#ab-ChangeChoice .pic.sm.none i { width: 16px; height: 16px; }
+#ab-ChangeChoice .prod { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; column-gap: 12px; align-items: start; padding: 12px 0 0; }
+#ab-ChangeChoice .prod .pic { grid-row: 1 / span 2; }
+#ab-ChangeChoice .pwhat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+#ab-ChangeChoice .pname { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 16px; line-height: 1.3; color: var(--t); }
+#ab-ChangeChoice .pdet { font-size: 14px; line-height: 1.4; color: var(--t2); }
+#ab-ChangeChoice .pprice { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding-top: 1px; }
+#ab-ChangeChoice .amt { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--t); }
+#ab-ChangeChoice .unit { font-size: 12px; line-height: 1.4; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-ChangeChoice .per { margin-left: 3px; font-size: 11px; font-weight: 400; color: var(--t3); word-spacing: -3px; }
+#ab-ChangeChoice .allp { grid-column: 2 / -1; justify-self: start; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 600; color: var(--q); }
+#ab-ChangeChoice .prod.noall { padding-bottom: 12px; }
+#ab-ChangeChoice .drow { position: relative; padding: 10px 0 2px; border-bottom: 1px solid var(--b1); }
+#ab-ChangeChoice .drow:last-child { border-bottom: 0; }
+#ab-ChangeChoice .dtop { display: flex; align-items: center; gap: 12px; }
+#ab-ChangeChoice .drow { padding: 10px 0 10px; }
+#ab-ChangeChoice .drow .dtop { align-items: flex-start; }
+#ab-ChangeChoice .drow .anchor { margin-top: 8px; }
+#ab-ChangeChoice .drow .ctl .anchor { margin-top: 8px; }
+#ab-ChangeChoice .cp { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 14px; line-height: 1.4; font-weight: 600; color: var(--q); white-space: nowrap; }
+#ab-ChangeChoice .cp.a { margin: -4px 0 -10px; align-self: flex-start; }
+#ab-ChangeChoice .whl { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+#ab-ChangeChoice .whl .wh { flex: 0 1 auto; min-width: 0; }
+#ab-ChangeChoice .cp.b { position: relative; min-height: 0; font-size: 14px; line-height: 18px; }
+#ab-ChangeChoice .cp.b::after { content: ''; position: absolute; left: -4px; right: -4px; top: -13px; bottom: -13px; }
+#ab-ChangeChoice .ctl { flex: none; display: flex; flex-direction: column; align-items: center; }
+#ab-ChangeChoice .cp.c { margin: -2px 0 -10px; }
+#ab-ChangeChoice .crop { width: 390px; box-sizing: border-box; padding: 4px 16px 8px; border-radius: 22px; background: var(--r); }
+#ab-ChangeChoice .crop .entries { margin-top: 0; }
+#ab-ChangeChoice .pick { margin: 0 0 12px; font-size: 16px; line-height: 1.4; font-weight: 600; color: #f7f8fc; }
+#ab-ChangeChoice .gap { height: 32px; }
+#ab-ChangeChoice .col.rejected .crop { opacity: 0.5; }
+#ab-ChangeChoice .col.rejected .pick { color: #98a0bb; }
+#ab-ChangeChoice .disc { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0; border: 0; border-bottom: 1px solid var(--b1); background: transparent; font-size: 16px; color: var(--t); text-align: left; }
+#ab-ChangeChoice .disc span { flex: 1; }
+#ab-ChangeChoice .disc i { flex: none; width: 20px; height: 20px; display: flex; color: var(--t2); }
+#ab-ChangeChoice .disc.open i { transform: rotate(180deg); }
+#ab-ChangeChoice .actions { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; }
+#ab-ChangeChoice .primary { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; padding: 8px 12px; border: 0; border-radius: 12px; background: var(--act); color: var(--on-act); font-size: 16px; font-weight: 600; }
+#ab-ChangeChoice .quiet { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; padding: 4px; border: 0; background: transparent; font-size: 14px; color: var(--t3); }
 </style>
 
 <header>
   <h1>Velista: a basket row records buys, and a detailed view of its lists</h1>
-  <p class="lede">Velista plans <code>0201</code> (the row sheet records what was bought for each list) and <code>0200</code> (a detailed view, <code>rows/:rowKey/lists</code>, holds each list's ask and the change of product), with backend <code>0273</code> behind the first. They ship together, so every frame draws the end state of both. Each board shows Day in English on the left and Night in Spanish on the right. The row sheet gains a heading and one text button where "Change for all lists" was; the detailed view is a sheet like the shop picker, with the chevron beside its title. No container, no tint, no banner. The design is layout A with colours A, on the stepper's number only. The detailed view opens on the row's product with "Change for all lists" under it; each list shows its own product on one line, in amber when it differs; the word Change at the end of that line is the only control that changes a list's product. A list the reader may not change keeps a stepper disabled as a whole (its border, its number and both ends) that explains itself when pressed. Under its title the detailed view says what it is for, in the sheets' secondary text, on every visit. A guest sees no "Lists and amounts". The board marked Today is drawn from the source on <code>dev</code>. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. Approved by the owner on 2026-11-22.</p>
+  <p class="lede">Velista plans <code>0201</code> (the row sheet records what was bought for each list) and <code>0200</code> (a detailed view, <code>rows/:rowKey/lists</code>, holds each list's ask and the change of product), with backend <code>0273</code> behind the first. They ship together, so every frame draws the end state of both. Each board shows Day in English on the left and Night in Spanish on the right. The row sheet gains a heading and one text button where "Change for all lists" was; the detailed view is a sheet like the shop picker, with the chevron beside its title. No container, no tint, no banner. The design is layout A with colours A, on the stepper's number only. The detailed view opens on the row's product, with its price, the unit price line under the price when it differs, and "Change for all lists" under it. A basket row is one product, so no list draws a product line; "Change product" on its own line under "Bought 2 of 3" is the only control that changes one list's product. A list the reader may not change keeps a stepper disabled as a whole (its border, its number and both ends) that explains itself when pressed. Under its title the detailed view says what it is for, in the sheets' secondary text, on every visit. A guest sees no "Lists and amounts". The board marked Today is drawn from the source on <code>dev</code>. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. Approved by the owner on 2026-11-22. Round 5, approved by the owner on 2026-11-25 and final: no product line per list, Change product as placement A, the unit price line in the product block, and a change of product closes back to the shopping list.</p>
 </header>
 
 <div class="controls">
@@ -1148,7 +1396,7 @@
 </div>
 
 <div class="viewport">
-  <div class="canvas" id="canvas" style="width: 2740px; height: 3722px;">
+  <div class="canvas" id="canvas" style="width: 2740px; height: 4970px;">
       <figure class="board" style="left: 0px; top: 250px; width: 860px;">
         <figcaption>Today, drawn from source: swap icon, a stepper that asks</figcaption>
         <div class="frame" id="ab-Today" style="width: 860px; height: 872px;">
@@ -1198,35 +1446,35 @@
         </div>
       </figure>
       <figure class="board" style="left: 0px; top: 1550px; width: 860px;">
-        <figcaption>0200 frame 2: one product, one list may change it</figcaption>
+        <figcaption>0200 frame 2, final: the unit price line shows; Change product on the one list that may change</figcaption>
         <div class="frame" id="ab-Detail" style="width: 860px; height: 872px;">
           <div class="pair"><div class="col"><p class="tag">Day, in English</p><div class="vel day phone">
           <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Shopping list</b></header>
           <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
           <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
           <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
-          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Lists and amounts</h2></div><p class="desc">Here you change the amount and the product of each list. What you bought goes on the previous screen.</p><div class="prod noall"><button class="pic" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="pwhat"><span class="pname">Leche semidesnatada</span><span class="pdet">Hacendado · 1 L</span></span><span class="pprice"><span class="amt">0,92 €</span><span class="per">0,92 € / L</span></span></div><div class="entries"><div class="head"><h3>What each list asks for</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span><span class="got">Bought 2 of 3</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span><button class="plc" type="button">Change</button></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Bought 0 of 1</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Another list</span></span><span class="got">Bought 1 of 2</span></span><span class="anchor"><span class="stp dis"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span></div></li></ul></div></section><span class="home"></span></div></div><div class="col"><p class="tag">Night, en español</p><div class="vel night phone">
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Lists and amounts</h2></div><p class="desc">Here you change the amount and the product of each list. What you bought goes on the previous screen.</p><div class="prod noall"><button class="pic" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-puleva.jpg" alt=""></button><span class="pwhat"><span class="pname">Leche semidesnatada</span><span class="pdet">Puleva · 1,5 L</span></span><span class="pprice"><span class="amt"><span>1,79 €</span></span><span class="unit"><span>1,19 €</span><span class="per">/ L</span></span></span></div><div class="entries"><div class="head"><h3>What each list asks for</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span><span class="got">Bought 2 of 3</span><button class="cp a" type="button">Change product</button></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Bought 0 of 1</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Another list</span></span><span class="got">Bought 1 of 2</span></span><span class="anchor"><span class="stp dis"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li></ul></div></section><span class="home"></span></div></div><div class="col"><p class="tag">Night, en español</p><div class="vel night phone">
           <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Lista de la compra</b></header>
           <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
           <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
           <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
-          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Listas y cantidades</h2></div><p class="desc">Aquí cambias la cantidad y el producto de cada lista. Lo que has comprado se apunta en la pantalla anterior.</p><div class="prod noall"><button class="pic" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="pwhat"><span class="pname">Leche semidesnatada</span><span class="pdet">Hacendado · 1 L</span></span><span class="pprice"><span class="amt">0,92 €</span><span class="per">0,92 € / L</span></span></div><div class="entries"><div class="head"><h3>Lo que pide cada lista</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span><span class="got">Comprado 2 de 3</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span><button class="plc" type="button">Cambiar</button></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Comprado 0 de 1</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Otra lista</span></span><span class="got">Comprado 1 de 2</span></span><span class="anchor"><span class="stp dis"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span></div></li></ul></div></section><span class="home"></span></div></div></div>
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Listas y cantidades</h2></div><p class="desc">Aquí cambias la cantidad y el producto de cada lista. Lo que has comprado se apunta en la pantalla anterior.</p><div class="prod noall"><button class="pic" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-puleva.jpg" alt=""></button><span class="pwhat"><span class="pname">Leche semidesnatada</span><span class="pdet">Puleva · 1,5 L</span></span><span class="pprice"><span class="amt"><span>1,79 €</span></span><span class="unit"><span>1,19 €</span><span class="per">/ L</span></span></span></div><div class="entries"><div class="head"><h3>Lo que pide cada lista</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span><span class="got">Comprado 2 de 3</span><button class="cp a" type="button">Cambiar producto</button></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Comprado 0 de 1</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Otra lista</span></span><span class="got">Comprado 1 de 2</span></span><span class="anchor"><span class="stp dis"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li></ul></div></section><span class="home"></span></div></div></div>
         </div>
       </figure>
       <figure class="board" style="left: 940px; top: 1550px; width: 860px;">
-        <figcaption>0200 frame 3: Change for all lists, one list on another product</figcaption>
+        <figcaption>0200 frame 3, final: no unit price line (equal to the price); Change for all lists, and Change product on two lists</figcaption>
         <div class="frame" id="ab-DetailAll" style="width: 860px; height: 872px;">
           <div class="pair"><div class="col"><p class="tag">Day, in English</p><div class="vel day phone">
           <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Shopping list</b></header>
           <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
           <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
           <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
-          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Lists and amounts</h2></div><p class="desc">Here you change the amount and the product of each list. What you bought goes on the previous screen.</p><div class="prod"><button class="pic" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="pwhat"><span class="pname">Leche semidesnatada</span><span class="pdet">Hacendado · 1 L</span></span><span class="pprice"><span class="amt">0,92 €</span><span class="per">0,92 € / L</span></span><button class="allp" type="button">Change for all lists</button></div><div class="entries"><div class="head"><h3>What each list asks for</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span><span class="got">Bought 2 of 3</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span><button class="plc" type="button">Change</button></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Bought 0 of 1</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl diff"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-puleva.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Puleva 1 L</span></span><button class="plc" type="button">Change</button></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Another list</span></span><span class="got">Bought 1 of 2</span></span><span class="anchor"><span class="stp dis"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span></div></li></ul></div></section><span class="home"></span></div></div><div class="col"><p class="tag">Night, en español</p><div class="vel night phone">
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Lists and amounts</h2></div><p class="desc">Here you change the amount and the product of each list. What you bought goes on the previous screen.</p><div class="prod"><button class="pic" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="pwhat"><span class="pname">Leche semidesnatada</span><span class="pdet">Hacendado · 1 L</span></span><span class="pprice"><span class="amt"><span>0,92 €</span></span></span><button class="allp" type="button">Change for all lists</button></div><div class="entries"><div class="head"><h3>What each list asks for</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span><span class="got">Bought 2 of 3</span><button class="cp a" type="button">Change product</button></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Bought 0 of 1</span><button class="cp a" type="button">Change product</button></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Another list</span></span><span class="got">Bought 1 of 2</span></span><span class="anchor"><span class="stp dis"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li></ul></div></section><span class="home"></span></div></div><div class="col"><p class="tag">Night, en español</p><div class="vel night phone">
           <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Lista de la compra</b></header>
           <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
           <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
           <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
-          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Listas y cantidades</h2></div><p class="desc">Aquí cambias la cantidad y el producto de cada lista. Lo que has comprado se apunta en la pantalla anterior.</p><div class="prod"><button class="pic" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="pwhat"><span class="pname">Leche semidesnatada</span><span class="pdet">Hacendado · 1 L</span></span><span class="pprice"><span class="amt">0,92 €</span><span class="per">0,92 € / L</span></span><button class="allp" type="button">Cambiar en todas las listas</button></div><div class="entries"><div class="head"><h3>Lo que pide cada lista</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span><span class="got">Comprado 2 de 3</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span><button class="plc" type="button">Cambiar</button></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Comprado 0 de 1</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl diff"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-puleva.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Puleva 1 L</span></span><button class="plc" type="button">Cambiar</button></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Otra lista</span></span><span class="got">Comprado 1 de 2</span></span><span class="anchor"><span class="stp dis"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span></div></li></ul></div></section><span class="home"></span></div></div></div>
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Listas y cantidades</h2></div><p class="desc">Aquí cambias la cantidad y el producto de cada lista. Lo que has comprado se apunta en la pantalla anterior.</p><div class="prod"><button class="pic" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="pwhat"><span class="pname">Leche semidesnatada</span><span class="pdet">Hacendado · 1 L</span></span><span class="pprice"><span class="amt"><span>0,92 €</span></span></span><button class="allp" type="button">Cambiar en todas las listas</button></div><div class="entries"><div class="head"><h3>Lo que pide cada lista</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span><span class="got">Comprado 2 de 3</span><button class="cp a" type="button">Cambiar producto</button></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Comprado 0 de 1</span><button class="cp a" type="button">Cambiar producto</button></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Otra lista</span></span><span class="got">Comprado 1 de 2</span></span><span class="anchor"><span class="stp dis"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li></ul></div></section><span class="home"></span></div></div></div>
         </div>
       </figure>
       <figure class="board" style="left: 1880px; top: 1550px; width: 860px;">
@@ -1237,12 +1485,12 @@
           <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
           <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
           <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
-          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Lists and amounts</h2></div><p class="desc">Here you change the amount and the product of each list. What you bought goes on the previous screen.</p><div class="prod noall"><button class="pic" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="pwhat"><span class="pname">Leche semidesnatada</span><span class="pdet">Hacendado · 1 L</span></span><span class="pprice"><span class="amt">0,92 €</span><span class="per">0,92 € / L</span></span></div><div class="entries"><div class="head"><h3>What each list asks for</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span><span class="got">Bought 2 of 3</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span><button class="plc" type="button">Change</button></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Bought 0 of 1</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Another list</span></span><span class="got">Bought 1 of 2</span></span><span class="anchor"><span class="stp dis"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span><span class="pop" role="note"><p>This list belongs to a group you are not in. Only its members can change what it asks for.</p></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span></div></li></ul></div></section><span class="home"></span></div></div><div class="col"><p class="tag">Night, en español</p><div class="vel night phone">
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Lists and amounts</h2></div><p class="desc">Here you change the amount and the product of each list. What you bought goes on the previous screen.</p><div class="prod noall"><button class="pic" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-puleva.jpg" alt=""></button><span class="pwhat"><span class="pname">Leche semidesnatada</span><span class="pdet">Puleva · 1,5 L</span></span><span class="pprice"><span class="amt"><span>1,79 €</span></span><span class="unit"><span>1,19 €</span><span class="per">/ L</span></span></span></div><div class="entries"><div class="head"><h3>What each list asks for</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span><span class="got">Bought 2 of 3</span><button class="cp a" type="button">Change product</button></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Bought 0 of 1</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Another list</span></span><span class="got">Bought 1 of 2</span></span><span class="anchor"><span class="stp dis"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span><span class="pop" role="note"><p>This list belongs to a group you are not in. Only its members can change what it asks for.</p></span></span></div></li></ul></div></section><span class="home"></span></div></div><div class="col"><p class="tag">Night, en español</p><div class="vel night phone">
           <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Lista de la compra</b></header>
           <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
           <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
           <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
-          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Listas y cantidades</h2></div><p class="desc">Aquí cambias la cantidad y el producto de cada lista. Lo que has comprado se apunta en la pantalla anterior.</p><div class="prod noall"><button class="pic" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="pwhat"><span class="pname">Leche semidesnatada</span><span class="pdet">Hacendado · 1 L</span></span><span class="pprice"><span class="amt">0,92 €</span><span class="per">0,92 € / L</span></span></div><div class="entries"><div class="head"><h3>Lo que pide cada lista</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span><span class="got">Comprado 2 de 3</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span><button class="plc" type="button">Cambiar</button></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Comprado 0 de 1</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Otra lista</span></span><span class="got">Comprado 1 de 2</span></span><span class="anchor"><span class="stp dis"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span><span class="pop" role="note"><p>Esta lista es de un grupo del que no formas parte. Solo sus miembros pueden cambiar lo que pide.</p></span></span></div><div class="pl"><button class="pic sm" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-hacendado.jpg" alt=""></button><span class="plt"><span class="pln">Leche semidesnatada</span><span class="plb"> · Hacendado 1 L</span></span></div></li></ul></div></section><span class="home"></span></div></div></div>
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Listas y cantidades</h2></div><p class="desc">Aquí cambias la cantidad y el producto de cada lista. Lo que has comprado se apunta en la pantalla anterior.</p><div class="prod noall"><button class="pic" type="button" aria-label="Leche semidesnatada"><img src="photos/milk-puleva.jpg" alt=""></button><span class="pwhat"><span class="pname">Leche semidesnatada</span><span class="pdet">Puleva · 1,5 L</span></span><span class="pprice"><span class="amt"><span>1,79 €</span></span><span class="unit"><span>1,19 €</span><span class="per">/ L</span></span></span></div><div class="entries"><div class="head"><h3>Lo que pide cada lista</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span><span class="got">Comprado 2 de 3</span><button class="cp a" type="button">Cambiar producto</button></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Comprado 0 de 1</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Otra lista</span></span><span class="got">Comprado 1 de 2</span></span><span class="anchor"><span class="stp dis"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">2</span></span><span class="sb plus"><i class="g"></i></span></span><span class="pop" role="note"><p>Esta lista es de un grupo del que no formas parte. Solo sus miembros pueden cambiar lo que pide.</p></span></span></div></li></ul></div></section><span class="home"></span></div></div></div>
         </div>
       </figure>
       <figure class="board" style="left: 0px; top: 2850px; width: 860px;">
@@ -1262,19 +1510,19 @@
         </div>
       </figure>
       <figure class="board" style="left: 940px; top: 2850px; width: 860px;">
-        <figcaption>0200 frame 4: long names in the detailed view</figcaption>
+        <figcaption>0200 frame 4, final: long names in the detailed view</figcaption>
         <div class="frame" id="ab-LongDetail" style="width: 860px; height: 872px;">
           <div class="pair"><div class="col"><p class="tag">Day, in English</p><div class="vel day phone">
           <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Shopping list</b></header>
           <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
           <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
           <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
-          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Lists and amounts</h2></div><p class="desc">Here you change the amount and the product of each list. What you bought goes on the previous screen.</p><div class="prod noall"><span class="pic none"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></i></span><span class="pwhat"><span class="pname">Tomate pera de Almería en rama, categoría primera</span><span class="pdet">Granel</span></span><span class="pprice"><span class="amt">2,49 € / kg</span></span></div><div class="entries"><div class="head"><h3>What each list asks for</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal de la casa de la playa</span></span><span class="wh">Piso de la playa de Cullera · Tomate pera para ensalada</span><span class="got">Bought 0,5 of 1,5 kg</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">1,5</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><span class="pic none sm"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></i></span><span class="plt"><span class="pln">Tomate pera de Almería en rama, categoría primera</span><span class="plb"> · Granel</span></span><button class="plc" type="button">Change</button></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Casa · Tomates</span><span class="got">Bought 1 of 1 kg</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">1</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><span class="pic none sm"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></i></span><span class="plt"><span class="pln">Tomate pera de Almería en rama, categoría primera</span><span class="plb"> · Granel</span></span></div></li></ul></div></section><span class="home"></span></div></div><div class="col"><p class="tag">Night, en español</p><div class="vel night phone">
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Lists and amounts</h2></div><p class="desc">Here you change the amount and the product of each list. What you bought goes on the previous screen.</p><div class="prod noall"><span class="pic none"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></i></span><span class="pwhat"><span class="pname">Tomate pera de Almería en rama, categoría primera</span><span class="pdet">Granel</span></span><span class="pprice"><span class="amt"><span>2,49 €</span><span class="per">/ kg</span></span></span></div><div class="entries"><div class="head"><h3>What each list asks for</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal de la casa de la playa</span></span><span class="wh">Piso de la playa de Cullera · Tomate pera para ensalada</span><span class="got">Bought 0,5 of 1,5 kg</span><button class="cp a" type="button">Change product</button></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">1,5</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Casa · Tomates</span><span class="got">Bought 1 of 1 kg</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">1</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li></ul></div></section><span class="home"></span></div></div><div class="col"><p class="tag">Night, en español</p><div class="vel night phone">
           <header class="ph"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg></i><b>Lista de la compra</b></header>
           <div class="prow"><span class="dot"></span><span>Tomate pera</span><em>1</em></div>
           <div class="prow"><span class="dot"></span><span>Leche semidesnatada</span><em>6</em></div>
           <div class="prow"><span class="dot"></span><span>Pan de molde</span><em>1</em></div>
-          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Listas y cantidades</h2></div><p class="desc">Aquí cambias la cantidad y el producto de cada lista. Lo que has comprado se apunta en la pantalla anterior.</p><div class="prod noall"><span class="pic none"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></i></span><span class="pwhat"><span class="pname">Tomate pera de Almería en rama, categoría primera</span><span class="pdet">Granel</span></span><span class="pprice"><span class="amt">2,49 € / kg</span></span></div><div class="entries"><div class="head"><h3>Lo que pide cada lista</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal de la casa de la playa</span></span><span class="wh">Piso de la playa de Cullera · Tomate pera para ensalada</span><span class="got">Comprado 0,5 de 1,5 kg</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">1,5</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><span class="pic none sm"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></i></span><span class="plt"><span class="pln">Tomate pera de Almería en rama, categoría primera</span><span class="plb"> · Granel</span></span><button class="plc" type="button">Cambiar</button></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Casa · Tomates</span><span class="got">Comprado 1 de 1 kg</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">1</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></span></div><div class="pl"><span class="pic none sm"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></i></span><span class="plt"><span class="pln">Tomate pera de Almería en rama, categoría primera</span><span class="plb"> · Granel</span></span></div></li></ul></div></section><span class="home"></span></div></div></div>
+          <div class="scrim"></div><section class="sheet"><div class="handle"></div><div class="shead"><button class="back" type="button" aria-label="Back"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></i></button><h2 class="title">Listas y cantidades</h2></div><p class="desc">Aquí cambias la cantidad y el producto de cada lista. Lo que has comprado se apunta en la pantalla anterior.</p><div class="prod noall"><span class="pic none"><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></i></span><span class="pwhat"><span class="pname">Tomate pera de Almería en rama, categoría primera</span><span class="pdet">Granel</span></span><span class="pprice"><span class="amt"><span>2,49 €</span><span class="per">/ kg</span></span></span></div><div class="entries"><div class="head"><h3>Lo que pide cada lista</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal de la casa de la playa</span></span><span class="wh">Piso de la playa de Cullera · Tomate pera para ensalada</span><span class="got">Comprado 0,5 de 1,5 kg</span><button class="cp a" type="button">Cambiar producto</button></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">1,5</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Casa · Tomates</span><span class="got">Comprado 1 de 1 kg</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig unit">1</span><span class="sym">kg</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li></ul></div></section><span class="home"></span></div></div></div>
         </div>
       </figure>
       <figure class="board" style="left: 1880px; top: 2850px; width: 860px;">
@@ -1293,15 +1541,24 @@
           <div class="scrim"></div><section class="sheet"><div class="handle"></div><h2 class="title">Leche semidesnatada Hacendado 1 L</h2><p class="sub">0,92 € la unidad · Faltan 3</p><div class="entries"><div class="head"><h3>Lo que has comprado</h3><button class="all" type="button">Listas y cantidades</button></div><ul class="rows"><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span><span class="ask"> · 2</span></span><span class="wh">Casa · Leche</span></span><span class="stp zero"><span class="sb minus end"><i class="g"></i></span><span class="cell"><span class="fig">0</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span><span class="ask"> · 1</span></span><span class="wh">Piso de la playa · Leche</span></span><span class="stp zero"><span class="sb minus end"><i class="g"></i></span><span class="cell"><span class="fig">0</span></span><span class="sb plus"><i class="g"></i></span></span></li></ul><button class="disc open" type="button" aria-expanded="true"><span>Comprado para otra lista</span><i><svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></i></button><ul class="rows"><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Despensa</span></span><span class="wh">Casa</span></span><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Cena del sábado</span></span><span class="wh">Casa</span></span><span class="stp zero"><span class="sb minus end"><i class="g"></i></span><span class="cell"><span class="fig">0</span></span><span class="sb plus"><i class="g"></i></span></span></li><li class="row"><span class="lbl"><span class="nm"><span class="nmt">Café de la oficina</span></span><span class="wh">Oficina</span></span><span class="stp zero"><span class="sb minus end"><i class="g"></i></span><span class="cell"><span class="fig">0</span></span><span class="sb plus"><i class="g"></i></span></span></li></ul></div><div class="actions"><button class="primary" type="button">Ya tengo los 3</button><button class="quiet" type="button">No había</button></div></section><span class="home"></span></div></div></div>
         </div>
       </figure>
+      <figure class="board" style="left: 0px; top: 4250px; width: 1330px;">
+        <figcaption>Round 5, decided: Change product goes at A (chosen); B and C not chosen</figcaption>
+        <div class="frame" id="ab-ChangeChoice" style="width: 1330px; height: 720px;">
+          <div class="pair"><div class="col"><p class="pick">A. Its own line under Bought 2 of 3 (chosen)</p><p class="tag">Day, in English</p><div class="vel day crop"><div class="entries"><div class="head"><h3>What each list asks for</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span><span class="got">Bought 2 of 3</span><button class="cp a" type="button">Change product</button></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Bought 0 of 1</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li></ul></div></div><div class="gap"></div><p class="tag">Night, en español</p><div class="vel night crop"><div class="entries"><div class="head"><h3>Lo que pide cada lista</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span><span class="got">Comprado 2 de 3</span><button class="cp a" type="button">Cambiar producto</button></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Comprado 0 de 1</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li></ul></div></div></div><div class="col rejected"><p class="pick">B. At the end of the zone · line line (not chosen)</p><p class="tag">Day, in English</p><div class="vel day crop"><div class="entries"><div class="head"><h3>What each list asks for</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="whl"><span class="wh">Casa · Leche</span><button class="cp b" type="button">Change product</button></span><span class="got">Bought 2 of 3</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Bought 0 of 1</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li></ul></div></div><div class="gap"></div><p class="tag">Night, en español</p><div class="vel night crop"><div class="entries"><div class="head"><h3>Lo que pide cada lista</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="whl"><span class="wh">Casa · Leche</span><button class="cp b" type="button">Cambiar producto</button></span><span class="got">Comprado 2 de 3</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Comprado 0 de 1</span></span><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></div></li></ul></div></div></div><div class="col rejected"><p class="pick">C. Under the stepper (not chosen)</p><p class="tag">Day, in English</p><div class="vel day crop"><div class="entries"><div class="head"><h3>What each list asks for</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span><span class="got">Bought 2 of 3</span></span><span class="ctl"><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span><button class="cp c" type="button">Change product</button></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Bought 0 of 1</span></span><span class="ctl"><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></span></div></li></ul></div></div><div class="gap"></div><p class="tag">Night, en español</p><div class="vel night crop"><div class="entries"><div class="head"><h3>Lo que pide cada lista</h3></div><ul class="rows"><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Compra semanal</span></span><span class="wh">Casa · Leche</span><span class="got">Comprado 2 de 3</span></span><span class="ctl"><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">3</span></span><span class="sb plus"><i class="g"></i></span></span></span><button class="cp c" type="button">Cambiar producto</button></span></div></li><li class="drow"><div class="dtop"><span class="lbl"><span class="nm"><span class="nmt">Básicos</span></span><span class="wh">Piso de la playa · Leche</span><span class="got">Comprado 0 de 1</span></span><span class="ctl"><span class="anchor"><span class="stp"><span class="sb minus"><i class="g"></i></span><span class="cell"><span class="fig">1</span></span><span class="sb plus"><i class="g"></i></span></span></span></span></div></li></ul></div></div></div></div>
+        </div>
+      </figure>
       <aside class="note" style="left: 0px; top: 0px; width: 420px;"><p>TODAY.</p><p>Each list has the swap icon in a bordered square, which changes the product of that list's line, and a stepper that changes what the list asks for.</p><p>Drawn from row-entries and the stepper on dev, not photographed: the staging account no longer signs in.</p></aside>
       <aside class="note" style="left: 940px; top: 0px; width: 420px;"><p>0201 TARGET STATES 2, 5, 6, 8; 0200 TARGET STATE 2. COLOURS A.</p><p>The heading says What you bought. Each stepper counts what this basket bought for that list in this trip; each name carries the list's ask. Básicos asks 2, has 2: its number is green. Cocina asks 1, has 2: amber. Only the number takes the colour.</p><p>The buy steppers snap to the list's ask as well as to 1000: a step lands exactly on the ask even when the step size would skip it (velista 0195 and 0201).</p><p>Lists and amounts, at the right of the heading, opens the detailed view.</p></aside>
       <aside class="note" style="left: 1880px; top: 0px; width: 420px;"><p>0200 SPECS 1; 0201 SPECS 6.</p><p>A guest whose lists allow no change of ask or product sees no Lists and amounts and no Bought for another list.</p></aside>
       <aside class="note" style="left: 0px; top: 1210px; width: 420px;"><p>THE DESCRIPTION.</p><p>Under the title, two lines of the sheets' secondary text say what the view is for, on every visit:</p><p>Here you change the amount and the product of each list. What you bought goes on the previous screen. / Aquí cambias la cantidad y el producto de cada lista. Lo que has comprado se apunta en la pantalla anterior.</p><p>The description names amount and product, so the heading, What each list asks for, does not repeat it.</p></aside>
-      <aside class="note" style="left: 940px; top: 1210px; width: 420px;"><p>0200 TARGET STATE 4. CHANGE.</p><p>Change for all lists sits under the product, in the block it changes.</p><p>Básicos takes Puleva: its line is amber because it is not the row's product. The line is plain text, not a control: the word Change / Cambiar (44 px tall) is the only control that changes a list's product, and the small picture opens the picture viewer. A list that may not change its product shows no Change.</p><p>Fits 844 px with the description, three lists and the home indicator; nothing scrolls.</p></aside>
-      <aside class="note" style="left: 1880px; top: 1210px; width: 420px;"><p>THE BUILD CHANGES THE STEPPER.</p><p>Disabled as a whole: no raised fill, the hairline (border-subtle) for the strong border, the number in text-muted at its usual size and weight, both glyphs in text-muted at 60%. In Night the faint outline stays as drawn.</p><p>Number on the sheet: Day 5.33 to 1, Night 6.66 to 1 (enabled: 18.4 and 16.3).</p><p>quantity-stepper.scss today fades only the ends (0.35 on aria-disabled); its border and number keep the enabled colours. The build adds a whole-stepper disabled state.</p><p>A press opens the note popover (anchored-popover, 280 px); for a guest's own group it says: Only members of Casa can change what this list asks for.</p></aside>
+      <aside class="note" style="left: 940px; top: 1210px; width: 420px;"><p>0200 TARGET STATE 4. CHANGE, FINAL.</p><p>A basket row is always one product: a list that takes another product moves to that product's row. So every list here has the row's product, and no list draws a product line (picture, name, brand and size, amber). Everything else each row shows stays.</p><p>Change for all lists sits under the product, in the block it changes, when two lists or more may change.</p><p>Change product / Cambiar producto (44 px tall) sits on its own line under Bought 2 of 3, in the list's reading column (placement A, the owner's pick). It is the only control that opens one list's change sheet, and shows only on a list that may change its product; a list that may not change keeps its row one line shorter.</p><p>Fits 844 px with the description, three lists and the home indicator; nothing scrolls.</p></aside>
+      <aside class="note" style="left: 1880px; top: 1090px; width: 420px;"><p>THE BUILD CHANGES THE STEPPER.</p><p>Disabled as a whole: no raised fill, the hairline (border-subtle) for the strong border, the number in text-muted at its usual size and weight, both glyphs in text-muted at 60%. In Night the faint outline stays as drawn.</p><p>Number on the sheet: Day 5.33 to 1, Night 6.66 to 1 (enabled: 18.4 and 16.3).</p><p>quantity-stepper.scss today fades only the ends (0.35 on aria-disabled); its border and number keep the enabled colours. The build adds a whole-stepper disabled state.</p><p>A press opens the note popover (anchored-popover, 280 px). For a list of the reader's own group it now says: Only people who manage this list can change what it asks for. / Solo quienes gestionan esta lista pueden cambiar lo que pide. For a list in a group the reader is not in, the words are unchanged (drawn here).</p><p>In these two sheets a stepper draws a plain minus at 1, never the trash.</p></aside>
       <aside class="note" style="left: 0px; top: 2600px; width: 420px;"><p>0201 TARGET STATE 5.</p><p>The name gives way first: Compra semanal de la… · 1,5 kg. The ask is never cut. The line under it is cut on its own.</p><p>A product by weight shows the ask in its exact form with the unit, and the stepper the figure over kg, as the sheet stepper already does.</p></aside>
-      <aside class="note" style="left: 940px; top: 2600px; width: 420px;"><p>0200 FRAME 4.</p><p>The list name and its zone · line are cut; Bought 0,5 of 1,5 kg and the stepper are not. A product name that long wraps to two lines in the block and is cut on a list's line, where its brand never is.</p><p>A product with no photo draws the app's product icon on the sunken fill, and is not a button. Both lists here may change their ask, so no disabled stepper shows.</p></aside>
+      <aside class="note" style="left: 940px; top: 2600px; width: 420px;"><p>0200 FRAME 4, ROUND 5.</p><p>The list name and its zone · line are cut; Bought 0,5 of 1,5 kg, the stepper and Change product are not. A product name that long wraps to two lines in the block.</p><p>A product with no photo draws the app's product icon on the sunken fill, and is not a button. Both lists here may change their ask, so no disabled stepper shows.</p></aside>
       <aside class="note" style="left: 1880px; top: 2600px; width: 420px;"><p>0201 TARGET STATE 7.</p><p>Add it to another list becomes Bought for another list. Its steppers start at 0 and a press up records a buy for that list. Despensa is stepped to 1.</p><p>When the answer comes back, Despensa becomes a list of the row, Despensa · 0, with its 1 in amber, and leaves this section.</p></aside>
+      <aside class="note" style="left: 0px; top: 3810px; width: 420px;"><p>ROUND 5: WHERE CHANGE PRODUCT GOES. DECIDED: A.</p><p>The same two rows in each: Compra semanal may change its product, Básicos may not.</p><p>A, chosen. Its own line under Bought 2 of 3, left aligned in the reading column, like Change for all lists under the product. It reads in order: list, where, bought, then the action. Only a row that may change grows. Every other board of this folder draws A.</p><p>B, not chosen. At the end of the zone · line line: too little room for the words, and a long zone is cut sooner.</p><p>C, not chosen. Under the stepper: it reads as part of the amount and looks odd in the column of controls.</p><p>B and C stay here faded, as the alternatives that were compared.</p></aside>
+      <aside class="note" style="left: 470px; top: 3810px; width: 420px;"><p>AFTER A CHANGE OF PRODUCT, FINAL.</p><p>A change of product closes Lists and amounts as well as the change sheet: the person is back on the shopping list, never on this view. That holds for Change product on one list and for Change for all lists.</p><p>On the shopping list the old product's row and the new product's row are both visible, and the list now sits on the new row.</p></aside>
+      <aside class="note" style="left: 940px; top: 3810px; width: 420px;"><p>THE UNIT PRICE LINE, FINAL.</p><p>The product block shows the catalog card's unit price line under the price: unitPriceWords, drawn as the card's .unit line (text-xs, 12 px, text-muted, tabular figures), the amount then its basis in the card's .per (text-2xs, 11 px, text-muted, 3 px before it). Bases: / kg, / L, / unit (es: / kg, / L, / unidad).</p><p>Shown on frame 2: Puleva 1,5 L at 1,79 € shows 1,19 € / L.</p><p>Hidden when it would equal the shelf price in cents: Hacendado 1 L at 0,92 € is 0,92 € / L, so frame 3 draws no line. Hidden too for a product sold by the kilo or the litre, whose price already says / kg or / L (the tomato on frame 4). A kilo piece always shows its price per kilo.</p></aside>
   </div>
 </div>
 
@@ -1311,7 +1568,7 @@
   (function () {
     var canvas = document.getElementById('canvas');
     var w = 2740;
-    var h = 3722;
+    var h = 4970;
     var buttons = document.querySelectorAll('.controls button');
     buttons.forEach(function (button) {
       button.addEventListener('click', function () {
