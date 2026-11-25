@@ -1,4 +1,4 @@
-> **PR:** [#1099](https://github.com/IchirokuXVI/nx-portfolio/pull/1099) stage 1, [#1100](https://github.com/IchirokuXVI/nx-portfolio/pull/1100) stage 2, [#1101](https://github.com/IchirokuXVI/nx-portfolio/pull/1101) stage 3
+> **PR:** [#1099](https://github.com/IchirokuXVI/nx-portfolio/pull/1099) stage 1, [#1100](https://github.com/IchirokuXVI/nx-portfolio/pull/1100) stage 2, [#1101](https://github.com/IchirokuXVI/nx-portfolio/pull/1101) stage 3, [#1102](https://github.com/IchirokuXVI/nx-portfolio/pull/1102) stage 4
 
 # 0208: every raise asks about the extra, and the amount set stands
 
