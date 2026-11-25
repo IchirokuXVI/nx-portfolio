@@ -27,6 +27,7 @@ import {
   BasketViewStore,
   ChangeLandingStore,
   ItemNames,
+  type ChangeLanding,
 } from '@portfolio/velista/data-access';
 import {
   QUANTITY_STEP_QUIET_MS,
@@ -761,6 +762,8 @@ describe('RowListsSheet (velista 0200)', () => {
         rowKey: ROW_KEY,
         lineId: 'zl-1',
         depth: 2,
+        // The entry the change sheet is pushed onto, one above this view.
+        sheetDepth: 5,
       });
       expect(landings.landingFor(ROW_KEY, null)).toBeNull();
       expect(router.navigateByUrl).toHaveBeenCalledWith(
@@ -781,11 +784,29 @@ describe('RowListsSheet (velista 0200)', () => {
         rowKey: ROW_KEY,
         lineId: null,
         depth: -1,
+        sheetDepth: 2,
       });
       expect(router.navigateByUrl).toHaveBeenCalledWith(
         `/velista/en/shopping-lists/${BASKET_ID}/sheet/rows/${ROW_KEY}/change`
       );
     });
+
+    it.each([
+      ['is cancelled', () => Promise.resolve(false)],
+      ['fails', () => Promise.reject(new Error('refused'))],
+    ])(
+      'lets the landing go when the navigation to the change sheet %s',
+      async (_name, outcome) => {
+        const { fixture, router, landings } = await render({ depth: 4 });
+        router.navigateByUrl.mockImplementationOnce(outcome);
+        rowsOf(fixture)[0]
+          .querySelector<HTMLButtonElement>('button.change')
+          ?.click();
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(landings.landingFor(ROW_KEY, 'zl-1')).toBeNull();
+      }
+    );
   });
 
   describe('the ask', () => {
@@ -1160,28 +1181,50 @@ describe('RowListsSheet (velista 0200)', () => {
       private readonly _pages = inject(PageNavigation);
       private readonly _landings = inject(ChangeLandingStore);
       private readonly _params = inject(ActivatedRoute).snapshot.paramMap;
-      /** Read as the real sheet reads it: by its row and line, from memory. */
-      readonly landing = this._landings.landingFor(
-        this._params.get('rowKey') ?? '',
-        this._params.get('lineId')
-      );
+      private readonly _history = inject(AppHistory);
+      private readonly _rowKey = this._params.get('rowKey') ?? '';
+      private readonly _lineId = this._params.get('lineId');
+      /**
+       * Taken as the real sheet takes it after a change: by its row and line,
+       * from memory, against the real `AppHistory` depth of its own entry.
+       */
+      landing(): ChangeLanding | null {
+        return this._landings.claim(
+          this._rowKey,
+          this._lineId,
+          this._history.depth()
+        );
+      }
       cancel(): void {
-        if (this.landing !== null) {
-          this._landings.release(this.landing);
+        const held = this._landings.landingFor(this._rowKey, this._lineId);
+        if (held !== null) {
+          this._landings.release(held);
         }
         void this._sheet.dismiss(`${PAGE}/sheet/rows/${ROW_KEY}/settle`);
       }
-      /** What the real sheet does after a change it was asked to land. */
+      /** What the real sheet does after a change. */
       changed(): void {
-        if (this.landing !== null) {
-          this._landings.release(this.landing);
-          void this._pages.backTo(this.landing.depth, PAGE);
+        const landing = this.landing();
+        if (landing === null) {
+          void this._sheet.dismiss(`${PAGE}/sheet/rows/${ROW_KEY}/settle`);
+          return;
         }
+        this._landings.release(landing);
+        void this._pages.backTo(landing.depth, PAGE);
       }
     }
 
+    /** The catalog that chooses, and a tab the tab bar pushes from it. */
+    @Component({
+      selector: 'lib-test-catalog-page',
+      template: '<p class="catalog">catalog</p>',
+      changeDetection: ChangeDetectionStrategy.OnPush,
+    })
+    class TestCatalogPage {}
+
     const PAGE = `/velista/en/shopping-lists/${BASKET_ID}`;
     const LISTS_URL = `${PAGE}/sheet/rows/${ROW_KEY}/lists`;
+    const CHANGE_ALL_URL = `${PAGE}/sheet/rows/${ROW_KEY}/change`;
 
     async function routed(rowOf: BasketRow) {
       TestBed.resetTestingModule();
@@ -1205,6 +1248,8 @@ describe('RowListsSheet (velista 0200)', () => {
                 },
               ],
             },
+            { path: 'velista/en/catalog', component: TestCatalogPage },
+            { path: 'velista/en/home', component: TestCatalogPage },
           ]),
           provideLocationMocks(),
           provideVelistaTesting({ basePath: '/velista' }),
@@ -1286,7 +1331,7 @@ describe('RowListsSheet (velista 0200)', () => {
         )?.componentInstance as TestChangeSheet | undefined;
         // The basket page is the entry the document loaded on, depth -1, under
         // the row's sheet (0) and this view (1).
-        expect(sheet?.landing?.depth).toBe(-1);
+        expect(sheet?.landing()?.depth).toBe(-1);
 
         sheet?.changed();
         await settleRouted(harness);
@@ -1298,5 +1343,71 @@ describe('RowListsSheet (velista 0200)', () => {
         expect(held()).toEqual([null, null]);
       }
     );
+
+    /** The change sheet drawn now, or undefined. */
+    const changeSheet = (harness: RouterTestingHarness) =>
+      harness.fixture.debugElement.query(By.directive(TestChangeSheet))
+        ?.componentInstance as TestChangeSheet | undefined;
+
+    it('the sheet popped back onto from the catalog still lands on the shopping list', async () => {
+      const { harness, location } = await routed(
+        row([
+          entry(),
+          entry({ lineId: 'zl-2', listId: 'l-basics', asked: 1, bought: 0 }),
+        ])
+      );
+      const host = harness.fixture.nativeElement as HTMLElement;
+      host.querySelector<HTMLButtonElement>('.change-all')?.click();
+      await settleRouted(harness);
+      expect(changeSheet(harness)?.landing()?.depth).toBe(-1);
+
+      // "Look for another one": the catalog is pushed over the sheet, and its
+      // answer pops back onto it, which draws the basket page and the sheet
+      // again, the sheet only once that navigation has ended.
+      await harness.navigateByUrl('/velista/en/catalog');
+      location.back();
+      await settleRouted(harness);
+      expect(location.path()).toBe(CHANGE_ALL_URL);
+      const back = changeSheet(harness);
+      expect(back?.landing()?.depth).toBe(-1);
+
+      back?.changed();
+      await settleRouted(harness);
+      expect(location.path()).toBe(PAGE);
+      expect(host.querySelector('lib-test-change-sheet')).toBeNull();
+      expect(held()).toEqual([null, null]);
+    });
+
+    it('a change sheet the basket page opens after the catalog was left another way takes no landing', async () => {
+      const { harness, location } = await routed(
+        row([
+          entry(),
+          entry({ lineId: 'zl-2', listId: 'l-basics', asked: 1, bought: 0 }),
+        ])
+      );
+      const host = harness.fixture.nativeElement as HTMLElement;
+      host.querySelector<HTMLButtonElement>('.change-all')?.click();
+      await settleRouted(harness);
+
+      // The catalog, a tab from its tab bar, and the shopping list pushed again.
+      await harness.navigateByUrl('/velista/en/catalog');
+      await harness.navigateByUrl('/velista/en/home');
+      await harness.navigateByUrl(PAGE);
+      // The basket page opens the change sheet of the same row, for all lists.
+      await harness.navigateByUrl(CHANGE_ALL_URL);
+      expect(location.path()).toBe(CHANGE_ALL_URL);
+      const history = TestBed.inject(AppHistory);
+      // The document's entry -1 is the basket page, the sheet held for is 2,
+      // and this one stands on 6.
+      expect(history.depth()).toBe(6);
+
+      changeSheet(harness)?.changed();
+      await settleRouted(harness);
+
+      // One step, onto the shopping list pushed at 5, not back to -1.
+      expect(location.path()).toBe(PAGE);
+      expect(history.depth()).toBe(5);
+      expect(held()).toEqual([null, null]);
+    });
   });
 });

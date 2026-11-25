@@ -369,27 +369,40 @@ export class RowListsSheet {
   /**
    * "Change product" on one list, or "Change for all lists" with null. The
    * basket page is two entries below this view (the row's sheet pushed it, and
-   * the basket page pushed the row's sheet), which is where a change lands.
+   * the basket page pushed the row's sheet), which is where a change lands. The
+   * change sheet is pushed one entry above this view, and only a sheet on that
+   * entry takes the landing (`ChangeLandingStore.claim`).
    */
   protected change(lineId: string | null): void {
     const row = this.row();
     if (row === null) {
       return;
     }
-    this._landings.hold({
+    const depth = this._history.depth();
+    const landing = {
       rowKey: row.rowKey,
       lineId,
-      depth: this._history.depth() - 2,
-    });
-    void this._router.navigateByUrl(
-      changeSheetPath(
-        this._locale(),
-        this._basePath,
-        this._store.address(),
-        row.rowKey,
-        lineId
+      depth: depth - 2,
+      sheetDepth: depth + 1,
+    };
+    this._landings.hold(landing);
+    // A sheet that never opened takes no landing, and none is left for later.
+    const release = () => this._landings.release(landing);
+    this._router
+      .navigateByUrl(
+        changeSheetPath(
+          this._locale(),
+          this._basePath,
+          this._store.address(),
+          row.rowKey,
+          lineId
+        )
       )
-    );
+      .then((opened) => {
+        if (!opened) {
+          release();
+        }
+      }, release);
   }
 
   /** One step of one list's ask: a typed amount is sent at once. */

@@ -12,6 +12,11 @@ export interface ChangeLanding {
   readonly lineId: string | null;
   /** The `AppHistory` depth the change sheet walks back to after a change. */
   readonly depth: number;
+  /**
+   * The `AppHistory` depth of the entry the change sheet occupies: one above the
+   * view that asked. Only a sheet on that entry may take the landing.
+   */
+  readonly sheetDepth: number;
 }
 
 /**
@@ -47,6 +52,41 @@ export class ChangeLandingStore {
     return held !== null && held.rowKey === rowKey && held.lineId === lineId
       ? held
       : null;
+  }
+
+  /**
+   * The landing for the change sheet of this row and line standing on
+   * `sheetDepth` (its own `AppHistory.depth()`), or null. Only the sheet that
+   * was asked for may take it, and that sheet stands on the entry the landing
+   * was held for: pushed there from the view, or popped back onto it from the
+   * catalog.
+   *
+   * A sheet on any other entry finds a landing left over from a walk that ended
+   * another way (a catalog left by its tab bar, a navigation that never
+   * happened), and walking back to it would pop past screens the person did not
+   * leave. It is let go, and the sheet closes one step as when anything else
+   * opened it.
+   *
+   * Asked by depth alone, and only once the sheet's own navigation has ended.
+   * While it is in flight `AppHistory.depth()` is still the entry a push left,
+   * but a sheet whose page was drawn again (the return from the catalog
+   * redraws the basket page) is constructed only after it ended, when the
+   * depth is already its own and `arrivingByPop()` no longer answers.
+   */
+  claim(
+    rowKey: string,
+    lineId: string | null,
+    sheetDepth: number
+  ): ChangeLanding | null {
+    const held = this.landingFor(rowKey, lineId);
+    if (held === null) {
+      return null;
+    }
+    if (held.sheetDepth !== sheetDepth) {
+      this.release(held);
+      return null;
+    }
+    return held;
   }
 
   /**

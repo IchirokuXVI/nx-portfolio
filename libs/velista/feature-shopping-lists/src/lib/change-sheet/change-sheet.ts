@@ -144,14 +144,11 @@ export class ChangeSheet {
   private readonly _lineId: string | null =
     this._route.snapshot.paramMap.get('lineId');
 
-  private readonly _landings = inject(ChangeLandingStore);
-
   /**
-   * Where a change lands when "Lists and amounts" opened this sheet, or null when
-   * anything else did and after a reload (`ChangeLandingStore`). A depth that is
-   * not under this sheet's own entry cannot be the basket page, and is none.
+   * Where a change lands when "Lists and amounts" opened this sheet
+   * (`ChangeLandingStore`). Asked after the change, never held by the sheet.
    */
-  private readonly _landing = this._landingOf();
+  private readonly _landings = inject(ChangeLandingStore);
 
   /**
    * The catalog that chooses is opening, so the landing is kept for the sheet
@@ -487,7 +484,7 @@ export class ChangeSheet {
       return;
     }
     this._left = true;
-    const landing = this._landing;
+    const landing = this._landingOf();
     if (landing === null) {
       this.close();
       return;
@@ -552,7 +549,18 @@ export class ChangeSheet {
       ...(query === '' ? {} : { q: query }),
       ...(chain === null ? {} : { chain }),
     };
-    void this._router.navigateByUrl(url);
+    // A catalog that never opened leaves this sheet standing, and its leaving
+    // then lets the landing go as any other does.
+    this._router.navigateByUrl(url).then(
+      (opened) => {
+        if (!opened) {
+          this._toCatalog = false;
+        }
+      },
+      () => {
+        this._toCatalog = false;
+      }
+    );
   }
 
   /** Close, Escape and the scrim: back to the row's sheet. */
@@ -569,24 +577,29 @@ export class ChangeSheet {
   }
 
   /**
-   * The landing held for this row and line. One at or above this sheet's own
-   * depth was asked of another walk, and is let go.
+   * The landing held for this row and line, if this sheet stands on the entry
+   * it was held for: pushed there from "Lists and amounts", or popped back onto
+   * from the catalog. Any other is let go (`ChangeLandingStore.claim`), so a
+   * landing left over from a catalog trip that ended elsewhere, or from a
+   * navigation that never happened, closes this sheet one step.
+   *
+   * Asked after the change rather than in the constructor: by then the sheet's
+   * own navigation has ended, and `AppHistory.depth()` is its own entry however
+   * it was drawn.
    */
   private _landingOf(): ChangeLanding | null {
-    const held = this._landings.landingFor(this._rowKey(), this._lineId);
-    if (held === null) {
-      return null;
-    }
-    if (held.depth >= this._history.depth()) {
-      this._landings.release(held);
-      return null;
-    }
-    return held;
+    return this._landings.claim(
+      this._rowKey(),
+      this._lineId,
+      this._history.depth()
+    );
   }
 
+  /** Whatever is held for this row and line is over. */
   private _releaseLanding(): void {
-    if (this._landing !== null) {
-      this._landings.release(this._landing);
+    const held = this._landings.landingFor(this._rowKey(), this._lineId);
+    if (held !== null) {
+      this._landings.release(held);
     }
   }
 

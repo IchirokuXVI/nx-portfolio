@@ -188,7 +188,17 @@ interface Options {
    */
   readonly landing?: number;
   readonly landingLine?: string | null;
+  /** The entry the landing was held for: one above the view, 3 by default. */
+  readonly sheetDepth?: number;
+  /**
+   * The `AppHistory` depth of the sheet's own entry: by default 3, one above
+   * the view at 2.
+   */
+  readonly depth?: number;
 }
+
+/** What the `AppHistory` double answers; a spec moves it between two sheets. */
+const history = { depth: 3 };
 
 async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<ChangeSheet>;
@@ -200,6 +210,7 @@ async function render(options: Options = {}): Promise<{
   landings: ChangeLandingStore;
 }> {
   TestBed.resetTestingModule();
+  history.depth = options.depth ?? 3;
   const changeProduct = jest.fn(() => Promise.resolve(options.refuse !== true));
   const dismiss = jest.fn().mockResolvedValue(undefined);
   const backTo = jest.fn().mockResolvedValue(undefined);
@@ -237,7 +248,10 @@ async function render(options: Options = {}): Promise<{
       { provide: CATALOG_BROWSE_SERVICE, useValue: { scopeOffers } },
       ProductPickStore,
       ChangeLandingStore,
-      { provide: AppHistory, useValue: { depth: () => 2 } },
+      {
+        provide: AppHistory,
+        useValue: { depth: () => history.depth },
+      },
       {
         provide: BasketStore,
         useValue: {
@@ -279,6 +293,7 @@ async function render(options: Options = {}): Promise<{
           ? options.landingLine
           : (options.lineId ?? null),
       depth: options.landing,
+      sheetDepth: options.sheetDepth ?? 3,
     });
   }
   const fixture = TestBed.createComponent(ChangeSheet);
@@ -589,10 +604,13 @@ describe('ChangeSheet', () => {
       ['nothing is held, as after a reload', {}],
       ['the landing is for another line', { landing: 0, landingLine: 'zl-2' }],
       ['the landing is for all lists', { landing: 0, landingLine: null }],
-      ['the depth is not under the sheet, as a stale one', { landing: 2 }],
+      ['the landing was held for another entry', { landing: 0, sheetDepth: 5 }],
     ] as const)(
       'closes onto the row after a change when %s',
-      async (_name, held: Pick<Options, 'landing' | 'landingLine'>) => {
+      async (
+        _name,
+        held: Pick<Options, 'landing' | 'landingLine' | 'sheetDepth'>
+      ) => {
         const { fixture, backTo, dismiss } = await render({
           lineId: 'zl-1',
           ...held,
@@ -608,11 +626,6 @@ describe('ChangeSheet', () => {
       }
     );
 
-    it('lets a stale depth go at once', async () => {
-      const { landings } = await render({ lineId: 'zl-1', landing: 2 });
-      expect(landings.landingFor('zl-1', 'zl-1')).toBeNull();
-    });
-
     it('keeps the landing across the catalog, and lands after the change made on return', async () => {
       const first = await render({ lineId: 'zl-1', landing: 0 });
       host(first.fixture).querySelector<HTMLButtonElement>('.catalog')?.click();
@@ -622,7 +635,9 @@ describe('ChangeSheet', () => {
 
       first.pick.choose(OAT.id);
       first.pick.use();
-      // The sheet is drawn again when the catalog pops back onto it.
+      // The sheet is drawn again when the catalog at 4 pops back onto the
+      // sheet's own entry, 3, the one the landing was held for.
+      history.depth = 3;
       const fixture = TestBed.createComponent(ChangeSheet);
       fixture.detectChanges();
       await settle(fixture);
@@ -639,6 +654,47 @@ describe('ChangeSheet', () => {
         landing: 0,
       });
       // A browser back pops the sheet without its close.
+      fixture.destroy();
+      expect(landings.landingFor('zl-1', 'zl-1')).toBeNull();
+    });
+
+    it.each([
+      // Basket page d = 0, row sheet 1, the view 2, the sheet held for 3, the
+      // catalog 4, a tab 5, the shopping list pushed again 6: the change sheet
+      // it opens for the same row stands on 7.
+      ['the basket page opens it after the catalog was left by its tab bar', 7],
+      ['it stands on any entry under the one held', 2],
+    ])(
+      'dismisses one step and lets the landing go when %s',
+      async (_name, depth: number) => {
+        const { fixture, backTo, dismiss, landings } = await render({
+          landing: 0,
+          depth,
+        });
+
+        radios(fixture)[1].click();
+        fixture.detectChanges();
+        useButton(fixture).click();
+        await settle(fixture);
+
+        expect(backTo).not.toHaveBeenCalled();
+        expect(dismiss).toHaveBeenCalledWith(
+          '/en/shopping-lists/live/sheet/rows/zl-1/settle'
+        );
+        expect(landings.landingFor('zl-1', null)).toBeNull();
+      }
+    );
+
+    it('lets the landing go on leaving when the catalog never opened', async () => {
+      const { fixture, navigateByUrl, landings } = await render({
+        lineId: 'zl-1',
+        landing: 0,
+      });
+      navigateByUrl.mockResolvedValueOnce(false);
+      host(fixture).querySelector<HTMLButtonElement>('.catalog')?.click();
+      await settle(fixture);
+      expect(landings.landingFor('zl-1', 'zl-1')?.depth).toBe(0);
+
       fixture.destroy();
       expect(landings.landingFor('zl-1', 'zl-1')).toBeNull();
     });
@@ -714,7 +770,8 @@ describe('ChangeSheet', () => {
         forLabel: 'basket.change.pickFor',
         forDetail: 'Milk for coffee',
         chosenId: MILK.id,
-        returnDepth: 2,
+        // The sheet's own entry, which the catalog walks back to.
+        returnDepth: 3,
         callerState: { keep: true },
       });
       const url = TestBed.inject(Router).serializeUrl(
