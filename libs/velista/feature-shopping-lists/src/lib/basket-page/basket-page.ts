@@ -25,6 +25,7 @@ import {
   BasketListStore,
   BasketStore,
   BasketViewStore,
+  ChangeLandingStore,
   GatewayError,
   GroupMembers,
   ItemNames,
@@ -68,6 +69,7 @@ import {
   VISIT_WARNING_MINUTES,
 } from '@portfolio/velista/models';
 import {
+  AppHistory,
   appPath,
   BrowserFacade,
   ColumnScroll,
@@ -156,13 +158,26 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
  * again, as on the list page. Long enough for a screen reader to see the region
  * change, short enough to read as the answer to the press.
  */
+const REPEAT_SAY_GAP_MS = 150;
+
 /**
  * The longest a handed over question waits for the search an add closed to pop its
  * entry (velista `0208`, target state 19).
  */
 const SEARCH_SETTLE_MS = 2000;
 
-const REPEAT_SAY_GAP_MS = 150;
+/**
+ * A flag set as the context it is called in starts going away, as on the line page.
+ * Hooks run in the order they were registered, so a caller registers it before any
+ * hook that must read it.
+ */
+function destroyingFlag(): { readonly destroying: boolean } {
+  const flag = { destroying: false };
+  inject(DestroyRef).onDestroy(() => {
+    flag.destroying = true;
+  });
+  return flag;
+}
 
 /**
  * What the basket showed when somebody left it for another page, handed back when
@@ -289,8 +304,16 @@ export class BasketPage {
   private readonly _names = inject(MemberNames);
   private readonly _extraHost = inject(ExtraAskHost);
   private readonly _handoff = inject(ExtraAskHandoff);
+  private readonly _history = inject(AppHistory);
+  private readonly _landings = inject(ChangeLandingStore);
   /** The page went: an answer that comes after it asks nothing (velista `0208`). */
   private _gone = false;
+  /**
+   * The page is being destroyed: a write its card runs flush now is a teardown
+   * write, and a teardown write never reports the extra (velista `0208`). Set by
+   * a destroy callback registered before the runs, so it is true when they flush.
+   */
+  private readonly _teardown = destroyingFlag();
   /**
    * What this screen is showing of the basket, as opposed to what is in it.
    *
@@ -1152,6 +1175,8 @@ export class BasketPage {
 
     inject(DestroyRef).onDestroy(() => {
       this._gone = true;
+      // A sheet over a basket page drawn later must not read this one's depth.
+      this._landings.notePage(null);
       followed.unsubscribe();
       // What a return to this basket comes back to, taken before the stores let go.
       this._returns.keep<BasketPageReturn>(
@@ -1353,6 +1378,9 @@ export class BasketPage {
   }
 
   protected openRow(row: BasketRowModel): void {
+    // Where a change of product from the row's "Lists and amounts" lands: this
+    // page, under the settle sheet this pushes (`ChangeLandingStore.pageBelow`).
+    this._landings.notePage(this._history.depth());
     void this._router.navigate(sheetSegments('rows', row.rowKey, 'settle'), {
       relativeTo: this._route,
       queryParams: this._search.kept(this._route),
@@ -2657,8 +2685,10 @@ export class BasketPage {
   ): Promise<void> {
     const change = { holding, from: run.from, to: run.to };
     // A rising ask asks the answer what it took into the ask (velista `0208`,
-    // target state 18), when there is a card to ask on. A lowering never does.
-    const raising = run.to > run.from && card !== null;
+    // target state 18), when there is a card to ask on. A lowering never does,
+    // and neither does a write the page's teardown flushes.
+    const raising =
+      run.to > run.from && card !== null && !this._teardown.destroying;
     const sent = ++this._holdingCount;
     this._holdingSent.set(holding.lineId, sent);
     this._extraHost.dropWaiting(holding.lineId);
@@ -2718,6 +2748,15 @@ export class BasketPage {
     if (raising && card !== null && result.extra !== undefined && !this._gone) {
       this._askOnCard(lineId, card, result.extra, sent);
     }
+  }
+
+  /**
+   * A sheet opened over the page, as on the list page (velista `0208`): the page's
+   * own question, open or waiting for its card to come back in sight, is dropped
+   * with no answer, and its line keeps the amount set. A sheet asks its own.
+   */
+  onSheetOpened(): void {
+    this._extraHost.drop();
   }
 
   /**
@@ -2793,10 +2832,18 @@ export class BasketPage {
       this._gone ||
       row === null ||
       column === undefined ||
+      // The person is typing the next item, in the field the add left focused: a
+      // sheet pushed now would take the field from them and race the search's
+      // push. Nothing is asked, and the ask set stands.
+      this.typing() ||
+      this.searchOpen() ||
       !this._inFront(column)
     ) {
       return;
     }
+    // Where a change of product from the sheet lands: this page, one entry below
+    // the sheet this pushes (`ChangeLandingStore.pageBelow`).
+    this._landings.notePage(this._history.depth());
     // Velista `0208`, target state 19 (the removable handoff): the question is
     // asked on the row's "Lists and amounts", which this opens.
     await this._handoff.send({ rowKey: row.rowKey, lineId, extra }, () =>

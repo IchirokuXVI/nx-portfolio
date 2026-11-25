@@ -789,4 +789,4 @@
   The sheets, as children of the page they cover (rule E1, plan 0008): the page
   keeps its scroll underneath and Android's back button dismisses them.
 -->
-<router-outlet />
+<router-outlet (activate)="onSheetOpened()" />

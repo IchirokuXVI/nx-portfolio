@@ -1255,7 +1255,21 @@ describe('RowListsSheet (velista 0200)', () => {
     const LISTS_URL = `${PAGE}/sheet/rows/${ROW_KEY}/lists`;
     const CHANGE_ALL_URL = `${PAGE}/sheet/rows/${ROW_KEY}/change`;
 
-    async function routed(rowOf: BasketRow) {
+    /**
+     * The basket page, then this view: pushed by the row's sheet (`settle`), or
+     * straight from the page by the basket's add (`page`, velista `0208`). With
+     * `recorded`, the page notes its depth as the real one does before it pushes
+     * (`ChangeLandingStore.notePage`). `under` pushes a page below the basket, so
+     * the basket stands on an entry this document pushed.
+     */
+    async function routed(
+      rowOf: BasketRow,
+      way: {
+        readonly via?: 'settle' | 'page';
+        readonly recorded?: boolean;
+        readonly under?: boolean;
+      } = {}
+    ) {
       TestBed.resetTestingModule();
       await TestBed.configureTestingModule({
         imports: [RokuTranslatorTestingModule.forTesting()],
@@ -1297,8 +1311,18 @@ describe('RowListsSheet (velista 0200)', () => {
       }).compileComponents();
       const harness = await RouterTestingHarness.create();
       TestBed.inject(Router).setUpLocationChangeListener();
+      if (way.under === true) {
+        await harness.navigateByUrl('/velista/en/home');
+      }
       await harness.navigateByUrl(PAGE);
-      await harness.navigateByUrl(`${PAGE}/sheet/rows/${ROW_KEY}/settle`);
+      if (way.recorded === true) {
+        TestBed.inject(ChangeLandingStore).notePage(
+          TestBed.inject(AppHistory).depth()
+        );
+      }
+      if (way.via !== 'page') {
+        await harness.navigateByUrl(`${PAGE}/sheet/rows/${ROW_KEY}/settle`);
+      }
       await harness.navigateByUrl(LISTS_URL);
       return { harness, location: TestBed.inject(Location) };
     }
@@ -1376,6 +1400,60 @@ describe('RowListsSheet (velista 0200)', () => {
         expect(held()).toEqual([null, null]);
       }
     );
+
+    it.each([
+      ['the document loaded on it', false, -1],
+      ['an entry this document pushed', true, 0],
+    ])(
+      'a change from the sheet the basket page opened itself lands on the basket page, on %s (0208)',
+      async (_name, under, page) => {
+        const { harness, location } = await routed(row([entry()]), {
+          via: 'page',
+          recorded: true,
+          under,
+        });
+        const history = TestBed.inject(AppHistory);
+        // The sheet stands one entry above the basket page.
+        expect(history.depth()).toBe(page + 1);
+        const host = harness.fixture.nativeElement as HTMLElement;
+        host.querySelector<HTMLButtonElement>('.row-label .change')?.click();
+        await settleRouted(harness);
+        const sheet = changeSheet(harness);
+        expect(sheet?.landing()?.depth).toBe(page);
+
+        sheet?.changed();
+        await settleRouted(harness);
+
+        expect(location.path()).toBe(PAGE);
+        expect(history.depth()).toBe(page);
+        expect(host.querySelector('lib-row-lists-sheet')).toBeNull();
+        expect(held()).toEqual([null, null]);
+        if (under) {
+          // Back from the basket page leaves it, and never shows the sheet again.
+          location.back();
+          await settleRouted(harness);
+          expect(location.path()).toBe('/velista/en/home');
+        }
+      }
+    );
+
+    it('a change from the sheet the row sheet opened still lands two entries under it, the page recorded', async () => {
+      const { harness, location } = await routed(row([entry()]), {
+        recorded: true,
+        under: true,
+      });
+      const host = harness.fixture.nativeElement as HTMLElement;
+      host.querySelector<HTMLButtonElement>('.row-label .change')?.click();
+      await settleRouted(harness);
+      const sheet = changeSheet(harness);
+      // Home -1, the basket page 0, the row's sheet 1, this view 2.
+      expect(sheet?.landing()?.depth).toBe(0);
+
+      sheet?.changed();
+      await settleRouted(harness);
+      expect(location.path()).toBe(PAGE);
+      expect(TestBed.inject(AppHistory).depth()).toBe(0);
+    });
 
     /** The change sheet drawn now, or undefined. */
     const changeSheet = (harness: RouterTestingHarness) =>
@@ -1704,6 +1782,61 @@ describe('RowListsSheet: a rising ask asks about the extra (velista 0208)', () =
     await settle();
 
     expect(hostOf(fixture).asked()).toBeNull();
+  });
+
+  it('reports nothing for a rising run the teardown flushes', async () => {
+    const { fixture, store } = await render();
+    steppers(fixture)[0].stepped.emit({ from: 3, to: 4, repeat: false });
+    fixture.destroy();
+    await settle();
+
+    expect(store.setDemand).toHaveBeenCalledTimes(1);
+    expect(store.setDemand).toHaveBeenCalledWith({
+      lineId: 'zl-1',
+      quantity: 4,
+      from: 1,
+    });
+  });
+
+  it("holds a step pressed while the count is out, then sends it from the count's left", async () => {
+    const { fixture, store, release } = await ownExtra();
+    let counted: () => void = () => undefined;
+    store.countExtra.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          counted = () => {
+            store.rows.set([row([entry({ left: 0, bought: 5, asked: 5 })])]);
+            resolve('counted');
+          };
+        })
+    );
+    plusTwice(fixture);
+    await answer(release);
+    fixture.detectChanges();
+    hostOf(fixture).answerCount();
+    await settle();
+    fixture.detectChanges();
+
+    steppers(fixture)[0].stepped.emit({
+      from: 5,
+      to: 6,
+      repeat: false,
+      typed: true,
+    });
+    await settle();
+    // Behind the count, never beside it: it would start from the old left.
+    expect(store.setDemand).toHaveBeenCalledTimes(1);
+
+    counted();
+    await settle();
+    await settle();
+    expect(store.setDemand).toHaveBeenCalledTimes(2);
+    expect(store.setDemand).toHaveBeenLastCalledWith({
+      lineId: 'zl-1',
+      quantity: 6,
+      from: 0,
+      reportExtra: true,
+    });
   });
 
   it('asks nothing when the sheet closed before the answer, and never throws', async () => {

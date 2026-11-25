@@ -37,6 +37,28 @@ export interface ChangeLanding {
 @Injectable()
 export class ChangeLandingStore {
   private _held: ChangeLanding | null = null;
+  private _page: number | null = null;
+
+  /**
+   * The basket page records the `AppHistory` depth it stands on each time a
+   * navigation ends with nothing over it, and null when it is destroyed. A sheet
+   * over it reads where the page really is, however the sheet was opened: pushed
+   * by the row's sheet, or straight from the page (velista `0208`, target state
+   * 19).
+   */
+  notePage(depth: number | null): void {
+    this._page = depth;
+  }
+
+  /**
+   * The depth of the basket page under a sheet standing on `sheetDepth`, or null
+   * when the page did not record one below it: a sheet the document loaded on, or
+   * a page drawn again under a sheet already open.
+   */
+  pageBelow(sheetDepth: number): number | null {
+    const page = this._page;
+    return page !== null && page < sheetDepth ? page : null;
+  }
 
   /** Ask the change sheet about to open to land at a depth. Called just before it navigates. */
   hold(landing: ChangeLanding): void {

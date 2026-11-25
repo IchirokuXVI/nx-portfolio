@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import {
   ITEM_BREAD_ID,
+  ITEM_MILK_ID,
   LINE_BREAD_ID,
   LIST_GROCERIES_ID,
   ZONE_WEEKLY_ID,
@@ -14,6 +15,7 @@ import {
   login,
   readLine,
   resetAliceWorld,
+  setLineProducts,
   setLineQuantity,
   type Session,
 } from './support/api';
@@ -747,5 +749,68 @@ test.describe('the basket asks about the extra (velista 0208, stage 4)', () => {
     expect(
       (await readLine(alice, LIST_GROCERIES_ID, LINE_BREAD_ID)).quantity
     ).toBe(0);
+  });
+
+  test('"Change product" in the "Lists and amounts" the add opened lands on the basket, and back never shows that view again', async ({
+    page,
+  }) => {
+    // Bread may also be Milk, so the change sheet offers a second product.
+    await setLineProducts(alice, LINE_BREAD_ID, [ITEM_BREAD_ID, ITEM_MILK_ID]);
+    await alice.patch(`/v1/lines/${LINE_BREAD_ID}`, {
+      favoriteItemId: ITEM_BREAD_ID,
+    });
+    try {
+      const danaBasket = await basketOf(dana, 'Change product');
+      await buyBasketRow(dana, danaBasket, [LINE_BREAD_ID], {
+        quantity: 4,
+        from: 1,
+      });
+      const basketId = await basketOf(alice, 'Change product');
+      await signIn(page, ALICE_EMAIL);
+      await page.goto(`/en/shopping-lists/${basketId}`);
+      await expect(composerField(page)).toBeVisible();
+
+      await composerField(page).fill('Bread');
+      await page
+        .locator('lib-line-composer')
+        .getByRole('button', { name: 'Add', exact: true })
+        .click();
+      await page
+        .locator('.picker button.option')
+        .filter({
+          has: page.locator('.name').getByText('Groceries', { exact: true }),
+        })
+        .click();
+
+      await expect(page).toHaveURL(/\/sheet\/rows\/[^/]+\/lists(\?.*)?$/);
+      const view = page.locator('lib-row-lists-sheet');
+      await expect(question(page).locator('.question')).toBeVisible();
+      await question(page)
+        .getByRole('button', { name: /Still need/ })
+        .click();
+      await expect(question(page)).toHaveCount(0);
+
+      await groceriesOf(view).locator('button.change').click();
+      await expect(page).toHaveURL(/\/sheet\/rows\/[^/]+\/change\/[^/?]+/);
+      const changeSheet = page.locator('lib-change-sheet');
+      await changeSheet.getByRole('radio', { checked: false }).first().click();
+      await changeSheet.locator('button.use').click();
+
+      // On the basket page itself, with no sheet left over it or under it.
+      await expect(page).toHaveURL(
+        new RegExp(`/shopping-lists/${basketId}(\\?.*)?$`)
+      );
+      await expect(page.locator('lib-change-sheet')).toHaveCount(0);
+      await expect(view).toHaveCount(0);
+
+      await page.goBack();
+      await expect(page).not.toHaveURL(/\/sheet\//);
+      await expect(view).toHaveCount(0);
+    } finally {
+      await setLineProducts(alice, LINE_BREAD_ID, [ITEM_BREAD_ID]);
+      await alice.patch(`/v1/lines/${LINE_BREAD_ID}`, {
+        favoriteItemId: null,
+      });
+    }
   });
 });

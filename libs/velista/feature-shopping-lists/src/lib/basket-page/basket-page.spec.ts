@@ -19,6 +19,7 @@ import {
   BasketListStore,
   BasketStore,
   BasketViewStore,
+  ChangeLandingStore,
   fakeCategoryStore,
   fakeGroupMembers,
   fakeItemNames,
@@ -567,6 +568,7 @@ async function render(options: Options = {}): Promise<{
     providers: [
       provideVelistaTesting({ basePath: '' }),
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
+      ChangeLandingStore,
       // The bottom bar's owner, as a double (velista `0117`): the router here is a
       // fake with no state to read, and what matters is what the page tells it.
       { provide: PageReturn, useValue: returns },
@@ -6474,6 +6476,46 @@ describe('BasketPage: the basket asks about the extra (velista 0208)', () => {
       expect(hostOf(fixture).asked()).toBeNull();
     });
 
+    it('drops its question when a sheet opens over the page, and the ask set stands', async () => {
+      const { fixture, page, card, store, release } = await withCard();
+      plusTwice(page, card);
+      release();
+      await turns();
+      expect(hostOf(fixture).asked()).not.toBeNull();
+
+      // What the page's outlet calls as a sheet's route activates.
+      fixture.componentInstance.onSheetOpened();
+      await turns();
+
+      expect(hostOf(fixture).asked()).toBeNull();
+      expect(store.countExtra).not.toHaveBeenCalled();
+    });
+
+    it('reports nothing for a rising run the teardown flushes', async () => {
+      const { fixture, page, card, setDemand } = await withCard();
+      const [holding] = page.holdingsOf()(MILK_CARD);
+      jest.useFakeTimers();
+      try {
+        page.changeHolding({
+          holding: holding as SuggestionHolding,
+          from: 3,
+          to: 4,
+          repeat: false,
+          cardKey: card.dataset['card'] as string,
+        });
+        fixture.destroy();
+      } finally {
+        jest.useRealTimers();
+      }
+
+      expect(setDemand).toHaveBeenCalledTimes(1);
+      expect(setDemand).toHaveBeenCalledWith({
+        lineId: 'zl-1',
+        quantity: 4,
+        from: 0,
+      });
+    });
+
     it('asks nothing when the page went before the answer, and never throws', async () => {
       const { fixture, page, release } = await withCard();
       const ask = jest.spyOn(hostOf(fixture), 'ask');
@@ -6504,7 +6546,12 @@ describe('BasketPage: the basket asks about the extra (velista 0208)', () => {
     const plus = (fixture: ComponentFixture<BasketPage>) =>
       query(fixture, 'lib-line-composer .send') as HTMLButtonElement;
 
-    async function added(extra: AbsorbedExtra | null, newLine = false) {
+    async function added(
+      extra: AbsorbedExtra | null,
+      newLine = false,
+      /** Words typed into the field the add left focused, before its answer. */
+      next?: string
+    ) {
       const rendered = await render({
         // A line at 0 this basket did not draw is new to the client: only the read
         // the add asks for names its row.
@@ -6540,11 +6587,32 @@ describe('BasketPage: the basket asks about the extra (velista 0208)', () => {
       plus(fixture).click();
       fixture.detectChanges();
       options()[0]?.click();
+      if (next !== undefined) {
+        typeInto(fixture, next);
+      }
       await fixture.whenStable();
       await turns();
       fixture.detectChanges();
       return { ...rendered, handoff, held: () => held };
     }
+
+    it('records its own depth for a change of product from the sheet it opens', async () => {
+      await added(OWN);
+
+      // Unwatched, `AppHistory` stands on -1: the sheet pushed over it is 0.
+      expect(TestBed.inject(ChangeLandingStore).pageBelow(0)).toBe(-1);
+    });
+
+    it('opens nothing while the person types the next item, and the ask set stands', async () => {
+      const { store, handoff } = await added(OWN, false, 'Pan');
+
+      expect(store.navigate).not.toHaveBeenCalledWith(
+        sheetSegments('rows', 'row-milk', 'lists'),
+        expect.anything()
+      );
+      expect(handoff.take('row-milk')).toBeNull();
+      expect(store.countExtra).not.toHaveBeenCalled();
+    });
 
     it('sends the flag, hands the question over and opens the row\'s "Lists and amounts"', async () => {
       const { store, held, handoff } = await added(OWN);

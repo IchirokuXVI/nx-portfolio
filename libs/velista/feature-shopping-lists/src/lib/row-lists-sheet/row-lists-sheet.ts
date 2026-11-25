@@ -424,11 +424,15 @@ export class RowListsSheet {
   }
 
   /**
-   * "Change product" on one list, or "Change for all lists" with null. The
-   * basket page is two entries below this view (the row's sheet pushed it, and
-   * the basket page pushed the row's sheet), which is where a change lands. The
-   * change sheet is pushed one entry above this view, and only a sheet on that
-   * entry takes the landing (`ChangeLandingStore.claim`).
+   * "Change product" on one list, or "Change for all lists" with null. A change
+   * lands on the basket page, at the depth the page recorded as it pushed the
+   * sheet this view came by (`ChangeLandingStore.pageBelow`): one entry below
+   * when the basket's "Add or find" opened this view itself (velista `0208`,
+   * target state 19), two when the row's sheet pushed it. A page that recorded
+   * nothing below (a document loaded on a sheet) is taken to be two entries
+   * below, as the row's sheet is the other way in. The change sheet is pushed
+   * one entry above this view, and only a sheet on that entry takes the landing
+   * (`ChangeLandingStore.claim`).
    */
   protected change(lineId: string | null): void {
     const row = this.row();
@@ -439,7 +443,7 @@ export class RowListsSheet {
     const landing = {
       rowKey: row.rowKey,
       lineId,
-      depth: depth - 2,
+      depth: this._landings.pageBelow(depth) ?? depth - 2,
       sheetDepth: depth + 1,
     };
     this._landings.hold(landing);
@@ -558,8 +562,9 @@ export class RowListsSheet {
         : (seen ?? Math.max(0, run.from - (entry.asked - entry.left)));
     this.failure.set(null);
     // A rising ask asks the answer what it took into the ask (velista `0208`,
-    // target state 17). A lowering never does.
-    const raising = run.to > run.from;
+    // target state 17). A lowering never does, and neither does a write the
+    // sheet's teardown flushes: nobody is left to ask.
+    const raising = run.to > run.from && !this._left;
     const result = await this._store.setDemand({
       lineId,
       quantity: run.to,
@@ -702,6 +707,10 @@ export class RowListsSheet {
    * "Count the extra" on one list (velista `0208`, target states 4 and 17): the
    * store lowers the entry by what the report made countable at once, expecting
    * it to still hold the `left` the answer gave.
+   *
+   * A write of the line like a step's, through the same one at a time chain: a
+   * step pressed while the count is out waits for it, and starts from the `left`
+   * the count ended on, never from the one before it.
    */
   private async _countExtra(
     rowKey: string,
@@ -709,13 +718,26 @@ export class RowListsSheet {
     amount: number,
     expect: number
   ): Promise<ExtraCountOutcome> {
-    const outcome = await this._store.countExtra(
-      rowKey,
-      lineId,
-      amount,
-      expect
-    );
-    return outcome === 'counted' ? 'done' : outcome;
+    let outcome: ExtraCountOutcome = 'failed';
+    const asked = this._entry(lineId)?.asked ?? amount;
+    await this._write(lineId, Math.max(0, asked - amount), async () => {
+      const counted = await this._store.countExtra(
+        rowKey,
+        lineId,
+        amount,
+        expect
+      );
+      outcome = counted === 'counted' ? 'done' : counted;
+      // The entry as the count left it: lowered, put back, or read again.
+      const now = this._entry(lineId);
+      if (now === undefined) {
+        this._answered.delete(lineId);
+      } else {
+        this._answered.set(lineId, now.left);
+      }
+      return counted === 'counted';
+    });
+    return outcome;
   }
 
   /** One write per line at a time: a write queued behind one waits for it. */

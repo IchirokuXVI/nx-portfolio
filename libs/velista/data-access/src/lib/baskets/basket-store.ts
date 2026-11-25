@@ -1375,11 +1375,9 @@ export class BasketStore {
       return 'counted';
     }
     const error = this._error();
-    if (error instanceof GatewayError && error.code === 'stale_quantity') {
-      // Read again by the write already: the entry is the server's.
-      return 'stale';
-    }
-    // Put back only what this count drew: a newer state of the entry stays.
+    // Put back only what this count drew: a newer state of the entry stays. A
+    // stale count was read again by the write, which then holds the server's
+    // entry; a read that failed too left the lowered one, and nothing was counted.
     const now = this.rowFor(lineId)?.entries.find(
       (held) => held.lineId === lineId
     );
@@ -1391,7 +1389,9 @@ export class BasketStore {
     ) {
       this._applyPatch([lineId], [before]);
     }
-    return 'failed';
+    return error instanceof GatewayError && error.code === 'stale_quantity'
+      ? 'stale'
+      : 'failed';
   }
 
   /**

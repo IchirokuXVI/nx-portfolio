@@ -35,6 +35,29 @@ describe('ChangeLandingStore (velista 0200)', () => {
     expect(store.landingFor('zl-1', null)).toBe(next);
   });
 
+  describe('the basket page under a sheet (velista 0208)', () => {
+    it('answers the depth the page recorded, below the sheet asking', () => {
+      const store = new ChangeLandingStore();
+      expect(store.pageBelow(3)).toBeNull();
+
+      store.notePage(2);
+      expect(store.pageBelow(3)).toBe(2);
+      expect(store.pageBelow(4)).toBe(2);
+      // A sheet on the page's own entry or below it is not over this page.
+      expect(store.pageBelow(2)).toBeNull();
+      expect(store.pageBelow(1)).toBeNull();
+    });
+
+    it('forgets the page once it is gone', () => {
+      const store = new ChangeLandingStore();
+      store.notePage(-1);
+      expect(store.pageBelow(0)).toBe(-1);
+
+      store.notePage(null);
+      expect(store.pageBelow(0)).toBeNull();
+    });
+  });
+
   describe('claim', () => {
     // The basket page at 0, the row's sheet 1, the view 2: the sheet goes on 3.
     const LANDING = { rowKey: 'zl-1', lineId: null, depth: 0, sheetDepth: 3 };

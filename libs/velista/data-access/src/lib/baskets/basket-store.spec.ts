@@ -3599,6 +3599,32 @@ describe('BasketStore: the extra already bought (velista 0208)', () => {
     });
   });
 
+  it('puts the entry back on a stale count whose read again fails too', async () => {
+    const built = await raisedOverExtra({
+      countExtra: async () => {
+        // The read the refusal asks for fails as well.
+        built.memory.getBasket = async () => {
+          throw new Error('offline');
+        };
+        throw new GatewayError({
+          code: 'stale_quantity',
+          status: 409,
+          correlationId: 'spec',
+          detail: 'moved',
+        });
+      },
+    });
+
+    expect(await built.store.countExtra(built.rowKey, built.lineId, 2, 2)).toBe(
+      'stale'
+    );
+    await flush();
+    expect(entryOf(built.store, built.lineId)).toMatchObject({
+      left: 2,
+      asked: built.over.asked + 4,
+    });
+  });
+
   it('puts the entry back on any other failure, and is never sent again', async () => {
     const sent: unknown[] = [];
     const { store, lineId, rowKey, over } = await raisedOverExtra({
