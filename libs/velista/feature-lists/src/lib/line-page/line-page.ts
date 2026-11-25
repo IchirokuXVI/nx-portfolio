@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   DOCUMENT,
   effect,
   ElementRef,
@@ -72,6 +73,19 @@ import {
 import { linePageStatus, loadLineContext } from './line-context';
 import { LineProductPrices } from './line-product-prices';
 import { selectLinePage } from './select-line-page';
+
+/**
+ * A flag set as the context it is called in starts going away. Hooks run in the
+ * order they were registered, so a caller registers it before any hook that must
+ * read it.
+ */
+function destroyingFlag(): { readonly destroying: boolean } {
+  const flag = { destroying: false };
+  inject(DestroyRef).onDestroy(() => {
+    flag.destroying = true;
+  });
+  return flag;
+}
 
 /** How many cards past the last one on screen are read ahead (velista `0135`, 3). */
 const CARDS_READ_AHEAD = 2;
@@ -145,6 +159,11 @@ export class LinePage {
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly _document = inject(DOCUMENT);
   private readonly _injector = inject(Injector);
+  /**
+   * Set as the page starts going away. Registered before `quantityRuns`, whose own
+   * hook writes the open runs, so the teardown's write reads it (velista `0208`).
+   */
+  private readonly _teardown = destroyingFlag();
 
   readonly zoneId = zoneIdOf(this._route);
   readonly listId = listIdOf(this._route);
@@ -423,9 +442,11 @@ export class LinePage {
     this._sentRuns.set(lineId, sent);
     this._extraHost.dropWaiting(lineId);
     // A raise reports what it took into the ask, and its answer may ask on the
-    // stepper (velista `0208`, target state 12). A lowering never.
+    // stepper (velista `0208`, target state 12). A lowering never. The teardown's
+    // write never reports: nobody is left to ask, and the server takes the extra
+    // in anyway.
     const writing =
-      delta > 0
+      delta > 0 && !this._teardown.destroying
         ? this._lines.raiseReportingExtra(lineId, delta).then((answer) => {
             if (
               answer.state === 'succeeded' &&
@@ -483,6 +504,10 @@ export class LinePage {
     extra: AbsorbedExtra,
     shown: number
   ): void {
+    // An answer that lands after the page went away asks nothing.
+    if (this._teardown.destroying) {
+      return;
+    }
     const line = this._line();
     if (line === undefined || line.id !== lineId) {
       return;

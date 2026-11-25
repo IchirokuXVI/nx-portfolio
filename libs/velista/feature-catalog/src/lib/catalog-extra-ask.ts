@@ -1,4 +1,4 @@
-import { afterNextRender, inject, Injector } from '@angular/core';
+import { afterNextRender, DestroyRef, inject, Injector } from '@angular/core';
 import {
   CatalogAddStore,
   MemberNames,
@@ -41,6 +41,7 @@ export function catalogExtraAsk(
   const names = inject(MemberNames, { optional: true });
   const session = inject(SessionStore);
   const injector = inject(Injector);
+  const destroyRef = inject(DestroyRef);
 
   host.connect({
     readerId: () => session.userId(),
@@ -58,6 +59,11 @@ export function catalogExtraAsk(
       return {
         reportExtra: true,
         onExtra: (report: CatalogExtraReport) => {
+          // `CatalogAddStore` outlives the page, so an answer can land after the
+          // page is gone: nobody is left to ask, and the amount set stands.
+          if (destroyRef.destroyed) {
+            return;
+          }
           const zoneId = zoneOf(report.listId);
           const line = adds.held().find((one) => one.lineId === report.lineId);
           if (zoneId === null || line === undefined) {

@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import type {
+  AbsorbedExtra,
   HeldLine,
   ItemLists,
   Line,
@@ -187,6 +188,8 @@ function setup(world: World) {
   let answerNext:
     | ((listId: string) => Awaited<ReturnType<LineServiceI['addLineResult']>>)
     | null = null;
+  /** What the next raise that reports says it took into the ask (velista `0208`). */
+  let extraNext: AbsorbedExtra | null = null;
   let failNextRead = false;
   let failNextLists = false;
   let pendingNext = false;
@@ -374,6 +377,17 @@ function setup(world: World) {
       server.set(lineId, moved);
       return moved;
     },
+    raiseReportingExtra: async (lineId, delta, unit) => {
+      calls.push(`raise:${lineId}:${delta}`);
+      units.push(unit);
+      await written();
+      const current = server.get(lineId) as Line;
+      const moved = { ...current, quantity: current.quantity + delta };
+      server.set(lineId, moved);
+      const extra = extraNext;
+      extraNext = null;
+      return { line: moved, extra };
+    },
     updateLine: async (lineId, changes) => {
       calls.push(`update:${lineId}:${changes.quantity}:${changes.unit}`);
       await written();
@@ -460,6 +474,10 @@ function setup(world: World) {
       ) => Awaited<ReturnType<LineServiceI['addLineResult']>>
     ) => {
       answerNext = answer;
+    },
+    /** Report this extra on the next raise that asks for a report. */
+    extraNext: (extra: AbsorbedExtra) => {
+      extraNext = extra;
     },
     failNextLists: () => {
       failNextLists = true;
@@ -2387,6 +2405,84 @@ describe('CatalogAddStore', () => {
       expect(store.ready()).toBe(true);
       expect(store.count()).toBe(0);
       expect(store.visit()).toEqual([]);
+    });
+  });
+
+  describe("a page's question about the extra (velista 0208)", () => {
+    const EXTRA: AbsorbedExtra = { above: 0, countable: 1, buyers: [] };
+
+    /** A page that is gone: its callback throws as `afterNextRender` would. */
+    const gone = () => {
+      const heard: string[] = [];
+      return {
+        heard,
+        options: {
+          reportExtra: true,
+          onExtra: (report: { readonly lineId: string }) => {
+            heard.push(report.lineId);
+            throw new Error('NG0911: View has already been destroyed.');
+          },
+        },
+      };
+    };
+
+    it('keeps a raise of the stepper whose callback throws, and counts no failure', async () => {
+      const { store, calls, server, drawn, extraNext } = setup({
+        ...HOME,
+        lines: [line('old', 'weekly', { quantity: 2 })],
+      });
+      await store.ensure();
+      const { heard, options } = gone();
+      extraNext(EXTRA);
+
+      store.step(
+        on('weekly', MILK),
+        'old',
+        { from: 2, to: 3, repeat: false },
+        options
+      );
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      await settled();
+
+      expect(calls).toContain('raise:old:1');
+      expect(heard).toEqual(['old']);
+      // The server took the raise, and what it took stays drawn.
+      expect(server.get('old')?.quantity).toBe(3);
+      expect(drawn('weekly', 'milk')).toEqual([3]);
+      expect(store.failures()).toBe(0);
+      expect(store.visit()).toMatchObject([{ lineId: 'old', quantity: 3 }]);
+    });
+
+    it('keeps an add whose callback throws, settles it once, and counts no failure', async () => {
+      const { store, server, drawn, answerNext } = setup({
+        ...HOME,
+        lines: [line('old', 'weekly', { quantity: 0 })],
+      });
+      await store.ensure();
+      const { heard, options } = gone();
+      answerNext(() => {
+        const raised = line('old', 'weekly', { quantity: 1 });
+        server.set('old', raised);
+        return {
+          line: raised,
+          merged: true,
+          outcome: 'raised' as const,
+          alreadyOnList: [],
+          extra: EXTRA,
+        };
+      });
+
+      await store.add(MILK, 'weekly', options);
+
+      expect(heard).toEqual(['old']);
+      expect(drawn('weekly', 'milk')).toEqual([1]);
+      expect(store.failures()).toBe(0);
+      expect(store.refusal()).toBeNull();
+      expect(store.visit()).toMatchObject([{ lineId: 'old', quantity: 1 }]);
+      // The add was counted down once: nothing is left counted as on its way.
+      const adding = (store as unknown as { _adding: Map<string, number> })
+        ._adding;
+      expect(adding.size).toBe(0);
     });
   });
 });

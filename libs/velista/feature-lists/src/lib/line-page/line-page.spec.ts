@@ -575,6 +575,54 @@ describe('LinePage', () => {
           fixture.debugElement.injector.get(ExtraAskHost).asked()
         ).toBeNull();
       });
+
+      it('writes the run a quick back leaves open as a plain raise, with no report', async () => {
+        // Nobody is left to ask, as on the zone list (velista 0208, stage 1).
+        const { fixture, lines } = await render();
+        const [, more] = fixture.debugElement
+          .queryAll(By.css('lib-quantity-stepper button'))
+          .map((element) => element.nativeElement as HTMLButtonElement);
+        jest.useFakeTimers();
+        more.click();
+        fixture.detectChanges();
+
+        fixture.destroy();
+        jest.useRealTimers();
+        await drain(fixture);
+
+        expect(lines.calls.filter((call) => call.kind === 'quantity')).toEqual([
+          { kind: 'quantity', lineId: LINE_ID, delta: 1 },
+        ]);
+      });
+
+      it('asks nothing and rejects nothing when the answer lands after the page is gone', async () => {
+        const { fixture, lines } = await render();
+        const host = fixture.debugElement.injector.get(ExtraAskHost);
+        lines.answerNextRaise({ extra: EXTRA });
+        lines.holdRaises();
+        const [, more] = fixture.debugElement
+          .queryAll(By.css('lib-quantity-stepper button'))
+          .map((element) => element.nativeElement as HTMLButtonElement);
+        jest.useFakeTimers();
+        more.click();
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        jest.useRealTimers();
+        const write = (
+          fixture.componentInstance as unknown as {
+            _runWrites: Map<string, Promise<void>>;
+          }
+        )._runWrites.get(LINE_ID);
+        expect(write).toBeDefined();
+
+        fixture.destroy();
+        lines.releaseRaises();
+
+        await expect(write).resolves.toBeUndefined();
+        expect(host.asked()).toBeNull();
+        expect(lines.calls.filter((call) => call.kind === 'quantity')).toEqual([
+          { kind: 'quantity', lineId: LINE_ID, delta: 1, reportExtra: true },
+        ]);
+      });
     });
 
     it('is a number with no buttons for a reader without DECIDE', async () => {

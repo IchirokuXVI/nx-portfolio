@@ -1492,9 +1492,8 @@ describe('LineDetailSheet: a Save that raises asks about the extra already bough
     expect(extraHost(fixture).asked()).toBeNull();
   });
 
-  it('asks nothing once the sheet is gone, and the line holds the amount saved', async () => {
+  it('asks nothing once the sheet is gone, throws nothing, and the line holds the amount saved', async () => {
     const { fixture, lines } = await render();
-    const host = extraHost(fixture);
     lines.holdWrites();
     lines.answerNextUpdate({
       state: 'succeeded',
@@ -1503,16 +1502,18 @@ describe('LineDetailSheet: a Save that raises asks about the extra already bough
     });
     fixture.componentInstance.onAmountChanged(3);
     fixture.detectChanges();
-    saveButton(fixture)?.click();
+    // The save the button starts, held so the answer lands after the sheet is gone.
+    const saving = fixture.componentInstance.save();
     fixture.detectChanges();
 
     fixture.destroy();
     lines.releaseWrites();
-    for (let turn = 0; turn < 20; turn += 1) {
-      await Promise.resolve();
-    }
 
-    expect(host.asked()).toBeNull();
+    // An ask on the destroyed sheet would reject the save with NG0911.
+    await expect(saving).resolves.toBeUndefined();
+    expect(updates(lines.calls)).toEqual([
+      { kind: 'update', lineId: LINE_ID, quantity: 3, reportExtra: true },
+    ]);
     expect(lines.linesIn(LIST_ID)[0]?.quantity).toBe(3);
     expect(
       lines.calls.filter(

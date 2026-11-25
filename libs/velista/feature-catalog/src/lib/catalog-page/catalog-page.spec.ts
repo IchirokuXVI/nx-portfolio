@@ -1977,6 +1977,42 @@ describe('CatalogPage: a card that raises a line asks about the extra already bo
     expect(extraHost(fixture).asked()).toBeNull();
   });
 
+  it('keeps a raise that answers after the page is gone, and asks nothing', async () => {
+    // The product page is a sibling route, so the visit goes on while this page is
+    // destroyed, and the store, which outlives it, hears the answer.
+    const { fixture, lines, adds } = await render('priced', {
+      lines: [OIL_LINE],
+    });
+    const store = TestBed.inject(CatalogAddStore);
+    const host = extraHost(fixture);
+    adds.reportNext(EXTRA);
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const raise = lines.raiseReportingExtra.getMockImplementation();
+    lines.raiseReportingExtra.mockImplementationOnce(async (...args) => {
+      await held;
+      return raise?.(...args);
+    });
+
+    heldLines(fixture, OIL)[0]?.plus?.click();
+    await quiet(fixture);
+    fixture.destroy();
+    release();
+    for (let tick = 0; tick < 40; tick++) {
+      await Promise.resolve();
+    }
+
+    expect(lines.raiseReportingExtra).toHaveBeenCalled();
+    // The write the server took stands, and no failure is counted for it.
+    expect(
+      store.held().find((line) => line.lineId === 'line-oil')?.quantity
+    ).toBe(3);
+    expect(store.failures()).toBe(0);
+    expect(store.refusal()).toBeNull();
+    expect(host.asked()).toBeNull();
+    expect(() => jest.runOnlyPendingTimers()).not.toThrow();
+  });
+
   it('never reports a lowering nor a take back', async () => {
     const { fixture, lines } = await render('priced', {
       lines: [OIL_LINE],

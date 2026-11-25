@@ -953,12 +953,20 @@ export class CatalogAddStore {
     ) {
       return;
     }
-    options.onExtra({
-      lineId: line.id,
-      listId: line.listId,
-      extra,
-      quantity: line.quantity,
-    });
+    // The page's callback runs after the write landed, and this store outlives the
+    // page: a callback that throws (a page already gone, say) loses its question
+    // and nothing else. It never reaches the write's failure path, which would undo
+    // what the server accepted.
+    try {
+      options.onExtra({
+        lineId: line.id,
+        listId: line.listId,
+        extra,
+        quantity: line.quantity,
+      });
+    } catch {
+      // Nobody is left to ask; the amount set stands.
+    }
   }
 
   /** One count, in its turn of the product's queue. */
