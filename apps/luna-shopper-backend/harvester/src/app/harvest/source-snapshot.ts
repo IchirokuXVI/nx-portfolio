@@ -85,7 +85,13 @@ export interface SourceEntryFields {
    * walk of the same chain read. Null is a statement, and is written.
    */
   packCount?: number | null;
-  categoryPath: string[];
+  /**
+   * The chain's category path, root first. **Absent means the source did not
+   * state one this time**, and leaves the stored path alone: El Jamón, for a
+   * page whose breadcrumb named another product (plan 0169, notes of
+   * 2026-11-25).
+   */
+  categoryPath?: string[];
   url: string | null;
   /**
    * The photo address the source prints for the product, or null (plan 0198).
@@ -178,7 +184,11 @@ export function applySourceGroup(
   if (fields.packCount !== undefined) {
     row.packCount = fields.packCount;
   }
-  row.categoryPath = fields.categoryPath;
+  // A path the observation does not state is left as stored, so a breadcrumb
+  // drawn for another product never replaces a right one.
+  if (fields.categoryPath !== undefined) {
+    row.categoryPath = fields.categoryPath;
+  }
   row.url = fields.url;
   row.imageUrl = fields.imageUrl;
   row.extra = fields.extra;
