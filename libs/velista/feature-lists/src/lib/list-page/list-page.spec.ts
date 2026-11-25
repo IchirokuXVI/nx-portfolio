@@ -109,6 +109,7 @@ import {
   PageHeader,
   TOOK_DURATION_MS,
   TripGroup,
+  type LineComposerSubmit,
   type SuggestionHolding,
 } from '@portfolio/velista/ui';
 import { readFileSync } from 'node:fs';
@@ -7395,17 +7396,134 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
     it('asks nothing when the page went before the answer, and never throws or undoes the raise', async () => {
       const { fixture, lines } = await raisedByAdd();
       lines.holdAdds();
-      await typeAndSend(fixture, 'Huevos');
       const host = fixture.debugElement.injector.get(ExtraAskHost);
       const ask = jest.spyOn(host, 'ask');
+      // The add itself, awaited: a render hook on the page that went would reject it.
+      const adding = fixture.componentInstance.add({
+        content: 'Huevos',
+        quantity: undefined,
+      } as LineComposerSubmit);
 
       fixture.destroy();
       lines.releaseAdds();
-      await turns();
 
+      await expect(adding).resolves.toBeUndefined();
+      await turns();
       expect(ask).not.toHaveBeenCalled();
       expect(stored(lines, 'ln-eggs')).toBe(1);
       expect(counts(lines.calls)).toEqual([]);
+    });
+
+    it('asks nothing for a row raise answered while an add into the same line is still out', async () => {
+      const { fixture, lines } = await raisedByAdd(null);
+      lines.answerNextRaise({ extra: EXTRA });
+      lines.holdRaises();
+      raise(fixture, 'ln-milk', 2, 3);
+      lines.holdAdds();
+      fixture.componentInstance.addChoice.set({
+        listId: LIST_ID,
+        entry: { content: 'Leche', quantity: undefined } as never,
+        anchor: field(fixture),
+        choice: { lines: [] } as never,
+      });
+      void fixture.componentInstance.chooseLine('ln-milk');
+      await turns();
+
+      // The raise answers first, with something to count; the add is newer.
+      lines.releaseRaises();
+      await settle(fixture);
+      await new Promise((resolve) => setTimeout(resolve));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.extraAsk()).toBeNull();
+      lines.releaseAdds();
+      await settle(fixture);
+      expect(counts(lines.calls)).toEqual([]);
+    });
+
+    it('stops an older raise of the line from asking with an add answer that asks nothing', async () => {
+      const rendered = await render({
+        lines: KEPT,
+        names: { [MARTA]: 'Marta' },
+      });
+      const { fixture, lines } = rendered;
+      await settle(fixture);
+      lines.answerNextRaise({ extra: EXTRA });
+      lines.holdRaises();
+      raise(fixture, 'ln-milk', 2, 3);
+      // The add raises the same line and reports nothing to count.
+      lines.answerAddWith({ state: 'raised', lineId: 'ln-milk', extra: null });
+      await typeAndSend(fixture, 'Leche');
+      await settle(fixture);
+
+      lines.releaseRaises();
+      await settle(fixture);
+      await new Promise((resolve) => setTimeout(resolve));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.extraAsk()).toBeNull();
+      expect(counts(lines.calls)).toEqual([]);
+    });
+
+    describe('the guards of an answered add', () => {
+      type Answered = {
+        _noteSent: (lineId: string) => number;
+        _addAnswered: (
+          listId: string,
+          line: Line,
+          extra: AbsorbedExtra,
+          shown: boolean,
+          sent: number
+        ) => void;
+      };
+
+      async function answered() {
+        const rendered = await render({
+          lines: KEPT,
+          names: { [MARTA]: 'Marta' },
+        });
+        await settle(rendered.fixture);
+        const host = rendered.fixture.debugElement.injector.get(ExtraAskHost);
+        const page = rendered.fixture.componentInstance as unknown as Answered;
+        const milk = rendered.lines
+          .linesIn(LIST_ID)
+          .find((one) => one.id === 'ln-milk') as Line;
+        return { ...rendered, ask: jest.spyOn(host, 'ask'), page, milk };
+      }
+
+      it('asks when nothing stands in its way', async () => {
+        const { page, milk, ask } = await answered();
+        page._addAnswered(LIST_ID, milk, FOUR, true, page._noteSent('ln-milk'));
+
+        expect(ask).toHaveBeenCalledTimes(1);
+      });
+
+      it('asks nothing while a run of the line is still open', async () => {
+        const { fixture, page, milk, ask } = await answered();
+        const sent = page._noteSent('ln-milk');
+        jest.useFakeTimers();
+        fixture.componentInstance.stepQuantity(press('ln-milk', 2, 3));
+        page._addAnswered(LIST_ID, milk, FOUR, true, sent);
+        jest.useRealTimers();
+
+        expect(ask).not.toHaveBeenCalled();
+      });
+
+      it('asks nothing once the page has moved to another list', async () => {
+        const { fixture, activatedRoute, page, milk, ask } = await answered();
+        const sent = page._noteSent('ln-milk');
+        // Watched before any line lookup, which a list change empties too.
+        const answering = jest.spyOn(
+          page as unknown as { _extraAnswered: () => void },
+          '_extraAnswered'
+        );
+        activatedRoute.setList('list-2');
+        fixture.detectChanges();
+        page._addAnswered(LIST_ID, milk, FOUR, true, sent);
+
+        expect(answering).not.toHaveBeenCalled();
+        expect(ask).not.toHaveBeenCalled();
+      });
     });
 
     it('asks nothing when a run of the raised row went out after the add', async () => {

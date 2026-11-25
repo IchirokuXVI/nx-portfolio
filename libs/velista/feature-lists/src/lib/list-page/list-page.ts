@@ -2349,6 +2349,12 @@ export class ListPage {
     // Every write of a line numbered before this add went out, so its answer can
     // tell whether a run of the line it raised went out after it (velista `0208`).
     const writesBefore = this._sentCount;
+    // An add into a line it names is a write of that line from the moment it goes:
+    // a raise of the line answered while it is out is no longer the newest.
+    const sentInto =
+      options?.intoLineId === undefined || options.intoLineId === ''
+        ? null
+        : this._noteSent(options.intoLineId);
     const current = this.loaded();
     const drawn = this._lines.drawsBeforeAnswer(
       listId,
@@ -2523,12 +2529,19 @@ export class ListPage {
       // `0208`, target state 16).
       const raised = outcome.line;
       const extra = outcome.extra;
+      // The answered add is now the newest write of its line, whether it asks or
+      // not, so an older raise of the line answered later asks nothing. Unless a
+      // write of the line went out after the add: that one is newer still.
+      const latest = this._sentRuns.get(raised.id) ?? 0;
+      const sent =
+        latest > writesBefore && latest !== sentInto
+          ? null
+          : this._noteSent(raised.id);
       this._markTook(
         [raised.id],
-        extra === null
+        extra === null || sent === null
           ? undefined
-          : (shown) =>
-              this._addAnswered(listId, raised, extra, shown, writesBefore)
+          : (shown) => this._addAnswered(listId, raised, extra, shown, sent)
       );
       this._announce(
         this._translator.t('list.addChoice.merged', undefined, this._locale(), {
@@ -2847,18 +2860,17 @@ export class ListPage {
     line: Line,
     extra: AbsorbedExtra,
     shown: boolean,
-    writesBefore: number
+    sent: number
   ): void {
     if (
       !shown ||
       this._teardown.destroying ||
       listId !== this.listId() ||
-      (this._sentRuns.get(line.id) ?? 0) > writesBefore ||
+      this._sentRuns.get(line.id) !== sent ||
       this.quantityRuns.pending().has(line.id)
     ) {
       return;
     }
-    const sent = this._noteSent(line.id);
     this._extraAnswered(line.id, sent, { extra, quantity: line.quantity });
   }
 
