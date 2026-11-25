@@ -29,14 +29,29 @@ describe('rebalanceApplied', () => {
     ]);
   });
 
-  it('gives units above the ask back to it, oldest buy first, before the line holds any', () => {
+  it('moves no buy on a rising ask and holds the rest on the line (plan 0276, spec 2)', () => {
+    // Asks 1, bought 5 across two buys: a rising ask to 4 no longer gives
+    // the extra back to it. The line holds 3, and the raise that writes it
+    // takes the extra in.
     const plan = rebalanceApplied([buy('a', 3, 1), buy('b', 2, 0)], 4);
 
+    expect(plan.left).toBe(3);
+    expect(plan.changes.size).toBe(0);
+  });
+
+  it("writes the owner's example as the line's 2 (plan 0276, case 4)", () => {
+    // Asks 3, bought 5, set to 5: `left` 2, and no buy moves.
+    expect(rebalanceApplied([buy('a', 5, 3)], 5)).toEqual({
+      left: 2,
+      changes: new Map(),
+    });
+  });
+
+  it('keeps the lowering of plan 0274 below what the buys meet', () => {
+    const plan = rebalanceApplied([buy('a', 5, 3)], 1);
+
     expect(plan.left).toBe(0);
-    expect([...plan.changes]).toEqual([
-      ['a', 3],
-      ['b', 1],
-    ]);
+    expect([...plan.changes]).toEqual([['a', 1]]);
   });
 
   it('holds the whole ask on the line with no buys', () => {

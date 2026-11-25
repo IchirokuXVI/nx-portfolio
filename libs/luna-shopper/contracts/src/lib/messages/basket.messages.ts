@@ -22,6 +22,7 @@ import type {
   PriceScopeChainView,
 } from './catalog.messages';
 import type {
+  AbsorbedExtra,
   AddLineOutcome,
   SettlePick,
   SettlementPaid,
@@ -962,6 +963,33 @@ export interface SetBasketRowDemandRequest {
    * refused with `stale_quantity`.
    */
   from: number;
+  /**
+   * Ask for {@link BasketRowResult.extra} (plan 0276): when this demand raised
+   * the line, what the raise took into the ask in every open basket, this
+   * one's own buys included. The raise takes it in with or without the flag.
+   */
+  reportExtra?: boolean;
+}
+
+/**
+ * "Count the extra" from the basket (plan 0276, section 9): lower the line by
+ * {@link amount}, the `countable` a raise of this row answered.
+ *
+ * Plan 0131's demand rule asked of the basket's **owner**, as the demand asks
+ * it, and written as the owner with the basket as `via`. {@link expect} is the
+ * line's quantity as the raise answered it, the entry's `left`; a line that
+ * moved since is refused with `stale_quantity` and nothing is written.
+ */
+export interface CountBasketRowExtraRequest {
+  basketId: string;
+  participantId: string;
+  /** The same id as {@link lineId}. */
+  rowKey: string;
+  lineId: string;
+  unit: LineUnit;
+  /** What to take off, a positive whole number, at most {@link expect}. */
+  amount: number;
+  expect: number;
 }
 
 /**
@@ -997,6 +1025,11 @@ export interface AddBasketLineRequest {
   intoLineId?: string;
   /** The same field the list's own add carries (plan 0228). */
   newLine?: boolean;
+  /**
+   * Ask for {@link BasketRowResult.extra} on a `RAISED` add (plan 0276), as
+   * the list's own add takes it.
+   */
+  reportExtra?: boolean;
 }
 
 /**
@@ -1219,6 +1252,15 @@ export interface BasketRowResult {
    * a row has no entry.
    */
   addOutcome?: AddLineOutcome;
+  /**
+   * What a raise took into the ask (plan 0276), on the line add's `RAISED`
+   * answer and on a demand that raised the line, only when the request
+   * carried `reportExtra: true`. The entries carry every basket's new `asked`
+   * of the line through this reader's read.
+   */
+  extra?: AbsorbedExtra;
+  /** The units "Count the extra" took off the line, set by that write alone. */
+  counted?: number;
 }
 
 /**
@@ -1243,6 +1285,8 @@ export const BASKET_PATTERNS = {
   rowBuyForList: 'basket.row.buyForList',
   rowRevert: 'basket.row.revert',
   rowDemand: 'basket.row.demand',
+  /** "Count the extra" on a row, after a raise reported it (plan 0276). */
+  rowCountExtra: 'basket.row.countExtra',
   rowRename: 'basket.row.rename',
   /** Put a row off for now, and take that back (plan 0137). */
   rowSkip: 'basket.row.skip',

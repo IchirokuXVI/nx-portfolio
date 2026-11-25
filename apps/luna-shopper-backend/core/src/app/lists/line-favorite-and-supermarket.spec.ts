@@ -171,8 +171,12 @@ function build(options: Options = {}) {
   const settlements = fakeLineSettlements();
 
   const dataSource = {
+    // The covering baskets a raise reads (plan 0276): none here.
+    query: async () => [],
     transaction: async <T>(run: (m: EntityManager) => Promise<T>) =>
       run({
+        // The covering baskets a raise reads (plan 0276): none here.
+        query: async () => [],
         getRepository: (entity: unknown) => {
           if (entity === ListLineItem) {
             return lineItems.repo;

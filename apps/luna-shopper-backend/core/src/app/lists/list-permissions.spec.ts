@@ -210,8 +210,12 @@ function world(options: {
   };
 
   const dataSource = {
+    // The covering baskets a raise reads (plan 0276): none here.
+    query: async () => [],
     transaction: async <T>(run: (m: unknown) => Promise<T>) =>
       run({
+        // The covering baskets a raise reads (plan 0276): none here.
+        query: async () => [],
         getRepository: (entity: unknown) => {
           // A deleted line's conversation goes with it (plan 0132). Bound by
           // name, because the line repository answering for it would count an

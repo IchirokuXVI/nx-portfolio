@@ -40,10 +40,17 @@ import {
  * ask of `n` below what the buys met cannot be a line quantity: the line goes
  * to 0, and `applied` is lowered on this basket's standing buys of the line,
  * newest first, until it adds up to `n`. The units taken off become units
- * above the ask, which a minus takes first. An ask raised again gives units
- * above the ask back to it, oldest buy first, before the line holds anything:
- * `applied` adds up to the smaller of `n` and what was bought, and the line
- * holds the rest of `n`. {@link rebalanceApplied} is that arithmetic.
+ * above the ask, which a minus takes first. {@link rebalanceApplied} is that
+ * arithmetic.
+ *
+ * ## An ask raised above what the buys met raises the line (plan 0276)
+ *
+ * The line takes the rest of `n` above what the buys meet, and the raise takes
+ * every unit bought above the ask into the ask under the same lock
+ * (`LineService.absorbExtra`), this basket's own included. So an ask that asks
+ * 3, bought 5, set to 5 writes the line 2 and takes the 2 extra in: the ask
+ * ends at 7. Plan 0274 folded this basket's own extra into the raised ask
+ * instead, and that fold is gone: the absorption replaces it.
  *
  * Nothing about it is a refusal: a household that asks for less than was
  * already bought asks for less, and what was bought stays bought.
@@ -165,9 +172,10 @@ export class BasketDemandService {
 
     if (delta === 0) {
       // The line keeps its number and only the split of this basket's buys
-      // moves (plan 0274, section 5): an ask set below what the buys met, or
-      // raised back over units that were above it. Nothing changed on the
-      // list, so no other basket's rows moved, and this basket is told alone.
+      // moves (plan 0274, section 5): an ask set below what the buys met,
+      // with the line already at 0. Nothing changed on the list, so no other
+      // basket's rows moved, and this basket is told alone. It reports
+      // nothing (plan 0276, section 12).
       await this.dataSource.transaction(async (manager) => {
         const line = await manager.getRepository(ListLine).findOne({
           where: { id: entry.id },
@@ -195,7 +203,7 @@ export class BasketDemandService {
     // the actor's own. `expect` carries the `from` bargain into the locked read,
     // so a settle that landed between the resolve and the write refuses this
     // rather than overwriting it.
-    await this.lines.addQuantity(
+    const written = await this.lines.addQuantity(
       {
         userId: opened.basket.ownerUserId,
         lineId: entry.id,
@@ -207,6 +215,9 @@ export class BasketDemandService {
         // 4): a guest shopping somebody else's list leaves a change with a
         // participant and no account.
         via: opened.via(),
+        // A raise answers what it took into the ask when asked (plan 0276).
+        // A lowering answers nothing, whatever the flag says.
+        ...(req.reportExtra === true && delta > 0 ? { reportExtra: true } : {}),
       },
       underLock
     );
@@ -216,7 +227,8 @@ export class BasketDemandService {
     // included, and says that the marks moved: the other people of this basket
     // are shown the change (plan 0138, section 5). A second announcement here
     // would be the same patch computed twice.
-    return opened.result([entry.id]);
+    const result = await opened.result([entry.id]);
+    return written.extra ? { ...result, extra: written.extra } : result;
   }
 
   /**
@@ -229,10 +241,14 @@ export class BasketDemandService {
    * "a guest can change demand on single entry rows only". The refusal is the
    * one of before, so the route cannot be used to learn which households the
    * redaction withheld.
+   *
+   * Not private: "Count the extra" on a row names its line by the same rule
+   * (plan 0276, section 9), and two copies of it are two rules to keep in
+   * step.
    */
-  private async pick(
+  async pick(
     opened: OpenBasketWrite,
-    req: SetBasketRowDemandRequest
+    req: Pick<SetBasketRowDemandRequest, 'rowKey' | 'lineId'>
   ): Promise<ListLine> {
     if (typeof req.lineId !== 'string' || req.lineId.length === 0) {
       throw new ValidationException('lineId is required', {
@@ -256,9 +272,10 @@ export class BasketDemandService {
    *
    * It is asked again here rather than trusted from the read, for the reason
    * section 5.2 of plan 0051 gives about every value that travelled: the read
-   * happened on another request, and access moves.
+   * happened on another request, and access moves. Not private, for the
+   * reason {@link pick} is not.
    */
-  private async ownerMayChange(
+  async ownerMayChange(
     ownerUserId: string,
     entry: Pick<ListLine, 'listId' | 'approvalStatus'>
   ): Promise<boolean> {

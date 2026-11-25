@@ -8799,6 +8799,121 @@
         ]
       }
     },
+    "/v1/lines/{id}/extra": {
+      "post": {
+        "operationId": "LinesController_countExtra_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CountLineExtraDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `line.countExtra` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/list.CountLineExtraResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`stale_quantity` — Somebody else changed this while you were looking at it. It is {current} now.\n\n`line_unit_mismatch` — This line counts in another unit now. Look at it again and change the amount there.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "lines"
+        ]
+      }
+    },
     "/v1/lines/{id}/approval": {
       "post": {
         "operationId": "LinesController_setApproval_v1",
@@ -11255,6 +11370,124 @@
           },
           "409": {
             "description": "`basket_finished` — This basket is finished, so it cannot be changed.\n\n`line_unit_mismatch` — This line counts in another unit now. Look at it again and change the amount there.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "baskets"
+        ]
+      }
+    },
+    "/v1/baskets/{id}/rows/{rowKey}/extra": {
+      "post": {
+        "operationId": "BasketController_countExtra_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rowKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CountBasketRowExtraDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `basket.row.countExtra` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket.BasketRowResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`stale_quantity` — Somebody else changed this while you were looking at it. It is {current} now.\n\n`basket_finished` — This basket is finished, so it cannot be changed.\n\n`line_unit_mismatch` — This line counts in another unit now. Look at it again and change the amount there.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -31549,6 +31782,10 @@
           "newLine": {
             "type": "boolean",
             "description": "The person chose a new line over the lines that hold a product under this typed name (plan 0228). A free text line of the same name still meets the add, because a list holds one free text line per name. A free text add only: true beside itemIds or a productGroupId answers 400 under newLine, because a second line of one product in one unit is what plan 0260 prevents (the owner, 2026-11-16)."
+          },
+          "reportExtra": {
+            "type": "boolean",
+            "description": "Report the units bought above the ask that this raise moved into the ask, and what an answer of Count the extra would take off the line."
           }
         },
         "required": [
@@ -31690,6 +31927,10 @@
           "confirmMerge": {
             "type": "boolean",
             "description": "Merge this line with the line the new content already belongs to (plan 0112, section 2). A rename onto a name another line of the list holds answers 409 line_merge_required and writes nothing unless this is true; the refusal names the other line in details. With it, the earlier of the two lines survives with the summed quantity and both lines’ products, comments, settlements and basket origins, and the answer names the removed line in absorbedLineId. It changes nothing on a rename to a free name."
+          },
+          "reportExtra": {
+            "type": "boolean",
+            "description": "Report the units bought above the ask that this raise moved into the ask, and what an answer of Count the extra would take off the line."
           }
         }
       },
@@ -31711,14 +31952,44 @@
             ],
             "description": "The unit the number was made in, which must be the line’s (plan 0246). Required: a unit that is not the line’s answers 409 `line_unit_mismatch` and changes nothing, and the client reads the line again."
           },
-          "countExtra": {
+          "reportExtra": {
             "type": "boolean",
-            "description": "Count the units bought above the ask in open shopping lists toward this raise. Only the zone list's rows send it."
+            "description": "Report the units bought above the ask that this raise moved into the ask, and what an answer of Count the extra would take off the line."
           }
         },
         "required": [
           "delta",
           "unit"
+        ]
+      },
+      "CountLineExtraDto": {
+        "type": "object",
+        "properties": {
+          "unit": {
+            "type": "string",
+            "enum": [
+              "UNIT",
+              "GRAM",
+              "MILLILITER"
+            ],
+            "description": "The unit the number was made in, which must be the line’s (plan 0246). Required: a unit that is not the line’s answers 409 `line_unit_mismatch` and changes nothing, and the client reads the line again."
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 99999,
+            "description": "What to take off the line: the `extra.countable` the raise answered. A positive whole number, at most `expect`."
+          },
+          "expect": {
+            "type": "number",
+            "minimum": 0,
+            "description": "The line quantity the raise answered. The line must still hold it when the count is written, or the count answers 409 `stale_quantity` with the current amount and writes nothing. It has no ceiling, because it is what the line holds and not what the count writes."
+          }
+        },
+        "required": [
+          "unit",
+          "amount",
+          "expect"
         ]
       },
       "SetApprovalDto": {
@@ -32114,6 +32385,10 @@
             "type": "number",
             "minimum": 0,
             "description": "The entry's `left` as you drew it: what the line itself held, not the ask. A write that landed since moves it and the demand is refused with `stale_quantity`. It has no ceiling, because it is what the line holds and not what the demand writes: a line stored above the ceiling is moved down with its own amount here (plan 0262)."
+          },
+          "reportExtra": {
+            "type": "boolean",
+            "description": "Report the units bought above the ask that this raise moved into the ask, and what an answer of Count the extra would take off the line."
           }
         },
         "required": [
@@ -32121,6 +32396,42 @@
           "quantity",
           "unit",
           "from"
+        ]
+      },
+      "CountBasketRowExtraDto": {
+        "type": "object",
+        "properties": {
+          "lineId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The list line whose raise is counted, as on the demand. It is the `rowKey` of the path."
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "UNIT",
+              "GRAM",
+              "MILLILITER"
+            ],
+            "description": "The unit the number was made in, which must be the line’s (plan 0246). Required: a unit that is not the line’s answers 409 `line_unit_mismatch` and changes nothing, and the client reads the line again."
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 99999,
+            "description": "What to take off the line: the `extra.countable` the demand answered. A positive whole number, at most `expect`."
+          },
+          "expect": {
+            "type": "number",
+            "minimum": 0,
+            "description": "The entry's `left` the demand answered: the line's quantity. A write that landed since moves it, and the count answers 409 `stale_quantity` with the current amount and writes nothing. It has no ceiling, because it is what the line holds."
+          }
+        },
+        "required": [
+          "lineId",
+          "unit",
+          "amount",
+          "expect"
         ]
       },
       "RenameBasketRowDto": {
@@ -32223,6 +32534,10 @@
           "newLine": {
             "type": "boolean",
             "description": "The person chose a new line over the lines that hold a product under this typed name (plan 0228). A free text line of the same name still meets the add, because a list holds one free text line per name. A free text add only: true beside itemIds or a productGroupId answers 400 under newLine, because a second line of one product in one unit is what plan 0260 prevents (the owner, 2026-11-16)."
+          },
+          "reportExtra": {
+            "type": "boolean",
+            "description": "Report the units bought above the ask that this raise moved into the ask, and what an answer of Count the extra would take off the line."
           }
         },
         "required": [
@@ -38464,6 +38779,13 @@
           },
           "addOutcome": {
             "$ref": "#/components/schemas/enums.AddLineOutcome"
+          },
+          "extra": {
+            "$ref": "#/components/schemas/list.AbsorbedExtra"
+          },
+          "counted": {
+            "type": "integer",
+            "minimum": 1
           }
         },
         "required": [
@@ -47746,6 +48068,31 @@
         ],
         "additionalProperties": false
       },
+      "list.AbsorbedExtra": {
+        "type": "object",
+        "properties": {
+          "above": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "countable": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "buyers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/list.ExtraBuyer"
+            }
+          }
+        },
+        "required": [
+          "above",
+          "countable",
+          "buyers"
+        ],
+        "additionalProperties": false
+      },
       "list.AddLineQuantityResult": {
         "type": "object",
         "properties": {
@@ -47865,7 +48212,7 @@
             "format": "date-time"
           },
           "extra": {
-            "$ref": "#/components/schemas/list.CountedExtra"
+            "$ref": "#/components/schemas/list.AbsorbedExtra"
           }
         },
         "required": [
@@ -47914,6 +48261,9 @@
               "$ref": "#/components/schemas/list.LineView"
             },
             "maxItems": 10
+          },
+          "extra": {
+            "$ref": "#/components/schemas/list.AbsorbedExtra"
           }
         },
         "required": [
@@ -48032,32 +48382,159 @@
         ],
         "additionalProperties": false
       },
-      "list.CountedExtra": {
+      "list.CountLineExtraResult": {
         "type": "object",
         "properties": {
-          "above": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/enums.LineUnit"
+          },
+          "itemIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "itemSetHash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "productGroupId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "groupItemIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "favoriteItemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preferredSupermarketId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "named": {
+            "type": "boolean"
+          },
+          "position": {
+            "type": "integer"
+          },
+          "approvalStatus": {
+            "$ref": "#/components/schemas/enums.LineApprovalStatus"
+          },
+          "createdByUserId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "approvedByUserId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer"
+          },
+          "boughtCount": {
             "type": "integer",
             "minimum": 0
+          },
+          "lastSettlementOutcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.SettlementOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "claimed": {
+            "type": "boolean"
+          },
+          "claimedByUserId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "commentCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
           },
           "counted": {
             "type": "integer",
-            "minimum": 0
-          },
-          "buyers": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/list.CountedExtraBuyer"
-            }
+            "minimum": 1
           }
         },
         "required": [
-          "above",
-          "counted",
-          "buyers"
+          "id",
+          "listId",
+          "content",
+          "quantity",
+          "unit",
+          "itemIds",
+          "itemSetHash",
+          "productGroupId",
+          "groupItemIds",
+          "favoriteItemId",
+          "preferredSupermarketId",
+          "named",
+          "position",
+          "approvalStatus",
+          "createdByUserId",
+          "approvedByUserId",
+          "version",
+          "boughtCount",
+          "lastSettlementOutcome",
+          "claimed",
+          "claimedByUserId",
+          "commentCount",
+          "createdAt",
+          "updatedAt",
+          "counted"
         ],
         "additionalProperties": false
       },
-      "list.CountedExtraBuyer": {
+      "list.ExtraBuyer": {
         "type": "object",
         "properties": {
           "userId": {
@@ -49070,6 +49547,9 @@
           "absorbedLineId": {
             "type": "string",
             "minLength": 1
+          },
+          "extra": {
+            "$ref": "#/components/schemas/list.AbsorbedExtra"
           }
         },
         "required": [

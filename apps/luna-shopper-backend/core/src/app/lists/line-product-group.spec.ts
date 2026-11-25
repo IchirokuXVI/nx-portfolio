@@ -14,6 +14,7 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import type { DataSource, EntityManager } from 'typeorm';
 import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
+import { fakeLineClaims } from '../baskets/line-claims.fake';
 import {
   LineSettlement,
   ListLineGroupRemoval,
@@ -23,7 +24,6 @@ import {
   type ShoppingList,
 } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
-import { fakeLineClaims } from '../baskets/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { fakeLineChanges } from './changes/line-change.fake';
 import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
@@ -181,8 +181,12 @@ function build(options: Options = {}) {
   const settlements = fakeLineSettlements();
 
   const dataSource = {
+    // The covering baskets a raise reads (plan 0276): none here.
+    query: async () => [],
     transaction: async <T>(run: (m: EntityManager) => Promise<T>) =>
       run({
+        // The covering baskets a raise reads (plan 0276): none here.
+        query: async () => [],
         getRepository: (entity: unknown) => {
           if (entity === ListLineItem) {
             return lineItems.repo;

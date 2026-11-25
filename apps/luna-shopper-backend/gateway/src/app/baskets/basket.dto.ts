@@ -32,9 +32,12 @@ import {
 } from 'class-validator';
 import {
   ADD_CHOICE_DOCS,
+  AsSpelledNumber,
+  AtMostExpect,
   LINE_UNIT_DOCS,
   NotBesideNewLine,
   OnTypedNameOnly,
+  ReportExtra,
   RequiredLineUnit,
 } from '../lists/list.dto';
 
@@ -298,6 +301,50 @@ export class SetBasketRowDemandDto {
   @IsInt()
   @Min(0)
   from!: number;
+
+  @ReportExtra()
+  reportExtra?: boolean;
+}
+
+/**
+ * "Count the extra" on a row (plan 0276, section 9): lower the line by what
+ * the raise of this row's demand reported, once the person said the extra
+ * covers the raise. Checked as the demand is, against the basket's owner.
+ */
+export class CountBasketRowExtraDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The list line whose raise is counted, as on the demand. It is the `rowKey` of the path.',
+  })
+  @IsUUID()
+  lineId!: string;
+
+  @RequiredLineUnit()
+  unit!: LineUnit;
+
+  @ApiProperty({
+    minimum: 1,
+    maximum: LINE_QUANTITY_MAX,
+    description:
+      'What to take off the line: the `extra.countable` the demand answered. A positive whole number, at most `expect`.',
+  })
+  @AsSpelledNumber()
+  @IsInt()
+  @Min(1)
+  @Max(LINE_QUANTITY_MAX)
+  @AtMostExpect()
+  amount!: number;
+
+  @ApiProperty({
+    minimum: 0,
+    description:
+      "The entry's `left` the demand answered: the line's quantity. A write that landed since moves it, and the count answers 409 `stale_quantity` with the current amount and writes nothing. It has no ceiling, because it is what the line holds.",
+  })
+  @AsSpelledNumber()
+  @IsInt()
+  @Min(0)
+  expect!: number;
 }
 
 /**
@@ -388,6 +435,10 @@ export class AddBasketLineDto {
   @IsBoolean()
   @OnTypedNameOnly()
   newLine?: boolean;
+
+  // As the list's own add takes it (plan 0276).
+  @ReportExtra()
+  reportExtra?: boolean;
 }
 
 /**

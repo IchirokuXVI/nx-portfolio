@@ -8,6 +8,7 @@ import {
   type BasketSearchScopeRequest,
   type BuyForListBasketRequest,
   type ChangeBasketLinesProductRequest,
+  type CountBasketRowExtraRequest,
   type RenameBasketRowRequest,
   type RevertBasketRowRequest,
   type SetBasketRowDemandRequest,
@@ -15,6 +16,7 @@ import {
   type SkipBasketRowRequest,
 } from '@portfolio/luna-shopper/contracts';
 import { BasketBuyForListService } from './basket-buy-for-list.service';
+import { BasketCountExtraService } from './basket-count-extra.service';
 import { BasketDemandService } from './basket-demand.service';
 import { BasketLineAddService } from './basket-line-add.service';
 import { BasketProductChangeService } from './basket-product-change.service';
@@ -46,7 +48,9 @@ export class BasketWriteController {
     private readonly productChangeService: BasketProductChangeService,
     // A buy for a list that does not ask (plan 0273). Last, so no positional
     // construction has to shift an argument.
-    private readonly buyForListService: BasketBuyForListService
+    private readonly buyForListService: BasketBuyForListService,
+    // "Count the extra" on a row (plan 0276). Last, for the same reason.
+    private readonly countExtraService: BasketCountExtraService
   ) {}
 
   @MessagePattern(BASKET_PATTERNS.rowSettle)
@@ -70,6 +74,14 @@ export class BasketWriteController {
   @MessagePattern(BASKET_PATTERNS.rowDemand)
   demand(@Payload() req: SetBasketRowDemandRequest): Promise<BasketRowResult> {
     return this.demandService.setDemand(req);
+  }
+
+  /** "Count the extra" after a raise reported it (plan 0276, section 9). */
+  @MessagePattern(BASKET_PATTERNS.rowCountExtra)
+  countExtra(
+    @Payload() req: CountBasketRowExtraRequest
+  ): Promise<BasketRowResult> {
+    return this.countExtraService.countExtra(req);
   }
 
   @MessagePattern(BASKET_PATTERNS.rowRename)

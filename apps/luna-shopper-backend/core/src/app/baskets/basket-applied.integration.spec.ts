@@ -608,7 +608,7 @@ describeIntegration(
 
     // --- 4. an ask set below what was applied ---------------------------------
 
-    it('lowers what the buys met when the ask goes below it, and gives it back when it rises (spec 4)', async () => {
+    it('lowers what the buys met when the ask goes below it, and a rise takes the extra in (spec 4, plan 0276)', async () => {
       const w = await world();
       const milk = await line(w, 3);
       await buy(w, [milk.id], 3, 3);
@@ -629,14 +629,17 @@ describeIntegration(
       expect(await appliedOf(milk.id)).toEqual([{ quantity: 3, applied: 2 }]);
       await expectTripAgrees(w, milk.id);
 
+      // Plan 0276, section 11: a rising ask raises the line by what the buys
+      // do not meet, and the raise takes the unit above the ask into the ask.
+      // The ask ends one above what was set, as the plan's case 4 does.
       await ask(w, milk.id, 4, 0);
 
       expect(await numbersOf(w, milk.id)).toEqual({
-        asked: 4,
-        left: 1,
+        asked: 5,
+        left: 2,
         bought: 3,
       });
-      expect(await quantityOf(milk.id)).toBe(1);
+      expect(await quantityOf(milk.id)).toBe(2);
       expect(await appliedOf(milk.id)).toEqual([{ quantity: 3, applied: 3 }]);
       await expectTripAgrees(w, milk.id);
     });
@@ -695,10 +698,10 @@ describeIntegration(
     // --- a raise from the list page after a buy above the ask -----------------
 
     it('reads a raise after a buy above the ask the same in the basket read and the trips read, open and finished', async () => {
-      // The owner's ruling (2026-11-22): a raise of the line from the list page
-      // takes nothing back from the units bought above the ask. Asks 3, the
-      // basket buys 4 (3 met it, the line goes to 0), the household raises the
-      // line to 2: asked 5, left 2, bought 4, in every read.
+      // Plan 0276 replaces the ruling of 2026-11-22: a raise of the line from
+      // the list page takes the units bought above the ask into the ask. Asks
+      // 3, the basket buys 4 (3 met it, the line goes to 0), the household
+      // raises the line to 2: asked 6, left 2, bought 4, in every read.
       const w = await world();
       const milk = await line(w, 3);
       await buy(w, [milk.id], 4, 3);
@@ -713,14 +716,14 @@ describeIntegration(
 
       const expectEveryRead = async () => {
         expect(await numbersOf(w, milk.id)).toEqual({
-          asked: 5,
+          asked: 6,
           left: 2,
           bought: 4,
         });
         expect((await rowOf(w, milk.id)).state).toBe('PARTLY');
         const trip = toTripRowView(TripKind.BASKET, await tripOf(w, milk.id));
         expect(trip).toMatchObject({
-          asked: 5,
+          asked: 6,
           left: 2,
           bought: 4,
           outcome: TripRowOutcome.PARTLY,
@@ -744,7 +747,7 @@ describeIntegration(
       const frozen = await dataSource
         .getRepository(BasketTripRow)
         .findOneByOrFail({ basketId: w.basket.id, lineId: milk.id });
-      expect(frozen.asked).toBe(5);
+      expect(frozen.asked).toBe(6);
 
       await expectEveryRead();
     });
