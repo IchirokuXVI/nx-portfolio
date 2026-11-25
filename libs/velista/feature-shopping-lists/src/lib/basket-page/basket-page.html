@@ -779,7 +779,14 @@
 <p aria-live="polite" class="visually-hidden said">{{ outstandingSaid() }}</p>
 
 <!--
+  The question about the extra already bought, on a catalog card of "Add or find"
+  (velista 0208, target state 18), and the notice a count that wrote nothing
+  leaves in its place.
+-->
+<lib-extra-ask-popover />
+
+<!--
   The sheets, as children of the page they cover (rule E1, plan 0008): the page
   keeps its scroll underneath and Android's back button dismisses them.
 -->
-<router-outlet />
+<router-outlet (activate)="onSheetOpened()" />

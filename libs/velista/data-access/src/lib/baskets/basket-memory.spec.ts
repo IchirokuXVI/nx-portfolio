@@ -1655,3 +1655,117 @@ describe('BasketMemory: a buy keeps the ask it met (backend 0274, velista 0201)'
     ).toBe('not_found');
   });
 });
+
+describe('BasketMemory: a raise takes the extra into the ask (backend 0276, velista 0208)', () => {
+  const one = (lineId: string): BasketRowTarget => ({
+    rowKey: lineId,
+    lineIds: [lineId],
+  });
+
+  /** Milk, bought 2 above its ask through this basket. */
+  async function overBought() {
+    const memory = new BasketMemory();
+    const line = rowOf(await rowsOf(memory), 'Milk').entries[0];
+    await memory.settle(BASKET, one(line.lineId), {
+      outcome: 'BOUGHT',
+      quantity: line.left + 2,
+      from: line.left,
+      unit: 'UNIT',
+    });
+    const over = rowOf(await rowsOf(memory), 'Milk').entries[0];
+    return { memory, over };
+  }
+
+  it('raises the ask by the extra and the raise, keeps the amount set as left, and reports it', async () => {
+    const { memory, over } = await overBought();
+
+    const result = await memory.setDemand(BASKET, {
+      lineId: over.lineId,
+      quantity: over.asked + 2,
+      from: over.left,
+      unit: 'UNIT',
+      reportExtra: true,
+    });
+
+    expect(result.entries[0]).toMatchObject({
+      left: 2,
+      asked: over.asked + 4,
+      bought: over.bought,
+    });
+    expect(result.extra).toMatchObject({ above: 2, countable: 2 });
+    expect(result.extra?.buyers).toHaveLength(1);
+  });
+
+  it('takes the extra in without the flag too, and reports nothing', async () => {
+    const { memory, over } = await overBought();
+
+    const result = await memory.setDemand(BASKET, {
+      lineId: over.lineId,
+      quantity: over.asked + 1,
+      from: over.left,
+      unit: 'UNIT',
+    });
+
+    expect(result).not.toHaveProperty('extra');
+    expect(result.entries[0]).toMatchObject({ left: 1, asked: over.asked + 3 });
+  });
+
+  it('counts the extra off the ask, and refuses a line that moved', async () => {
+    const { memory, over } = await overBought();
+    await memory.setDemand(BASKET, {
+      lineId: over.lineId,
+      quantity: over.asked + 2,
+      from: over.left,
+      unit: 'UNIT',
+      reportExtra: true,
+    });
+
+    expect(
+      await codeOf(
+        memory.countExtra(BASKET, {
+          lineId: over.lineId,
+          unit: 'UNIT',
+          amount: 1,
+          expect: 1,
+        })
+      )
+    ).toBe('stale_quantity');
+
+    const counted = await memory.countExtra(BASKET, {
+      lineId: over.lineId,
+      unit: 'UNIT',
+      amount: 2,
+      expect: 2,
+    });
+
+    expect(counted.counted).toBe(2);
+    expect(counted.entries[0]).toMatchObject({
+      left: 0,
+      asked: over.asked + 2,
+    });
+    // The extra is inside the ask now: the next raise reports nothing to count.
+    const again = await memory.setDemand(BASKET, {
+      lineId: over.lineId,
+      quantity: over.asked + 3,
+      from: 0,
+      unit: 'UNIT',
+      reportExtra: true,
+    });
+    expect(again).not.toHaveProperty('extra');
+  });
+
+  it('refuses a count above what the line holds', async () => {
+    const { memory, over } = await overBought();
+
+    expect(
+      await codeOf(
+        memory.countExtra(BASKET, {
+          lineId: over.lineId,
+          unit: 'UNIT',
+          amount: 3,
+          expect: 0,
+        })
+      )
+    ).toBe('validation_failed');
+  });
+});

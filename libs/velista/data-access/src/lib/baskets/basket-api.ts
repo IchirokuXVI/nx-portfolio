@@ -5,6 +5,7 @@ import type {
   BasketAddLineRequest,
   BasketBuyForListRequest,
   BasketChangePage,
+  BasketCountExtraRequest,
   BasketDemandRequest,
   BasketLinkPreview,
   BasketMarks,
@@ -384,12 +385,39 @@ export class BasketApi implements BasketServiceI {
           from: body.from,
           // The line's unit, always (velista `0182`).
           unit: body.unit,
+          // Only as itself (backend `0276`): a rising ask asks what it took in.
+          ...(body.reportExtra === true ? { reportExtra: true } : {}),
         },
         this._participantOptions(basketId, 'basket.demand')
       )
     );
 
     return required(toBasketRowResult(answer), 'basket.demand');
+  }
+
+  /**
+   * "Count the extra" on one line (backend `0276`; velista `0208`, target state
+   * 17), keyed by the line as the demand is. The answer is the line as it now
+   * stands, and `counted`.
+   */
+  async countExtra(
+    basketId: string,
+    body: BasketCountExtraRequest
+  ): Promise<BasketRowResult> {
+    const answer = await firstValueFrom(
+      this._http.post<unknown>(
+        `${this._row(basketId, body.lineId)}/extra`,
+        {
+          lineId: body.lineId,
+          unit: body.unit,
+          amount: body.amount,
+          expect: body.expect,
+        },
+        this._participantOptions(basketId, 'basket.countExtra')
+      )
+    );
+
+    return required(toBasketRowResult(answer), 'basket.countExtra');
   }
 
   /**
@@ -475,6 +503,10 @@ export class BasketApi implements BasketServiceI {
         body.itemIds !== undefined && body.itemIds.length > 0
       )
     );
+    // Only as itself (backend `0276`): an add that raises a line asks what it took in.
+    if (body.reportExtra === true) {
+      request['reportExtra'] = true;
+    }
 
     const answer = await firstValueFrom(
       this._http.post<unknown>(

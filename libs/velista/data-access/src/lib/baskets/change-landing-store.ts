@@ -1,4 +1,28 @@
 import { Injectable } from '@angular/core';
+import type { BasketAddress } from '@portfolio/velista/models';
+
+/** The row a sheet is pushed for, as `ChangeLandingStore.notePage` keeps it. */
+export interface NotedRow {
+  readonly rowKey: string;
+  readonly entries: readonly { readonly lineId: string }[];
+}
+
+/** One sheet the basket page pushed: the basket, the row, and the page's depth. */
+interface PageNote {
+  /** `'live'`, or the basket's id. */
+  readonly basket: string;
+  readonly rowKey: string;
+  readonly lineIds: ReadonlySet<string>;
+  readonly page: number;
+}
+
+function basketOf(address: BasketAddress | null): string | null {
+  return address === null
+    ? null
+    : address === 'live'
+      ? 'live'
+      : address.basketId;
+}
 
 /**
  * Where a change of product lands, asked by "Lists and amounts" (velista `0200`,
@@ -37,6 +61,74 @@ export interface ChangeLanding {
 @Injectable()
 export class ChangeLandingStore {
   private _held: ChangeLanding | null = null;
+
+  /** What the basket page noted as it pushed a sheet, by that sheet's depth. */
+  private readonly _notes = new Map<number, PageNote>();
+
+  /**
+   * The basket page notes, just before it pushes a sheet of one row, the basket,
+   * that row and the `AppHistory` depth it stands on; the sheet goes on the entry
+   * above it (velista `0208`, target state 19).
+   *
+   * A note outlives the page: the page is destroyed while the catalog that
+   * chooses is open, and a person who backs out of it, or walks back or forward
+   * onto the sheet's entry, finds the page drawn again under a sheet it never
+   * pushed. A push from the page drops every note at its own depth or above,
+   * since those entries are gone from the history; the notes below it still
+   * describe entries that stand.
+   */
+  notePage(address: BasketAddress | null, row: NotedRow, page: number): void {
+    for (const sheet of [...this._notes.keys()]) {
+      if (sheet >= page) {
+        this._notes.delete(sheet);
+      }
+    }
+    const basket = basketOf(address);
+    if (basket === null) {
+      return;
+    }
+    this._notes.set(page + 1, {
+      basket,
+      rowKey: row.rowKey,
+      lineIds: new Set(row.entries.map((held) => held.lineId)),
+      page,
+    });
+  }
+
+  /**
+   * The depth of the basket page under "Lists and amounts" of `row`, standing on
+   * `sheetDepth`, or null. The page is one entry below when it pushed this view
+   * itself (the basket's "Add or find"), and two when it pushed the row's sheet,
+   * which pushed this view. Only a note of the same basket and the same row
+   * answers (the row by its key, or by a line of it when its key moved): a note
+   * of another row or basket at those depths describes another walk.
+   *
+   * Null when nothing matches: a document loaded on a sheet (a reload forgets
+   * every note), or a page that pushed nothing since. The caller then takes the
+   * row's sheet as the way in.
+   */
+  pageBelow(
+    address: BasketAddress | null,
+    row: NotedRow,
+    sheetDepth: number
+  ): number | null {
+    const basket = basketOf(address);
+    if (basket === null) {
+      return null;
+    }
+    for (const sheet of [sheetDepth, sheetDepth - 1]) {
+      const note = this._notes.get(sheet);
+      if (
+        note !== undefined &&
+        note.basket === basket &&
+        (note.rowKey === row.rowKey ||
+          row.entries.some((held) => note.lineIds.has(held.lineId)))
+      ) {
+        return note.page;
+      }
+    }
+    return null;
+  }
 
   /** Ask the change sheet about to open to land at a depth. Called just before it navigates. */
   hold(landing: ChangeLanding): void {

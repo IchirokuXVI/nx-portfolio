@@ -6,6 +6,7 @@ import {
   isOpenBasket,
   LINE_QUANTITY_MAX,
   LINK_VISIT_HOURS,
+  type AbsorbedExtra,
   type Basket,
   type BasketAddLineRequest,
   type BasketBuyForListRequest,
@@ -15,6 +16,7 @@ import {
   type BasketChangeMark,
   type BasketChangeOrigin,
   type BasketChangePage,
+  type BasketCountExtraRequest,
   type BasketDemandRequest,
   type BasketEntryAct,
   type BasketLinkPreview,
@@ -1472,7 +1474,20 @@ export class BasketMemory implements BasketServiceI {
     // `applied` on the newest buys first, which become units above the ask
     // (backend `0274`, section 5).
     const applied = entry.asked - entry.left;
+    const before = line.quantity;
     line.quantity = Math.max(0, body.quantity - applied);
+    if (line.quantity > before) {
+      // A raise takes this basket's units above the ask into the ask, and the line
+      // keeps the amount set (backend `0276`). Only this basket's buys are held
+      // here, so they are the extra this twin knows of.
+      const extra = this._absorb(line, line.quantity - before);
+      this._moved(line.id);
+      this._announce([line.id], true);
+      const result = await this._result([line.id]);
+      return body.reportExtra === true && extra !== null
+        ? { ...result, extra }
+        : result;
+    }
     let over = applied - body.quantity;
     for (const act of this._standing().reverse()) {
       if (over <= 0) {
@@ -1488,6 +1503,89 @@ export class BasketMemory implements BasketServiceI {
     this._moved(line.id);
     this._announce([line.id], true);
     return this._result([line.id]);
+  }
+
+  /**
+   * "Count the extra" on one line (backend `0276`): the line's ask goes down by
+   * `amount`, which the buys already met. Refused with `stale_quantity` when the
+   * line no longer holds `expect`, and with a validation failure for an amount
+   * that is not a positive whole number or is above `expect`.
+   */
+  async countExtra(
+    _basketId: string,
+    body: BasketCountExtraRequest
+  ): Promise<BasketRowResult> {
+    this._requireLive();
+    const line = this._lines.find(
+      (held) => held.id === body.lineId && !held.deleted
+    );
+    if (line === undefined) {
+      throw this._refuse('not_found', 404, 'No such row on this basket');
+    }
+    const entry = this._entry(line);
+    this._requireUnit(body.unit, entry.unit);
+    if (!entry.demandEditable) {
+      throw this._refuse(
+        'forbidden',
+        403,
+        'This list does not allow its quantity to be changed from here'
+      );
+    }
+    if (
+      !Number.isInteger(body.amount) ||
+      body.amount < 1 ||
+      body.amount > body.expect
+    ) {
+      throw this._refuse(
+        'validation_failed',
+        400,
+        'amount must be a whole number from 1 to expect'
+      );
+    }
+    this._requireFrom(body.expect, entry.left);
+    line.quantity -= body.amount;
+    this._moved(line.id);
+    this._announce([line.id], true);
+    return { ...(await this._result([line.id])), counted: body.amount };
+  }
+
+  /**
+   * Take this basket's units above the ask of a line into the ask, after a raise
+   * of `raise` (backend `0276`): every standing buy of the line counts whole
+   * toward the ask from now on, so `left` stays what was set and `asked` grows by
+   * the extra. Null when nothing was above the ask. `countable` is what "Count the
+   * extra" may take off: the extra, at most the raise.
+   */
+  private _absorb(line: StoredLine, raise: number): AbsorbedExtra | null {
+    const buys = this._standing().filter(
+      (act) =>
+        act.lineId === line.id &&
+        act.outcome === 'BOUGHT' &&
+        act.quantity > this._appliedOf(act)
+    );
+    const above = buys.reduce(
+      (sum, act) => sum + act.quantity - this._appliedOf(act),
+      0
+    );
+    if (above === 0) {
+      return null;
+    }
+    const buyers: { readonly userId: string | null }[] = [];
+    for (const act of buys) {
+      act.applied = act.quantity;
+      const person = this._participants.find((held) => held.id === act.by);
+      // A guest's buy is named as the basket's owner (backend `0275`).
+      const userId =
+        person === undefined
+          ? null
+          : person.kind === 'GUEST'
+            ? (OWNER.userId ?? null)
+            : (person.userId ?? null);
+      if (!buyers.some((held) => held.userId === userId)) {
+        buyers.push({ userId });
+      }
+    }
+    return { above, countable: Math.min(above, raise), buyers };
   }
 
   /**
@@ -1711,11 +1809,21 @@ export class BasketMemory implements BasketServiceI {
       };
     }
     if (held !== undefined) {
-      // Kept at zero: raised (rule 4).
+      // Kept at zero: raised (rule 4), taking this basket's units above the ask
+      // into the ask (backend `0276`).
+      const before = held.quantity;
       held.quantity = raiseOf(held);
+      const extra =
+        held.quantity > before
+          ? this._absorb(held, held.quantity - before)
+          : null;
       this._moved(held.id);
       this._announce([held.id], true, false);
-      return { ...(await this._result([held.id])), addOutcome: 'raised' };
+      return {
+        ...(await this._result([held.id])),
+        addOutcome: 'raised',
+        ...(body.reportExtra === true && extra !== null ? { extra } : {}),
+      };
     }
 
     const line: StoredLine = {
