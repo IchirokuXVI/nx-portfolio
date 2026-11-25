@@ -1075,3 +1075,18 @@ test('the prompt says what every shelf of an entry is, and that none is a catego
   );
   assert.match(template, /never a category of ours/);
 });
+
+test('the prompt says a weight range printed beside a price is for a person to check (owner decision 144)', () => {
+  const template = loadPromptTemplate();
+  // A packet field the prompt does not name is a field the model ignores, so
+  // the paragraph is pinned here as `brandMatches` itself is.
+  assert.match(template, /`entry\.extra\.priceBasisToReview`, when present/);
+  assert.match(
+    template,
+    /The range is not the format of the product and not the weight\s+of one piece/
+  );
+  assert.match(
+    template,
+    /Answer\s+`REVIEW`, so a person checks what the price is/
+  );
+});

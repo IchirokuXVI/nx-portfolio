@@ -128,6 +128,11 @@ format apart, and rule 1 merges anything they do not separate.
   the registry holds it as a spelling of that brand's `label`. It is null when the two are
   the same brand.
 - `entry.extra` is whatever else the source carried, truncated.
+- `entry.extra.priceBasisToReview`, when present, is a weight range the chain printed beside
+  the price, such as `Aprox. 360-460g`. The price was stored as the price of one piece, and it
+  may be the price of a kilo. The range is not the format of the product and not the weight
+  of one piece. Do not use it, or the price beside it, to tell two products apart. Answer
+  `REVIEW`, so a person checks what the price is.
 
 `candidates` are the catalog products a search for the entry's name found, most relevant
 first. The list is short, and it is not the whole catalog: a product missing from it was not

@@ -2,7 +2,9 @@
 > and the research), [#248](https://github.com/IchirokuXVI/nx-portfolio/pull/248)
 > (the `REGION` rename and the price granularity it settles),
 > [#254](https://github.com/IchirokuXVI/nx-portfolio/pull/254) (the library, the
-> two runners and the store discovery dispatch)
+> two runners and the store discovery dispatch),
+> [#1104](https://github.com/IchirokuXVI/nx-portfolio/pull/1104) (owner decisions
+> 141a, 143a and 144, the notes after the build)
 
 # 0089 A catalog that arrives a week at a time
 
@@ -409,3 +411,64 @@ rather than a 401 with a name on it.
 - The run refuses a request that names a `priceScopeId`.
 - `supermarket_sources` holds a disabled `lidl-api` row for LIDL, and the run refuses to start until
   an admin enables it, by plan `0083`.
+
+## Notes after the build (2026-11-25)
+
+These notes record the owner's decisions of the harvester round. Where the text above, or plan
+`0244` section 5.2, disagrees, these notes hold. The code is in `libs/luna-shopper/lidl/src/lib/size.ts`
+(`weightRangeOf`), `normalize.ts` (`perKilo` and `basisToReview` on `LidlRegionPrice`) and
+`apps/luna-shopper-backend/harvester/src/app/harvest/lidl-catalog.runner.ts`
+(`lidlObservationPrices`, which the walk and the one product refresh both use).
+
+**Only a `ca.` range is a price per kilo (owner decisions 141a and 144).** A price block whose format
+is a weight range that starts with `ca.` (`ca.220-360g`, `ca. 0,8-1Kg`, any spacing) prints the
+price of a kilo, and a block printed `Aprox.300 g` prints the price of the piece. On sea bass fillets
+`11003305` the walk of 2026-11-20 read `ca.220-360g` at 21.99, and the next week reads `Aprox.300 g`
+at 6.60, which is 21.99 times 0.3 kg. So the figure beside a `ca.` range is written as the unit
+price with the label `kg` and no piece price. A shopper sees no LIDL price that week rather than a
+wrong one. No piece price is derived from the weight (the owner refused option b of decision 141a),
+and the row is not marked sold by weight. The block's own format decides, and the page's format
+stands in for a block that prints none. A range of a unit that is not a weight is no range here.
+
+**Any other range is the piece price, and a person decides (owner decision 144).** The proof covers
+`ca.` ranges only. A range after `Aprox.`, `aprox`, `aprox..` (two dots, as lidl.es printed on
+2026-11-25) or no prefix keeps its figure as the price of the piece, as before decision 141a. The
+row names it for review: `extra.priceBasisToReview` holds the printed range, and the run report
+lists each such product under `pricesToReview` with its id, name and range. The queue shows
+`extra` only on the rows it holds, `CANDIDATE` and `UNRESOLVED`, and there inside a collapsed
+block. A bound row that prints an `aprox` range thus gets no review prompt, and only the run
+report's `pricesToReview` names it. The curation packet carries `extra` to the model, whose prompt
+says to answer `REVIEW` for such an entry. Of the mechanisms that exist, the size doubt of plan `0249`
+(admin plan `0072`) does not fit: it records a size its own unit price disproves, and such a row has
+neither a size nor a unit price. What is missing, and left to the owner: the queue has no filter for
+the mark, no run warning names these products (a new warning code would change the contract and
+the OpenAPI document), and the admin run page does not draw `pricesToReview`.
+
+**A range of any prefix states no weight.** It is two numbers, and neither is the weight of the
+piece, so `approxWeight` is absent, not null, and the weight an `Aprox.` week stored stays on the
+entry. The approximate prefix takes any run of dots and spaces after the word, so `aprox..600-800 g`
+reads as a range and not as a string with no size, which had answered a null weight. The widened
+prefix also reads a single weight printed with two dots (`aprox..600 g`) as an approximate weight
+of 600 g, where it had read as no size. The kilo pieces release task (`0006`) reads its weights
+through `approxWeightIn`, so it now reads such a format as a weight too.
+
+**What a week does not state stays stored (owner decision 143a).** LIDL prints the format only
+inside a price block, so a week that prices a product nowhere prints no format for it. The source
+observation of the ingest now lets `sizeFormat`, `unitSize` and `sizeUnit` be absent, meaning
+"leave the stored value", as `approxWeight`, `packaging` and `packCount` already were. The LIDL
+runner sends all five fields read out of the format as absent when the page prints none, so
+"Empanada de atún" keeps its `500 g`. Every other adapter sends what it sent before, and a null it
+sends still clears the stored size. The product is still reported in full, as section 8.1 says: a
+new one is created with no size, and a known one has its name, brand, EAN, `categoryPath`, url,
+photo address and `extra` rewritten as any week rewrites them. Every path of the product
+(`categoryPaths`, plan `0268`) goes to the sink apart, as before. No migration and no contract
+schema changed.
+
+**A refresh never classifies a price by a stored format.** The one product refresh of plan `0216`
+rebuilds the list row from the stored entry, and a block that prints no format is read with the
+row's. The stored format is an earlier week's, so a row that stored `ca.220-360g` would have its
+figure written as a price per kilo in a later week whose page prints nothing. The refresh thus
+passes no format in that row (`price-refresh.fetchers.ts`, `lidlRowOf`), and its per kilo or to
+review decision reads only what the fetched page prints. The refresh writes prices only, so no
+other field read the stored format. On a walk the fall back is the search row of the same week,
+which stays.

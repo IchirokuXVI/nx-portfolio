@@ -186,14 +186,26 @@ export interface SourceObservation {
   name: string;
   brand: string | null;
   ean: string | null;
-  unitSize: number | null;
+  /**
+   * The size of the pack, in {@link sizeUnit}. Null is a statement that the
+   * source prints none, and clears the stored one.
+   *
+   * **Absent means the source did not state a size this time** (owner
+   * decision 143a), and leaves the stored size and its unit alone, as an
+   * absent {@link approxWeight} leaves the weight. Only LIDL sends it absent:
+   * it prints the format only inside a price block, so a week that prices a
+   * product nowhere states no format for it, and a null would erase the
+   * `500 g` an earlier week stored. Every other adapter states it every time.
+   */
+  unitSize?: number | null;
   /**
    * The catalog unit `unitSize` is in, stated by the source's own adapter
-   * (plan 0177). Required, so an adapter cannot write a number without saying
-   * what it counts: null is the answer for no size, and for a size printed in
-   * a unit the catalog does not hold.
+   * (plan 0177): null is the answer for no size, and for a size printed in
+   * a unit the catalog does not hold. Absent exactly when `unitSize` is: the
+   * ingest reads it only beside a stated size, so a unit cannot be written
+   * without the number it counts.
    */
-  sizeUnit: SourceSizeUnit | null;
+  sizeUnit?: SourceSizeUnit | null;
   /**
    * Whether the source sells the product by weight (plan 0181): a piece whose
    * weight is not the same on every pack. Every price beside it is then the
@@ -216,7 +228,13 @@ export interface SourceObservation {
    * no `approx_weight`), and leaves the stored weight alone.
    */
   approxWeight?: number | null;
-  sizeFormat: string | null;
+  /**
+   * The format the source prints, verbatim. Null is a statement that it
+   * prints none. Absent is a source that did not state one this time (owner
+   * decision 143a), LIDL for a week with no price block, and leaves the stored
+   * text alone.
+   */
+  sizeFormat?: string | null;
   /**
    * The container the source prints (`Brik`, `Botella`, `Pack-4`), verbatim
    * (plan 0248). Null is a statement that it prints none. Absent is a source
@@ -1632,7 +1650,9 @@ export class SourceIngest {
         ean: fields.ean,
         name: fields.name,
         brand: fields.brand,
-        unitSize: fields.unitSize === null ? null : Number(fields.unitSize),
+        // The row's own size, which `applySourceGroup` wrote: an observation
+        // that did not state one left the stored one (owner decision 143a).
+        unitSize: row.unitSize === null ? null : Number(row.unitSize),
         approxWeight:
           row.approxWeight === null ? null : Number(row.approxWeight),
       });
@@ -1695,6 +1715,11 @@ export class SourceIngest {
     const draft = this.entries.create({
       supermarketId,
       ...fields,
+      // A new row holds nothing to keep, so a size the observation did not
+      // state is no size (owner decision 143a).
+      unitSize: fields.unitSize ?? null,
+      sizeUnit: fields.sizeUnit ?? null,
+      sizeFormat: fields.sizeFormat ?? null,
       timesSeen: 1,
       firstSeenAt: seenAt,
       lastSeenAt: seenAt,
@@ -1723,7 +1748,7 @@ export class SourceIngest {
       ean: observation.ean,
       // The row's size and not the observation's: a row sold by weight holds
       // none, whatever the source printed beside it (plan 0181).
-      unitSize: fields.unitSize,
+      unitSize: draft.unitSize,
       // The weight of one piece stands in for the size it does not have (plan
       // 0244, section 5.8), so a piece never proposes one of another weight.
       approxWeight: fields.approxWeight ?? null,
@@ -1745,8 +1770,8 @@ export class SourceIngest {
       // leaflet the web listing.
       const sibling = siblings.match(
         observation.name,
-        observation.sizeFormat,
-        fields.unitSize,
+        draft.sizeFormat,
+        draft.unitSize,
         fields.approxWeight ?? null,
         // The count and the container join the key (plan 0248, D2 and D3).
         {
@@ -2441,7 +2466,16 @@ function fieldsOf(
   // 0181): the weight is not the same on every pack, so a leaflet tile that
   // prints `1 kg aprox` beside its price per kilo has no size either.
   // `sizeFormat` is not touched. It is half of the row's key.
-  const unitSize = soldByWeight ? null : observation.unitSize;
+  //
+  // A size the observation does not state stays undefined (owner decision
+  // 143a), so the stored size and its unit stay, unless a weight below says
+  // the row holds no size.
+  const stated = soldByWeight ? null : observation.unitSize;
+  const weighed =
+    stated === undefined &&
+    observation.approxWeight !== undefined &&
+    observation.approxWeight !== null;
+  const unitSize = weighed ? null : stated;
   return {
     externalId: observation.externalId,
     sourceKind,
@@ -2454,12 +2488,19 @@ function fieldsOf(
     unitSize,
     // Held to the size here as well as in every adapter: a unit beside no
     // number describes nothing, and the column's own doc says it is null then.
-    sizeUnit: unitSize === null ? null : observation.sizeUnit,
+    sizeUnit:
+      unitSize === null || unitSize === undefined
+        ? unitSize
+        : (observation.sizeUnit ?? null),
     soldByWeight,
     // The weight of one piece (plan 0244), held only beside no size: a size
-    // writes a null weight whatever the observation said. With no size, a
-    // source that never reads a weight leaves the stored one alone.
-    approxWeight: unitSize === null ? observation.approxWeight : null,
+    // writes a null weight whatever the observation said. With no size, or
+    // none stated, a source that never reads a weight leaves the stored one
+    // alone. A weight clears the size, as `see` holds it.
+    approxWeight:
+      unitSize === null || unitSize === undefined
+        ? observation.approxWeight
+        : null,
     sizeFormat: observation.sizeFormat,
     packaging: observation.packaging,
     packCount: observation.packCount,

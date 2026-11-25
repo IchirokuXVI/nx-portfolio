@@ -252,6 +252,201 @@ describe('normalizeProduct', () => {
     expect(product?.unitSize).toBeNull();
     expect(product?.unit).toBeNull();
     expect(product?.prices.length).toBeGreaterThan(0);
+    // The price of the tray, not of a kilo, and nothing to review (owner
+    // decisions 141a and 144).
+    expect(
+      product?.prices.every((price) => !price.perKilo && !price.basisToReview)
+    ).toBe(true);
+  });
+
+  describe('a week printed with a weight range (owner decisions 141a and 144)', () => {
+    /**
+     * **Constructed, not captured.** No committed fixture holds a range week,
+     * the range weeks of the walk of 2026-11-20 have ended, and this job may
+     * not fetch. So the page state is built here, shaped exactly like the
+     * blocks LIDL serves: the root `price` and the `currentPrice` block are
+     * the ones of `product-approximate-weight.json` (2026-11-05), and the
+     * `regionsV2` entries are the ones `p11003305` printed on 2026-11-25.
+     * Only the packaging text, the figure and the dates change. Two price ids
+     * carry two figures, so each region is seen to get its own.
+     */
+    function pageOf(
+      packaging: string,
+      figures: { mainland: number; islands: number }
+    ) {
+      const block = (price: number) => ({
+        basePrice: { prefix: false },
+        currencyCode: 'EUR',
+        currencyCodeSecond: '',
+        currencySymbol: '€',
+        currencySymbolSecond: '',
+        displayedCurrency: '€',
+        endDate: '2026-11-22T22:59:59Z',
+        endDateExclusive: '2026-11-22T23:00Z',
+        hasStar: false,
+        hasVat: true,
+        packaging: { text: packaging },
+        price,
+        priceTheme: 'white_red',
+        specialTaxes: [],
+        startDate: '2026-11-15T23:00Z',
+        superscript: '',
+        variantsHaveDifferentPrices: false,
+      });
+      const region = (regionName: string, regionPriceId: string) => ({
+        regionName,
+        isDefault: false,
+        regionPriceId,
+        status: 'ONLINE',
+        hasVat: true,
+        priceHasZeroVat: false,
+      });
+      return {
+        keyfacts: { title: 'Filetes de lubina' },
+        price: {
+          currencyCode: 'EUR',
+          currencyCodeSecond: '',
+          currencySymbol: '€',
+          currencySymbolSecond: '',
+          displayedCurrency: '€',
+          hasStar: false,
+          hasVat: false,
+          packaging: { text: packaging },
+          price: figures.mainland,
+          priceTheme: 'white_red',
+          specialTaxes: [],
+          variantsHaveDifferentPrices: false,
+        },
+        regionsV2: {
+          '1': region('A Coruña', '1'),
+          '2': region('Pontevedra', '1'),
+          '58': region('Gran Canaria', '2'),
+        },
+        regionsPrices: {
+          '1': {
+            currentPrice: block(figures.mainland),
+            futureLidlPlusPrices: [],
+          },
+          '2': {
+            currentPrice: block(figures.islands),
+            futureLidlPlusPrices: [],
+          },
+        },
+      };
+    }
+
+    const read = (state: unknown) =>
+      normalizeProduct(state as never, {
+        row: emptyRow('11003305'),
+        observedAt: OBSERVED_AT,
+      });
+
+    it('reads the figure of each region beside a ca. range as a price per kilo, with no size and no weight', () => {
+      const product = read(
+        pageOf('ca.220-360g', { mainland: 21.99, islands: 22.49 })
+      );
+
+      expect(product?.sizeFormat).toBe('ca.220-360g');
+      expect(product?.unitSize).toBeNull();
+      expect(product?.unit).toBeNull();
+      // Not stated, which is not the null of "no weight": a weight stored
+      // from an `Aprox.300 g` week stays.
+      expect(product?.approxWeight).toBeUndefined();
+      expect(
+        product?.prices.map((price) => ({
+          regions: price.regions.map((each) => each.id),
+          price: price.price,
+          perKilo: price.perKilo,
+          basisToReview: price.basisToReview,
+        }))
+      ).toEqual([
+        {
+          regions: ['1', '2'],
+          price: 21.99,
+          perKilo: true,
+          basisToReview: false,
+        },
+        { regions: ['58'], price: 22.49, perKilo: true, basisToReview: false },
+      ]);
+    });
+
+    it.each([
+      'Aprox. 360-460g',
+      'aprox..600-800 g',
+      'aprox.. 900-1000 g',
+      '400-600 g',
+    ])(
+      'keeps the figure beside %s as the price of the piece, marked for review, and states no weight',
+      (packaging) => {
+        const product = read(
+          pageOf(packaging, { mainland: 3.79, islands: 3.79 })
+        );
+
+        expect(product?.sizeFormat).toBe(packaging);
+        expect(product?.unitSize).toBeNull();
+        expect(product?.unit).toBeNull();
+        // Not stated, whatever the prefix and however many dots follow it.
+        expect(product?.approxWeight).toBeUndefined();
+        expect(
+          product?.prices.map((price) => [
+            price.price,
+            price.perKilo,
+            price.basisToReview,
+          ])
+        ).toEqual([
+          [3.79, false, true],
+          [3.79, false, true],
+        ]);
+      }
+    );
+
+    it('reads a ca. range in kilos the same way', () => {
+      const product = read(
+        pageOf('ca. 0,8-1Kg', { mainland: 4.39, islands: 4.39 })
+      );
+
+      expect(product?.approxWeight).toBeUndefined();
+      expect(product?.prices.every((price) => price.perKilo)).toBe(true);
+    });
+
+    it('still reads a single Aprox. weight as the price of the piece, with its weight', () => {
+      const product = read(
+        pageOf('Aprox.300 g', { mainland: 6.6, islands: 6.6 })
+      );
+
+      expect(product?.sizeFormat).toBe('Aprox.300 g');
+      expect(product?.approxWeight).toBe(300);
+      expect(product?.unitSize).toBeNull();
+      expect(
+        product?.prices.map((price) => [price.price, price.perKilo])
+      ).toEqual([
+        [6.6, false],
+        [6.6, false],
+      ]);
+    });
+
+    it('decides by the block, and by the page format only when the block prints none', () => {
+      const state = pageOf('ca.220-360g', { mainland: 21.99, islands: 6.6 });
+      state.regionsPrices['2'].currentPrice.packaging.text = 'Aprox.300 g';
+      const unprinted: Record<string, unknown> = {
+        ...state.regionsPrices['1'].currentPrice,
+      };
+      delete unprinted['packaging'];
+      const product = read({
+        ...state,
+        regionsPrices: {
+          '1': { ...state.regionsPrices['1'], currentPrice: unprinted },
+          '2': state.regionsPrices['2'],
+        },
+      });
+
+      expect(
+        product?.prices.map((price) => [price.price, price.perKilo])
+      ).toEqual([
+        [21.99, true],
+        [6.6, false],
+      ]);
+    });
   });
 
   it('never reads an eight digit code as an EAN', () => {

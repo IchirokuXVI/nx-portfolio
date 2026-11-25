@@ -45,10 +45,12 @@ export type { PhotoFields, PhotoRead } from './lib/photo';
 export {
   approxWeightIn,
   approxWeightOf,
+  isPrintedWeightRange,
   packCountIn,
   parseSize,
+  weightRangeOf,
 } from './lib/size';
-export type { LidlSize } from './lib/size';
+export type { LidlSize, LidlWeightRange } from './lib/size';
 export {
   LIDL_BASE_URL,
   LIDL_GROCERY_CATEGORIES,

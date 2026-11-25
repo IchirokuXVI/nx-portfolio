@@ -4434,3 +4434,349 @@ describe('SourceIngest, a decision made while the walk runs (plan 0269)', () => 
     expect(Object.keys(guarded[0][1]).sort()).toEqual([...decided].sort());
   });
 });
+
+/**
+ * What a LIDL week does not state stays as an earlier week stored it (owner
+ * decisions 141a, 143a and 144). The observations are the shapes
+ * `lidl-catalog.runner.ts` reports, asserted there; this is where the row
+ * write is decided.
+ */
+describe('SourceIngest, a LIDL week that does not state a stored value (owner decisions 141a, 143a and 144)', () => {
+  const session = {
+    supermarketId: CHAIN,
+    defaultPriceScopeId: SCOPE,
+    sourceKind: PriceSourceKind.OFFICIAL_API,
+  };
+  const bound = {
+    status: SourceEntryStatus.ACTIVE,
+    matchedBy: ItemSourceMatch.MANUAL,
+    itemId: 'item-1',
+    decidedAt: new Date('2026-09-01T00:00:00Z'),
+  };
+
+  it('keeps the stored weight beside a ca. range, and writes its figure as a price per kilo with no piece price', async () => {
+    const { ingest, context, saved, priceRows, catalog } = build({
+      rows: [
+        {
+          externalId: '11003305',
+          name: 'Filetes de lubina',
+          sizeFormat: 'Aprox.300 g',
+          approxWeight: 300,
+          ...bound,
+        },
+      ],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    await ingest.ingest(context, {
+      ...session,
+      observations: [
+        observation({
+          externalId: '11003305',
+          name: 'Filetes de lubina',
+          sizeFormat: 'ca.220-360g',
+          soldByWeight: false,
+          // As the runner reports a range: the key is there, and says nothing.
+          approxWeight: undefined,
+          price: {
+            price: null,
+            currency: 'EUR',
+            unitPrice: 21.99,
+            unitPriceLabel: 'kg',
+            validFrom: null,
+            validUntil: null,
+          },
+        }),
+      ],
+    });
+
+    expect(saved[0]).toMatchObject({
+      sizeFormat: 'ca.220-360g',
+      unitSize: null,
+      soldByWeight: false,
+      approxWeight: 300,
+    });
+    expect(priceRows[0]).toMatchObject({
+      price: null,
+      unitPrice: 21.99,
+      unitPriceLabel: 'kg',
+    });
+    expect(catalog.addPrices.mock.calls[0][1][0]).toMatchObject({
+      itemId: 'item-1',
+      price: null,
+      unitPrice: 21.99,
+      unitPriceLabel: 'kg',
+    });
+  });
+
+  it('keeps the stored weight beside an Aprox. range, writes its figure as the piece price, and stores the review mark', async () => {
+    const { ingest, context, saved, priceRows, catalog } = build({
+      rows: [
+        {
+          externalId: '11672806',
+          name: 'Costillas',
+          sizeFormat: 'Aprox.400 g',
+          approxWeight: 400,
+          ...bound,
+        },
+      ],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    await ingest.ingest(context, {
+      ...session,
+      observations: [
+        observation({
+          externalId: '11672806',
+          name: 'Costillas',
+          sizeFormat: 'aprox..600-800 g',
+          soldByWeight: false,
+          approxWeight: undefined,
+          extra: { priceBasisToReview: 'aprox..600-800 g' },
+          price: {
+            price: 3.79,
+            currency: 'EUR',
+            unitPrice: null,
+            unitPriceLabel: null,
+            validFrom: null,
+            validUntil: null,
+          },
+        }),
+      ],
+    });
+
+    expect(saved[0]).toMatchObject({
+      sizeFormat: 'aprox..600-800 g',
+      unitSize: null,
+      approxWeight: 400,
+      // Stored and shown in the queue, never read.
+      extra: { priceBasisToReview: 'aprox..600-800 g' },
+    });
+    expect(priceRows[0]).toMatchObject({
+      price: 3.79,
+      unitPrice: null,
+      unitPriceLabel: null,
+    });
+    expect(catalog.addPrices.mock.calls[0][1][0]).toMatchObject({
+      itemId: 'item-1',
+      price: 3.79,
+      unitPrice: null,
+    });
+  });
+
+  it('drops the review mark once a later week prints a normal format for the same row', async () => {
+    const { ingest, context, saved } = build({
+      rows: [
+        {
+          externalId: '11672806',
+          name: 'Costillas',
+          sizeFormat: 'aprox..600-800 g',
+          approxWeight: 400,
+          extra: { categorySlug: null, priceBasisToReview: 'aprox..600-800 g' },
+          ...bound,
+        },
+      ],
+    });
+
+    await ingest.ingest(context, {
+      ...session,
+      observations: [
+        observation({
+          externalId: '11672806',
+          name: 'Costillas',
+          sizeFormat: 'Aprox.700 g',
+          soldByWeight: false,
+          approxWeight: 700,
+          // As the runner reports a week with no range: no mark.
+          extra: { categorySlug: null },
+          price: {
+            price: 3.79,
+            currency: 'EUR',
+            unitPrice: null,
+            unitPriceLabel: null,
+            validFrom: null,
+            validUntil: null,
+          },
+        }),
+      ],
+    });
+
+    expect(saved[0]).toMatchObject({
+      sizeFormat: 'Aprox.700 g',
+      approxWeight: 700,
+      extra: { categorySlug: null },
+    });
+    expect(saved[0].extra).not.toHaveProperty('priceBasisToReview');
+  });
+
+  it('keeps the stored format, size and unit of a product listed with no price block, and refreshes the rest', async () => {
+    const { ingest, context, saved, priceRows, catalog } = build({
+      rows: [
+        {
+          externalId: '11006339',
+          name: 'Empanada atún',
+          sizeFormat: '500 g',
+          unitSize: 500,
+          sizeUnit: UnitOfMeasure.GRAM,
+          approxWeight: null,
+          packCount: null,
+          extra: { categorySlug: null },
+          imageUrl: 'https://www.lidl.es/assets/gcp11006339.png',
+          ...bound,
+        },
+      ],
+    });
+
+    const { counters } = await ingest.ingest(context, {
+      ...session,
+      // As the runner reports a page that prints no format: the size fields
+      // are absent, not null (owner decision 143a).
+      observations: [
+        {
+          externalId: '11006339',
+          name: 'Empanada de atún',
+          brand: null,
+          ean: '20123456',
+          categoryPath: ['Panadería'],
+          url: 'https://www.lidl.es/p/empanada/p11006339',
+          imageUrl: 'https://www.lidl.es/assets/gcp11006339.png',
+          observedAt: new Date('2026-11-20T10:00:00.000Z'),
+          soldByWeight: false,
+          extra: { categorySlug: null, ian: '5706670' },
+          prices: [],
+        },
+      ],
+    });
+
+    expect(saved[0]).toMatchObject({
+      // Refreshed, as plan 0089 section 8.1 holds.
+      name: 'Empanada de atún',
+      ean: '20123456',
+      url: 'https://www.lidl.es/p/empanada/p11006339',
+      extra: { categorySlug: null, ian: '5706670' },
+      // Not stated, so kept.
+      sizeFormat: '500 g',
+      unitSize: 500,
+      sizeUnit: UnitOfMeasure.GRAM,
+      status: SourceEntryStatus.ACTIVE,
+      itemId: 'item-1',
+      lastRunId: RUN,
+    });
+    expect(counters).toMatchObject({ created: 0, updated: 1 });
+    expect(priceRows).toEqual([]);
+    expect(catalog.addPrices).not.toHaveBeenCalled();
+  });
+
+  it('reports a known row whose only news is a format it did not state as unchanged', async () => {
+    const { ingest, context } = build({
+      rows: [
+        {
+          externalId: '11006339',
+          name: 'Empanada de atún',
+          sizeFormat: '500 g',
+          unitSize: 500,
+          sizeUnit: UnitOfMeasure.GRAM,
+          approxWeight: null,
+          soldByWeight: false,
+          imageUrl: null,
+          ...bound,
+        },
+      ],
+    });
+
+    const { counters } = await ingest.ingest(context, {
+      ...session,
+      observations: [
+        {
+          externalId: '11006339',
+          name: 'Empanada de atún',
+          brand: null,
+          ean: null,
+          categoryPath: [],
+          url: null,
+          imageUrl: null,
+          observedAt: new Date('2026-11-20T10:00:00.000Z'),
+          soldByWeight: false,
+          extra: null,
+          prices: [],
+        },
+      ],
+    });
+
+    expect(counters).toMatchObject({ created: 0, updated: 0, unchanged: 1 });
+  });
+
+  it('creates a product it holds no row for from a page that prints no format, with no size', async () => {
+    const { ingest, context, saved, warnings } = build({ rows: [] });
+
+    const { counters } = await ingest.ingest(context, {
+      ...session,
+      observations: [
+        {
+          externalId: '11099999',
+          name: 'Empanada de atún',
+          brand: null,
+          ean: null,
+          categoryPath: [],
+          url: null,
+          imageUrl: null,
+          observedAt: new Date('2026-11-20T10:00:00.000Z'),
+          soldByWeight: false,
+          extra: null,
+          prices: [],
+        },
+      ],
+    });
+
+    expect(counters).toMatchObject({ created: 1 });
+    expect(saved[0]).toMatchObject({
+      externalId: '11099999',
+      name: 'Empanada de atún',
+      sizeFormat: null,
+      unitSize: null,
+      sizeUnit: null,
+      status: SourceEntryStatus.UNRESOLVED,
+    });
+    // Reported whole, so the partial path is not reached.
+    expect(
+      warnings.some(
+        (warning) => warning.code === HarvestWarningCode.DETAIL_SKIPPED_UNKNOWN
+      )
+    ).toBe(false);
+  });
+
+  it('still clears a stored size for another chain that states null', async () => {
+    const { ingest, context, saved } = build({
+      rows: [
+        {
+          externalId: 'm-1',
+          name: 'Leche entera',
+          sizeFormat: '1 l',
+          unitSize: 1,
+          sizeUnit: UnitOfMeasure.LITER,
+          ...bound,
+        },
+      ],
+    });
+
+    const { counters } = await ingest.ingest(context, {
+      ...session,
+      observations: [
+        observation({
+          externalId: 'm-1',
+          name: 'Leche entera',
+          sizeFormat: null,
+          unitSize: null,
+          sizeUnit: null,
+        }),
+      ],
+    });
+
+    expect(saved[0]).toMatchObject({
+      sizeFormat: null,
+      unitSize: null,
+      sizeUnit: null,
+    });
+    expect(counters).toMatchObject({ updated: 1 });
+  });
+});
