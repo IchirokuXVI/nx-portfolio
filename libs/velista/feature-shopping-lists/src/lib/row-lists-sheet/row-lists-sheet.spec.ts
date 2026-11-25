@@ -25,6 +25,7 @@ import {
 import {
   BasketStore,
   BasketViewStore,
+  ChangeLandingStore,
   ItemNames,
 } from '@portfolio/velista/data-access';
 import {
@@ -45,10 +46,6 @@ import {
 } from '@portfolio/velista/platform';
 import { AnchoredPopover, QuantityStepper } from '@portfolio/velista/ui';
 import { of } from 'rxjs';
-import {
-  changeLandingOf,
-  changeLandingState,
-} from '../change-sheet/change-landing';
 import { RowListsSheet } from './row-lists-sheet';
 
 /**
@@ -186,6 +183,8 @@ interface World {
   readonly echoValues?: boolean;
   /** `AppHistory.depth()` while the view is open. */
   readonly depth?: number;
+  /** The basket is read at a shop. */
+  readonly atShop?: boolean;
 }
 
 function storeDouble(world: World) {
@@ -243,7 +242,11 @@ async function render(world: World = {}) {
       provideVelistaTesting({ basePath: '/velista' }),
       provideFakeBrowserFacade(new Map()),
       { provide: BasketStore, useValue: store },
-      { provide: BasketViewStore, useValue: { readAtShop: signal(false) } },
+      {
+        provide: BasketViewStore,
+        useValue: { readAtShop: signal(world.atShop === true) },
+      },
+      ChangeLandingStore,
       { provide: ItemNames, useValue: { nameOf: () => null } },
       { provide: AppHistory, useValue: { depth: () => world.depth ?? -1 } },
       {
@@ -300,6 +303,7 @@ async function render(world: World = {}) {
     fixture,
     store,
     router: TestBed.inject(Router) as unknown as { navigateByUrl: jest.Mock },
+    landings: TestBed.inject(ChangeLandingStore),
     sheets: TestBed.inject(SheetNavigation) as unknown as {
       dismiss: jest.Mock;
     },
@@ -356,6 +360,27 @@ describe('RowListsSheet (velista 0200)', () => {
       expect(texts(fixture, '.product-amount')[0]).toContain('0.92');
     });
 
+    /** An offer as the wire reads it. */
+    function wireOffer(
+      offer: Partial<NonNullable<BasketProduct['offer']>>
+    ): NonNullable<BasketProduct['offer']> {
+      return {
+        priceScopeId: 's1',
+        price: 1.79,
+        currency: 'EUR',
+        unitPrice: null,
+        unitPriceLabel: null,
+        unitBasis: null,
+        comparablePrice: null,
+        comparableBasis: null,
+        piecePrice: null,
+        observedAt: null,
+        sourceKind: 'OFFICIAL_WEB',
+        stale: false,
+        ...offer,
+      };
+    }
+
     /** The row's product, with its offer as the wire reads it. */
     function priced(
       over: Partial<BasketProduct>,
@@ -363,23 +388,33 @@ describe('RowListsSheet (velista 0200)', () => {
     ): ReadonlyMap<string, BasketProduct> {
       const held = product('p-milk', 'Puleva', {
         ...over,
-        offer: {
-          priceScopeId: 's1',
-          price: 1.79,
-          currency: 'EUR',
-          unitPrice: null,
-          unitPriceLabel: null,
-          unitBasis: null,
-          comparablePrice: null,
-          comparableBasis: null,
-          piecePrice: null,
-          observedAt: null,
-          sourceKind: 'OFFICIAL_WEB',
-          stale: false,
-          ...offer,
-        },
+        offer: wireOffer(offer),
       });
       return new Map([[held.id, held]]);
+    }
+
+    /**
+     * The row's product read at a shop: the shop's own price, and the offer of
+     * the shop's scope, which may or may not be at that price.
+     */
+    function atShop(
+      over: Partial<BasketProduct>,
+      shopPrice: number,
+      offer: Partial<NonNullable<BasketProduct['offer']>>
+    ): ReadonlyMap<string, BasketProduct> {
+      return priced(
+        {
+          ...over,
+          offers: [wireOffer({ priceScopeId: 's-shop', ...offer })],
+          atShop: {
+            priceScopeId: 's-shop',
+            price: shopPrice,
+            currency: 'EUR',
+            available: true,
+          },
+        },
+        {}
+      );
     }
 
     const unitLine = (fixture: ComponentFixture<RowListsSheet>) =>
@@ -456,6 +491,67 @@ describe('RowListsSheet (velista 0200)', () => {
       );
     });
 
+    describe('at a shop', () => {
+      it("draws the unit price line of the shop scope's offer at the shop's price", async () => {
+        const { fixture } = await render({
+          atShop: true,
+          products: atShop({ size: 1.5, unit: 'LITER' }, 1.79, {
+            price: 1.79,
+            unitPrice: 1.19,
+            unitBasis: 'LITER',
+          }),
+        });
+        expect(texts(fixture, '.product-amount')[0]).toContain('1.79');
+        expect(unitLine(fixture)?.textContent).toContain('1.19');
+      });
+
+      it('draws no unit price line where no offer is at the price the shop shows', async () => {
+        const { fixture } = await render({
+          atShop: true,
+          products: atShop({ size: 1.5, unit: 'LITER' }, 1.65, {
+            price: 1.79,
+            unitPrice: 1.19,
+            unitBasis: 'LITER',
+          }),
+        });
+        expect(texts(fixture, '.product-amount')[0]).toContain('1.65');
+        expect(unitLine(fixture)).toBeNull();
+      });
+
+      it('draws a kilo piece with the price per kilo of the matching offer', async () => {
+        const { fixture } = await render({
+          atShop: true,
+          products: atShop(
+            { size: null, unit: 'KILOGRAM', approxWeight: 400 },
+            9.5,
+            { price: 9.5, unitPrice: 9.5, piecePrice: 3.8 }
+          ),
+        });
+        expect(texts(fixture, '.product-amount')[0]).toContain('3.80');
+        const line = unitLine(fixture);
+        expect(line?.textContent).toContain('9.50');
+        expect(line?.querySelector('.per')?.textContent).toBe(
+          'catalog.per.KILOGRAM'
+        );
+      });
+
+      it("keeps a kilo piece's price per kilo, from the price it shows, where no offer matches", async () => {
+        const { fixture } = await render({
+          atShop: true,
+          products: atShop(
+            { size: null, unit: 'KILOGRAM', approxWeight: 400 },
+            9.9,
+            { price: 9.5, unitPrice: 9.5, piecePrice: 3.8 }
+          ),
+        });
+        const line = unitLine(fixture);
+        expect(line?.textContent).toContain('9.90');
+        expect(line?.querySelector('.per')?.textContent).toBe(
+          'catalog.per.KILOGRAM'
+        );
+      });
+    });
+
     it('draws "Change for all lists" with two changeable entries, and not with one', async () => {
       const one = await render();
       expect(html(one.fixture).querySelector('.change-all')).toBeNull();
@@ -472,8 +568,7 @@ describe('RowListsSheet (velista 0200)', () => {
       expect(button?.textContent).toContain('basket.change.all');
       button?.click();
       expect(two.router.navigateByUrl).toHaveBeenCalledWith(
-        `/velista/en/shopping-lists/${BASKET_ID}/sheet/rows/${ROW_KEY}/change`,
-        expect.anything()
+        `/velista/en/shopping-lists/${BASKET_ID}/sheet/rows/${ROW_KEY}/change`
       );
     });
   });
@@ -633,8 +728,7 @@ describe('RowListsSheet (velista 0200)', () => {
 
       changes[0]?.click();
       expect(router.navigateByUrl).toHaveBeenCalledWith(
-        `/velista/en/shopping-lists/${BASKET_ID}/sheet/rows/${ROW_KEY}/change/zl-1`,
-        expect.anything()
+        `/velista/en/shopping-lists/${BASKET_ID}/sheet/rows/${ROW_KEY}/change/zl-1`
       );
     });
 
@@ -658,18 +752,24 @@ describe('RowListsSheet (velista 0200)', () => {
 
   describe('after a change of product', () => {
     it('asks the change sheet to land on the basket page, two entries under this view', async () => {
-      const { fixture, router } = await render({ depth: 4 });
+      const { fixture, router, landings } = await render({ depth: 4 });
       rowsOf(fixture)[0]
         .querySelector<HTMLButtonElement>('button.change')
         ?.click();
+      // In memory, keyed by the row and the line, never in the history state.
+      expect(landings.landingFor(ROW_KEY, 'zl-1')).toEqual({
+        rowKey: ROW_KEY,
+        lineId: 'zl-1',
+        depth: 2,
+      });
+      expect(landings.landingFor(ROW_KEY, null)).toBeNull();
       expect(router.navigateByUrl).toHaveBeenCalledWith(
-        `/velista/en/shopping-lists/${BASKET_ID}/sheet/rows/${ROW_KEY}/change/zl-1`,
-        { state: changeLandingState(2) }
+        `/velista/en/shopping-lists/${BASKET_ID}/sheet/rows/${ROW_KEY}/change/zl-1`
       );
     });
 
     it('asks the same of "Change for all lists"', async () => {
-      const { fixture, router } = await render({
+      const { fixture, router, landings } = await render({
         depth: 1,
         row: row([
           entry(),
@@ -677,9 +777,13 @@ describe('RowListsSheet (velista 0200)', () => {
         ]),
       });
       html(fixture).querySelector<HTMLButtonElement>('.change-all')?.click();
+      expect(landings.landingFor(ROW_KEY, null)).toEqual({
+        rowKey: ROW_KEY,
+        lineId: null,
+        depth: -1,
+      });
       expect(router.navigateByUrl).toHaveBeenCalledWith(
-        `/velista/en/shopping-lists/${BASKET_ID}/sheet/rows/${ROW_KEY}/change`,
-        { state: changeLandingState(-1) }
+        `/velista/en/shopping-lists/${BASKET_ID}/sheet/rows/${ROW_KEY}/change`
       );
     });
   });
@@ -1054,17 +1158,24 @@ describe('RowListsSheet (velista 0200)', () => {
     class TestChangeSheet {
       private readonly _sheet = inject(SheetNavigation);
       private readonly _pages = inject(PageNavigation);
-      /** Read as the real sheet reads it, while its navigation is in flight. */
-      readonly landing = changeLandingOf(
-        inject(Router).currentNavigation()?.extras.state
+      private readonly _landings = inject(ChangeLandingStore);
+      private readonly _params = inject(ActivatedRoute).snapshot.paramMap;
+      /** Read as the real sheet reads it: by its row and line, from memory. */
+      readonly landing = this._landings.landingFor(
+        this._params.get('rowKey') ?? '',
+        this._params.get('lineId')
       );
       cancel(): void {
+        if (this.landing !== null) {
+          this._landings.release(this.landing);
+        }
         void this._sheet.dismiss(`${PAGE}/sheet/rows/${ROW_KEY}/settle`);
       }
       /** What the real sheet does after a change it was asked to land. */
       changed(): void {
         if (this.landing !== null) {
-          void this._pages.backTo(this.landing, PAGE);
+          this._landings.release(this.landing);
+          void this._pages.backTo(this.landing.depth, PAGE);
         }
       }
     }
@@ -1101,6 +1212,7 @@ describe('RowListsSheet (velista 0200)', () => {
           provideEnvironmentInitializer(() => inject(AppHistory).watch()),
           { provide: BasketStore, useValue: storeDouble({ row: rowOf }) },
           { provide: BasketViewStore, useValue: { readAtShop: signal(false) } },
+          ChangeLandingStore,
           { provide: ItemNames, useValue: { nameOf: () => null } },
           { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
         ],
@@ -1112,6 +1224,15 @@ describe('RowListsSheet (velista 0200)', () => {
       await harness.navigateByUrl(LISTS_URL);
       return { harness, location: TestBed.inject(Location) };
     }
+
+    /** What the store still holds for the row, for one line and for all of them. */
+    const held = () => {
+      const landings = TestBed.inject(ChangeLandingStore);
+      return [
+        landings.landingFor(ROW_KEY, 'zl-1'),
+        landings.landingFor(ROW_KEY, null),
+      ];
+    };
 
     async function settleRouted(harness: RouterTestingHarness): Promise<void> {
       await new Promise<void>((resolve) => setTimeout(resolve));
@@ -1141,6 +1262,7 @@ describe('RowListsSheet (velista 0200)', () => {
 
         expect(location.path()).toBe(LISTS_URL);
         expect(host.querySelector('lib-row-lists-sheet')).not.toBeNull();
+        expect(held()).toEqual([null, null]);
       }
     );
 
@@ -1164,7 +1286,7 @@ describe('RowListsSheet (velista 0200)', () => {
         )?.componentInstance as TestChangeSheet | undefined;
         // The basket page is the entry the document loaded on, depth -1, under
         // the row's sheet (0) and this view (1).
-        expect(sheet?.landing).toBe(-1);
+        expect(sheet?.landing?.depth).toBe(-1);
 
         sheet?.changed();
         await settleRouted(harness);
@@ -1173,6 +1295,7 @@ describe('RowListsSheet (velista 0200)', () => {
         expect(host.querySelector('lib-row-lists-sheet')).toBeNull();
         expect(host.querySelector('lib-test-row-sheet')).toBeNull();
         expect(host.querySelector('lib-test-change-sheet')).toBeNull();
+        expect(held()).toEqual([null, null]);
       }
     );
   });

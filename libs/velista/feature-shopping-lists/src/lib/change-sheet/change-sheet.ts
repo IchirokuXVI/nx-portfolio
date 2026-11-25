@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   inject,
   signal,
@@ -16,7 +17,9 @@ import {
 import {
   BasketStore,
   BasketViewStore,
+  ChangeLandingStore,
   ProductPickStore,
+  type ChangeLanding,
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
@@ -50,7 +53,6 @@ import {
 import { basketErrorKey } from '../basket-error-copy';
 import { basketPath, settleSheetPath } from '../basket-paths';
 import { ChangeChoices } from './change-choices';
-import { changeLandingOf } from './change-landing';
 import {
   basketProductOf,
   chainOfShop,
@@ -142,14 +144,20 @@ export class ChangeSheet {
   private readonly _lineId: string | null =
     this._route.snapshot.paramMap.get('lineId');
 
+  private readonly _landings = inject(ChangeLandingStore);
+
   /**
-   * The history depth of the basket page when "Lists and amounts" opened this
-   * sheet, or null when anything else did (`change-landing.ts`). Read while the
-   * navigation that draws the sheet is still in flight.
+   * Where a change lands when "Lists and amounts" opened this sheet, or null when
+   * anything else did and after a reload (`ChangeLandingStore`). A depth that is
+   * not under this sheet's own entry cannot be the basket page, and is none.
    */
-  private readonly _landing = changeLandingOf(
-    this._router.currentNavigation()?.extras.state
-  );
+  private readonly _landing = this._landingOf();
+
+  /**
+   * The catalog that chooses is opening, so the landing is kept for the sheet
+   * that comes back from it.
+   */
+  private _toCatalog = false;
 
   protected readonly skeletonRows = SKELETON_ROWS;
 
@@ -363,6 +371,14 @@ export class ChangeSheet {
   );
 
   constructor() {
+    // A sheet left any other way than to the catalog, a browser back among them,
+    // leaves no landing for a sheet opened later from somewhere else.
+    inject(DestroyRef).onDestroy(() => {
+      if (!this._toCatalog) {
+        this._releaseLanding();
+      }
+    });
+
     // Read the products once the row and its lines are known, and again when the
     // shop or a product picked in the catalog changes what is asked.
     effect(() => {
@@ -471,14 +487,16 @@ export class ChangeSheet {
       return;
     }
     this._left = true;
-    if (this._landing === null) {
+    const landing = this._landing;
+    if (landing === null) {
       this.close();
       return;
     }
     // Opened from "Lists and amounts": the change closes that view too, and the
     // person is back on the shopping list (velista `0200`, 2026-11-25).
+    this._releaseLanding();
     void this._pages.backTo(
-      this._landing,
+      landing.depth,
       basketPath(this._locale(), this._basePath, this._store.address())
     );
   }
@@ -498,6 +516,7 @@ export class ChangeSheet {
       return;
     }
     const locale = this._locale();
+    this._toCatalog = true;
     this._pick.open({
       kind: 'one',
       lineId: anchor.lineId,
@@ -538,6 +557,7 @@ export class ChangeSheet {
 
   /** Close, Escape and the scrim: back to the row's sheet. */
   protected close(): void {
+    this._releaseLanding();
     void this._sheet.dismiss(
       settleSheetPath(
         this._locale(),
@@ -546,6 +566,28 @@ export class ChangeSheet {
         this.row()?.rowKey ?? this._rowKey()
       )
     );
+  }
+
+  /**
+   * The landing held for this row and line. One at or above this sheet's own
+   * depth was asked of another walk, and is let go.
+   */
+  private _landingOf(): ChangeLanding | null {
+    const held = this._landings.landingFor(this._rowKey(), this._lineId);
+    if (held === null) {
+      return null;
+    }
+    if (held.depth >= this._history.depth()) {
+      this._landings.release(held);
+      return null;
+    }
+    return held;
+  }
+
+  private _releaseLanding(): void {
+    if (this._landing !== null) {
+      this._landings.release(this._landing);
+    }
   }
 
   /**

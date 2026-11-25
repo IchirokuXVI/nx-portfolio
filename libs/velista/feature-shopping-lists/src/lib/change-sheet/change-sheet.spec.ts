@@ -9,6 +9,7 @@ import {
   BasketStore,
   BasketViewStore,
   CATALOG_BROWSE_SERVICE,
+  ChangeLandingStore,
   fakeGroupMembers,
   ItemNames,
   ProductPickStore,
@@ -30,7 +31,6 @@ import {
   SheetNavigation,
 } from '@portfolio/velista/platform';
 import { of } from 'rxjs';
-import { changeLandingState } from './change-landing';
 import { ChangeSheet } from './change-sheet';
 
 function offer(price: number, unitPrice: number): ProductOffer {
@@ -182,8 +182,12 @@ interface Options {
   readonly atShop?: boolean;
   readonly failNames?: boolean;
   readonly refuse?: boolean;
-  /** The landing "Lists and amounts" puts in the navigation's state. */
+  /**
+   * The depth "Lists and amounts" holds for this sheet in `ChangeLandingStore`,
+   * for the sheet's own row and line unless `landingLine` names another.
+   */
   readonly landing?: number;
+  readonly landingLine?: string | null;
 }
 
 async function render(options: Options = {}): Promise<{
@@ -193,6 +197,7 @@ async function render(options: Options = {}): Promise<{
   backTo: jest.Mock;
   navigateByUrl: jest.SpyInstance;
   pick: ProductPickStore;
+  landings: ChangeLandingStore;
 }> {
   TestBed.resetTestingModule();
   const changeProduct = jest.fn(() => Promise.resolve(options.refuse !== true));
@@ -231,6 +236,7 @@ async function render(options: Options = {}): Promise<{
       },
       { provide: CATALOG_BROWSE_SERVICE, useValue: { scopeOffers } },
       ProductPickStore,
+      ChangeLandingStore,
       { provide: AppHistory, useValue: { depth: () => 2 } },
       {
         provide: BasketStore,
@@ -264,11 +270,16 @@ async function render(options: Options = {}): Promise<{
   const navigateByUrl = jest
     .spyOn(TestBed.inject(Router), 'navigateByUrl')
     .mockResolvedValue(true);
+  const landings = TestBed.inject(ChangeLandingStore);
   if (options.landing !== undefined) {
-    // The sheet reads it while the navigation that draws it is in flight.
-    jest.spyOn(TestBed.inject(Router), 'currentNavigation').mockReturnValue({
-      extras: { state: changeLandingState(options.landing) },
-    } as unknown as ReturnType<Router['currentNavigation']>);
+    landings.hold({
+      rowKey: 'zl-1',
+      lineId:
+        options.landingLine !== undefined
+          ? options.landingLine
+          : (options.lineId ?? null),
+      depth: options.landing,
+    });
   }
   const fixture = TestBed.createComponent(ChangeSheet);
   fixture.detectChanges();
@@ -280,6 +291,7 @@ async function render(options: Options = {}): Promise<{
     backTo,
     navigateByUrl,
     pick: TestBed.inject(ProductPickStore),
+    landings,
   };
 }
 
@@ -508,7 +520,7 @@ describe('ChangeSheet', () => {
     ])(
       'lands on the shopping list after a change for %s, never back on the view',
       async (_name, lineId) => {
-        const { fixture, backTo, dismiss } = await render({
+        const { fixture, backTo, dismiss, landings } = await render({
           lineId,
           landing: 0,
         });
@@ -520,25 +532,47 @@ describe('ChangeSheet', () => {
 
         expect(backTo).toHaveBeenCalledWith(0, '/en/shopping-lists/live');
         expect(dismiss).not.toHaveBeenCalled();
+        // Used once: a sheet opened later finds no landing.
+        expect(landings.landingFor('zl-1', lineId ?? null)).toBeNull();
       }
     );
 
-    it('still closes onto the row on Escape or the scrim', async () => {
-      const { fixture, backTo, dismiss } = await render({
-        lineId: 'zl-1',
-        landing: 0,
-      });
-      // The sheet shell's dismiss: Escape, the scrim, the handle.
-      (fixture.componentInstance as unknown as { close(): void }).close();
-      await settle(fixture);
-      expect(backTo).not.toHaveBeenCalled();
-      expect(dismiss).toHaveBeenCalledWith(
-        '/en/shopping-lists/live/sheet/rows/zl-1/settle'
-      );
-    });
+    it.each([
+      ['Escape', 'escape'],
+      ['the scrim', 'scrim'],
+    ] as const)(
+      'still closes onto the row on %s, and lets the landing go',
+      async (_name, gesture) => {
+        const { fixture, backTo, dismiss, landings } = await render({
+          lineId: 'zl-1',
+          landing: 0,
+        });
+        jest.useFakeTimers();
+        try {
+          const shell = host(fixture).querySelector('lib-sheet-shell');
+          if (gesture === 'escape') {
+            shell?.dispatchEvent(
+              new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+            );
+          } else {
+            shell?.querySelector<HTMLButtonElement>('.scrim')?.click();
+          }
+          // The panel falls before the shell asks the sheet to close.
+          jest.runAllTimers();
+        } finally {
+          jest.useRealTimers();
+        }
+        await settle(fixture);
+        expect(backTo).not.toHaveBeenCalled();
+        expect(dismiss).toHaveBeenCalledWith(
+          '/en/shopping-lists/live/sheet/rows/zl-1/settle'
+        );
+        expect(landings.landingFor('zl-1', 'zl-1')).toBeNull();
+      }
+    );
 
-    it('stays open when the change is refused', async () => {
-      const { fixture, backTo } = await render({
+    it('stays open when the change is refused, and keeps the landing', async () => {
+      const { fixture, backTo, landings } = await render({
         lineId: 'zl-1',
         landing: 0,
         refuse: true,
@@ -548,6 +582,65 @@ describe('ChangeSheet', () => {
       useButton(fixture).click();
       await settle(fixture);
       expect(backTo).not.toHaveBeenCalled();
+      expect(landings.landingFor('zl-1', 'zl-1')?.depth).toBe(0);
+    });
+
+    it.each([
+      ['nothing is held, as after a reload', {}],
+      ['the landing is for another line', { landing: 0, landingLine: 'zl-2' }],
+      ['the landing is for all lists', { landing: 0, landingLine: null }],
+      ['the depth is not under the sheet, as a stale one', { landing: 2 }],
+    ] as const)(
+      'closes onto the row after a change when %s',
+      async (_name, held: Pick<Options, 'landing' | 'landingLine'>) => {
+        const { fixture, backTo, dismiss } = await render({
+          lineId: 'zl-1',
+          ...held,
+        });
+        radios(fixture)[1].click();
+        fixture.detectChanges();
+        useButton(fixture).click();
+        await settle(fixture);
+        expect(backTo).not.toHaveBeenCalled();
+        expect(dismiss).toHaveBeenCalledWith(
+          '/en/shopping-lists/live/sheet/rows/zl-1/settle'
+        );
+      }
+    );
+
+    it('lets a stale depth go at once', async () => {
+      const { landings } = await render({ lineId: 'zl-1', landing: 2 });
+      expect(landings.landingFor('zl-1', 'zl-1')).toBeNull();
+    });
+
+    it('keeps the landing across the catalog, and lands after the change made on return', async () => {
+      const first = await render({ lineId: 'zl-1', landing: 0 });
+      host(first.fixture).querySelector<HTMLButtonElement>('.catalog')?.click();
+      // The catalog's route replaces the sheet, which is destroyed.
+      first.fixture.destroy();
+      expect(first.landings.landingFor('zl-1', 'zl-1')?.depth).toBe(0);
+
+      first.pick.choose(OAT.id);
+      first.pick.use();
+      // The sheet is drawn again when the catalog pops back onto it.
+      const fixture = TestBed.createComponent(ChangeSheet);
+      fixture.detectChanges();
+      await settle(fixture);
+      useButton(fixture).click();
+      await settle(fixture);
+
+      expect(first.backTo).toHaveBeenCalledWith(0, '/en/shopping-lists/live');
+      expect(first.landings.landingFor('zl-1', 'zl-1')).toBeNull();
+    });
+
+    it('lets the landing go when the sheet is left any other way', async () => {
+      const { fixture, landings } = await render({
+        lineId: 'zl-1',
+        landing: 0,
+      });
+      // A browser back pops the sheet without its close.
+      fixture.destroy();
+      expect(landings.landingFor('zl-1', 'zl-1')).toBeNull();
     });
   });
 

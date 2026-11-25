@@ -17,6 +17,7 @@ import {
 import {
   BasketStore,
   BasketViewStore,
+  ChangeLandingStore,
   ItemNames,
 } from '@portfolio/velista/data-access';
 import {
@@ -25,6 +26,7 @@ import {
   catalogName,
   isMeasured,
   shownOffer,
+  soldAs,
   type BasketProduct,
   type BasketRow,
   type BasketRowEntry,
@@ -38,6 +40,7 @@ import {
   AppHistory,
   exactAmount,
   formatAmount,
+  formatMoney,
   quantityRuns,
   rowKeyOf,
   SheetNavigation,
@@ -58,7 +61,6 @@ import {
 import { basketErrorKey, correlationIdOf } from '../basket-error-copy';
 import { basketLineStep } from '../basket-line-step';
 import { settleSheetPath } from '../basket-paths';
-import { changeLandingState } from '../change-sheet/change-landing';
 import {
   changeableLineIds,
   changeSheetPath,
@@ -146,8 +148,8 @@ interface DrawnList {
  * product. "Change for all lists" is under the row's product at the top.
  *
  * A change made from either closes this view as well as the change sheet: the
- * navigation carries the basket page's history depth (`change-landing.ts`), and
- * the change sheet walks back to it.
+ * view holds the basket page's history depth in `ChangeLandingStore`, and the
+ * change sheet walks back to it.
  */
 @Component({
   selector: 'lib-row-lists-sheet',
@@ -170,6 +172,7 @@ export class RowListsSheet {
   private readonly _itemNames = inject(ItemNames);
   private readonly _sheet = inject(SheetNavigation);
   private readonly _history = inject(AppHistory);
+  private readonly _landings = inject(ChangeLandingStore);
   private readonly _router = inject(Router);
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _translator = inject(RokuTranslatorService);
@@ -268,15 +271,28 @@ export class RowListsSheet {
     // The catalog card's rule (`productRowView`): a stale price draws no unit
     // line. The basis is the drawn offer's, as a basket product has none.
     const drawn = price === null ? null : offerOfShown(product, offer);
+    // A kilo piece with no matching offer, as at a shop, keeps the price per kilo
+    // of the price it draws, as it always did: that line is the shown price's own.
+    const kiloPiece =
+      offer !== null &&
+      offer.piecePrice !== null &&
+      soldAs(product.unit, product.size, product.approxWeight) === 'KILO_PIECE';
     const unit =
-      drawn === null || drawn.stale
-        ? null
-        : unitPriceWords(
-            drawn,
-            { ...product, unitBasis: drawn.unitBasis ?? null },
-            locale,
-            translate
-          );
+      drawn === null
+        ? kiloPiece && offer !== null
+          ? {
+              amount: formatMoney(offer.price, offer.currency, locale),
+              per: translate('catalog.per.KILOGRAM'),
+            }
+          : null
+        : drawn.stale
+          ? null
+          : unitPriceWords(
+              drawn,
+              { ...product, unitBasis: drawn.unitBasis ?? null },
+              locale,
+              translate
+            );
     return {
       name: catalogName(product.name, locale),
       detail: productBrandSizeText(product, locale, translate),
@@ -360,6 +376,11 @@ export class RowListsSheet {
     if (row === null) {
       return;
     }
+    this._landings.hold({
+      rowKey: row.rowKey,
+      lineId,
+      depth: this._history.depth() - 2,
+    });
     void this._router.navigateByUrl(
       changeSheetPath(
         this._locale(),
@@ -367,8 +388,7 @@ export class RowListsSheet {
         this._store.address(),
         row.rowKey,
         lineId
-      ),
-      { state: changeLandingState(this._history.depth() - 2) }
+      )
     );
   }
 

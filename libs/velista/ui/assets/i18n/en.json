@@ -2123,7 +2123,7 @@
       "listLabel": "{{list}}, amount of {{name}}: {{amount}}"
     },
     "change": {
-      "oneLabel": "Change the product on {{name}}",
+      "oneLabel": "Change product on {{name}}",
       "all": "Change for all lists",
       "openLabel": "There is a cheaper option than {{name}}. Change the product",
       "cheaper": "cheaper option",
