@@ -817,12 +817,28 @@ export class LineStore {
       favoriteItemId?: string | null;
       preferredSupermarketId?: string | null;
       confirmMerge?: boolean;
+      /**
+       * Ask the answer of a raise of the quantity to report the extra it took into
+       * the ask (backend `0276`, velista `0208`): the line sheet's Save. Sent only
+       * for a raise in the line's own unit and never with `confirmMerge`, so a
+       * merge and a unit change never report.
+       */
+      reportExtra?: boolean;
     }
   ): Promise<LineUpdateOutcome> {
     const before = this._lineById(lineId);
     if (before === null) {
       return { state: 'failed', error: null };
     }
+    const { reportExtra: asked, ...edits } = changes;
+    const reporting =
+      asked === true &&
+      edits.confirmMerge !== true &&
+      edits.unit === undefined &&
+      edits.quantity !== undefined &&
+      edits.quantity > before.quantity &&
+      this._legacyUnit(before) === null;
+    changes = reporting ? { ...edits, reportExtra: true } : edits;
     // Every absolute write states what its number counts (velista `0182`): the
     // line's own unit, unless the caller names another. A line the migration left
     // in `UNIT` is corrected to its product's unit by this write (backend `0246`
@@ -900,7 +916,12 @@ export class LineStore {
     }
 
     this._clearNote(lineId);
-    return { state: 'succeeded', line, absorbedLineId };
+    return {
+      state: 'succeeded',
+      line,
+      absorbedLineId,
+      extra: reporting ? (outcome.value.extra ?? null) : null,
+    };
   }
 
   /**
@@ -994,14 +1015,7 @@ export class LineStore {
     }
     const listId = before.listId;
     const quantity = expect - amount;
-    const overlay: Overlay<unknown> = {
-      key: overlayKey(lineId, 'quantity'),
-      apply: (current) => ({ ...(current as Line), quantity }) as unknown,
-      fields: ['quantity'],
-    };
-    this._patch(listId, lineId, (line) => ({ ...line, quantity }));
-
-    const outcome = await this._mutations.run(overlay, async () => {
+    const send = async () => {
       const answer = await this._lines.countExtra(
         lineId,
         amount,
@@ -1009,7 +1023,34 @@ export class LineStore {
         before.unit
       );
       return answer.line;
-    });
+    };
+
+    // A line that no longer holds what the question was about (a realtime update
+    // landed while it was open) is not patched: the server decides, and its
+    // `stale_quantity` is the answer the page says. Patching would draw Z over a
+    // number nobody asked about.
+    if (before.quantity !== expect) {
+      try {
+        const line = await send();
+        this._patch(listId, lineId, () => line);
+        return 'counted';
+      } catch (error) {
+        if (isStaleQuantity(error) || isUnitMismatch(error)) {
+          await this.refresh(listId);
+          return 'stale';
+        }
+        return 'failed';
+      }
+    }
+
+    const overlay: Overlay<unknown> = {
+      key: overlayKey(lineId, 'quantity'),
+      apply: (current) => ({ ...(current as Line), quantity }) as unknown,
+      fields: ['quantity'],
+    };
+    this._patch(listId, lineId, (line) => ({ ...line, quantity }));
+
+    const outcome = await this._mutations.run(overlay, send);
 
     if (outcome.state === 'failed') {
       this._patch(listId, lineId, () => before);

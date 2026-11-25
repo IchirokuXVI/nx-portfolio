@@ -319,6 +319,12 @@
       }
     }
   }
+
+  <!--
+    Does the extra already bought count? (velista 0208, target state 12.) Asked after
+    a raise of the stepper, below it: the header leaves no room above.
+  -->
+  <lib-extra-ask-popover />
 </main>
 
 <!--
@@ -328,5 +334,5 @@
   another user deletes it stays and says so (plan 0083).
 -->
 @if (status() === 'ready' || status() === 'missing') {
-  <router-outlet />
+  <router-outlet (activate)="onSheetOpened()" />
 }

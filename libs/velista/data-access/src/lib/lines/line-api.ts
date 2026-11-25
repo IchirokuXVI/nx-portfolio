@@ -160,6 +160,8 @@ export class LineApi implements LineServiceI {
       // owner's ruling of 2026-11-16: a product add that meets two or more lines is
       // a question as well. Never `newLine` beside products (backend `0260`, R7).
       ...addLineOptionsRequest(options, products),
+      // Beside any of the three (velista `0208`): a raise answers its report.
+      ...(options?.reportExtra === true ? { reportExtra: true } : {}),
     };
 
     const body = await firstValueFrom(
@@ -189,6 +191,9 @@ export class LineApi implements LineServiceI {
       outcome,
       alreadyOnList:
         outcome === 'alreadyOnList' && met.length === 0 ? [line] : met,
+      // Read on its own, from `unknown` (rule D4), and only for a raise: an add
+      // that made or met a line took nothing in.
+      extra: outcome === 'raised' ? toAbsorbedExtra(record?.['extra']) : null,
     };
   }
 
@@ -204,6 +209,7 @@ export class LineApi implements LineServiceI {
       favoriteItemId?: string | null;
       preferredSupermarketId?: string | null;
       confirmMerge?: boolean;
+      reportExtra?: boolean;
     }
   ): Promise<LineUpdateResult> {
     const request: UpdateLineRequest = {};
@@ -252,6 +258,11 @@ export class LineApi implements LineServiceI {
     if (changes.confirmMerge === true) {
       (request as { confirmMerge?: boolean }).confirmMerge = true;
     }
+    // Only ever `true`, and only beside a quantity (velista `0208`): the report is
+    // about a raise of the amount, which a save with no quantity cannot be.
+    if (changes.reportExtra === true && changes.quantity !== undefined) {
+      (request as { reportExtra?: boolean }).reportExtra = true;
+    }
 
     const body = await firstValueFrom(
       this._http.patch<unknown>(this._line(lineId), request, {
@@ -264,6 +275,8 @@ export class LineApi implements LineServiceI {
     return {
       line: required(toLine(body), 'lines.update'),
       absorbedLineId: isRecord(body) ? str(body['absorbedLineId']) : null,
+      // Beside the line too (backend `0276`), read from `unknown` (rule D4).
+      extra: isRecord(body) ? toAbsorbedExtra(body['extra']) : null,
     };
   }
 

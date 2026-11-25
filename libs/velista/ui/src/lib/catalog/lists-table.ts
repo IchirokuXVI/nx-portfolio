@@ -2,6 +2,8 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  ElementRef,
+  inject,
   input,
   output,
 } from '@angular/core';
@@ -229,6 +231,38 @@ export class ListsTable {
 
   /** A step of the stepper of a line that exists. */
   readonly lineStepped = output<ListsTableStep>();
+
+  private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  /**
+   * The control a step or an add of one list was made on, and the row it sits in,
+   * or null when the table no longer draws it (velista `0208`, target state 14):
+   * the anchor of the question about the extra already bought. `lineId` names a
+   * line under another name; null, or the line under the product's name, is the
+   * list's own stepper or reel.
+   */
+  controlFor(
+    listId: string,
+    lineId: string | null
+  ): { readonly control: HTMLElement; readonly row: HTMLElement } | null {
+    const item = Array.from(
+      this._host.nativeElement.querySelectorAll<HTMLElement>('li[data-list]')
+    ).find((one) => one.dataset['list'] === listId);
+    if (item === undefined) {
+      return null;
+    }
+    const other =
+      lineId === null
+        ? undefined
+        : Array.from(
+            item.querySelectorAll<HTMLElement>(':scope > .other[data-line]')
+          ).find((one) => one.dataset['line'] === lineId);
+    const row = other ?? item.querySelector<HTMLElement>(':scope > .row');
+    const control = row?.querySelector<HTMLElement>(
+      ':scope > lib-quantity-stepper, :scope > lib-quantity-reel'
+    );
+    return row && control ? { control, row } : null;
+  }
 
   /** Whether the list's own stepper can do anything for this person. */
   protected usable(list: ProductListRow): boolean {

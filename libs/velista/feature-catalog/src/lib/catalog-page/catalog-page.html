@@ -200,7 +200,7 @@
               @if (index === unpricedAt()) {
                 <li class="unpriced">{{ 'catalog.unpriced' | rokuT }}</li>
               }
-              <li>
+              <li [attr.data-product]="row.id">
                 <lib-product-row
                   (added)="addProduct(row)"
                   (chosen)="choose($event)"
@@ -389,5 +389,11 @@
   }
 }
 
+<!--
+  Does the extra already bought count? (velista 0208, target state 13.) Asked after a
+  card's raise, below the card, its pointer on the card's stepper or plus.
+-->
+<lib-extra-ask-popover />
+
 <!-- The two sheets of section 4, child routes over the list. -->
-<router-outlet />
+<router-outlet (activate)="onSheetOpened()" />

@@ -853,6 +853,8 @@ export type LineWriteCall =
       readonly unit?: LineUnit;
       /** Whether the edit confirmed a merge (velista plan 0083, section 5). */
       readonly confirmMerge?: boolean;
+      /** Whether the edit asked for the report of the extra (velista `0208`). */
+      readonly reportExtra?: boolean;
     }
   | { readonly kind: 'delete'; readonly lineId: string }
   /**
@@ -944,6 +946,8 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         readonly state: 'succeeded';
         readonly line?: Partial<Line> & { readonly id: string };
         readonly absorbedLineId?: string;
+        /** What the save's report says was taken in (velista `0208`). */
+        readonly extra?: AbsorbedExtra | null;
       }
   )[] = [];
   /** Holds every edit in flight until released, for the states a save passes through. */
@@ -1215,6 +1219,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         favoriteItemId?: string | null;
         preferredSupermarketId?: string | null;
         confirmMerge?: boolean;
+        reportExtra?: boolean;
       }
     ) => {
       calls.push({ kind: 'update', lineId, ...patch });
@@ -1264,6 +1269,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
           state: 'succeeded' as const,
           line: answered as Line,
           absorbedLineId: staged.absorbedLineId ?? null,
+          extra: patch?.reportExtra === true ? (staged.extra ?? null) : null,
         };
       }
 
@@ -1324,6 +1330,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
             state: outcome as 'succeeded' | 'overwritten',
             line: edited,
             absorbedLineId: null,
+            extra: null,
           };
     },
 

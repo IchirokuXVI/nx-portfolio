@@ -144,6 +144,12 @@ export interface AddLineRequest {
   readonly askIfAmbiguous?: boolean;
   readonly intoLineId?: string;
   readonly newLine?: boolean;
+  /**
+   * Ask an add that raises a line to say what the raise took into the ask (backend
+   * `0276`, velista `0208`). Only ever `true` on the wire: an add that made a line,
+   * or met one it left alone, answers no report.
+   */
+  readonly reportExtra?: boolean;
 }
 
 export interface UpdateLineRequest {
@@ -188,6 +194,12 @@ export interface UpdateLineRequest {
   readonly favoriteItemId?: string | null;
   /** The supermarket of the line, a chain, or null for any (backend `0199`). */
   readonly preferredSupermarketId?: string | null;
+  /**
+   * Ask a save that raises the quantity to say what the raise took into the ask
+   * (backend `0276`, velista `0208`). Only ever `true` on the wire, and only with a
+   * raised `quantity`: a merge or a unit change takes nothing in.
+   */
+  readonly reportExtra?: boolean;
 }
 
 /**
@@ -213,8 +225,8 @@ export interface AddLineQuantityRequest {
    * Ask the answer to say what this raise took into the ask (backend `0276`, velista
    * `0208`): every raise moves the units bought above the ask in open shopping lists
    * into the ask anyway, and the flag adds who bought them and what "Count the
-   * extra" would take off the line. Only the zone list's rows send it, and only
-   * with a positive delta.
+   * extra" would take off the line. Every control that raises a line sends it with
+   * a positive delta, so its question can be asked on the control.
    */
   readonly reportExtra?: boolean;
 }

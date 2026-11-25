@@ -18,6 +18,7 @@ import {
   visitFloor,
   visitTakeBack,
   visitWithout,
+  type AbsorbedExtra,
   type AddTargetList,
   type AddUnitRefusal,
   type CatalogVisit,
@@ -38,6 +39,7 @@ import {
   type QuantityRun,
 } from '@portfolio/velista/platform';
 import { SessionStore } from '../auth/session-store';
+import { GatewayError } from '../errors';
 import { LINE_SERVICE, type LineServiceI } from '../lines/line-service';
 import { LIST_SERVICE, type ListServiceI } from '../lists/list-service';
 import { toAddUnitRefusal, toRefusedLine } from '../mapping/add-choice-mappers';
@@ -73,6 +75,32 @@ export interface CatalogAddProduct {
    */
   readonly quantity?: number;
 }
+
+/**
+ * What a raise from a card took into the ask (velista `0208`, target state 13):
+ * the line, its list, the report, and the amount the line holds after it, which
+ * is what the card's stepper shows and what "Still need" leaves (Y).
+ */
+export interface CatalogExtraReport {
+  readonly lineId: string;
+  readonly listId: string;
+  readonly extra: AbsorbedExtra;
+  readonly quantity: number;
+}
+
+/**
+ * How a card's raise asks about the extra (velista `0208`): `reportExtra` sends the
+ * flag, and `onExtra` hears an answer that offers something to count, only while
+ * nothing newer of the line is open or on its way, so the amount it names is the
+ * one the card shows. A lowering and a take back never report.
+ */
+export interface CatalogRaiseOptions {
+  readonly reportExtra?: boolean;
+  readonly onExtra?: (report: CatalogExtraReport) => void;
+}
+
+/** What "Count the extra" on a card came to (velista `0208`, target state 4). */
+export type CatalogCountOutcome = 'counted' | 'stale' | 'failed';
 
 /** What one add asks for: its own amount, or one step of the product. */
 function addedAmount(product: CatalogAddProduct): number {
@@ -205,8 +233,19 @@ export class CatalogAddStore {
   /** The product of each open run, and the drawn amount it started from. */
   private readonly _runOf = new Map<
     string,
-    { readonly product: VisitProduct; readonly from: number }
+    {
+      readonly product: VisitProduct;
+      readonly from: number;
+      readonly options?: CatalogRaiseOptions;
+    }
   >();
+
+  /**
+   * How many writes of each product are queued or on their way, by the key of
+   * {@link _queues}. A raise's report is heard only from the last of them: an
+   * answer with another write behind it names an amount the card no longer shows.
+   */
+  private readonly _depth = new Map<string, number>();
 
   /** Bumped by every erase, so an answer from the visit before is dropped. */
   private _generation = 0;
@@ -440,7 +479,11 @@ export class CatalogAddStore {
    * that line. The quantity is drawn before the answer, and put back if the write
    * fails.
    */
-  add(product: CatalogAddProduct, listId?: string): Promise<void> {
+  add(
+    product: CatalogAddProduct,
+    listId?: string,
+    options: CatalogRaiseOptions = {}
+  ): Promise<void> {
     const to = listId ?? this._targetId();
     if (to === null) {
       return Promise.resolve();
@@ -461,7 +504,7 @@ export class CatalogAddStore {
     const drawnOn = this._drawAdd(to, product);
     this._adding.set(key, (this._adding.get(key) ?? 0) + 1);
     return this._queued(key, (generation) =>
-      this._add(to, product, drawnOn, generation)
+      this._add(to, product, drawnOn, generation, options)
     );
   }
 
@@ -478,7 +521,12 @@ export class CatalogAddStore {
    * line that was there before goes to zero and stays, which is what a list calls
    * stocked.
    */
-  step(product: VisitProduct, lineId: string, step: QuantityStep): void {
+  step(
+    product: VisitProduct,
+    lineId: string,
+    step: QuantityStep,
+    options: CatalogRaiseOptions = {}
+  ): void {
     const line = this._held().find((held) => held.lineId === lineId);
     if (line === undefined || isUnsavedLine(lineId) || step.to === step.from) {
       return;
@@ -520,7 +568,7 @@ export class CatalogAddStore {
       return;
     }
     if (!open) {
-      this._runOf.set(lineId, { product, from: line.quantity });
+      this._runOf.set(lineId, { product, from: line.quantity, options });
     }
     this._move(lineId, step.to - line.quantity);
     // The run starts from what was drawn, so the change it writes is exactly how
@@ -542,6 +590,45 @@ export class CatalogAddStore {
     return this._queued(keyOf(entry.listId, entry.itemId), () =>
       this._takeBack(lineId)
     );
+  }
+
+  /**
+   * "Count the extra" on a card or a row of the product page's table (velista
+   * `0208`, target states 1 and 4; backend `0276`): take `amount` off the line,
+   * which must still hold `expect`, the amount the raise answered. In the queue of
+   * the product's writes, so it lands after any still on their way.
+   *
+   * The card shows `expect - amount` at once when it still shows `expect`; a line
+   * that moved meanwhile is not patched, and the server decides. On
+   * `stale_quantity` nothing is counted and the line is read again, so the card
+   * shows the server's amount; on any other failure it is put back. Never sent
+   * again by itself.
+   */
+  async countExtra(
+    product: VisitProduct,
+    lineId: string,
+    amount: number,
+    expect: number
+  ): Promise<CatalogCountOutcome> {
+    const line = this._held().find((held) => held.lineId === lineId);
+    if (
+      line === undefined ||
+      isUnsavedLine(lineId) ||
+      !Number.isInteger(amount) ||
+      amount < 1 ||
+      amount > expect
+    ) {
+      return 'failed';
+    }
+    let outcome: CatalogCountOutcome = 'failed';
+    await this._queued(keyOf(product.listId, product.itemId), (generation) =>
+      this._count(product, lineId, amount, expect, generation).then(
+        (answered) => {
+          outcome = answered;
+        }
+      )
+    );
+    return outcome;
   }
 
   /** Take back everything the visit added to one list. */
@@ -634,7 +721,8 @@ export class CatalogAddStore {
     listId: string,
     product: CatalogAddProduct,
     drawnOn: string,
-    generation: number
+    generation: number,
+    options: CatalogRaiseOptions = {}
   ): Promise<void> {
     const key = keyOf(listId, product.itemId);
     // One step of the product's unit, 25 g, 25 ml or one piece (velista `0185`),
@@ -652,7 +740,8 @@ export class CatalogAddStore {
         amount,
         [product.itemId],
         false,
-        undefined,
+        // An add that raises a line reports what it took in (velista `0208`).
+        options.reportExtra === true ? { reportExtra: true } : undefined,
         unit
       );
       if (generation !== this._generation) {
@@ -716,6 +805,9 @@ export class CatalogAddStore {
           amount
         )
       );
+      if (result.outcome === 'raised' && ahead === 0) {
+        this._heard(key, result.line, result.extra ?? null, options);
+      }
     } catch (error) {
       if (generation !== this._generation) {
         return;
@@ -773,7 +865,7 @@ export class CatalogAddStore {
     }
     const { product } = meta;
     void this._queued(keyOf(product.listId, product.itemId), (generation) =>
-      this._writeRun(product, lineId, run, generation)
+      this._writeRun(product, lineId, run, generation, meta.options)
     );
   }
 
@@ -786,16 +878,28 @@ export class CatalogAddStore {
     product: VisitProduct,
     lineId: string,
     run: QuantityRun,
-    generation: number
+    generation: number,
+    options: CatalogRaiseOptions = {}
   ): Promise<void> {
     const delta = run.to - run.from;
     const line = this._held().find((held) => held.lineId === lineId);
+    const unit = line?.unit ?? 'UNIT';
+    // A raise reports what it took into the ask (velista `0208`); a lowering never.
+    const reporting = options.reportExtra === true && delta > 0;
     try {
-      const answer = await this._lines.addQuantity(
-        lineId,
-        delta,
-        line?.unit ?? 'UNIT'
-      );
+      let extra: AbsorbedExtra | null = null;
+      let answer: Line;
+      if (reporting) {
+        const raised = await this._lines.raiseReportingExtra(
+          lineId,
+          delta,
+          unit
+        );
+        answer = raised.line;
+        extra = raised.extra;
+      } else {
+        answer = await this._lines.addQuantity(lineId, delta, unit);
+      }
       if (generation !== this._generation) {
         return;
       }
@@ -815,6 +919,9 @@ export class CatalogAddStore {
       this._visit.update((visit) =>
         visitAfterStep(visit, product, stateOf(answer), run.from)
       );
+      if (reporting && (this._adding.get(key) ?? 0) === 0) {
+        this._heard(key, answer, extra, options);
+      }
     } catch {
       if (generation === this._generation) {
         this._move(lineId, -delta);
@@ -822,6 +929,137 @@ export class CatalogAddStore {
         this._met.set(null);
         this._failures.update((count) => count + 1);
       }
+    }
+  }
+
+  /**
+   * A raise answered with its report (velista `0208`): handed to the card's page
+   * when it offers something to count and nothing newer of the line is open or
+   * queued, so the amount it names is the one the card shows.
+   */
+  private _heard(
+    key: string,
+    line: Line,
+    extra: AbsorbedExtra | null,
+    options: CatalogRaiseOptions
+  ): void {
+    if (
+      extra === null ||
+      extra.countable <= 0 ||
+      extra.countable > line.quantity ||
+      options.onExtra === undefined ||
+      this._runs.pending().has(line.id) ||
+      (this._depth.get(key) ?? 0) > 1
+    ) {
+      return;
+    }
+    // The page's callback runs after the write landed, and this store outlives the
+    // page: a callback that throws (a page already gone, say) loses its question
+    // and nothing else. It never reaches the write's failure path, which would undo
+    // what the server accepted.
+    try {
+      options.onExtra({
+        lineId: line.id,
+        listId: line.listId,
+        extra,
+        quantity: line.quantity,
+      });
+    } catch {
+      // Nobody is left to ask; the amount set stands.
+    }
+  }
+
+  /** One count, in its turn of the product's queue. */
+  private async _count(
+    product: VisitProduct,
+    lineId: string,
+    amount: number,
+    expect: number,
+    generation: number
+  ): Promise<CatalogCountOutcome> {
+    const line = this._held().find((held) => held.lineId === lineId);
+    if (line === undefined) {
+      return 'failed';
+    }
+    const key = keyOf(product.listId, product.itemId);
+    const patched = line.quantity === expect;
+    if (patched) {
+      this._move(lineId, -amount);
+    }
+    try {
+      const answer = await this._lines.countExtra(
+        lineId,
+        amount,
+        expect,
+        line.unit
+      );
+      if (generation !== this._generation) {
+        return 'counted';
+      }
+      const held = heldOf(
+        answer.line,
+        this._adding.get(key) ?? 0,
+        this._addEach.get(key)
+      );
+      this._held.update((all) =>
+        upsert(all, {
+          ...held,
+          quantity: held.quantity + this._openOffset(lineId),
+        })
+      );
+      // A count is a lowering: the record follows it, and leaves it when the line
+      // is back at what it held before the visit.
+      this._visit.update((visit) =>
+        visitAfterStep(visit, product, stateOf(answer.line), expect)
+      );
+      return 'counted';
+    } catch (error) {
+      if (generation !== this._generation) {
+        return 'failed';
+      }
+      if (patched) {
+        this._move(lineId, amount);
+      }
+      if (
+        error instanceof GatewayError &&
+        (error.code === 'stale_quantity' || error.code === 'line_unit_mismatch')
+      ) {
+        await this._reread(product.itemId, lineId, generation);
+        return 'stale';
+      }
+      return 'failed';
+    }
+  }
+
+  /**
+   * The one line as the server holds it now, after a refused count: read through
+   * the product's lines on every list, and taken whatever this visit wrote, since
+   * the refusal says the held amount is no longer the server's.
+   */
+  private async _reread(
+    itemId: string,
+    lineId: string,
+    generation: number
+  ): Promise<void> {
+    try {
+      const answer = await this._lines.linesHoldingItem(itemId);
+      const fresh = answer.lines.find((line) => line.lineId === lineId);
+      if (generation !== this._generation || fresh === undefined) {
+        return;
+      }
+      this._held.update((held) =>
+        held.map((line) =>
+          line.lineId === lineId
+            ? {
+                ...fresh,
+                quantity: fresh.quantity + this._openOffset(lineId),
+                itemIds: union(line.itemIds, fresh.itemIds),
+              }
+            : line
+        )
+      );
+    } catch {
+      // The card keeps what it held; the next read of the lists corrects it.
     }
   }
 
@@ -1167,12 +1405,19 @@ export class CatalogAddStore {
   ): Promise<void> {
     const generation = this._generation;
     const ahead = this._queues.get(key);
+    this._depth.set(key, (this._depth.get(key) ?? 0) + 1);
     const next =
       ahead === undefined
         ? write(generation)
         : ahead.then(() => write(generation));
     this._queues.set(key, next);
     void next.finally(() => {
+      const depth = (this._depth.get(key) ?? 1) - 1;
+      if (depth <= 0) {
+        this._depth.delete(key);
+      } else {
+        this._depth.set(key, depth);
+      }
       if (this._queues.get(key) === next) {
         this._queues.delete(key);
       }

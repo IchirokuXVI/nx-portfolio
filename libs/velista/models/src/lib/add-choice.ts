@@ -27,6 +27,11 @@ export interface AddLineOptions {
   readonly askIfAmbiguous?: true;
   readonly intoLineId?: string;
   readonly newLine?: true;
+  /**
+   * Not one of the three, and sent beside any of them (velista `0208`): an add that
+   * raises a line answers what the raise took into the ask (backend `0276`).
+   */
+  readonly reportExtra?: true;
 }
 
 /**

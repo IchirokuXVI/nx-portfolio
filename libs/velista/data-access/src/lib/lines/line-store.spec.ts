@@ -1177,6 +1177,74 @@ describe('LineStore', () => {
         expect(TestBed.inject(DroppedWrites).take(`list:${LIST}`)).toEqual([]);
       });
 
+      it('sends the count unpatched when the line no longer holds what the question was about', async () => {
+        const { store, lines, realtime } = await build([
+          line('a', { quantity: 4 }),
+        ]);
+        await store.load(LIST);
+        // Somebody raised the line to 5 while the question was open.
+        realtime.emit('line.updated', line('a', { quantity: 5, version: 2 }));
+        expect(store.linesIn(LIST)[0].quantity).toBe(5);
+        lines.holdWrites();
+
+        const counted = store.countExtra('a', 3, 4);
+        // No Z drawn over a number nobody asked about: the server decides.
+        expect(store.linesIn(LIST)[0].quantity).toBe(5);
+        expect(lines.counts).toEqual([{ amount: 3, expect: 4, unit: 'UNIT' }]);
+        lines.failNext(refusal('stale_quantity'));
+        lines.setServed([line('a', { quantity: 5, version: 2 })]);
+        lines.releaseWrites();
+
+        expect(await counted).toBe('stale');
+        expect(store.linesIn(LIST)[0].quantity).toBe(5);
+      });
+
+      it('keeps the count drawn over a realtime update that lands while it is out, and takes the answer', async () => {
+        const { store, lines, realtime } = await build([
+          line('a', { quantity: 4 }),
+        ]);
+        await store.load(LIST);
+        lines.holdWrites();
+
+        const counted = store.countExtra('a', 3, 4);
+        expect(store.linesIn(LIST)[0].quantity).toBe(1);
+        // The echo of the raise, older than the count, arrives while it is out.
+        realtime.emit('line.updated', line('a', { quantity: 4, version: 2 }));
+        expect(store.linesIn(LIST)[0].quantity).toBe(1);
+        lines.releaseWrites();
+
+        expect(await counted).toBe('counted');
+        expect(store.linesIn(LIST)[0]).toEqual(
+          expect.objectContaining({ quantity: 1, version: 3 })
+        );
+      });
+
+      it('lets a save report only a raise of the amount in its own unit (velista 0208, target state 11)', async () => {
+        const { store, lines } = await build([line('a', { quantity: 4 })]);
+        await store.load(LIST);
+
+        await store.updateLine('a', { quantity: 6, reportExtra: true });
+        await store.updateLine('a', { quantity: 2, reportExtra: true });
+        await store.updateLine('a', {
+          quantity: 9,
+          content: 'Pan',
+          confirmMerge: true,
+          reportExtra: true,
+        });
+        await store.updateLine('a', {
+          quantity: 1000,
+          unit: 'GRAM',
+          reportExtra: true,
+        });
+
+        expect(lines.updates.map((sent) => sent.reportExtra)).toEqual([
+          true,
+          undefined,
+          undefined,
+          undefined,
+        ]);
+      });
+
       it('sends nothing for an amount it cannot count', async () => {
         const { store, lines } = await build([line('a', { quantity: 4 })]);
         await store.load(LIST);

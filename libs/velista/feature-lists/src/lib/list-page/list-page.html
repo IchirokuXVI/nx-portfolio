@@ -593,60 +593,10 @@
       the extra" writes: whatever else closes it leaves the amount set, which the raise
       already wrote. Held against the mark beside the row, laid over its control, so
       it is inserted in the list item and never inside the row, which is a button.
+      A count that wrote nothing says so in the same place. The page's ExtraAskHost
+      holds both (velista 0208, target state 10).
     -->
-    @if (extraAsk(); as asked) {
-      @if (asked.shown) {
-        @if (extraWords(); as words) {
-          <lib-anchored-popover
-            (closed)="closeExtraAsk($event)"
-            [accent]="extraFlashing()"
-            [keepInSight]="asked.row"
-            [labelledBy]="extraAskTitleId"
-            [open]="true"
-            [origin]="asked.origin"
-            [pointer]="true"
-            [side]="asked.side"
-            align="end"
-            frame="choice"
-          >
-            <lib-extra-ask
-              (dismissed)="closeExtraAsk('escape')"
-              (kept)="answerCount()"
-              (stillNeed)="answerStillNeed()"
-              [takeFocus]="asked.takeFocus"
-              [titleId]="extraAskTitleId"
-              [words]="words"
-            />
-          </lib-anchored-popover>
-        }
-      }
-    }
-
-    <!--
-      A count that wrote nothing says so in the question's place (velista 0208,
-      target state 4): no buttons and no focus, said in the page's polite region too,
-      and gone on the next touch anywhere, Escape or leaving.
-    -->
-    @if (extraNotice(); as notice) {
-      @if (extraNoticeWords(); as words) {
-        <lib-anchored-popover
-          (closed)="closeExtraNotice()"
-          [keepInSight]="notice.row"
-          [open]="true"
-          [origin]="notice.origin"
-          [pointer]="true"
-          [role]="null"
-          [side]="notice.side"
-          align="end"
-          frame="choice"
-        >
-          <lib-extra-ask-notice
-            (pointerdown)="closeExtraNotice()"
-            [words]="words"
-          />
-        </lib-anchored-popover>
-      }
-    }
+    <lib-extra-ask-popover />
   }
 </main>
 

@@ -228,7 +228,7 @@
             </div>
             <ul class="rows">
               @for (row of group.rows; track row.id) {
-                <li>
+                <li [attr.data-product]="row.id">
                   <lib-product-row
                     (added)="addProduct(row)"
                     (lineStepped)="stepLine(row, $event)"
@@ -253,5 +253,11 @@
   }
 </p>
 
+<!--
+  Does the extra already bought count? (velista 0208, target state 14.) Asked after a
+  raise from the table, above its row, or from a similar card, below the card.
+-->
+<lib-extra-ask-popover />
+
 <!-- The sheet of lists, a child route over this page (section 4.3). -->
-<router-outlet />
+<router-outlet (activate)="onSheetOpened()" />
