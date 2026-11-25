@@ -561,14 +561,17 @@ export class RowListsSheet {
       !finished &&
       entry.demandEditable &&
       (entry.listId !== null || row.entries.length === 1);
+    // Why the ask is locked (the owner, 2026-11-25). `demandEditable` reads the
+    // rights of the basket's owner on the list, never the reader's, so a member
+    // of the group who may change the list on its own page can still see it
+    // locked here. The text thus sends a served reader to the list itself. Any
+    // other list is one this reader was not served.
     const reason =
       editable || finished
         ? null
         : ref === undefined
           ? this._translator.t('basket.lists.notInGroup', undefined, locale)
-          : this._translator.t('basket.lists.ownGroup', undefined, locale, {
-              group: ref.zoneName,
-            });
+          : this._translator.t('basket.lists.ownGroup', undefined, locale);
     const shown = open ?? entry.asked;
     return {
       lineId: entry.lineId,

@@ -222,6 +222,14 @@ export class QuantityStepper {
    * the number takes the colour, never the outline or the symbol.
    */
   readonly target = input<number | null>(null);
+  /**
+   * Whether minus draws the red trash where one press takes the amount to 0 (the
+   * owner's S14). True, the default, is the zone list, where 0 means the line leaves
+   * its list. The two basket sheets pass false (the owner, 2026-11-23): there 0 is an
+   * amount like any other, so minus keeps its bar and its colour and still steps to
+   * 0. Only the glyph changes; the step, the hold and the name do not.
+   */
+  readonly trashAtZero = input(true);
 
   /** The next amount, on every press, every repeat, every key and every typed commit. */
   readonly valueChange = output<number>();
@@ -260,11 +268,17 @@ export class QuantityStepper {
    * Whether one press of minus takes the amount to 0, where the line leaves its list
    * (the owner's S14): minus then draws a red trash in place of its bar. Never with a
    * floor above 0 (a due row, the how many step), never at 0 itself, and never on
-   * a {@link locked} stepper, whose minus takes no press.
+   * a {@link locked} stepper, whose minus takes no press, and never where the caller
+   * turned it off with {@link trashAtZero}.
    */
   readonly minusClears = computed(() => {
     const value = this.value();
-    return !this.locked() && value > 0 && this._down(value) === 0;
+    return (
+      this.trashAtZero() &&
+      !this.locked() &&
+      value > 0 &&
+      this._down(value) === 0
+    );
   });
 
   /** Both buttons and the field ignore input: a write in flight, or a locked amount. */

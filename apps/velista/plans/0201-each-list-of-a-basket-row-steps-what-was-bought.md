@@ -34,6 +34,10 @@
 > Amended on 2026-11-23 after its review: the steppers stay live on a row with nothing left,
 > until the shopping list is finished.
 >
+> Amended on 2026-11-23: the buy steppers (the entries and "Bought for another list") draw the
+> plain minus at 1, never the trash, and still step to 0, because a buy taken back to 0 takes
+> no line off its list. The stepper's `trashAtZero` input, true by default, turns it off.
+>
 > This was the design of the sheet before velista `0139`: the entries pane of velista `0090`
 > had a "got" reel per list (commit `3b8da1e91`, `row-entries.ts`, output `allocated`),
 > removed by `9f74867a1`. Its revert then took units from the whole row; this plan takes

@@ -1944,6 +1944,75 @@ describe('QuantityStepper (velista 0188)', () => {
     });
   });
 
+  /** The owner, 2026-11-23: the basket sheets draw a plain minus where it reaches 0. */
+  describe('trashAtZero', () => {
+    const trash = (h: Harness) => h.minus.querySelector('lib-trash-icon');
+    const bar = (h: Harness) => h.minus.querySelector('.glyph');
+    const variants = ['row', 'sheet', 'sheet-narrow'] as const;
+
+    it.each(variants)(
+      'is on by default, so every other caller keeps the trash (%s)',
+      (variant) => {
+        const h = render({ value: 1, min: 0, variant });
+        expect(h.fixture.componentInstance.trashAtZero()).toBe(true);
+        expect(trash(h)).not.toBeNull();
+        expect(h.minus.classList).toContain('is-clear');
+      }
+    );
+
+    it.each([
+      [1, 'UNIT', 'sheet-narrow'],
+      [1, 'UNIT', 'sheet'],
+      [25, 'GRAM', 'sheet'],
+    ] as const)(
+      'turned off, draws the bar at %s %s in the %s variant',
+      (value, unit, variant) => {
+        const h = render({ value, unit, min: 0, variant, trashAtZero: false });
+        expect(trash(h)).toBeNull();
+        expect(bar(h)).not.toBeNull();
+        expect(h.minus.classList).not.toContain('is-clear');
+      }
+    );
+
+    it('turned off, still steps to 0 from 1', () => {
+      const h = render({
+        value: 1,
+        min: 0,
+        variant: 'sheet-narrow',
+        trashAtZero: false,
+      });
+      pointerClick(h.minus);
+      expect(h.steps).toEqual([{ from: 1, to: 0, repeat: false }]);
+      expect(h.minus.getAttribute('aria-disabled')).toBe('true');
+    });
+
+    it('turned off, names minus with the plain step words, as at any amount', () => {
+      const h = render({
+        value: 1,
+        min: 0,
+        variant: 'sheet-narrow',
+        trashAtZero: false,
+      });
+      expect(h.minus.getAttribute('aria-label')).toBe(
+        'amount.less:{"step":"1","name":"Plátano"}'
+      );
+      h.set('value', 3);
+      expect(h.minus.getAttribute('aria-label')).toBe(
+        'amount.less:{"step":"1","name":"Plátano"}'
+      );
+    });
+
+    it('turned off, leaves the long press from 1 as it is: 0 on release, no repeat', () => {
+      const h = render({ value: 25, unit: 'GRAM', trashAtZero: false });
+      fire(h.minus, 'pointerdown');
+      jest.advanceTimersByTime(3000);
+      expect(h.steps).toEqual([]);
+      fire(h.minus, 'pointerup');
+      pointerClick(h.minus);
+      expect(h.steps).toEqual([{ from: 25, to: 0, repeat: false }]);
+    });
+  });
+
   describe('presses faster than the caller redraws', () => {
     it('builds each press in one task on the one before', () => {
       const h = render(

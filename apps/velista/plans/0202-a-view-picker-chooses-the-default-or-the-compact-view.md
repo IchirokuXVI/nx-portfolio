@@ -26,6 +26,10 @@
 > are final; and **the filter icon becomes a funnel** on the zone list header and on the
 > basket's tools row, so it is not confused with the view button.
 >
+> Amended on 2026-11-23: choosing Default or Compact from the "View" row of the basket's menu
+> closes the menu, and focus goes back to the menu button, as the picker of the tools row
+> closes after a choice.
+>
 > **The mock is approved**: `apps/velista/plans/mocks/compact-reel/`, published at
 > https://claude.ai/artifact/U74Z1MyvcxEK6PN3CRn8N6. Take every look and word from its boards
 > (section 1 lists them) and the notes in its `canvas.json`.

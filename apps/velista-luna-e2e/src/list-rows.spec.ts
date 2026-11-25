@@ -351,8 +351,9 @@ test.describe('the default and the compact view (velista 0191, 0202)', () => {
       await expect(button).toBeFocused();
     });
 
-    await test.step("the basket's menu names Compact, and chooses Default", async () => {
-      await page.getByRole('button', { name: 'More', exact: true }).click();
+    await test.step("the basket's menu names Compact, chooses Default and closes", async () => {
+      const more = page.getByRole('button', { name: 'More', exact: true });
+      await more.click();
       await expect(page).toHaveURL(/\/sheet\/more(\?.*)?$/);
       const viewRow = sheet(page, 'More').getByRole('button', {
         name: /^View/,
@@ -362,7 +363,11 @@ test.describe('the default and the compact view (velista 0191, 0202)', () => {
       await viewRow.click();
       await viewChoice(page, 'Default').click();
       await expect(page.getByRole('menuitemradio')).toHaveCount(0);
-      await expect(viewRow).toContainText('Default');
+      // The menu closes after a choice, and focus is back on its button (velista
+      // 0202, amended on 2026-11-23).
+      await expect(page).not.toHaveURL(/\/sheet\/more(\?.*)?$/);
+      await expect(sheet(page, 'More')).toHaveCount(0);
+      await expect(more).toBeFocused();
     });
 
     await test.step('the zone list follows the choice made on the basket', async () => {
