@@ -27,10 +27,12 @@ import {
   BasketViewStore,
   ChangeLandingStore,
   ItemNames,
+  MemberNames,
   type ChangeLanding,
 } from '@portfolio/velista/data-access';
 import {
   QUANTITY_STEP_QUIET_MS,
+  type AbsorbedExtra,
   type BasketListRef,
   type BasketParticipant,
   type BasketProduct,
@@ -45,8 +47,13 @@ import {
   provideVelistaTesting,
   SheetNavigation,
 } from '@portfolio/velista/platform';
-import { AnchoredPopover, QuantityStepper } from '@portfolio/velista/ui';
+import {
+  AnchoredPopover,
+  ExtraAskHost,
+  QuantityStepper,
+} from '@portfolio/velista/ui';
 import { of } from 'rxjs';
+import { ExtraAskHandoff } from '../basket-page/extra-ask-handoff';
 import { RowListsSheet } from './row-lists-sheet';
 
 /**
@@ -186,6 +193,10 @@ interface World {
   readonly depth?: number;
   /** The basket is read at a shop. */
   readonly atShop?: boolean;
+  /** Names of the members of a group, by user id. */
+  readonly names?: Readonly<Record<string, string>>;
+  /** The basket page's handoff (velista `0208`, target state 19). */
+  readonly handoff?: ExtraAskHandoff;
 }
 
 function storeDouble(world: World) {
@@ -228,6 +239,7 @@ function storeDouble(world: World) {
     lineLeft: jest.fn(() => false),
     handOver: jest.fn(),
     setDemand: jest.fn().mockResolvedValue({ entries: [], skippedCount: 0 }),
+    countExtra: jest.fn().mockResolvedValue('counted'),
   };
 }
 
@@ -249,6 +261,17 @@ async function render(world: World = {}) {
       },
       ChangeLandingStore,
       { provide: ItemNames, useValue: { nameOf: () => null } },
+      {
+        provide: MemberNames,
+        useValue: {
+          nameOf: (_zoneId: string, userId: string) =>
+            world.names?.[userId] ?? null,
+          ensure: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+      ...(world.handoff === undefined
+        ? []
+        : [{ provide: ExtraAskHandoff, useValue: world.handoff }]),
       { provide: AppHistory, useValue: { depth: () => world.depth ?? -1 } },
       {
         provide: SheetNavigation,
@@ -826,6 +849,7 @@ describe('RowListsSheet (velista 0200)', () => {
         lineId: 'zl-1',
         quantity: 7,
         from: 1,
+        reportExtra: true,
       });
     });
 
@@ -845,6 +869,7 @@ describe('RowListsSheet (velista 0200)', () => {
         lineId: 'zl-1',
         quantity: 4,
         from: 1,
+        reportExtra: true,
       });
       for (const [body] of store.setDemand.mock.calls) {
         expect(body.quantity).not.toBe(2);
@@ -871,6 +896,7 @@ describe('RowListsSheet (velista 0200)', () => {
         lineId: 'zl-1',
         quantity: 4,
         from: 1,
+        reportExtra: true,
       });
     });
 
@@ -904,6 +930,7 @@ describe('RowListsSheet (velista 0200)', () => {
         lineId: 'zl-1',
         quantity: 5,
         from: 1,
+        reportExtra: true,
       });
 
       // The first write answers: asks 5 with 2 bought, so 3 are left. Right after
@@ -924,6 +951,7 @@ describe('RowListsSheet (velista 0200)', () => {
         lineId: 'zl-1',
         quantity: 6,
         from: 3,
+        reportExtra: true,
       });
     });
 
@@ -960,6 +988,7 @@ describe('RowListsSheet (velista 0200)', () => {
         lineId: 'zl-1',
         quantity: 6,
         from: 1,
+        reportExtra: true,
       });
     });
   });
@@ -1259,6 +1288,10 @@ describe('RowListsSheet (velista 0200)', () => {
           { provide: BasketViewStore, useValue: { readAtShop: signal(false) } },
           ChangeLandingStore,
           { provide: ItemNames, useValue: { nameOf: () => null } },
+          {
+            provide: MemberNames,
+            useValue: { nameOf: () => null, ensure: jest.fn() },
+          },
           { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
         ],
       }).compileComponents();
@@ -1408,6 +1441,361 @@ describe('RowListsSheet (velista 0200)', () => {
       expect(location.path()).toBe(PAGE);
       expect(history.depth()).toBe(5);
       expect(held()).toEqual([null, null]);
+    });
+  });
+});
+
+/**
+ * Velista `0208`, stage 4 (target states 17, 19 and 20; specs 16, 18 and 19): a
+ * rising ask in "Lists and amounts" asks about the extra already bought, on that
+ * list's stepper, with Y the answered `asked` and Z what "Count the extra" leaves.
+ */
+describe('RowListsSheet: a rising ask asks about the extra (velista 0208)', () => {
+  const OWN: AbsorbedExtra = {
+    above: 2,
+    countable: 2,
+    buyers: [{ userId: 'u-me' }],
+  };
+
+  afterEach(() => jest.useRealTimers());
+
+  const hostOf = (fixture: ComponentFixture<RowListsSheet>) =>
+    fixture.debugElement.injector.get(ExtraAskHost);
+
+  /**
+   * One list whose demand answers `answered` and `extra` when released, and sets
+   * the row to `answered` as the store's fold does.
+   */
+  async function oneList(
+    seen: Partial<BasketRowEntry>,
+    answered: Partial<BasketRowEntry>,
+    extra: AbsorbedExtra | null,
+    world: World = {}
+  ) {
+    const rendered = await render({
+      row: row([entry(seen)]),
+      echoValues: true,
+      ...world,
+    });
+    let release: () => void = () => undefined;
+    rendered.store.setDemand.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = () => {
+            const now = entry({ ...seen, ...answered });
+            rendered.store.rows.set([row([now])]);
+            resolve({
+              entries: [now],
+              skippedCount: 0,
+              ...(extra === null ? {} : { extra }),
+            });
+          };
+        })
+    );
+    return { ...rendered, release: () => release() };
+  }
+
+  /** Two presses of the plus, written after the quiet beat. */
+  function plusTwice(fixture: ComponentFixture<RowListsSheet>): void {
+    jest.useFakeTimers();
+    const plus =
+      rowsOf(fixture)[0].querySelector<HTMLButtonElement>('button.step.plus');
+    plus?.click();
+    plus?.click();
+    jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+    jest.useRealTimers();
+    fixture.detectChanges();
+  }
+
+  /** The write goes out a turn after the run, and its answer then comes. */
+  async function answer(release: () => void): Promise<void> {
+    await settle();
+    release();
+    await settle();
+    await settle();
+  }
+
+  /** The owner's example (frame 12): asks 3, bought 5, plus twice. */
+  const ownExtra = () =>
+    oneList(
+      { left: 0, bought: 5, asked: 3 },
+      { left: 2, bought: 5, asked: 7 },
+      OWN
+    );
+
+  it('reports a rising ask, and never a lowering (0208 spec 16)', async () => {
+    const { fixture, store } = await render();
+    steppers(fixture)[0].stepped.emit({
+      from: 3,
+      to: 2,
+      repeat: false,
+      typed: true,
+    });
+    await settle();
+
+    expect(store.setDemand).toHaveBeenCalledWith({
+      lineId: 'zl-1',
+      quantity: 2,
+      from: 1,
+    });
+  });
+
+  it("draws the run's amount until the answer, then the answered ask in the same change as the question", async () => {
+    const { fixture, release } = await ownExtra();
+    plusTwice(fixture);
+    await settle();
+    fixture.detectChanges();
+
+    expect(steppers(fixture)[0].value()).toBe(5);
+    expect(hostOf(fixture).asked()).toBeNull();
+
+    release();
+    await settle();
+    await settle();
+    // The question is open before the next frame draws, and that frame draws 7.
+    expect(hostOf(fixture).asked()?.shown).toBe(true);
+    fixture.detectChanges();
+    expect(steppers(fixture)[0].value()).toBe(7);
+    expect(document.querySelector('lib-extra-ask')).not.toBeNull();
+  });
+
+  it("asks about this shopping list's own extra with 7 and 5 (frame 12)", async () => {
+    const { fixture, release } = await ownExtra();
+    plusTwice(fixture);
+    await answer(release);
+    fixture.detectChanges();
+
+    const host = hostOf(fixture);
+    expect(host.asked()?.quantity).toBe(7);
+    expect(host.asked()?.anchor).toBe(
+      rowsOf(fixture)[0].querySelector('lib-quantity-stepper')
+    );
+    expect(host.asked()?.side).toBe('above');
+    const question = host.words()?.question ?? '';
+    expect(question).toContain('list.extra.boughtByYou');
+    expect(question).toContain('list.extra.ask:{"asked":"7","left":"5"}');
+  });
+
+  it("asks about another shopping list's extra with 3 and 2 (frame 6)", async () => {
+    const { fixture, release } = await oneList(
+      { left: 1, bought: 1, asked: 2 },
+      { left: 2, bought: 1, asked: 3 },
+      { above: 1, countable: 1, buyers: [{ userId: 'u-marta' }] },
+      { names: { 'u-marta': 'Marta' } }
+    );
+    jest.useFakeTimers();
+    rowsOf(fixture)[0]
+      .querySelector<HTMLButtonElement>('button.step.plus')
+      ?.click();
+    jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+    jest.useRealTimers();
+    await answer(release);
+    fixture.detectChanges();
+
+    const question = hostOf(fixture).words()?.question ?? '';
+    expect(question).toContain('list.extra.boughtBy:');
+    expect(question).toContain('"name":"Marta"');
+    expect(question).toContain('list.extra.ask:{"asked":"3","left":"2"}');
+  });
+
+  it('asks whether that is enough when the count would leave 0', async () => {
+    const { fixture, release } = await oneList(
+      { left: 0, bought: 3, asked: 0 },
+      { left: 2, bought: 3, asked: 2 },
+      { above: 3, countable: 2, buyers: [{ userId: 'u-marta' }] }
+    );
+    plusTwice(fixture);
+    await answer(release);
+    fixture.detectChanges();
+
+    const words = hostOf(fixture).words();
+    expect(words?.question).toContain('list.extra.askEnough:{"asked":"2"}');
+    expect(words?.keep.words).toBe('list.extra.enough');
+  });
+
+  it('asks nothing for an answer that offers nothing to count', async () => {
+    const { fixture, release } = await oneList(
+      { left: 0, bought: 5, asked: 3 },
+      { left: 2, bought: 5, asked: 5 },
+      { above: 0, countable: 0, buyers: [] }
+    );
+    plusTwice(fixture);
+    await answer(release);
+
+    expect(hostOf(fixture).asked()).toBeNull();
+  });
+
+  it('"Count the extra" sends the basket count with the answered left, and the stepper shows Z', async () => {
+    const { fixture, store, release } = await ownExtra();
+    store.countExtra.mockImplementation(async () => {
+      store.rows.set([row([entry({ left: 0, bought: 5, asked: 5 })])]);
+      return 'counted';
+    });
+    plusTwice(fixture);
+    await answer(release);
+    fixture.detectChanges();
+
+    hostOf(fixture).answerCount();
+    await settle();
+    fixture.detectChanges();
+
+    expect(store.countExtra).toHaveBeenCalledWith(ROW_KEY, 'zl-1', 2, 2);
+    expect(steppers(fixture)[0].value()).toBe(5);
+    expect(hostOf(fixture).notice()).toBeNull();
+  });
+
+  it('"Still need" sends nothing, and the stepper keeps 7', async () => {
+    const { fixture, store, release } = await ownExtra();
+    plusTwice(fixture);
+    await answer(release);
+    fixture.detectChanges();
+
+    hostOf(fixture).answerStillNeed();
+    await settle();
+    fixture.detectChanges();
+
+    expect(store.countExtra).not.toHaveBeenCalled();
+    expect(store.setDemand).toHaveBeenCalledTimes(1);
+    expect(steppers(fixture)[0].value()).toBe(7);
+  });
+
+  it.each([
+    ['stale', 'list.extra.stale'],
+    ['failed', 'list.extra.countFailed'],
+  ] as const)(
+    'a count answered %s says %s on the stepper',
+    async (outcome, key) => {
+      const { fixture, store, release } = await ownExtra();
+      store.countExtra.mockResolvedValue(outcome);
+      plusTwice(fixture);
+      await answer(release);
+      fixture.detectChanges();
+
+      hostOf(fixture).answerCount();
+      await settle();
+      fixture.detectChanges();
+      await settle();
+      fixture.detectChanges();
+
+      expect(hostOf(fixture).notice()?.key).toBe(key);
+      expect(hostOf(fixture).notice()?.anchor).toBe(
+        rowsOf(fixture)[0].querySelector('lib-quantity-stepper')
+      );
+    }
+  );
+
+  it('asks nothing when a newer run of the line is queued behind the answered one', async () => {
+    const { fixture, release } = await ownExtra();
+    steppers(fixture)[0].stepped.emit({
+      from: 3,
+      to: 5,
+      repeat: false,
+      typed: true,
+    });
+    await settle();
+    fixture.detectChanges();
+    steppers(fixture)[0].stepped.emit({
+      from: 5,
+      to: 6,
+      repeat: false,
+      typed: true,
+    });
+    release();
+    await settle();
+
+    expect(hostOf(fixture).asked()).toBeNull();
+  });
+
+  it('asks nothing when the sheet closed before the answer, and never throws', async () => {
+    const { fixture, release } = await ownExtra();
+    const host = hostOf(fixture);
+    const ask = jest.spyOn(host, 'ask');
+    // The write itself, awaited: a question on a sheet that went would reject it.
+    const demanding = (
+      fixture.componentInstance as unknown as {
+        _demand: (
+          lineId: string,
+          run: { from: number; to: number },
+          seen: number,
+          sent: number
+        ) => Promise<boolean>;
+      }
+    )._demand('zl-1', { from: 3, to: 5 }, 0, 1);
+
+    fixture.destroy();
+    release();
+
+    await expect(demanding).resolves.toBe(true);
+    expect(ask).not.toHaveBeenCalled();
+  });
+
+  it('asks a guest, with "Someone" for every buyer and never "You" (0208 spec 19)', async () => {
+    const { fixture, release } = await oneList(
+      { listId: null, left: 0, bought: 5, asked: 3 },
+      { listId: null, left: 2, bought: 5, asked: 7 },
+      { above: 2, countable: 2, buyers: [{ userId: 'u-me' }] },
+      { meKind: 'GUEST', names: { 'u-me': 'Ana' } }
+    );
+    plusTwice(fixture);
+    await answer(release);
+    fixture.detectChanges();
+
+    const question = hostOf(fixture).words()?.question ?? '';
+    expect(question).toContain('list.extra.boughtBySomeone');
+    expect(question).not.toContain('boughtByYou');
+    expect(question).not.toContain('Ana');
+  });
+
+  describe("the basket's add, handed over (0208 spec 18)", () => {
+    async function handedOver(lineId: string, rowKey = ROW_KEY) {
+      const handoff = new ExtraAskHandoff();
+      // The page's navigation, still out while the sheet opens.
+      void handoff.send(
+        { rowKey, lineId, extra: OWN },
+        () => new Promise(() => undefined)
+      );
+      const rendered = await render({
+        row: row([entry({ left: 2, bought: 5, asked: 7 })]),
+        echoValues: true,
+        handoff,
+      });
+      await settle();
+      rendered.fixture.detectChanges();
+      return { ...rendered, handoff };
+    }
+
+    it("asks on the raised list's stepper once the sheet is open, with Y the drawn ask", async () => {
+      const { fixture } = await handedOver('zl-1');
+
+      const host = hostOf(fixture);
+      expect(host.asked()?.lineId).toBe('zl-1');
+      expect(host.asked()?.quantity).toBe(7);
+      expect(host.words()?.question).toContain(
+        'list.extra.ask:{"asked":"7","left":"5"}'
+      );
+      expect(host.asked()?.anchor).toBe(
+        rowsOf(fixture)[0].querySelector('lib-quantity-stepper')
+      );
+    });
+
+    it('takes the question once, so a sheet opened later asks nothing', async () => {
+      const { handoff } = await handedOver('zl-1');
+
+      expect(handoff.take(ROW_KEY)).toBeNull();
+    });
+
+    it('asks nothing for a line the sheet does not draw', async () => {
+      const { fixture } = await handedOver('zl-9');
+
+      expect(hostOf(fixture).asked()).toBeNull();
+    });
+
+    it('asks nothing for a question about another row', async () => {
+      const { fixture, handoff } = await handedOver('zl-1', 'zl-other');
+
+      expect(hostOf(fixture).asked()).toBeNull();
+      // Still held for its own navigation, which drops it when it is over.
+      expect(handoff.take('zl-other')?.lineId).toBe('zl-1');
     });
   });
 });

@@ -1333,6 +1333,68 @@ export class BasketStore {
   }
 
   /**
+   * "Count the extra" on one list of a row (velista `0208`, target state 17): the
+   * line's ask goes down by `amount`, expecting the entry to still hold `expect`
+   * as its `left`. The entry's `left` and `asked` go down at once; the answered
+   * line lands on success. A line that moved in between is refused
+   * (`stale_quantity`) and the basket is read again, so the entry shows the
+   * server's amount. Any other failure puts the entry back as it was.
+   *
+   * **Never sent again by itself**, and never a dropped write: a count replayed
+   * later would lower a line on numbers the person no longer sees.
+   */
+  async countExtra(
+    rowKey: string,
+    lineId: string,
+    amount: number,
+    expect: number
+  ): Promise<'counted' | 'stale' | 'failed'> {
+    const row = this.rowFor(lineId) ?? this.rowFor(rowKey);
+    const entry = row?.entries.find((held) => held.lineId === lineId);
+    if (row === null || entry === undefined) {
+      return 'failed';
+    }
+    const before = basketEntryPatchOf(entry);
+    const lowered = {
+      ...before,
+      left: Math.max(0, entry.left - amount),
+      asked: Math.max(0, entry.asked - amount),
+    };
+    this._applyPatch([lineId], [lowered]);
+    const result = await this._write(row.rowKey, async (id) => {
+      const answer = await this._service.countExtra(id, {
+        lineId,
+        unit: entry.unit,
+        amount,
+        expect,
+      });
+      this._fold(answer, [lineId]);
+      return answer;
+    });
+    if (result !== null) {
+      return 'counted';
+    }
+    const error = this._error();
+    if (error instanceof GatewayError && error.code === 'stale_quantity') {
+      // Read again by the write already: the entry is the server's.
+      return 'stale';
+    }
+    // Put back only what this count drew: a newer state of the entry stays.
+    const now = this.rowFor(lineId)?.entries.find(
+      (held) => held.lineId === lineId
+    );
+    if (
+      now !== undefined &&
+      now.version === lowered.version &&
+      now.left === lowered.left &&
+      now.asked === lowered.asked
+    ) {
+      this._applyPatch([lineId], [before]);
+    }
+    return 'failed';
+  }
+
+  /**
    * Whether the server states a buy of this line in this trip (backend `0201`,
    * section 1): its latest standing buy named a product. Read off the basket as it
    * was read, never off a choice this device holds.

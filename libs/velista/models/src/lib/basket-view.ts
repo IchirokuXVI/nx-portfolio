@@ -13,6 +13,7 @@ import type {
 import { isOpenBasket } from './enums';
 import type { LineUnit } from './line-unit';
 import type { ProductCategory } from './product-category';
+import type { AbsorbedExtra } from './requests';
 import type { ShopSectionName } from './shop';
 import type { LocalizedName } from './shopping-profile';
 
@@ -1398,6 +1399,28 @@ export interface BasketDemandRequest {
    * `0182`). Refused with `line_unit_mismatch` when it is not.
    */
   readonly unit: LineUnit;
+  /**
+   * Ask the answer what a rising ask took into the ask (backend `0276`, velista
+   * `0208` target state 17): the result's `extra`. Sent only as `true`, and only
+   * for an ask that rises.
+   */
+  readonly reportExtra?: true;
+}
+
+/**
+ * "Count the extra" on a basket row (`POST /v1/baskets/:id/rows/:rowKey/extra`,
+ * backend `0276`, velista `0208` target state 17): take `amount` off the line's
+ * ask. The line must still hold `expect` as its entry's `left`, or the server
+ * refuses with `stale_quantity` and writes nothing.
+ */
+export interface BasketCountExtraRequest {
+  readonly lineId: string;
+  /** The line's unit, as on the demand. */
+  readonly unit: LineUnit;
+  /** The `countable` the demand or the add answered. */
+  readonly amount: number;
+  /** The entry's `left` the demand or the add answered. */
+  readonly expect: number;
 }
 
 /**
@@ -1465,6 +1488,11 @@ export interface BasketAddLineRequest {
   readonly askIfAmbiguous?: true;
   readonly intoLineId?: string;
   readonly newLine?: true;
+  /**
+   * Ask the answer what an add that raised a line took into the ask (backend
+   * `0276`, velista `0208` target state 19): the result's `extra`.
+   */
+  readonly reportExtra?: true;
 }
 
 /**
@@ -1497,6 +1525,14 @@ export interface BasketRowResult {
    * answered by a gateway of before backend `0260`.
    */
   readonly addOutcome?: AddOutcome;
+  /**
+   * What a demand or an add sent with `reportExtra` took into the ask when it
+   * raised the line (backend `0276`). Absent when it raised nothing, when the
+   * write did not ask, and when this build cannot read it.
+   */
+  readonly extra?: AbsorbedExtra;
+  /** What a count took off the line (backend `0276`), set by the count alone. */
+  readonly counted?: number;
 }
 
 /**

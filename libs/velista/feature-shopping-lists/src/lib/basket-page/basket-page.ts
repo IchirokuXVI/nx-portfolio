@@ -30,6 +30,7 @@ import {
   ItemNames,
   keepsShopMap,
   ListRowsStore,
+  MemberNames,
   SessionStore,
   ShopDetailStore,
   ShopSectionsStore,
@@ -37,6 +38,7 @@ import {
   toAddUnitRefusal,
 } from '@portfolio/velista/data-access';
 import {
+  type AbsorbedExtra,
   type AddChoice,
   addChoiceName,
   addChoiceRows,
@@ -93,6 +95,9 @@ import {
   type ChipRowItem,
   DragReleasesField,
   EllipsisIcon,
+  ExtraAskHost,
+  ExtraAskPopover,
+  type ExtraCountOutcome,
   InfoIcon,
   LineComposer,
   type LineComposerSubmit,
@@ -132,6 +137,7 @@ import {
 } from '../change-sheet/change-targets';
 import { HeldBuy } from '../held-buy';
 import { ChangeAcknowledger } from './change-acknowledger';
+import { ExtraAskHandoff } from './extra-ask-handoff';
 import { SeenTarget } from './seen-target';
 
 /**
@@ -234,6 +240,7 @@ function basketReturnKey(live: boolean, id: string): string {
     ChipRow,
     DragReleasesField,
     EllipsisIcon,
+    ExtraAskPopover,
     SeenTarget,
     InfoIcon,
     LineComposer,
@@ -265,11 +272,19 @@ function basketReturnKey(live: boolean, id: string): string {
   // constructed and destroyed while this page stays.
   // `HeldBuy` here, for `ChangeAcknowledger`'s reason: the sheets that hold and
   // release a buy are drawn in this page's outlet (velista `0141`).
-  providers: [ChangeAcknowledger, HeldBuy],
+  // The question about the extra already bought (velista `0208`, target states 18
+  // and 19) here for the same reason: it goes with the page, and the handoff to
+  // the row's "Lists and amounts" reaches that sheet, drawn in this page's outlet.
+  providers: [ChangeAcknowledger, HeldBuy, ExtraAskHost, ExtraAskHandoff],
 })
 export class BasketPage {
   private readonly _store = inject(BasketStore);
   private readonly _groupMembers = inject(GroupMembers);
+  private readonly _names = inject(MemberNames);
+  private readonly _extraHost = inject(ExtraAskHost);
+  private readonly _handoff = inject(ExtraAskHandoff);
+  /** The page went: an answer that comes after it asks nothing (velista `0208`). */
+  private _gone = false;
   /**
    * What this screen is showing of the basket, as opposed to what is in it.
    *
@@ -1114,7 +1129,23 @@ export class BasketPage {
       });
     });
 
+    const me = () => this._store.me();
+    this._extraHost.connect({
+      area: () => this._column()?.nativeElement ?? null,
+      // A guest is never "You": the server names a guest's own buy as the
+      // basket's owner (backend `0275`), and a guest has no account to be.
+      readerId: () => (me()?.kind === 'GUEST' ? null : (me()?.userId ?? null)),
+      // A guest is not served the members of a group: every buyer is "Someone"
+      // (velista `0208`, target state 20).
+      nameOf: (zoneId, userId) =>
+        me()?.kind === 'GUEST' || zoneId === ''
+          ? null
+          : this._names.nameOf(zoneId, userId),
+      say: (sentence) => this._say(sentence),
+    });
+
     inject(DestroyRef).onDestroy(() => {
+      this._gone = true;
       followed.unsubscribe();
       // What a return to this basket comes back to, taken before the stores let go.
       this._returns.keep<BasketPageReturn>(
@@ -2566,6 +2597,17 @@ export class BasketPage {
   /** The holding each open run belongs to, for the sentence after its write. */
   private readonly _runHoldings = new Map<string, SuggestionHolding>();
 
+  /** The card each open run was stepped on, for the question after its write. */
+  private readonly _runCards = new Map<string, string>();
+
+  /**
+   * The newest demand write sent from a card for each line, numbered, so an
+   * answer can tell whether a newer run of the line went out after it (velista
+   * `0208`).
+   */
+  private readonly _holdingSent = new Map<string, number>();
+  private _holdingCount = 0;
+
   /**
    * A card's steps on one line, gathered into one demand write per run (velista
    * `0188`, section 5.6): a hold repeats ten times a second, which would otherwise be
@@ -2573,15 +2615,20 @@ export class BasketPage {
    */
   private readonly _holdingRuns = quantityRuns<string>((lineId, run) => {
     const holding = this._runHoldings.get(lineId);
+    const card = this._runCards.get(lineId) ?? null;
     this._runHoldings.delete(lineId);
+    this._runCards.delete(lineId);
     if (holding !== undefined) {
-      void this._sendHolding(holding, run);
+      void this._sendHolding(holding, run, card);
     }
   });
 
   /** A card's stepper stepped one list's demand. */
   protected changeHolding(change: SuggestionHoldingChange): void {
     this._runHoldings.set(change.holding.lineId, change.holding);
+    if (change.cardKey !== undefined) {
+      this._runCards.set(change.holding.lineId, change.cardKey);
+    }
     this._holdingRuns.step(change.holding.lineId, {
       from: change.from,
       to: change.to,
@@ -2599,9 +2646,16 @@ export class BasketPage {
    */
   private async _sendHolding(
     holding: SuggestionHolding,
-    run: QuantityRun
+    run: QuantityRun,
+    card: string | null = null
   ): Promise<void> {
     const change = { holding, from: run.from, to: run.to };
+    // A rising ask asks the answer what it took into the ask (velista `0208`,
+    // target state 18), when there is a card to ask on. A lowering never does.
+    const raising = run.to > run.from && card !== null;
+    const sent = ++this._holdingCount;
+    this._holdingSent.set(holding.lineId, sent);
+    this._extraHost.dropWaiting(holding.lineId);
     // The demand write is not optimistic, so the run's amount stays drawn until
     // it answers: the card does not jump back to the old amount and then forward.
     const sending = { to: run.to };
@@ -2615,7 +2669,12 @@ export class BasketPage {
     const met = entry === undefined ? 0 : entry.asked - entry.left;
     const from = Math.max(0, run.from - met);
     const result = await this._store
-      .setDemand({ lineId, quantity: run.to, from })
+      .setDemand({
+        lineId,
+        quantity: run.to,
+        from,
+        ...(raising ? { reportExtra: true as const } : {}),
+      })
       .finally(() =>
         this._sending.update((all) => {
           if (all.get(lineId) !== sending) {
@@ -2649,6 +2708,107 @@ export class BasketPage {
         )
       );
     }
+
+    if (raising && card !== null && result.extra !== undefined && !this._gone) {
+      this._askOnCard(lineId, card, result.extra, sent);
+    }
+  }
+
+  /**
+   * A card's rising ask answered with what it took into the ask (velista `0208`,
+   * target state 18): asked on the card's stepper of that line, below it as the
+   * composer's cards ask, with the card kept in sight. Y is the answered entry's
+   * `asked`, which the card shows from this answer on, and Z what "Count the
+   * extra" leaves. A card the results no longer draw, a sheet over the page or a
+   * newer run of the line asks nothing, and the ask set stands.
+   */
+  private _askOnCard(
+    lineId: string,
+    cardKey: string,
+    extra: AbsorbedExtra,
+    sent: number
+  ): void {
+    const column = this._column()?.nativeElement;
+    const row = this._store.rowFor(lineId);
+    const entry = row?.entries.find((held) => held.lineId === lineId);
+    if (column === undefined || row === null || entry === undefined) {
+      return;
+    }
+    const card = () =>
+      Array.from(column.querySelectorAll<HTMLElement>('[data-card]')).find(
+        (held) => held.dataset['card'] === cardKey
+      ) ?? null;
+    const shown = entry.asked;
+    const expect = entry.left;
+    const rowKey = row.rowKey;
+    this._extraHost.ask({
+      lineId,
+      zoneId: this._zoneOf(entry.listId),
+      unit: entry.unit,
+      extra,
+      shown,
+      origin: () =>
+        Array.from(
+          card()?.querySelectorAll<HTMLElement>(
+            'li[data-line] > lib-quantity-stepper'
+          ) ?? []
+        ).find((held) => held.parentElement?.dataset['line'] === lineId) ??
+        null,
+      keepInSight: card,
+      side: 'below',
+      count: () => this._countExtra(rowKey, lineId, extra.countable, expect),
+      inFront: () => !this._gone && this._inFront(column),
+      current: () =>
+        this._holdingSent.get(lineId) === sent &&
+        !this._holdingRuns.pending().has(lineId),
+    });
+  }
+
+  /**
+   * Whether the basket page itself is what the person is looking at: no sheet over
+   * it (a sheet is a child route), no picker or dialog, and the document not
+   * hidden (velista `0208`).
+   */
+  private _inFront(column: HTMLElement): boolean {
+    const doc = column.ownerDocument;
+    return (
+      !this._route.firstChild &&
+      this.pickerAnchor() === null &&
+      doc.visibilityState !== 'hidden' &&
+      doc.querySelector('dialog[open]') === null
+    );
+  }
+
+  /** The group of a covered list, whose members name the buyers, or none. */
+  private _zoneOf(listId: string | null): string {
+    if (listId === null) {
+      return '';
+    }
+    const zoneId = this._store.lists().get(listId)?.zoneId ?? '';
+    if (zoneId !== '' && this._store.me()?.kind !== 'GUEST') {
+      void this._names.ensure(zoneId);
+    }
+    return zoneId;
+  }
+
+  /**
+   * "Count the extra" (velista `0208`, target states 4 and 18): the store lowers
+   * the entry by what the report made countable at once, expecting it to still
+   * hold the `left` the answer gave.
+   */
+  private async _countExtra(
+    rowKey: string,
+    lineId: string,
+    amount: number,
+    expect: number
+  ): Promise<ExtraCountOutcome> {
+    const outcome = await this._store.countExtra(
+      rowKey,
+      lineId,
+      amount,
+      expect
+    );
+    return outcome === 'counted' ? 'done' : outcome;
   }
 
   /**
@@ -2792,7 +2952,17 @@ export class BasketPage {
       ...(options?.newLine === true && itemIds.length === 0
         ? { newLine: true }
         : {}),
+      // An add that raises a line answers what the raise took into the ask
+      // (velista `0208`, target state 19).
+      reportExtra: true,
     });
+
+    if (this._gone) {
+      // The page went while the add was out. The store holds what the server
+      // answered; nothing is left to mark, say or ask on, and a render hook of a
+      // destroyed page would throw.
+      return;
+    }
 
     // The words were held in the field while the add was out, a card's too. Whether
     // the popover that sent them is still open for them is read off the add itself,
@@ -2950,6 +3120,31 @@ export class BasketPage {
       // `addOutcome` (a gateway of before backend `0260`) a raise is told by a line
       // this basket already showed.
       this._markTook([line.lineId]);
+      const extra = result.extra;
+      const raisedRow = this._store.rowFor(line.lineId);
+      const column = this._column()?.nativeElement;
+      if (
+        result.addOutcome === 'raised' &&
+        extra !== undefined &&
+        extra.countable > 0 &&
+        raisedRow !== null &&
+        column !== undefined &&
+        this._inFront(column)
+      ) {
+        // Velista `0208`, target state 19 (the removable handoff): the question is
+        // asked on the row's "Lists and amounts", which this opens.
+        void this._handoff.send(
+          { rowKey: raisedRow.rowKey, lineId: line.lineId, extra },
+          () =>
+            this._router.navigate(
+              sheetSegments('rows', raisedRow.rowKey, 'lists'),
+              {
+                relativeTo: this._route,
+                queryParams: this._search.kept(this._route),
+              }
+            )
+        );
+      }
       const shown = this._shownRow(line.lineId);
       this._say(
         this._translator.t('list.addChoice.merged', undefined, this._locale(), {

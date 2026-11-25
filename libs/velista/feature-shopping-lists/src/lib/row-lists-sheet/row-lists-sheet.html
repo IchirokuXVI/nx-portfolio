@@ -73,7 +73,7 @@
 
     <ul class="rows">
       @for (list of lists(); track list.lineId) {
-        <li #rowElement class="row">
+        <li [attr.data-line-id]="list.lineId" #rowElement class="row">
           <div class="row-top">
             <!--
               The list's reading column: its name, "zone · line", "Bought 2 of
@@ -164,6 +164,13 @@
       }
     </ul>
   </section>
+
+  <!--
+    The question about the extra already bought (velista 0208, target state 17),
+    held against the raised list's stepper, and the notice a count that wrote
+    nothing leaves in its place.
+  -->
+  <lib-extra-ask-popover />
 
   @if (failure(); as failed) {
     <p aria-live="assertive" class="failed" role="alert">

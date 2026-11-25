@@ -1,10 +1,13 @@
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
   DestroyRef,
   effect,
+  ElementRef,
   inject,
+  Injector,
   signal,
   untracked,
 } from '@angular/core';
@@ -19,6 +22,7 @@ import {
   BasketViewStore,
   ChangeLandingStore,
   ItemNames,
+  MemberNames,
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
@@ -27,6 +31,7 @@ import {
   isMeasured,
   shownOffer,
   soldAs,
+  type AbsorbedExtra,
   type BasketProduct,
   type BasketRow,
   type BasketRowEntry,
@@ -50,6 +55,8 @@ import {
   AmountFigure,
   AnchoredPopover,
   ChevronLeftIcon,
+  ExtraAskHost,
+  ExtraAskPopover,
   priceWords,
   productBrandSizeText,
   ProductPicture,
@@ -57,9 +64,11 @@ import {
   SheetShell,
   unitPriceWords,
   type AnchoredPopoverClose,
+  type ExtraCountOutcome,
 } from '@portfolio/velista/ui';
 import { basketErrorKey, correlationIdOf } from '../basket-error-copy';
 import { basketLineStep } from '../basket-line-step';
+import { ExtraAskHandoff } from '../basket-page/extra-ask-handoff';
 import { settleSheetPath } from '../basket-paths';
 import {
   changeableLineIds,
@@ -157,6 +166,7 @@ interface DrawnList {
     AmountFigure,
     AnchoredPopover,
     ChevronLeftIcon,
+    ExtraAskPopover,
     ProductPicture,
     QuantityStepper,
     RokuTranslatorPipe,
@@ -165,6 +175,9 @@ interface DrawnList {
   templateUrl: './row-lists-sheet.html',
   styleUrl: './row-lists-sheet.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  // The question about the extra already bought (velista `0208`, target state
+  // 17), one per sheet, so it goes with the sheet.
+  providers: [ExtraAskHost],
 })
 export class RowListsSheet {
   private readonly _store = inject(BasketStore);
@@ -178,6 +191,10 @@ export class RowListsSheet {
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _rowKey = rowKeyOf(inject(ActivatedRoute));
+  private readonly _names = inject(MemberNames);
+  private readonly _extraHost = inject(ExtraAskHost);
+  private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly _injector = inject(Injector);
 
   /** The row, read live, by its key and then by any entry's line id. */
   protected readonly row = computed<BasketRow | null>(() =>
@@ -208,8 +225,25 @@ export class RowListsSheet {
   private readonly _demandRuns = quantityRuns<string>((lineId, run) => {
     const seen = this._seen.get(lineId);
     this._seen.delete(lineId);
-    void this._write(lineId, run.to, () => this._demand(lineId, run, seen));
+    // Numbered when it is queued, so an answer can tell that a newer write of the
+    // line went out, or waits, after it (velista `0208`).
+    const sent = this._noteSent(lineId);
+    void this._write(lineId, run.to, () =>
+      this._demand(lineId, run, seen, sent)
+    );
   });
+
+  /** The newest write queued for each line, numbered (velista `0208`). */
+  private readonly _sentRuns = new Map<string, number>();
+  private _sentCount = 0;
+
+  /** Number a write of a line, and drop a waiting question it replaces. */
+  private _noteSent(lineId: string): number {
+    const sent = ++this._sentCount;
+    this._sentRuns.set(lineId, sent);
+    this._extraHost.dropWaiting(lineId);
+    return sent;
+  }
 
   /**
    * The `left` each open run started from, by line id: the entry's, or `'answer'`
@@ -322,6 +356,29 @@ export class RowListsSheet {
     inject(DestroyRef).onDestroy(() => {
       this._left = true;
     });
+
+    const me = () => this._store.me();
+    this._extraHost.connect({
+      // A guest is never "You": the server names a guest's own buy as the
+      // basket's owner (backend `0275`), and a guest has no account to be.
+      readerId: () => (me()?.kind === 'GUEST' ? null : (me()?.userId ?? null)),
+      // A guest is not served the members of a group, so every buyer is
+      // "Someone" (velista `0208`, target state 20).
+      nameOf: (zoneId, userId) =>
+        me()?.kind === 'GUEST' || zoneId === ''
+          ? null
+          : this._names.nameOf(zoneId, userId),
+    });
+
+    // Velista `0208`, target state 19 (the removable handoff): the basket's "Add or
+    // find" raised a line of this row over extra already bought, and its question
+    // is asked here once the sheet has finished opening.
+    const pending = inject(ExtraAskHandoff, { optional: true })?.take(
+      this._rowKey()
+    );
+    if (pending !== undefined && pending !== null) {
+      this._askWhenOpen(pending.lineId, pending.extra);
+    }
 
     // A row whose key moved is followed in place, as the settle sheet follows it.
     effect(() => {
@@ -485,7 +542,8 @@ export class RowListsSheet {
   private async _demand(
     lineId: string,
     run: QuantityRun,
-    seen: number | 'answer' | undefined
+    seen: number | 'answer' | undefined,
+    sent: number
   ): Promise<boolean> {
     const entry = this._entry(lineId);
     if (entry === undefined) {
@@ -499,10 +557,14 @@ export class RowListsSheet {
         ? (this._answered.get(lineId) ?? entry.left)
         : (seen ?? Math.max(0, run.from - (entry.asked - entry.left)));
     this.failure.set(null);
+    // A rising ask asks the answer what it took into the ask (velista `0208`,
+    // target state 17). A lowering never does.
+    const raising = run.to > run.from;
     const result = await this._store.setDemand({
       lineId,
       quantity: run.to,
       from,
+      ...(raising ? { reportExtra: true as const } : {}),
     });
     if (result === null) {
       this._answered.set(lineId, from);
@@ -534,7 +596,126 @@ export class RowListsSheet {
         )
       );
     }
+    if (raising && result.extra !== undefined && !this._left) {
+      this._ask(
+        lineId,
+        result.extra,
+        () => this._sentRuns.get(lineId) === sent
+      );
+    }
     return true;
+  }
+
+  /**
+   * The question the basket's "Add or find" handed over (velista `0208`, target
+   * state 19), asked once the sheet's panel has finished coming up. A line the
+   * sheet does not draw asks nothing, and so does a write of the line made since.
+   */
+  private _askWhenOpen(lineId: string, extra: AbsorbedExtra): void {
+    // Any write of the line from here on is newer than the add that asked.
+    const writes = this._sentCount;
+    afterNextRender(
+      () => {
+        if (this._left) {
+          return;
+        }
+        const element = this._host.nativeElement;
+        const moving =
+          element.getAnimations?.({ subtree: true }).map((one) =>
+            one.finished.then(
+              () => undefined,
+              () => undefined
+            )
+          ) ?? [];
+        void Promise.all(moving).then(() => {
+          if (!this._left) {
+            this._ask(
+              lineId,
+              extra,
+              () => (this._sentRuns.get(lineId) ?? 0) <= writes
+            );
+          }
+        });
+      },
+      { injector: this._injector }
+    );
+  }
+
+  /**
+   * A rising ask answered with what it took into the ask (velista `0208`, target
+   * state 17): asked on that list's stepper, above its row as the board draws it
+   * (frames 6 and 12). Y is the answered entry's `asked`, which the stepper shows
+   * from this answer on, and Z what "Count the extra" leaves. Only while the
+   * sheet is open and in front, and only when no newer write of the line is open
+   * or queued; otherwise nothing is asked and the ask set stands.
+   */
+  private _ask(
+    lineId: string,
+    extra: AbsorbedExtra,
+    newest: () => boolean
+  ): void {
+    const entry = this._entry(lineId);
+    const row = this.row();
+    if (entry === undefined || row === null) {
+      return;
+    }
+    const ref =
+      entry.listId === null ? undefined : this._store.lists().get(entry.listId);
+    const zoneId = ref?.zoneId ?? '';
+    if (zoneId !== '' && this._store.me()?.kind !== 'GUEST') {
+      void this._names.ensure(zoneId);
+    }
+    const shown = entry.asked;
+    const expect = entry.left;
+    const rowKey = row.rowKey;
+    const doc = this._host.nativeElement.ownerDocument;
+    const item = () =>
+      Array.from(
+        this._host.nativeElement.querySelectorAll<HTMLElement>(
+          'li.row[data-line-id]'
+        )
+      ).find((held) => held.dataset['lineId'] === lineId) ?? null;
+    this._extraHost.ask({
+      lineId,
+      zoneId,
+      unit: entry.unit,
+      extra,
+      shown,
+      origin: () =>
+        item()?.querySelector<HTMLElement>('lib-quantity-stepper') ?? null,
+      keepInSight: item,
+      side: 'above',
+      count: () => this._countExtra(rowKey, lineId, extra.countable, expect),
+      inFront: () =>
+        !this._left &&
+        !this._following() &&
+        this.explained() === null &&
+        doc.visibilityState !== 'hidden',
+      current: () =>
+        newest() &&
+        !this._demandRuns.pending().has(lineId) &&
+        this._entry(lineId)?.asked === shown,
+    });
+  }
+
+  /**
+   * "Count the extra" on one list (velista `0208`, target states 4 and 17): the
+   * store lowers the entry by what the report made countable at once, expecting
+   * it to still hold the `left` the answer gave.
+   */
+  private async _countExtra(
+    rowKey: string,
+    lineId: string,
+    amount: number,
+    expect: number
+  ): Promise<ExtraCountOutcome> {
+    const outcome = await this._store.countExtra(
+      rowKey,
+      lineId,
+      amount,
+      expect
+    );
+    return outcome === 'counted' ? 'done' : outcome;
   }
 
   /** One write per line at a time: a write queued behind one waits for it. */

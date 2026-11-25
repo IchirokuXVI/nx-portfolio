@@ -10,7 +10,8 @@ import { join, relative, sep } from 'node:path';
  * called only from the `count` an `ExtraAskHost` request carries: written inline in
  * that property, or in a private `_countExtra` that only such a property calls. And
  * each control the plan's target states 11 to 14 and 16 name passes `reportExtra`
- * (stage 3 adds the zone list's "Add or find" field and its cards). A text
+ * (stage 3 adds the zone list's "Add or find" field and its cards; stage 4 the
+ * basket's "Lists and amounts", its catalog cards and its "Add or find"). A text
  * scan rather than a spec per page, because the rule is about every screen that
  * exists and every one added later.
  */
@@ -21,6 +22,10 @@ const WORKSPACE = join(SCOPE, '..', '..');
 
 /** The data layer, which carries the calls and may name them freely. */
 const DATA_LAYER = [
+  'libs/velista/data-access/src/lib/baskets/basket-api.ts',
+  'libs/velista/data-access/src/lib/baskets/basket-memory.ts',
+  'libs/velista/data-access/src/lib/baskets/basket-service.ts',
+  'libs/velista/data-access/src/lib/baskets/basket-store.ts',
   'libs/velista/data-access/src/lib/catalog/catalog-add-store.ts',
   'libs/velista/data-access/src/lib/lines/line-api.ts',
   'libs/velista/data-access/src/lib/lines/line-memory.ts',
@@ -32,12 +37,14 @@ const DATA_LAYER = [
   'libs/velista/ui/src/lib/list/extra-ask-host.ts',
 ];
 
-/** The hosts that ask, through `ExtraAskHost` (target states 10 to 14). */
+/** The hosts that ask, through `ExtraAskHost` (target states 10 to 19). */
 const HOSTS = [
   'libs/velista/feature-catalog/src/lib/catalog-extra-ask.ts',
   'libs/velista/feature-lists/src/lib/line-detail-sheet/line-detail-sheet.ts',
   'libs/velista/feature-lists/src/lib/line-page/line-page.ts',
   'libs/velista/feature-lists/src/lib/list-page/list-page.ts',
+  'libs/velista/feature-shopping-lists/src/lib/basket-page/basket-page.ts',
+  'libs/velista/feature-shopping-lists/src/lib/row-lists-sheet/row-lists-sheet.ts',
 ];
 
 function sources(dir: string): string[] {
@@ -94,7 +101,9 @@ describe('every raise reports the extra, and only the question counts it', () =>
         );
     const calls = lines
       .map((line, at) => ({ line, at }))
-      .filter(({ line }) => /\b(this\._lines|adds)\.countExtra\(/.test(line));
+      .filter(({ line }) =>
+        /\b(this\._lines|this\._store|adds)\.countExtra\(/.test(line)
+      );
     expect(calls.length).toBeGreaterThan(0);
     for (const { at } of calls) {
       expect({ at: at + 1, inCount: opens(at) }).toEqual({
@@ -139,12 +148,6 @@ describe('every raise reports the extra, and only the question counts it', () =>
       4,
     ],
     [
-      'the zone list\'s "Add or find", its add and a chosen line (target state 16)',
-      'libs/velista/feature-lists/src/lib/list-page/list-page.ts',
-      /reportExtra: true/,
-      2,
-    ],
-    [
       'the catalog cards in the results of "Add or find" (target state 16)',
       'libs/velista/feature-lists/src/lib/list-page/list-page.ts',
       /this\._runControls\.set\(lineId, \{ card: change\.cardKey \}\)/,
@@ -156,8 +159,38 @@ describe('every raise reports the extra, and only the question counts it', () =>
       /reportExtra: true/,
       1,
     ],
+    [
+      'the basket\'s "Lists and amounts", a rising ask (target state 17)',
+      'libs/velista/feature-shopping-lists/src/lib/row-lists-sheet/row-lists-sheet.ts',
+      /\.\.\.\(raising \? \{ reportExtra: true as const \} : \{\}\)/,
+      1,
+    ],
+    [
+      'the basket\'s catalog cards (target state 18) and its "Add or find" (target state 19)',
+      'libs/velista/feature-shopping-lists/src/lib/basket-page/basket-page.ts',
+      /reportExtra: true/,
+      2,
+    ],
   ])('%s passes reportExtra', (_what, file, pattern, times) => {
     expect(read(file).filter((line) => pattern.test(line)).length).toBe(times);
+  });
+
+  // Every add of the zone list's "Add or find" that can raise a line reports
+  // (target state 16): the field's add and a chosen line. "A new line" makes one
+  // and raises none.
+  it('the zone list\'s "Add or find" reports on every add that can raise', () => {
+    const source = read(
+      'libs/velista/feature-lists/src/lib/list-page/list-page.ts'
+    ).join('\n');
+    const sends = [...source.matchAll(/this\._send\(([\s\S]*?)\);/g)].map(
+      (match) => match[1]
+    );
+    const raising = sends.filter((send) => !/newLine: true/.test(send));
+    expect(sends).toHaveLength(3);
+    expect(raising).toHaveLength(2);
+    for (const send of raising) {
+      expect(send).toMatch(/reportExtra: true/);
+    }
   });
 
   // Velista `0208`, spec 9: "Still need" sends nothing, so nothing remembers it.

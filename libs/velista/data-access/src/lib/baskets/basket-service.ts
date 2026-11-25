@@ -5,6 +5,7 @@ import type {
   BasketAddLineRequest,
   BasketBuyForListRequest,
   BasketChangePage,
+  BasketCountExtraRequest,
   BasketDemandRequest,
   BasketLinkPreview,
   BasketMarks,
@@ -245,6 +246,18 @@ export interface BasketServiceI {
   setDemand(
     basketId: string,
     body: BasketDemandRequest
+  ): Promise<BasketRowResult>;
+
+  /**
+   * "Count the extra" on one line of a row (`POST
+   * /v1/baskets/:id/rows/:rowKey/extra`, backend `0276`; velista `0208`, target
+   * state 17): take `amount` off the line's ask, keyed by the line as the demand
+   * is. A line that no longer holds `expect` is refused with `stale_quantity` and
+   * nothing is written. The answer is the line as it now stands, and `counted`.
+   */
+  countExtra(
+    basketId: string,
+    body: BasketCountExtraRequest
   ): Promise<BasketRowResult>;
 
   /**

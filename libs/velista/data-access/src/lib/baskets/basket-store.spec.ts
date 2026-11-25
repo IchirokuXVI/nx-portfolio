@@ -178,6 +178,7 @@ function build(
     skip: (id, target) => memory.skip(id, target),
     unskip: (id, target) => memory.unskip(id, target),
     setDemand: (id, body) => memory.setDemand(id, body),
+    countExtra: (id, body) => memory.countExtra(id, body),
     changeProduct: (id, body) => memory.changeProduct(id, body),
     productLists: (id, itemId) => memory.productLists(id, itemId),
     addLine: (id, body) => memory.addLine(id, body),
@@ -3488,5 +3489,136 @@ describe('BasketStore: one list of a row steps what was bought (velista 0201)', 
     expect(result).toBeNull();
     expect(store.error()).toBe(refusal);
     expect(getBasket.mock.calls.length).toBeGreaterThan(reads);
+  });
+});
+
+/**
+ * "Count the extra" on a basket row (velista `0208`, target state 17): the entry
+ * goes down at once, the answered line lands, a refusal shows the server's line,
+ * and any other failure puts the entry back.
+ */
+describe('BasketStore: the extra already bought (velista 0208)', () => {
+  /** Milk bought 2 above its ask, then its ask raised by 2: asks 4 more, 2 left. */
+  async function raisedOverExtra(overrides: Partial<BasketServiceI> = {}) {
+    const built = build(overrides);
+    const milk = (await built.memory.getBasket()).rows.find(
+      (row) => row.content === 'Milk'
+    );
+    const line = milk?.entries[0];
+    if (line === undefined) {
+      throw new Error('the fixture basket lost its milk');
+    }
+    await built.memory.settle(
+      'basket-saturday',
+      { rowKey: line.lineId, lineIds: [line.lineId] },
+      {
+        outcome: 'BOUGHT',
+        quantity: line.left + 2,
+        from: line.left,
+        unit: 'UNIT',
+      }
+    );
+    await built.store.open('basket-saturday');
+    const over = entryOf(built.store, line.lineId);
+    const result = await built.store.setDemand({
+      lineId: line.lineId,
+      quantity: over.asked + 2,
+      from: over.left,
+      reportExtra: true,
+    });
+    return {
+      ...built,
+      lineId: line.lineId,
+      rowKey: rowOf(built.store, 'Milk').rowKey,
+      over,
+      result,
+    };
+  }
+
+  function entryOf(store: BasketStore, lineId: string) {
+    const found = rowOf(store, 'Milk').entries.find(
+      (held) => held.lineId === lineId
+    );
+    if (found === undefined) {
+      throw new Error(`no entry ${lineId}`);
+    }
+    return found;
+  }
+
+  it('answers what a rising demand took into the ask', async () => {
+    const { result, store, lineId, over } = await raisedOverExtra();
+
+    expect(result?.extra).toMatchObject({ above: 2, countable: 2 });
+    expect(entryOf(store, lineId)).toMatchObject({
+      left: 2,
+      asked: over.asked + 4,
+    });
+  });
+
+  it('counts, and the entry takes the answered line', async () => {
+    const { store, lineId, rowKey, over } = await raisedOverExtra();
+
+    expect(await store.countExtra(rowKey, lineId, 2, 2)).toBe('counted');
+    expect(entryOf(store, lineId)).toMatchObject({
+      left: 0,
+      asked: over.asked + 2,
+    });
+  });
+
+  it('lowers the entry at once, before the answer', async () => {
+    let answer: () => void = () => undefined;
+    const holder: { memory?: BasketMemory } = {};
+    const built = await raisedOverExtra({
+      countExtra: (id, body) =>
+        new Promise((resolve, reject) => {
+          answer = () =>
+            (holder.memory as BasketMemory)
+              .countExtra(id, body)
+              .then(resolve, reject);
+        }),
+    });
+    holder.memory = built.memory;
+    const counting = built.store.countExtra(built.rowKey, built.lineId, 2, 2);
+
+    expect(entryOf(built.store, built.lineId)).toMatchObject({
+      left: 0,
+      asked: built.over.asked + 2,
+    });
+    answer();
+    expect(await counting).toBe('counted');
+  });
+
+  it('answers stale for a line that moved, and shows the server line', async () => {
+    const { store, lineId, rowKey, over } = await raisedOverExtra();
+
+    expect(await store.countExtra(rowKey, lineId, 1, 1)).toBe('stale');
+    await flush();
+    expect(entryOf(store, lineId)).toMatchObject({
+      left: 2,
+      asked: over.asked + 4,
+    });
+  });
+
+  it('puts the entry back on any other failure, and is never sent again', async () => {
+    const sent: unknown[] = [];
+    const { store, lineId, rowKey, over } = await raisedOverExtra({
+      countExtra: async (_id, body) => {
+        sent.push(body);
+        throw new GatewayError({
+          code: 'forbidden',
+          status: 403,
+          correlationId: 'spec',
+          detail: 'no',
+        });
+      },
+    });
+
+    expect(await store.countExtra(rowKey, lineId, 2, 2)).toBe('failed');
+    await flush();
+    expect(entryOf(store, lineId)).toMatchObject({
+      left: 2,
+      asked: over.asked + 4,
+    });
+    expect(sent).toHaveLength(1);
   });
 });

@@ -40,6 +40,7 @@ import {
   type LiveBasketSummary,
   type ScopeLocation,
 } from '@portfolio/velista/models';
+import { toAbsorbedExtra, toCounted } from './absorbed-extra-mapper';
 import { toAddOutcome } from './add-choice-mappers';
 import { toProductCategories } from './category-mappers';
 import { toLocalizedName, toProductOffer } from './mappers';
@@ -473,10 +474,17 @@ export function toBasketRowResult(raw: unknown): BasketRowResult | null {
 
   // Only the line add names it (backend `0260`); every other write leaves it out.
   const addOutcome = toAddOutcome(raw['addOutcome']);
+  // Only a demand or an add sent with `reportExtra` that raised the line names it
+  // (backend `0276`), and only the count names `counted`. Either one this build
+  // cannot read whole is left out, and a left out `extra` asks nothing.
+  const extra = toAbsorbedExtra(raw['extra']);
+  const counted = toCounted(raw['counted']);
   return {
     entries: mapArray(raw['entries'], (entry) => toBasketRowEntry(entry)),
     skippedCount: atLeastZero(raw['skippedCount']),
     ...(addOutcome === null ? {} : { addOutcome }),
+    ...(extra === null ? {} : { extra }),
+    ...(counted === null ? {} : { counted }),
   };
 }
 
