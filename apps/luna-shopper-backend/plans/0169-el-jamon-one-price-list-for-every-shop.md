@@ -429,7 +429,8 @@ Harvester:
 
 ## Notes after the build (2026-11-25)
 
-These notes record a defect of the detail stage and its fix. Where the text above disagrees,
+These notes record a defect of the detail stage and its fix
+([#1106](https://github.com/IchirokuXVI/nx-portfolio/pull/1106)). Where the text above disagrees,
 these notes hold.
 
 **The shop draws part of a product page from the session.** It keeps a current product in the
