@@ -39,9 +39,11 @@ import type {
  * detail stage (plan 0253, D1). An attempt is one request the transport sent,
  * a retry included, and it is silent when it timed out. With six workers and a
  * 30 second idle timeout, 20 is about 100 seconds of a chain that answers
- * nothing. Any attempt that gets an answer, a 404 included, starts the count
- * again. A reset connection, a socket hang up or a DNS failure is no answer
- * and no silence, so it leaves the count as it is.
+ * nothing. An attempt that gets an answer, a 404 included, starts the count
+ * again, except an answer to a session start (the `/` and postal code
+ * requests), which leaves the count as it is; a session start that times out
+ * still counts. A reset connection, a socket hang up or a DNS failure is no
+ * answer and no silence, so it leaves the count as it is.
  */
 export const DETAIL_TIMEOUTS_IN_A_ROW = 20;
 
@@ -124,11 +126,21 @@ function urlOf(input: string | URL | Request): string {
  * retries included, even when a retry then answered. The shop may still
  * answer that request late and move the session's current product, so the
  * next page opens a fresh session rather than read on that one. So the pool
- * holds at most `workers` clients at once plus the ones it dropped.
+ * holds at most `workers` clients at once.
+ *
+ * **A dropped client is let go**: its requests are added to a total the pool
+ * keeps, and the pool holds no reference to it. Each client keeps the home
+ * page it read, so a chain that resets many pages would otherwise keep a
+ * dropped client per reset alive until the run ends.
  */
 export class SessionPool {
   private readonly idle: ElJamonClient[] = [];
-  private readonly opened: ElJamonClient[] = [];
+  /** The clients not dropped, idle or in use. */
+  private readonly live = new Set<ElJamonClient>();
+  /** Clients ever opened, the listing's and the dropped ones included. */
+  private openedCount = 0;
+  /** Requests of the clients already dropped, retries included. */
+  private droppedRequests = 0;
   /** Sessions dropped after a request with no answer. On the report. */
   dropped = 0;
 
@@ -141,7 +153,7 @@ export class SessionPool {
     first?: ElJamonClient
   ) {
     if (first) {
-      this.opened.push(first);
+      this.track(first);
       this.idle.push(first);
     }
   }
@@ -154,7 +166,10 @@ export class SessionPool {
       return await work(client);
     } finally {
       if (client.transportFailures > failuresBefore) {
-        // Still in `opened`, so its requests stay on the report.
+        // Its requests stay on the report through the total; the client
+        // itself is let go.
+        this.droppedRequests += client.requests;
+        this.live.delete(client);
         this.dropped += 1;
       } else {
         this.idle.push(client);
@@ -164,18 +179,32 @@ export class SessionPool {
 
   /** How many sessions the run used, the listing's included. */
   get size(): number {
-    return this.opened.length;
+    return this.openedCount;
+  }
+
+  /** How many clients the pool still holds, idle or in use. */
+  get held(): number {
+    return this.live.size;
   }
 
   /** Every request of every client, retries and session starts included. */
   get requests(): number {
-    return this.opened.reduce((sum, client) => sum + client.requests, 0);
+    let sum = this.droppedRequests;
+    for (const client of this.live) {
+      sum += client.requests;
+    }
+    return sum;
   }
 
   private openOne(): ElJamonClient {
     const client = this.open();
-    this.opened.push(client);
+    this.track(client);
     return client;
+  }
+
+  private track(client: ElJamonClient): void {
+    this.openedCount += 1;
+    this.live.add(client);
   }
 }
 

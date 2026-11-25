@@ -203,6 +203,46 @@ describe('a page that states another product code than the one asked (plan 0169,
   it('marks nothing when no code was asked for', () => {
     expect(parseProductPage(clean)?.otherProductCode).toBeNull();
   });
+
+  /** A page whose JSON-LD carries `fields`, written as the shop writes them. */
+  const pageWith = (fields: string): string =>
+    '<script type="application/ld+json">{"@type": "Product", ' +
+    `"name": "palomitas saladas, 80g", ${fields}}</script>`;
+
+  it('reads a numeric sku equal to the asked code as the asked product', () => {
+    expect(
+      parseProductPage(pageWith('"sku": 33002037'), '33002037')
+    ).toMatchObject({ code: '33002037', otherProductCode: null });
+  });
+
+  it('reads a sku with spaces around it as the asked product', () => {
+    expect(
+      parseProductPage(pageWith('"sku": "  33002037 "'), '33002037')
+    ).toMatchObject({ code: '33002037', otherProductCode: null });
+  });
+
+  it('reads a JSON-LD url with a query string as the asked product', () => {
+    const page = pageWith(
+      '"url": "https://www.supermercadoseljamon.com/detalle/-/Producto/palomitas-saladas-80g/33002037?utm=x"'
+    );
+    expect(parseProductPage(page, '33002037')).toMatchObject({
+      code: '33002037',
+      otherProductCode: null,
+    });
+  });
+
+  it('documents the current behaviour: a numeric sku that lost its leading zero reads as another product', () => {
+    // A number cannot carry a leading zero, so `01234567` written as a JSON
+    // number reads as `1234567`. Whether that is the asked product is the
+    // owner's to decide; today the page is marked as another product's.
+    expect(
+      parseProductPage(pageWith('"sku": 1234567'), '01234567')
+    ).toMatchObject({
+      code: '1234567',
+      otherProductCode: '1234567',
+      categoryPath: [],
+    });
+  });
 });
 
 describe('parseBreadcrumb', () => {

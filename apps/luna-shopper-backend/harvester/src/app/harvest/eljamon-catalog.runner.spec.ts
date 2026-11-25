@@ -18,8 +18,10 @@ import {
 } from './catalog-runner';
 import { mergeCategoryPaths } from './category-paths';
 import {
+  DETAIL_TIMEOUTS_IN_A_ROW,
   ElJamonCatalogRunner,
-  type SilentAttempts,
+  SessionPool,
+  SilentAttempts,
 } from './eljamon-catalog.runner';
 import { FailingRunReport } from './failing-run-report.fake';
 import type { RunContext } from './run-context';
@@ -2172,5 +2174,134 @@ describe('ElJamonCatalogRunner', () => {
         droppedSessions: 0,
       });
     });
+  });
+});
+
+describe('SessionPool (plan 0169, notes of 2026-11-26)', () => {
+  /** A client with only what the pool reads: its two counters. */
+  const fakeClient = (): ElJamonClient =>
+    ({ requests: 0, transportFailures: 0 }) as unknown as ElJamonClient;
+
+  it('lets a dropped client go, and still counts its requests', async () => {
+    const first = fakeClient();
+    const opened: ElJamonClient[] = [];
+    const pool = new SessionPool(() => {
+      const client = fakeClient();
+      opened.push(client);
+      return client;
+    }, first);
+
+    // The listing's client answers two pages, then meets a reset connection.
+    await pool.use(async (client) => {
+      client.requests += 2;
+    });
+    await pool.use(async (client) => {
+      expect(client).toBe(first);
+      client.requests += 3;
+      client.transportFailures += 1;
+    });
+    expect(pool.dropped).toBe(1);
+    expect(pool.held).toBe(0);
+    expect(pool.requests).toBe(5);
+
+    // The next page opens a fresh session, never the dropped one.
+    await pool.use(async (client) => {
+      expect(client).not.toBe(first);
+      client.requests += 4;
+    });
+    expect(opened).toHaveLength(1);
+    expect(pool.held).toBe(1);
+    expect(pool.size).toBe(2);
+    // The dropped client's five requests and the fresh one's four.
+    expect(pool.requests).toBe(9);
+  });
+
+  it('holds no dropped client however many pages met a reset', async () => {
+    const pool = new SessionPool(fakeClient);
+    for (let page = 0; page < 50; page += 1) {
+      await pool.use(async (client) => {
+        client.requests += 2;
+        client.transportFailures += 1;
+      });
+    }
+    expect(pool.dropped).toBe(50);
+    expect(pool.held).toBe(0);
+    expect(pool.size).toBe(50);
+    expect(pool.requests).toBe(100);
+  });
+
+  it('drops a client whose work threw, and keeps its requests', async () => {
+    const pool = new SessionPool(fakeClient);
+    await expect(
+      pool.use(async (client) => {
+        client.requests += 1;
+        client.transportFailures += 1;
+        throw new Error('socket hang up');
+      })
+    ).rejects.toThrow('socket hang up');
+    expect(pool.held).toBe(0);
+    expect(pool.requests).toBe(1);
+  });
+});
+
+describe('SilentAttempts and a session start (plan 0169, notes of 2026-11-26)', () => {
+  const timeout = (url: string) => new ElJamonTimeoutError(url, 30_000);
+
+  /** A transport that answers or times out per URL, counted by `silence`. */
+  function watched(
+    silence: SilentAttempts,
+    answer: (url: URL) => 'answer' | 'timeout'
+  ): typeof fetch {
+    return silence.watch((async (input: string) => {
+      const url = new URL(input);
+      if (answer(url) === 'timeout') {
+        throw timeout(input);
+      }
+      return new Response('');
+    }) as unknown as typeof fetch);
+  }
+
+  it('starts no new count on an answer to a session start', async () => {
+    const silence = new SilentAttempts();
+    const send = watched(silence, (url) =>
+      url.pathname.includes('/detalle/') ? 'timeout' : 'answer'
+    );
+
+    for (let page = 0; page < DETAIL_TIMEOUTS_IN_A_ROW; page += 1) {
+      await expect(
+        send(`${BASE}/detalle/-/Producto/p/${page}`)
+      ).rejects.toThrow();
+      // A fresh session after each page: its home page and postal code answer.
+      await send(`${BASE}/`);
+      await send(`${BASE}/delegate/seleccionarCodPostalAjaxServletFood`);
+    }
+
+    expect(silence.inARow).toBe(DETAIL_TIMEOUTS_IN_A_ROW);
+    expect(silence.exhausted).toBe(true);
+  });
+
+  it('counts a session start that times out', async () => {
+    const silence = new SilentAttempts();
+    const send = watched(silence, () => 'timeout');
+
+    await expect(send(`${BASE}/`)).rejects.toThrow();
+    await expect(send(`${BASE}/detalle/-/Producto/p/1`)).rejects.toThrow();
+
+    expect(silence.inARow).toBe(2);
+    expect(silence.total).toBe(2);
+  });
+
+  it('starts the count again on an answer to a product page', async () => {
+    const silence = new SilentAttempts();
+    let answers = false;
+    const send = watched(silence, () => (answers ? 'answer' : 'timeout'));
+
+    await expect(send(`${BASE}/detalle/-/Producto/p/1`)).rejects.toThrow();
+    await expect(send(`${BASE}/`)).rejects.toThrow();
+    answers = true;
+    await send(`${BASE}/detalle/-/Producto/p/2`);
+
+    expect(silence.inARow).toBe(0);
+    expect(silence.total).toBe(2);
   });
 });
