@@ -4434,3 +4434,120 @@ describe('SourceIngest, a decision made while the walk runs (plan 0269)', () => 
     expect(Object.keys(guarded[0][1]).sort()).toEqual([...decided].sort());
   });
 });
+
+/**
+ * What a LIDL week does not state stays as an earlier week stored it (owner
+ * decision 141a). The two observations are the shapes
+ * `lidl-catalog.runner.ts` reports, asserted there; this is where the row
+ * write is decided.
+ */
+describe('SourceIngest, a LIDL week that does not state a stored value (owner decision 141a)', () => {
+  const session = {
+    supermarketId: CHAIN,
+    defaultPriceScopeId: SCOPE,
+    sourceKind: PriceSourceKind.OFFICIAL_API,
+  };
+  const bound = {
+    status: SourceEntryStatus.ACTIVE,
+    matchedBy: ItemSourceMatch.MANUAL,
+    itemId: 'item-1',
+    decidedAt: new Date('2026-09-01T00:00:00Z'),
+  };
+
+  it('keeps the stored weight beside a printed range, and writes its figure as a price per kilo with no piece price', async () => {
+    const { ingest, context, saved, priceRows, catalog } = build({
+      rows: [
+        {
+          externalId: '11003305',
+          name: 'Filetes de lubina',
+          sizeFormat: 'Aprox.300 g',
+          approxWeight: 300,
+          ...bound,
+        },
+      ],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    await ingest.ingest(context, {
+      ...session,
+      observations: [
+        observation({
+          externalId: '11003305',
+          name: 'Filetes de lubina',
+          sizeFormat: 'ca.220-360g',
+          soldByWeight: false,
+          // As the runner reports a range: the key is there, and says nothing.
+          approxWeight: undefined,
+          price: {
+            price: null,
+            currency: 'EUR',
+            unitPrice: 21.99,
+            unitPriceLabel: 'kg',
+            validFrom: null,
+            validUntil: null,
+          },
+        }),
+      ],
+    });
+
+    expect(saved[0]).toMatchObject({
+      sizeFormat: 'ca.220-360g',
+      unitSize: null,
+      soldByWeight: false,
+      approxWeight: 300,
+    });
+    expect(priceRows[0]).toMatchObject({
+      price: null,
+      unitPrice: 21.99,
+      unitPriceLabel: 'kg',
+    });
+    expect(catalog.addPrices.mock.calls[0][1][0]).toMatchObject({
+      itemId: 'item-1',
+      price: null,
+      unitPrice: 21.99,
+      unitPriceLabel: 'kg',
+    });
+  });
+
+  it('keeps the stored format and size of a product listed with no price block', async () => {
+    const { ingest, context, saved, priceRows, catalog } = build({
+      rows: [
+        {
+          externalId: '11006339',
+          name: 'Empanada de atún',
+          sizeFormat: '500 g',
+          unitSize: 500,
+          sizeUnit: UnitOfMeasure.GRAM,
+          imageUrl: 'https://www.lidl.es/assets/gcp11006339.png',
+          ...bound,
+        },
+      ],
+    });
+
+    const { counters } = await ingest.ingest(context, {
+      ...session,
+      observations: [
+        {
+          externalId: '11006339',
+          detailFetched: false,
+          observedAt: new Date('2026-11-20T10:00:00.000Z'),
+          imageUrl: 'https://www.lidl.es/assets/gcp11006339.png',
+          prices: [],
+        },
+      ],
+    });
+
+    expect(saved[0]).toMatchObject({
+      name: 'Empanada de atún',
+      sizeFormat: '500 g',
+      unitSize: 500,
+      sizeUnit: UnitOfMeasure.GRAM,
+      status: SourceEntryStatus.ACTIVE,
+      itemId: 'item-1',
+      lastRunId: RUN,
+    });
+    expect(counters).toMatchObject({ created: 0, unchanged: 1 });
+    expect(priceRows).toEqual([]);
+    expect(catalog.addPrices).not.toHaveBeenCalled();
+  });
+});

@@ -66,7 +66,8 @@ function row(options: {
   title: string;
   category: string;
   brand?: string;
-  size?: string;
+  /** The size the index prints. Null prints no price block at all. */
+  size?: string | null;
   won?: string;
   /** `wonCategoryBreadcrumbs` of the row's `meta`, by name (plan 0268). */
   breadcrumbs?: string[][];
@@ -89,7 +90,14 @@ function row(options: {
             options.won ??
             'Mundos de necesidad/Comida y cerca de la comida/Quesos, productos lácteos y huevos/Queso',
         },
-        price: { price: 1.99, packaging: { text: options.size ?? '500 g' } },
+        ...(options.size === null
+          ? {}
+          : {
+              price: {
+                price: 1.99,
+                packaging: { text: options.size ?? '500 g' },
+              },
+            }),
         ians: ['80532'],
       },
     },
@@ -112,8 +120,11 @@ function crumbs(paths: string[][]): unknown[] {
 function product(options: {
   id: string;
   eans?: string[];
-  /** The size the page prints, verbatim. */
-  size?: string;
+  /**
+   * The size the page prints, verbatim. Null prints no format, as a page
+   * whose week holds no price block for the product.
+   */
+  size?: string | null;
   groups?: Array<{ priceId: string; regions: string[]; price: number | null }>;
   /**
    * The page's `wonCategoryBreadcrumbs`, by name (plan 0268). Absent leaves
@@ -158,7 +169,10 @@ function product(options: {
               wonCategoryPrimary:
                 'Mundos de necesidad/Comida y cerca de la comida/Quesos, productos lácteos y huevos/Queso',
             },
-            price: { packaging: { text: options.size ?? '500 g' } },
+            price:
+              options.size === null
+                ? { currencyCode: 'EUR' }
+                : { packaging: { text: options.size ?? '500 g' } },
             storeFacts: { retail: true, online: false },
             regionsV2,
             regionsPrices,
@@ -403,11 +417,20 @@ describe('LidlCatalogRunner', () => {
       // The tray's price, unchanged.
       prices: [expect.objectContaining({ price: 4.99 })],
     });
-    // A printed range is neither a size nor a weight.
+    // A printed range is no size, and it states no weight: absent, so the
+    // stored one stays (owner decision 141a). Its figure is per kilo.
     expect(bySize['Aprox. 360-460g']).toMatchObject({
       unitSize: null,
-      approxWeight: null,
+      soldByWeight: false,
+      prices: [
+        expect.objectContaining({
+          price: null,
+          unitPrice: 4.99,
+          unitPriceLabel: 'kg',
+        }),
+      ],
     });
+    expect(bySize['Aprox. 360-460g'].approxWeight).toBeUndefined();
     expect(bySize['500 g']).toMatchObject({
       unitSize: 500,
       sizeUnit: 'GRAM',
@@ -453,9 +476,11 @@ describe('LidlCatalogRunner', () => {
       scopeKey: '1',
       price: 2.5,
       currency: 'EUR',
-      // LIDL publishes no per kilogram figure, and deriving one would
-      // disagree with the chain on the field made for comparing.
+      // A block printed with a size is the price of the pack, and LIDL
+      // prints no per kilogram figure beside it. Deriving one would disagree
+      // with the chain on the field made for comparing.
       unitPrice: null,
+      unitPriceLabel: null,
       validFrom: new Date('2026-09-03T22:00Z'),
       validUntil: new Date('2026-09-06T21:59:59Z'),
     });
@@ -543,11 +568,91 @@ describe('LidlCatalogRunner', () => {
 
     await runner.run(context(), report, { supermarketId: CHAIN }, source());
 
-    // 21 of the week's products look like this. The catalog is allowed to know
-    // the article exists, so the product is reported with no price at all.
+    // A product the page prints a format for, with no price this week. The
+    // catalog is allowed to know the article exists, so the product is
+    // reported whole with no price at all.
     expect(report.products).toHaveLength(1);
     expect(report.products[0].prices).toEqual([]);
     expect(report.scopes).toEqual([]);
+  });
+
+  it('reads a product with no price block and no format from the listing alone (owner decision 141a)', async () => {
+    const runner = new TestRunner({
+      index: [
+        row({
+          id: '1',
+          title: 'Empanada de atún',
+          category: 'Food',
+          size: null,
+        }),
+      ],
+      products: { '/p/x/p1': product({ id: '1', size: null, groups: [] }) },
+    });
+
+    await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+    // LIDL prints the format only inside a price block. A full observation
+    // would state a null format and size, and the ingest would write them
+    // over the `500 g` a priced week stored. A partial one states neither.
+    expect(report.products).toEqual([]);
+    expect(report.partialProducts).toEqual([
+      {
+        externalId: '1',
+        detailFetched: false,
+        observedAt: expect.any(Date),
+        imageUrl: 'https://www.lidl.es/assets/gcp1.png',
+        prices: [],
+      },
+    ]);
+  });
+
+  it('writes the figure of a week printed with a weight range as a price per kilo, for each region (owner decision 141a)', async () => {
+    const runner = new TestRunner({
+      index: [
+        row({
+          id: '11003305',
+          title: 'Filetes de lubina',
+          category: 'Food',
+          size: 'ca.220-360g',
+        }),
+      ],
+      products: {
+        '/p/x/p11003305': product({
+          id: '11003305',
+          size: 'ca.220-360g',
+          groups: [
+            { priceId: 'mainland', regions: ['1', '2'], price: 21.99 },
+            { priceId: 'islands', regions: ['58'], price: 22.49 },
+          ],
+        }),
+      },
+    });
+
+    await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+    const [lubina] = report.products;
+    expect(lubina).toMatchObject({
+      sizeFormat: 'ca.220-360g',
+      unitSize: null,
+      sizeUnit: null,
+      soldByWeight: false,
+    });
+    // Not stated, so a weight stored from an `Aprox.300 g` week stays.
+    expect(lubina.approxWeight).toBeUndefined();
+    // No piece price at all, and none derived from a weight (option b, which
+    // the owner refused): a shopper sees no LIDL price this week.
+    expect(
+      lubina.prices.map((price) => [
+        price.scopeKey,
+        price.price,
+        price.unitPrice,
+        price.unitPriceLabel,
+      ])
+    ).toEqual([
+      ['1', null, 21.99, 'kg'],
+      ['2', null, 21.99, 'kg'],
+      ['58', null, 22.49, 'kg'],
+    ]);
   });
 
   it('lets a page that fails cost one product, and names it', async () => {

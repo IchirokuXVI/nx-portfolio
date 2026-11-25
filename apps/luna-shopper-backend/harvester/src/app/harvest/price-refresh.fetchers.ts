@@ -4,7 +4,6 @@ import {
   LidlClient,
   LidlHttpError,
   type LidlListRow,
-  type LidlProduct,
 } from '@portfolio/luna-shopper/lidl';
 import {
   MercadonaClient,
@@ -12,6 +11,7 @@ import {
   type MercadonaProduct,
 } from '@portfolio/luna-shopper/mercadona';
 import type { SourceCatalogEntry, SupermarketSource } from '../entities';
+import { lidlObservationPrices } from './lidl-catalog.runner';
 import type {
   PartialSourceObservation,
   SourceObservationPrice,
@@ -111,7 +111,9 @@ export const fetchLidl: RefreshFetcher = async (request) => {
       detailFetched: false,
       observedAt: product.observedAt,
       // The page has no field for it (plan 0181), so the row keeps its own.
-      prices: lidlPrices(product),
+      // Each price as the walk writes it, a week printed with a weight range
+      // by the kilo (owner decision 141a).
+      prices: lidlObservationPrices(product),
     },
   };
 };
@@ -161,24 +163,6 @@ function mercadonaPrices(
       validUntil: null,
     },
   ];
-}
-
-/**
- * One price per region, verbatim, with no unit price, as the walk writes them
- * (`lidl-catalog.runner.ts`): LIDL publishes no per kilogram figure.
- */
-function lidlPrices(product: LidlProduct): SourceObservationPrice[] {
-  return product.prices.flatMap((price) =>
-    price.regions.map((region) => ({
-      scopeKey: region.id,
-      price: price.price,
-      currency: price.currency,
-      unitPrice: null,
-      unitPriceLabel: null,
-      validFrom: price.validFrom,
-      validUntil: price.validUntil,
-    }))
-  );
 }
 
 /** The base URL a walk of this chain reads, from its row (plan 0083). */

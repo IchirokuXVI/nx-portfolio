@@ -1,5 +1,10 @@
 import { UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
-import { approxWeightIn, packCountIn, parseSize } from './size';
+import {
+  approxWeightIn,
+  isPrintedWeightRange,
+  packCountIn,
+  parseSize,
+} from './size';
 
 /**
  * Every string here was printed by the live assortment on 2026-09-06 (plan
@@ -182,5 +187,44 @@ describe('approxWeightIn (plan 0244)', () => {
 
   it('answers no weight for an approximate volume, which is not a weight', () => {
     expect(approxWeightIn('Aprox. 24 l')).toBeNull();
+  });
+});
+
+/**
+ * The first seven ranges are the ones the walk of 2026-11-20 stored (owner
+ * decision 141a). The chain writes them with and without a space, with `ca.`,
+ * `Aprox.` or `aprox` in front. `Aprox. 0,8-1,2kg` is the shape the parser's
+ * own doc names. `400-600 g` is made up here to pin a range with no prefix,
+ * and `1-2 l` and `ca. 2-3 uds` to pin that a range of a unit that is not a
+ * weight is not one.
+ */
+describe('isPrintedWeightRange (owner decision 141a)', () => {
+  it.each([
+    'ca.220-360g',
+    'ca. 190-360g',
+    'ca. 200-300 g',
+    'ca. 250-400 g',
+    'ca. 0,8-1Kg',
+    'Aprox. 360-460g',
+    'aprox 700-900g',
+    'Aprox. 0,8-1,2kg',
+    '400-600 g',
+  ])('reads %s as a weight range', (printed) => {
+    expect(isPrintedWeightRange(printed)).toBe(true);
+  });
+
+  it.each([
+    'Aprox.300 g',
+    'Aprox. 950g',
+    '500 g',
+    '6x200ml',
+    'Paquete',
+    '1-2 l',
+    'ca. 2-3 uds',
+    '',
+    null,
+    undefined,
+  ])('does not read %s as a weight range', (printed) => {
+    expect(isPrintedWeightRange(printed)).toBe(false);
   });
 });

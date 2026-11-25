@@ -99,8 +99,19 @@ export interface LidlRegionPrice {
   /** The source's price id, which is what the regions below point at. */
   priceId: string;
   regions: LidlRegion[];
-  /** The shelf price. Null is never written: an unpriced region is dropped. */
+  /**
+   * The figure the block prints. Null is never written: an unpriced region is
+   * dropped. It is the price of the piece, or of a kilo when {@link perKilo}
+   * says so.
+   */
   price: number;
+  /**
+   * Whether {@link price} is the price of a kilo (owner decision 141a): the
+   * block prints its format as a weight range (`ca.220-360g`), and LIDL prints
+   * a price per kilo beside a range. The harvester then writes the figure as
+   * the unit price and no piece price. False for every other format.
+   */
+  perKilo: boolean;
   /** The price before the discount, when the article is discounted. */
   oldPrice: number | null;
   currency: string;
@@ -162,10 +173,14 @@ export interface LidlProduct {
    * The approximate weight of one piece in grams (plan 0244, section 5.2):
    * the number of a printed `Aprox. 350 g`. LIDL prints one price for such a
    * tray and no price per kilo, so the row is a piece priced as one and never
-   * sold by weight. Null for a size it promises, for a printed range and for
-   * anything that is not a weight.
+   * sold by weight. Null for a size it promises and for anything that is not
+   * a weight.
+   *
+   * **Undefined beside a printed weight range** (owner decision 141a): the
+   * range states no weight of the piece, and it does not say the piece has
+   * none, so a weight stored from another week stays.
    */
-  approxWeight: number | null;
+  approxWeight: number | null | undefined;
   /** The printed size, verbatim, so nothing is lost when the parse gives up. */
   sizeFormat: string | null;
   /** The `N` of a printed `NxQ` (plan 0162), or null for a size that multiplies nothing. */

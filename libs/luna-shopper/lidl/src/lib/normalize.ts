@@ -11,7 +11,12 @@ import {
   readString,
   type Json,
 } from './json';
-import { approxWeightOf, packCountIn, parseSize } from './size';
+import {
+  approxWeightOf,
+  isPrintedWeightRange,
+  packCountIn,
+  parseSize,
+} from './size';
 import {
   LIDL_BASE_URL,
   type LidlListRow,
@@ -191,7 +196,12 @@ export function normalizeProduct(
     readString(readRecord(readRecord(state, 'price'), 'packaging'), 'text') ??
     row.sizeFormat;
   const size = parseSize(sizeFormat);
-  const approxWeight = approxWeightOf(size);
+  // A printed weight range states no weight of the piece (owner decision
+  // 141a), so the product says nothing about one rather than null, which
+  // would clear the weight stored from a week that printed `Aprox.300 g`.
+  const approxWeight = isPrintedWeightRange(sizeFormat)
+    ? undefined
+    : approxWeightOf(size);
 
   return {
     externalId: row.externalId,
@@ -220,8 +230,10 @@ export function normalizeProduct(
     // A weight the chain does not promise is no size (plan 0244, section
     // 5.2): it travels as `approxWeight`, and the row has neither a size nor
     // a unit.
-    unitSize: approxWeight === null ? (size?.unitSize ?? null) : null,
-    unit: approxWeight === null ? (size?.unit ?? null) : null,
+    // A range parses to no size, so it states none either way.
+    unitSize:
+      typeof approxWeight === 'number' ? null : (size?.unitSize ?? null),
+    unit: typeof approxWeight === 'number' ? null : (size?.unit ?? null),
     approxWeight,
     sizeFormat,
     packCount: packCountIn(sizeFormat),
@@ -234,7 +246,7 @@ export function normalizeProduct(
     inStore:
       readBoolean(storeFacts, 'retail') === true &&
       readBoolean(storeFacts, 'online') === false,
-    prices: normalizeRegionPrices(state),
+    prices: normalizeRegionPrices(state, sizeFormat),
     observedAt: options.observedAt,
   };
 }
@@ -247,8 +259,15 @@ export function normalizeProduct(
  * observation of absence and not a price of zero: most products publish nothing
  * for the five Canary regions, and writing the mainland figure there would show
  * a shopper in Las Palmas a price the chain never published.
+ *
+ * **A block printed with a weight range is a price per kilo** (owner decision
+ * 141a, {@link isPrintedWeightRange}). The block's own format decides, and
+ * `sizeFormat`, the product's, stands in for a block that prints none.
  */
-export function normalizeRegionPrices(state: Json): LidlRegionPrice[] {
+export function normalizeRegionPrices(
+  state: Json,
+  sizeFormat: string | null = null
+): LidlRegionPrice[] {
   const regionsV2 = readRecord(state, 'regionsV2');
   const regionsPrices = readRecord(state, 'regionsPrices');
 
@@ -280,10 +299,12 @@ export function normalizeRegionPrices(state: Json): LidlRegionPrice[] {
     if (price === null) {
       continue;
     }
+    const blockFormat = readString(readRecord(current, 'packaging'), 'text');
     prices.push({
       priceId,
       regions,
       price,
+      perKilo: isPrintedWeightRange(blockFormat ?? sizeFormat),
       oldPrice: readNumber(current, 'oldPrice'),
       currency: readString(current, 'currencyCode') ?? 'EUR',
       // Next week's window is already published, and it is written with the
@@ -291,7 +312,7 @@ export function normalizeRegionPrices(state: Json): LidlRegionPrice[] {
       // whether a price applies.
       validFrom: readDate(current, 'startDate'),
       validUntil: readDate(current, 'endDate'),
-      sizeFormat: readString(readRecord(current, 'packaging'), 'text'),
+      sizeFormat: blockFormat,
     });
   }
   return prices;

@@ -120,6 +120,43 @@ export function parseSize(printed: string | null | undefined): LidlSize | null {
 }
 
 /**
+ * `220-360g`, `0,8-1Kg`, `200-300 g`: two numbers and one unit, once the
+ * approximate prefix is gone. Anchored at both ends, as {@link PRINTED_SIZE}.
+ */
+const PRINTED_RANGE =
+  /^\d+(?:[.,]\d+)?\s*-\s*\d+(?:[.,]\d+)?\s*([A-Za-zÀ-ÿ]{1,8})\.?$/;
+
+/**
+ * Whether the printed size is a weight range (owner decision 141a): an
+ * approximate prefix or none, two numbers, one unit of weight. `ca.220-360g`,
+ * `ca. 200-300 g`, `ca. 0,8-1Kg`, `Aprox. 360-460g`.
+ *
+ * **Beside a range, LIDL's figure is the price of a kilo.** On one product id
+ * the chain prints `ca.220-360g` at 21.99 in one week and `Aprox.300 g` at
+ * 6.60 in the next, and 21.99 times 0.3 kg is 6.60. Read as the price of the
+ * piece, the range weeks put sea bass at 61 to 100 € a kilo. So a price block
+ * printed with a range is read as a price per kilo, and the range is never a
+ * size and never a weight.
+ *
+ * A range of a unit that is not a weight (`1-2 l`) answers false: the owner's
+ * decision names the kilo, and nothing measured shows a volume range.
+ */
+export function isPrintedWeightRange(
+  printed: string | null | undefined
+): boolean {
+  if (!printed) {
+    return false;
+  }
+  const stated = printed.replace(/\s+/g, ' ').trim().replace(APPROXIMATE, '');
+  const match = PRINTED_RANGE.exec(stated);
+  if (!match) {
+    return false;
+  }
+  const token = UNITS[match[1].toLowerCase()];
+  return token !== undefined && GRAMS_IN[token.unit] !== undefined;
+}
+
+/**
  * How many units the pack holds (plan 0162, section 1): the `N` of a printed
  * `NxQ`, so `3x200 ml` is 3 and `4x1 / l` is 4.
  *
@@ -147,7 +184,9 @@ const GRAMS_IN: Partial<Record<UnitOfMeasure, number>> = {
  * `Aprox. 350 g` is a tray whose weight varies: LIDL prints one price for it
  * and no price per kilo, so it is a piece priced as one, with a weight and no
  * size. A printed range (`Aprox. 360-460g`) parses to no size at all, so it
- * answers no weight either. An approximate volume (`Aprox. 24 l`) is not a
+ * answers no weight either: {@link isPrintedWeightRange} says what it is, and
+ * `normalizeProduct` then states no weight at all, so a stored one stays
+ * (owner decision 141a). An approximate volume (`Aprox. 24 l`) is not a
  * weight and answers null, and its size stays as printed.
  */
 export function approxWeightOf(size: LidlSize | null): number | null {

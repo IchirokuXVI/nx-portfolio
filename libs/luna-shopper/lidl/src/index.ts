@@ -45,6 +45,7 @@ export type { PhotoFields, PhotoRead } from './lib/photo';
 export {
   approxWeightIn,
   approxWeightOf,
+  isPrintedWeightRange,
   packCountIn,
   parseSize,
 } from './lib/size';

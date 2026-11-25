@@ -409,3 +409,38 @@ rather than a 401 with a name on it.
 - The run refuses a request that names a `priceScopeId`.
 - `supermarket_sources` holds a disabled `lidl-api` row for LIDL, and the run refuses to start until
   an admin enables it, by plan `0083`.
+
+## Notes after the build (2026-11-25)
+
+These notes record the owner's decisions of the harvester round. Where the text above, or plan
+`0244` section 5.2, disagrees, these notes hold.
+
+**A weight range is a price per kilo (owner decision 141a, part 1).** LIDL does publish a figure
+per kilo. A price block whose format is a weight range (`ca.220-360g`, `ca. 0,8-1Kg`,
+`Aprox. 360-460g`: an approximate prefix or none, two numbers, one unit of weight) prints the price
+of a kilo, and a block printed `Aprox.300 g` prints the price of the piece. On sea bass fillets
+`11003305` the walk of 2026-11-20 read `ca.220-360g` at 21.99, and the next week reads
+`Aprox.300 g` at 6.60, which is 21.99 times 0.3 kg. So such a figure is written as the unit price
+with the label `kg` and no piece price (`lidlObservationPrices`,
+`apps/luna-shopper-backend/harvester/src/app/harvest/lidl-catalog.runner.ts`; the walk and the one
+product refresh both use it). A shopper sees no LIDL price that week rather than a wrong one. No
+piece price is derived from the weight (the owner refused option b), and the row is not marked sold
+by weight. The block's own format decides, and the page's format stands in for a block that prints
+none (`isPrintedWeightRange` in `libs/luna-shopper/lidl/src/lib/size.ts`, `perKilo` on
+`LidlRegionPrice`). A range of a unit that is not a weight is not read so. No committed fixture holds
+a range week, so the specs build one block shaped like a captured one.
+
+**What a week does not state stays stored (owner decision 141a, part 2).**
+
+- A range states no weight of the piece. `approxWeight` is then absent, not null, so the weight an
+  `Aprox.` week stored stays on the entry.
+- A product the week lists with no price block and no format is reported from the listing alone
+  (`detailFetched: false`), because LIDL prints the format only inside a price block and a null
+  format would erase the stored `sizeFormat` and `unitSize` ("Empanada de atún" lost `500 g`). Of
+  the three options of the analysis this is the smallest that keeps them, and it changes no shared
+  observation contract. What it gives up: that week the entry's name, brand, EAN, category path,
+  address and `extra` are not rewritten, and a product the chain holds no row for is not created
+  until a week prices it (the ingest skips it with a `DETAIL_SKIPPED_UNKNOWN` warning). That narrows
+  section 8.1 for a product never seen before: an unpriced product is now known to the catalog from
+  its first priced week. The general fix, a format and size the ingest can read as "not stated" for
+  every chain, is left to the owner.

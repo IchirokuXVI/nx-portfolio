@@ -17,7 +17,10 @@ import type { CatalogDiscoveryInput, CatalogRunner } from './catalog-runner';
 import { photoOf } from './photo-address';
 import type { RunContext } from './run-context';
 import type { RunReport } from './run-report';
-import type { SourceObservation } from './source-ingest';
+import type {
+  ReportedObservation,
+  SourceObservationPrice,
+} from './source-ingest';
 
 /**
  * `CATALOG_DISCOVERY` against the `lidl-api` adapter (plan 0089).
@@ -285,11 +288,8 @@ function reportCategoryPaths(
  * A price the chain states for several regions becomes one entry per region,
  * each naming that region as its scope, because the format allows a different
  * price per region and a model that collapsed the ones that agree this week
- * could not store the week one of them differs.
- *
- * Each price is verbatim. `unitPrice` is null: LIDL publishes no per kilogram
- * figure, and deriving one from the printed size would disagree with the chain
- * in the last cent on the field whose only purpose is comparison.
+ * could not store the week one of them differs. {@link lidlObservationPrices}
+ * says what each figure is.
  *
  * **It never says a product is sold by weight (plan 0181).** The payload has
  * no field for it. In the captured fixtures a price block carries `price`,
@@ -297,13 +297,39 @@ function reportCategoryPaths(
  * product, with no amount and no unit. The eight digit code LIDL keeps for a
  * weight item does not say it either: `product-short-code.json` carries one
  * and prints a fixed `400 g`. So the row is left as it is, and a person
- * decides the unit when the product is created.
+ * decides the unit when the product is created. A week priced by the kilo
+ * (owner decision 141a) does not change that either: the flag would flip
+ * every week on a product the chain sells as a piece.
  *
  * **It does state the weight of a tray printed `Aprox.`** (plan 0244, section
  * 5.2). LIDL prints one price for that tray and none per kilo, so it is a
- * piece priced as one: no size, the weight, and not sold by weight.
+ * piece priced as one: no size, the weight, and not sold by weight. A week
+ * printed with a range states no weight, so the stored one stays.
+ *
+ * **A product the week prices nowhere and prints no format for is read as a
+ * listing alone** (owner decision 141a, part 2). LIDL prints the format only
+ * inside a price block, so such a product states no format, and a full
+ * observation would write that null over the format and size stored from a
+ * week that priced it ("Empanada de atún" lost its `500 g`). A partial
+ * observation writes no identity field at all, which keeps them. The cost:
+ * its name, brand, EAN, category path, address and `extra` are not rewritten
+ * that week, and a product the chain holds no row for is not created until
+ * a week prices it. The ingest skips that one with a
+ * `DETAIL_SKIPPED_UNKNOWN` warning.
  */
-function observationOf(product: LidlProduct): SourceObservation {
+function observationOf(product: LidlProduct): ReportedObservation {
+  const imageUrl = photoOf(photoAddressRead(product), product.externalId);
+  if (product.prices.length === 0 && product.sizeFormat === null) {
+    return {
+      externalId: product.externalId,
+      detailFetched: false,
+      observedAt: product.observedAt,
+      // The index prints the photo whether or not the week priced the
+      // product, so it is stated here as a full read states it.
+      imageUrl,
+      prices: [],
+    };
+  }
   return {
     externalId: product.externalId,
     name: product.name,
@@ -315,7 +341,9 @@ function observationOf(product: LidlProduct): SourceObservation {
     sizeUnit: product.unitSize === null ? null : sourceSizeUnitOf(product.unit),
     // `Aprox. 350 g` (plan 0244, section 5.2): a tray priced as one piece. The
     // adapter answers the grams here and no size, the price is the tray's, and
-    // the row is not sold by weight. A printed range parses to neither.
+    // the row is not sold by weight. A printed range parses to no size and
+    // states no weight: undefined, which leaves the stored weight alone
+    // (owner decision 141a).
     soldByWeight: false,
     approxWeight: product.approxWeight,
     sizeFormat: product.sizeFormat,
@@ -324,30 +352,53 @@ function observationOf(product: LidlProduct): SourceObservation {
     url: product.url,
     // The search row's `image`, else the first of its `imageList` (plan
     // 0198).
-    imageUrl: photoOf(photoAddressRead(product), product.externalId),
+    imageUrl,
     observedAt: product.observedAt,
     // Stored, shown in the queue and never interpreted. The short code is
     // LIDL's own number for a weight item, and the aisle is a proposal a person
     // reads: neither may be written as an identifier or as a decision.
     extra: extraOf(product),
-    prices: product.prices.flatMap((price) =>
-      price.regions.map((region) => ({
-        // The chain's own id for the offer region, which is what a scope is
-        // resolved by: it survives a move to another cluster, and a uuid does
-        // not (plan 0103, D3).
-        scopeKey: region.id,
-        price: price.price,
-        currency: price.currency,
-        unitPrice: null,
-        unitPriceLabel: null,
-        // The window the chain published, kept as it stated it. Next week's
-        // prices arrive with a start date in the future and are written with
-        // it: plan 0080 decides on read whether a price applies.
-        validFrom: price.validFrom,
-        validUntil: price.validUntil,
-      }))
-    ),
+    prices: lidlObservationPrices(product),
   };
+}
+
+/**
+ * Every price of one product, one entry per offer region, as the walk and a
+ * one product refresh both write them.
+ *
+ * **Each figure is verbatim, and the block says what it is the price of.** A
+ * block printed with a size or an `Aprox.` weight prints the price of the
+ * piece, and LIDL prints no figure per kilo beside it: `unitPrice` is null,
+ * because deriving one from the printed size would disagree with the chain in
+ * the last cent on the field whose only purpose is comparison.
+ *
+ * **A block printed with a weight range prints the price of a kilo** (owner
+ * decision 141a). `ca.220-360g` at 21.99 one week and `Aprox.300 g` at 6.60
+ * the next are one sea bass fillet. So that figure is the unit price, under
+ * the label `kg`, and the piece price is null: a shopper sees no LIDL price
+ * that week rather than a wrong one. **No piece price is derived from the
+ * weight** (the owner refused that, option b of the decision).
+ */
+export function lidlObservationPrices(
+  product: LidlProduct
+): SourceObservationPrice[] {
+  return product.prices.flatMap((price) =>
+    price.regions.map((region) => ({
+      // The chain's own id for the offer region, which is what a scope is
+      // resolved by: it survives a move to another cluster, and a uuid does
+      // not (plan 0103, D3).
+      scopeKey: region.id,
+      price: price.perKilo ? null : price.price,
+      currency: price.currency,
+      unitPrice: price.perKilo ? price.price : null,
+      unitPriceLabel: price.perKilo ? 'kg' : null,
+      // The window the chain published, kept as it stated it. Next week's
+      // prices arrive with a start date in the future and are written with
+      // it: plan 0080 decides on read whether a price applies.
+      validFrom: price.validFrom,
+      validUntil: price.validUntil,
+    }))
+  );
 }
 
 function extraOf(product: LidlProduct): Record<string, unknown> | null {
