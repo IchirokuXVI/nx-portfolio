@@ -29,6 +29,7 @@ import {
 } from '@portfolio/velista/models';
 import {
   AppHistory,
+  PageNavigation,
   productPickPath,
   rowKeyOf,
   SheetNavigation,
@@ -47,8 +48,9 @@ import {
   type ProductRowView,
 } from '@portfolio/velista/ui';
 import { basketErrorKey } from '../basket-error-copy';
-import { settleSheetPath } from '../basket-paths';
+import { basketPath, settleSheetPath } from '../basket-paths';
 import { ChangeChoices } from './change-choices';
+import { changeLandingOf } from './change-landing';
 import {
   basketProductOf,
   chainOfShop,
@@ -127,6 +129,7 @@ export class ChangeSheet {
   private readonly _pick = inject(ProductPickStore);
   private readonly _history = inject(AppHistory);
   private readonly _sheet = inject(SheetNavigation);
+  private readonly _pages = inject(PageNavigation);
   private readonly _router = inject(Router);
   private readonly _route = inject(ActivatedRoute);
   private readonly _basePath = inject(APP_BASE_PATH);
@@ -138,6 +141,15 @@ export class ChangeSheet {
   /** The one line the sheet is for, or null for every line the reader may change. */
   private readonly _lineId: string | null =
     this._route.snapshot.paramMap.get('lineId');
+
+  /**
+   * The history depth of the basket page when "Lists and amounts" opened this
+   * sheet, or null when anything else did (`change-landing.ts`). Read while the
+   * navigation that draws the sheet is still in flight.
+   */
+  private readonly _landing = changeLandingOf(
+    this._router.currentNavigation()?.extras.state
+  );
 
   protected readonly skeletonRows = SKELETON_ROWS;
 
@@ -459,7 +471,16 @@ export class ChangeSheet {
       return;
     }
     this._left = true;
-    this.close();
+    if (this._landing === null) {
+      this.close();
+      return;
+    }
+    // Opened from "Lists and amounts": the change closes that view too, and the
+    // person is back on the shopping list (velista `0200`, 2026-11-25).
+    void this._pages.backTo(
+      this._landing,
+      basketPath(this._locale(), this._basePath, this._store.address())
+    );
   }
 
   /**

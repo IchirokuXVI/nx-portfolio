@@ -684,6 +684,12 @@ export function toProductOffer(raw: unknown): ProductOffer | null {
     currency: nullableStr(raw['currency']),
     unitPrice: typeof raw['unitPrice'] === 'number' ? raw['unitPrice'] : null,
     unitPriceLabel: nullableStr(raw['unitPriceLabel']),
+    // Null without a unit price, so a basis never names a figure that is not
+    // there; a basis this build cannot read is null too.
+    unitBasis:
+      typeof raw['unitPrice'] === 'number'
+        ? oneOfOrNull(raw['unitBasis'], PRICE_UNIT_BASES)
+        : null,
     comparablePrice: comparable ? comparablePrice : null,
     comparableBasis: comparable ? comparableBasis : null,
     // The server's figure for one piece of a kilo piece (backend `0244`), never

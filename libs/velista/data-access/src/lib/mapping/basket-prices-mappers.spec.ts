@@ -94,6 +94,7 @@ describe('toBasket: prices and places (velista 0062)', () => {
       currency: 'EUR',
       unitPrice: 0.95,
       unitPriceLabel: 'EUR/L',
+      unitBasis: null,
       comparablePrice: null,
       comparableBasis: null,
       piecePrice: null,
@@ -101,6 +102,35 @@ describe('toBasket: prices and places (velista 0062)', () => {
       sourceKind: 'OFFICIAL_WEB',
       priceScopeId: 'scope-a',
     });
+  });
+
+  it("keeps the unit basis of every offer, the best one and each scope's", () => {
+    // A basket product has no basis of its own: the unit price line of "Lists
+    // and amounts" names the basis of the offer it draws, the shop's included.
+    const view = basket({
+      products: [
+        {
+          ...PRODUCT,
+          bestOffer: { ...OFFER, unitPrice: 0.63, unitBasis: 'LITER' },
+          offers: [
+            { ...OFFER, unitPrice: 0.63, unitBasis: 'LITER' },
+            {
+              ...OFFER,
+              priceScopeId: 'scope-b',
+              unitPrice: 0.7,
+              unitBasis: 'KILOGRAM',
+            },
+          ],
+        },
+      ],
+    });
+    const product = view?.products.get('i-milk');
+
+    expect(product?.offer?.unitBasis).toBe('LITER');
+    expect(product?.offers.map((held) => held.unitBasis)).toEqual([
+      'LITER',
+      'KILOGRAM',
+    ]);
   });
 
   it('keeps a null offer null, and reads an absent one the same way', () => {

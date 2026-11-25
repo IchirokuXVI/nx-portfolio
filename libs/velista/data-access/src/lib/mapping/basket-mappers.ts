@@ -620,6 +620,9 @@ function toBasketProduct(raw: unknown): BasketProduct | null {
         unit: nullableStr(raw['defaultUnit']),
         approxWeight: positiveNum(raw['approxWeight']),
         quantityStep: quantityStepOf(raw['quantityStep']),
+        // Each offer carries its own `unitBasis`, read by `toProductOffer`, so the
+        // unit price line names the basis of the offer it draws, the shop's
+        // included. A basket product has no basis of its own.
         offer: toProductOffer(raw['bestOffer']),
         // Every scope's offer (velista `0078`, section 2). Absent for every caller
         // but the basket read, which is the only one that asks backend `0109` for

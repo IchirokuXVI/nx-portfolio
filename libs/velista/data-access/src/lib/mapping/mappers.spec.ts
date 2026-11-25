@@ -1265,6 +1265,7 @@ describe('toCatalogItem: the price it used to drop', () => {
       currency: 'EUR',
       unitPrice: 1.05,
       unitPriceLabel: 'EUR/L',
+      unitBasis: null,
       comparablePrice: null,
       comparableBasis: null,
       piecePrice: null,
@@ -1716,6 +1717,37 @@ describe('toProductOffer: the comparable pair (backend 0245)', () => {
     const offer = toProductOffer({ ...wire, ...patch });
     expect(offer?.comparablePrice).toBeNull();
     expect(offer?.comparableBasis).toBeNull();
+  });
+});
+
+describe('toProductOffer: the unit basis', () => {
+  const wire = {
+    price: 1.79,
+    currency: 'EUR',
+    unitPrice: 1.19,
+    unitPriceLabel: 'EUR/L',
+    unitBasis: 'LITER',
+    observedAt: '2026-11-01T08:00:00.000Z',
+    sourceKind: 'OFFICIAL_WEB',
+    priceScopeId: 'scope-mercadona',
+  };
+
+  it.each(['KILOGRAM', 'LITER', 'UNIT', 'DOZEN'])(
+    'reads the basis %s off the offer',
+    (basis) => {
+      expect(toProductOffer({ ...wire, unitBasis: basis })?.unitBasis).toBe(
+        basis
+      );
+    }
+  );
+
+  it.each([
+    ['an unknown basis', { unitBasis: 'POUND' }],
+    ['a basis that is not a string', { unitBasis: 3 }],
+    ['an absent basis', { unitBasis: undefined }],
+    ['a basis with no unit price', { unitPrice: null }],
+  ])('reads %s as null', (_, patch) => {
+    expect(toProductOffer({ ...wire, ...patch })?.unitBasis).toBeNull();
   });
 });
 

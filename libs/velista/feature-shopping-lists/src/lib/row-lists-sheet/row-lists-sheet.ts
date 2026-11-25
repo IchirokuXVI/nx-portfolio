@@ -14,7 +14,6 @@ import {
   RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
-import { lineProductOf } from '@portfolio/luna-shopper/basket-rules';
 import {
   BasketStore,
   BasketViewStore,
@@ -25,19 +24,20 @@ import {
   basketRowProduct,
   catalogName,
   isMeasured,
-  priceWordsText,
   shownOffer,
-  soldAs,
+  type BasketProduct,
   type BasketRow,
   type BasketRowEntry,
   type LineUnit,
-  type LocalizedName,
+  type PriceWords,
+  type ProductOffer,
   type QuantityStep,
+  type ShownPrice,
 } from '@portfolio/velista/models';
 import {
+  AppHistory,
   exactAmount,
   formatAmount,
-  formatMoney,
   quantityRuns,
   rowKeyOf,
   SheetNavigation,
@@ -50,30 +50,20 @@ import {
   priceWords,
   productBrandSizeText,
   ProductPicture,
-  productSizeText,
   QuantityStepper,
   SheetShell,
+  unitPriceWords,
   type AnchoredPopoverClose,
 } from '@portfolio/velista/ui';
 import { basketErrorKey, correlationIdOf } from '../basket-error-copy';
 import { basketLineStep } from '../basket-line-step';
 import { settleSheetPath } from '../basket-paths';
+import { changeLandingState } from '../change-sheet/change-landing';
 import {
   changeableLineIds,
   changeSheetPath,
 } from '../change-sheet/change-targets';
 import { rowListsPath } from './row-lists-path';
-
-/** What a picture and a product line need of a product, from any of its records. */
-interface ProductFacts {
-  readonly id: string;
-  readonly name: LocalizedName;
-  readonly brand: string | null;
-  readonly imageUrl: string | null;
-  readonly size: number | null;
-  readonly unit: string | null;
-  readonly approxWeight: number | null;
-}
 
 /** The row's product at the top, as it is drawn. */
 interface DrawnProduct {
@@ -81,20 +71,13 @@ interface DrawnProduct {
   /** "Hacendado · 1 L", or null when the catalog knows neither. */
   readonly detail: string | null;
   readonly imageUrl: string | null;
-  /** "0,92 €", or "2,49 € / kg", or null for none. */
-  readonly price: string | null;
-  /** The price per kilo under a kilo piece's piece price, or null. */
-  readonly perKilo: string | null;
-}
-
-/** One list's product on its own line, as it is drawn. */
-interface DrawnLineProduct {
-  readonly name: string;
-  /** " · Hacendado 1 L", or null when the catalog knows neither. */
-  readonly brandSize: string | null;
-  readonly imageUrl: string | null;
-  /** It is not the row's product, so the line takes the quiet amber. */
-  readonly differs: boolean;
+  /** "0,92 €", or "2,49 €" with "/ kg", or null for none. */
+  readonly price: PriceWords | null;
+  /**
+   * The catalog card's unit price line under the price ("1,19 €" with "/ L"), or
+   * null where it would say what the price already says (`unitPriceWords`).
+   */
+  readonly unit: PriceWords | null;
 }
 
 /** One list of the row, as the detailed view draws it. */
@@ -123,15 +106,10 @@ interface DrawnList {
   readonly label: string;
   /** What the buttons and the settled amount name. */
   readonly name: string;
-  /** "Change" is drawn on this list. */
+  /** "Change product" is drawn on this list. */
   readonly changeable: boolean;
-  /** Change's accessible name, which names the list and holds the word. */
+  /** Its accessible name, which names the list and holds the words. */
   readonly changeLabel: string;
-  /**
-   * The list's product, or the line's own name with the default icon when the
-   * client cannot name one and "Change" is drawn; null when neither.
-   */
-  readonly product: DrawnLineProduct | null;
 }
 
 /**
@@ -161,9 +139,15 @@ interface DrawnList {
  *
  * ## The product of a list
  *
- * Under each list, on one line, and the word "Change" at its end is the only
- * control that opens the change sheet for it. "Change for all lists" is under
- * the row's product at the top. The change sheets pop back onto this view.
+ * A basket row is one product, so every list here has the row's product and no
+ * list draws a product line (the mock's round 5, 2026-11-25). "Change product",
+ * on its own line under "Bought 2 of 3", is the only control that opens the
+ * change sheet for one list, and is drawn only on a list that may change its
+ * product. "Change for all lists" is under the row's product at the top.
+ *
+ * A change made from either closes this view as well as the change sheet: the
+ * navigation carries the basket page's history depth (`change-landing.ts`), and
+ * the change sheet walks back to it.
  */
 @Component({
   selector: 'lib-row-lists-sheet',
@@ -185,6 +169,7 @@ export class RowListsSheet {
   private readonly _view = inject(BasketViewStore);
   private readonly _itemNames = inject(ItemNames);
   private readonly _sheet = inject(SheetNavigation);
+  private readonly _history = inject(AppHistory);
   private readonly _router = inject(Router);
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _translator = inject(RokuTranslatorService);
@@ -272,7 +257,7 @@ export class RowListsSheet {
         detail: null,
         imageUrl: null,
         price: null,
-        perKilo: null,
+        unit: null,
       };
     }
     const offer = shownOffer(product, this._view.readAtShop());
@@ -280,22 +265,24 @@ export class RowListsSheet {
       this._translator.t(key, undefined, locale, args);
     const price =
       offer === null ? null : priceWords(offer, product, locale, translate);
-    const kiloPiece =
-      offer !== null &&
-      offer.piecePrice !== null &&
-      soldAs(product.unit, product.size, product.approxWeight) === 'KILO_PIECE';
+    // The catalog card's rule (`productRowView`): a stale price draws no unit
+    // line. The basis is the drawn offer's, as a basket product has none.
+    const drawn = price === null ? null : offerOfShown(product, offer);
+    const unit =
+      drawn === null || drawn.stale
+        ? null
+        : unitPriceWords(
+            drawn,
+            { ...product, unitBasis: drawn.unitBasis ?? null },
+            locale,
+            translate
+          );
     return {
       name: catalogName(product.name, locale),
       detail: productBrandSizeText(product, locale, translate),
       imageUrl: product.imageUrl,
-      price: price === null ? null : priceWordsText(price),
-      perKilo:
-        kiloPiece && offer !== null
-          ? priceWordsText({
-              amount: formatMoney(offer.price, offer.currency, locale),
-              per: translate('catalog.per.KILOGRAM'),
-            })
-          : null,
+      price,
+      unit,
     };
   });
 
@@ -363,7 +350,11 @@ export class RowListsSheet {
     );
   }
 
-  /** "Change" on one list, or "Change for all lists" with null. */
+  /**
+   * "Change product" on one list, or "Change for all lists" with null. The
+   * basket page is two entries below this view (the row's sheet pushed it, and
+   * the basket page pushed the row's sheet), which is where a change lands.
+   */
   protected change(lineId: string | null): void {
     const row = this.row();
     if (row === null) {
@@ -376,7 +367,8 @@ export class RowListsSheet {
         this._store.address(),
         row.rowKey,
         lineId
-      )
+      ),
+      { state: changeLandingState(this._history.depth() - 2) }
     );
   }
 
@@ -603,62 +595,33 @@ export class RowListsSheet {
         locale,
         { name: list }
       ),
-      product: this._lineProduct(
-        row,
-        entry,
-        this._changeable().has(entry.lineId)
-      ),
     };
   }
+}
 
-  /**
-   * The product a list's line counts as (backend `0201`, section 1, the shared
-   * rule), with the row's product as the pick. When the client cannot name it, a
-   * changeable entry still draws its line, with the default icon and the line's
-   * own name, so its "Change" stays; any other entry draws none.
-   */
-  private _lineProduct(
-    row: BasketRow,
-    entry: BasketRowEntry,
-    changeable: boolean
-  ): DrawnLineProduct | null {
-    const id = lineProductOf(entry, row.productId) ?? row.productId;
-    const facts: ProductFacts | null =
-      id === null
-        ? null
-        : (this._store.products().get(id) ?? this._itemNames.nameOf(id));
-    if (facts === null) {
-      if (!changeable) {
-        return null;
-      }
-      const line = entry.content.trim();
-      return {
-        name: line === '' ? row.content : line,
-        brandSize: null,
-        imageUrl: null,
-        differs: id !== row.productId,
-      };
-    }
-    const locale = this._locale();
-    const translate = (key: string, args?: Record<string, unknown>) =>
-      this._translator.t(key, undefined, locale, args);
-    const size = productSizeText(
-      facts.size,
-      facts.unit,
-      locale,
-      translate,
-      facts.approxWeight
-    );
-    const brandSize = [facts.brand?.trim() ?? '', size ?? '']
-      .filter((part) => part !== '')
-      .join(' ');
-    return {
-      name: catalogName(facts.name, locale),
-      brandSize: brandSize === '' ? null : ` · ${brandSize}`,
-      imageUrl: facts.imageUrl,
-      differs: id !== row.productId,
-    };
+/**
+ * The whole offer behind the price the block draws, for its unit price line: the
+ * offer of the same scope at the same price in cents, the cheapest first. Null
+ * when none matches, as at a shop whose own price is not the offer's: a unit
+ * price of another figure would describe a price that is not on screen.
+ */
+function offerOfShown(
+  product: BasketProduct,
+  shown: ShownPrice | null
+): ProductOffer | null {
+  if (shown === null) {
+    return null;
   }
+  const cents = Math.round(shown.price * 100);
+  return (
+    [product.offer, ...product.offers].find(
+      (held): held is ProductOffer =>
+        held !== null &&
+        held.priceScopeId === shown.priceScopeId &&
+        held.price !== null &&
+        Math.round(held.price * 100) === cents
+    ) ?? null
+  );
 }
 
 /**

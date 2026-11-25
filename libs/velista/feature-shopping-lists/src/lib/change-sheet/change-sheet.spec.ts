@@ -25,10 +25,12 @@ import type {
 } from '@portfolio/velista/models';
 import {
   AppHistory,
+  PageNavigation,
   provideVelistaTesting,
   SheetNavigation,
 } from '@portfolio/velista/platform';
 import { of } from 'rxjs';
+import { changeLandingState } from './change-landing';
 import { ChangeSheet } from './change-sheet';
 
 function offer(price: number, unitPrice: number): ProductOffer {
@@ -180,18 +182,22 @@ interface Options {
   readonly atShop?: boolean;
   readonly failNames?: boolean;
   readonly refuse?: boolean;
+  /** The landing "Lists and amounts" puts in the navigation's state. */
+  readonly landing?: number;
 }
 
 async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<ChangeSheet>;
   changeProduct: jest.Mock;
   dismiss: jest.Mock;
+  backTo: jest.Mock;
   navigateByUrl: jest.SpyInstance;
   pick: ProductPickStore;
 }> {
   TestBed.resetTestingModule();
   const changeProduct = jest.fn(() => Promise.resolve(options.refuse !== true));
   const dismiss = jest.fn().mockResolvedValue(undefined);
+  const backTo = jest.fn().mockResolvedValue(undefined);
   const known = new Map(
     [MILK, SIX, PASCUAL, PULEVA, OAT].map((held) => [held.id, held])
   );
@@ -247,6 +253,7 @@ async function render(options: Options = {}): Promise<{
         useValue: { pricedAtShop: signal(options.atShop === true) },
       },
       { provide: SheetNavigation, useValue: { dismiss } },
+      { provide: PageNavigation, useValue: { backTo } },
       {
         provide: ActivatedRoute,
         useValue: { paramMap: of(params), snapshot: { paramMap: params } },
@@ -257,6 +264,12 @@ async function render(options: Options = {}): Promise<{
   const navigateByUrl = jest
     .spyOn(TestBed.inject(Router), 'navigateByUrl')
     .mockResolvedValue(true);
+  if (options.landing !== undefined) {
+    // The sheet reads it while the navigation that draws it is in flight.
+    jest.spyOn(TestBed.inject(Router), 'currentNavigation').mockReturnValue({
+      extras: { state: changeLandingState(options.landing) },
+    } as unknown as ReturnType<Router['currentNavigation']>);
+  }
   const fixture = TestBed.createComponent(ChangeSheet);
   fixture.detectChanges();
   await settle(fixture);
@@ -264,6 +277,7 @@ async function render(options: Options = {}): Promise<{
     fixture,
     changeProduct,
     dismiss,
+    backTo,
     navigateByUrl,
     pick: TestBed.inject(ProductPickStore),
   };
@@ -444,7 +458,7 @@ describe('ChangeSheet', () => {
         { lineIds: ['zl-1'], itemId: PASCUAL.id, keep: true },
         expect.objectContaining({ id: PASCUAL.id })
       );
-      // Back to the row's sheet.
+      // Back to the row's sheet: nothing asked it to land elsewhere.
       expect(dismiss).toHaveBeenCalledWith(
         '/en/shopping-lists/live/sheet/rows/zl-1/settle'
       );
@@ -484,6 +498,56 @@ describe('ChangeSheet', () => {
       expect(host(fixture).querySelector('.error')?.textContent).toContain(
         'basket.error.failed'
       );
+    });
+  });
+
+  describe('opened from "Lists and amounts"', () => {
+    it.each([
+      ['one list', 'zl-1'],
+      ['all lists', undefined],
+    ])(
+      'lands on the shopping list after a change for %s, never back on the view',
+      async (_name, lineId) => {
+        const { fixture, backTo, dismiss } = await render({
+          lineId,
+          landing: 0,
+        });
+
+        radios(fixture)[1].click();
+        fixture.detectChanges();
+        useButton(fixture).click();
+        await settle(fixture);
+
+        expect(backTo).toHaveBeenCalledWith(0, '/en/shopping-lists/live');
+        expect(dismiss).not.toHaveBeenCalled();
+      }
+    );
+
+    it('still closes onto the row on Escape or the scrim', async () => {
+      const { fixture, backTo, dismiss } = await render({
+        lineId: 'zl-1',
+        landing: 0,
+      });
+      // The sheet shell's dismiss: Escape, the scrim, the handle.
+      (fixture.componentInstance as unknown as { close(): void }).close();
+      await settle(fixture);
+      expect(backTo).not.toHaveBeenCalled();
+      expect(dismiss).toHaveBeenCalledWith(
+        '/en/shopping-lists/live/sheet/rows/zl-1/settle'
+      );
+    });
+
+    it('stays open when the change is refused', async () => {
+      const { fixture, backTo } = await render({
+        lineId: 'zl-1',
+        landing: 0,
+        refuse: true,
+      });
+      radios(fixture)[2].click();
+      fixture.detectChanges();
+      useButton(fixture).click();
+      await settle(fixture);
+      expect(backTo).not.toHaveBeenCalled();
     });
   });
 
