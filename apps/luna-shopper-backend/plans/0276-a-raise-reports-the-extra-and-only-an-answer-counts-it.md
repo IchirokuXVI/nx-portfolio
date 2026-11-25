@@ -390,7 +390,7 @@ Gateway:
      than what is still above the ask on them. Units that arrive later sit on newer buys,
      after the mark, and are never covered. This is why an amount alone is not enough: the
      revert runs in the basket code and takes no lock of the line, so an amount it does not
-     lower would silence a later, unrelated extra (case 24).
+     lower would silence a later, unrelated extra (case 25).
    - **A count** with `counted > 0` clears the record, in its own transaction.
    - **The line starts over**: a change of the line's unit (the units no longer compare),
      the removal of the line, and a merge of plan 0112 (the merged line's record goes with
@@ -428,8 +428,8 @@ Gateway:
    new `basket.rowStillNeedExtra` opens the basket as `basket.rowCountExtra` does (refused
    on a finished basket, `pick` for the line, `canChangeDemand` of the owner) and calls
    `LineService.stillNeedExtra` as the owner with `via: opened.via()`.
-8. **The errors of both routes**: 400 for a body out of bounds or a `"true"` spelled as a
-   string; 409 `line_unit_mismatch` for another unit; 409 `stale_quantity` for a line that
+8. **The errors of both routes**: 400 for a body out of bounds, a missing field, or a number
+   spelled as a string; 409 `line_unit_mismatch` for another unit; 409 `stale_quantity` for a line that
    moved; 409 for a finished basket on the basket route, as the demand; 403 and 404 as the
    demand route and `PATCH /v1/lines/:id`. Never a 401.
 
