@@ -1175,8 +1175,8 @@ export class BasketPage {
 
     inject(DestroyRef).onDestroy(() => {
       this._gone = true;
-      // A sheet over a basket page drawn later must not read this one's depth.
-      this._landings.notePage(null);
+      // The notes of the sheets this page pushed are kept: the page drawn again
+      // under one of them, back from the catalog, still stands where it did.
       followed.unsubscribe();
       // What a return to this basket comes back to, taken before the stores let go.
       this._returns.keep<BasketPageReturn>(
@@ -1380,7 +1380,7 @@ export class BasketPage {
   protected openRow(row: BasketRowModel): void {
     // Where a change of product from the row's "Lists and amounts" lands: this
     // page, under the settle sheet this pushes (`ChangeLandingStore.pageBelow`).
-    this._landings.notePage(this._history.depth());
+    this._landings.notePage(this._store.address(), row, this._history.depth());
     void this._router.navigate(sheetSegments('rows', row.rowKey, 'settle'), {
       relativeTo: this._route,
       queryParams: this._search.kept(this._route),
@@ -2843,7 +2843,7 @@ export class BasketPage {
     }
     // Where a change of product from the sheet lands: this page, one entry below
     // the sheet this pushes (`ChangeLandingStore.pageBelow`).
-    this._landings.notePage(this._history.depth());
+    this._landings.notePage(this._store.address(), row, this._history.depth());
     // Velista `0208`, target state 19 (the removable handoff): the question is
     // asked on the row's "Lists and amounts", which this opens.
     await this._handoff.send({ rowKey: row.rowKey, lineId, extra }, () =>

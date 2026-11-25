@@ -6596,11 +6596,21 @@ describe('BasketPage: the basket asks about the extra (velista 0208)', () => {
       return { ...rendered, handoff, held: () => held };
     }
 
-    it('records its own depth for a change of product from the sheet it opens', async () => {
-      await added(OWN);
+    it('records its own depth for a change of product from the sheet it opens, and keeps it past its destroy', async () => {
+      const { fixture } = await added(OWN);
+      const landings = TestBed.inject(ChangeLandingStore);
+      const basket = { basketId: 'basket-saturday' };
+      const asking = milkRow({ left: 2, bought: 5, asked: 7 });
 
       // Unwatched, `AppHistory` stands on -1: the sheet pushed over it is 0.
-      expect(TestBed.inject(ChangeLandingStore).pageBelow(0)).toBe(-1);
+      expect(landings.pageBelow(basket, asking, 0)).toBe(-1);
+      // Not for another basket at the same depths.
+      expect(landings.pageBelow({ basketId: 'b-other' }, asking, 0)).toBeNull();
+
+      // The catalog that chooses destroys the page; the page drawn again under
+      // the sheet, back from it, still stands on -1.
+      fixture.destroy();
+      expect(landings.pageBelow(basket, asking, 0)).toBe(-1);
     });
 
     it('opens nothing while the person types the next item, and the ask set stands', async () => {

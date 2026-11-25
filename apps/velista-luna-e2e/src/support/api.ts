@@ -481,6 +481,10 @@ export async function resetAliceWorld(alice: Session): Promise<void> {
   await alice.patch(`/v1/lines/${LINE_MILK_ID}`, {
     favoriteItemId: ITEM_MILK_ID,
   });
+  // Bread names Bread alone in the seed, with no favourite. The change of
+  // product spec gives it Milk too, and a change of product moves its favourite.
+  await setLineProducts(alice, LINE_BREAD_ID, [ITEM_BREAD_ID]);
+  await alice.patch(`/v1/lines/${LINE_BREAD_ID}`, { favoriteItemId: null });
   // Eggs names no product in the seed. The aisles spec gives it one for the
   // length of its run and takes it back; this puts it back if a run stopped early.
   await setLineProducts(alice, LINE_EGGS_ID, []);

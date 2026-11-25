@@ -36,25 +36,89 @@ describe('ChangeLandingStore (velista 0200)', () => {
   });
 
   describe('the basket page under a sheet (velista 0208)', () => {
-    it('answers the depth the page recorded, below the sheet asking', () => {
-      const store = new ChangeLandingStore();
-      expect(store.pageBelow(3)).toBeNull();
+    const BASKET = { basketId: 'b-1' } as const;
+    const ROW = { rowKey: 'row-milk', entries: [{ lineId: 'zl-1' }] };
 
-      store.notePage(2);
-      expect(store.pageBelow(3)).toBe(2);
-      expect(store.pageBelow(4)).toBe(2);
-      // A sheet on the page's own entry or below it is not over this page.
-      expect(store.pageBelow(2)).toBeNull();
-      expect(store.pageBelow(1)).toBeNull();
+    it.each([
+      ['warm', 2],
+      ['cold, on the entry the document loaded on', -1],
+    ])(
+      'answers the page one entry below the view it pushed, %s',
+      (_name, page) => {
+        const store = new ChangeLandingStore();
+        expect(store.pageBelow(BASKET, ROW, page + 1)).toBeNull();
+
+        store.notePage(BASKET, ROW, page);
+        expect(store.pageBelow(BASKET, ROW, page + 1)).toBe(page);
+        // Read, not taken: asked again after a catalog round trip.
+        expect(store.pageBelow(BASKET, ROW, page + 1)).toBe(page);
+      }
+    );
+
+    it('answers the page two entries below the view the row sheet pushed', () => {
+      const store = new ChangeLandingStore();
+      store.notePage(BASKET, ROW, 0);
+      // The row's sheet on 1, this view on 2.
+      expect(store.pageBelow(BASKET, ROW, 2)).toBe(0);
     });
 
-    it('forgets the page once it is gone', () => {
+    it.each([
+      ['on the page itself', 2],
+      ['below the page', 1],
+      ['three entries above it', 5],
+    ])('answers null for a view %s', (_name, sheetDepth) => {
       const store = new ChangeLandingStore();
-      store.notePage(-1);
-      expect(store.pageBelow(0)).toBe(-1);
+      store.notePage(BASKET, ROW, 2);
+      expect(store.pageBelow(BASKET, ROW, sheetDepth)).toBeNull();
+    });
 
-      store.notePage(null);
-      expect(store.pageBelow(0)).toBeNull();
+    it.each([
+      [
+        'another row',
+        BASKET,
+        { rowKey: 'row-bread', entries: [{ lineId: 'zl-7' }] },
+      ],
+      ['another basket', { basketId: 'b-2' }, ROW],
+      ['the live basket', 'live' as const, ROW],
+      ['no basket read yet', null, ROW],
+    ])('answers null for %s at the same depths', (_name, address, asking) => {
+      const store = new ChangeLandingStore();
+      store.notePage(BASKET, ROW, 2);
+      expect(store.pageBelow(address, asking, 3)).toBeNull();
+      expect(store.pageBelow(address, asking, 4)).toBeNull();
+    });
+
+    it('answers for the row whose key moved, by a line of it', () => {
+      const store = new ChangeLandingStore();
+      store.notePage(BASKET, ROW, 2);
+      expect(
+        store.pageBelow(
+          BASKET,
+          { rowKey: 'row-milk-2', entries: [{ lineId: 'zl-1' }] },
+          3
+        )
+      ).toBe(2);
+    });
+
+    it('keeps the notes of entries below a later push, and drops those above it', () => {
+      const store = new ChangeLandingStore();
+      const bread = { rowKey: 'row-bread', entries: [{ lineId: 'zl-7' }] };
+      // The page on 0 opened milk's view on 1; back on the page, the person
+      // walks on and the basket page is pushed again on 4, which opens bread's.
+      store.notePage(BASKET, ROW, 0);
+      store.notePage(BASKET, bread, 4);
+      expect(store.pageBelow(BASKET, ROW, 1)).toBe(0);
+      expect(store.pageBelow(BASKET, bread, 5)).toBe(4);
+
+      // A push from the page on 0 again replaces every entry above it.
+      store.notePage(BASKET, bread, 0);
+      expect(store.pageBelow(BASKET, ROW, 1)).toBeNull();
+      expect(store.pageBelow(BASKET, bread, 5)).toBeNull();
+      expect(store.pageBelow(BASKET, bread, 1)).toBe(0);
+    });
+
+    it('a reload starts with no note', () => {
+      expect(new ChangeLandingStore().pageBelow(BASKET, ROW, 0)).toBeNull();
     });
   });
 

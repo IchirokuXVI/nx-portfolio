@@ -33,6 +33,7 @@ import {
 import {
   QUANTITY_STEP_QUIET_MS,
   type AbsorbedExtra,
+  type BasketAddress,
   type BasketListRef,
   type BasketParticipant,
   type BasketProduct,
@@ -1267,6 +1268,11 @@ describe('RowListsSheet (velista 0200)', () => {
       way: {
         readonly via?: 'settle' | 'page';
         readonly recorded?: boolean;
+        /** The basket and row the page notes, when not this view's own. */
+        readonly noted?: {
+          readonly address: BasketAddress;
+          readonly row: BasketRow;
+        };
         readonly under?: boolean;
       } = {}
     ) {
@@ -1317,6 +1323,8 @@ describe('RowListsSheet (velista 0200)', () => {
       await harness.navigateByUrl(PAGE);
       if (way.recorded === true) {
         TestBed.inject(ChangeLandingStore).notePage(
+          way.noted?.address ?? { basketId: BASKET_ID },
+          way.noted?.row ?? rowOf,
           TestBed.inject(AppHistory).depth()
         );
       }
@@ -1453,6 +1461,98 @@ describe('RowListsSheet (velista 0200)', () => {
       await settleRouted(harness);
       expect(location.path()).toBe(PAGE);
       expect(TestBed.inject(AppHistory).depth()).toBe(0);
+    });
+
+    it.each([
+      ['the document loaded on it', false, -1],
+      ['an entry this document pushed', true, 0],
+    ])(
+      'a change from the sheet the basket page opened itself lands on the basket page after a catalog round trip, on %s (0208)',
+      async (_name, under, page) => {
+        const { harness, location } = await routed(row([entry()]), {
+          via: 'page',
+          recorded: true,
+          under,
+        });
+        const history = TestBed.inject(AppHistory);
+        const host = harness.fixture.nativeElement as HTMLElement;
+        host.querySelector<HTMLButtonElement>('.row-label .change')?.click();
+        await settleRouted(harness);
+
+        // "Look for another one": the catalog destroys the basket page; the
+        // person backs out of it and cancels the change sheet, onto this view
+        // drawn again over a page that pushed nothing since.
+        await harness.navigateByUrl('/velista/en/catalog');
+        location.back();
+        await settleRouted(harness);
+        changeSheet(harness)?.cancel();
+        await settleRouted(harness);
+        expect(location.path()).toBe(LISTS_URL);
+        expect(history.depth()).toBe(page + 1);
+
+        host.querySelector<HTMLButtonElement>('.row-label .change')?.click();
+        await settleRouted(harness);
+        const sheet = changeSheet(harness);
+        expect(sheet?.landing()?.depth).toBe(page);
+
+        sheet?.changed();
+        await settleRouted(harness);
+        expect(location.path()).toBe(PAGE);
+        expect(history.depth()).toBe(page);
+        expect(host.querySelector('lib-row-lists-sheet')).toBeNull();
+        if (under) {
+          // Back from the basket page leaves it, and never shows the sheet again.
+          location.back();
+          await settleRouted(harness);
+          expect(location.path()).toBe('/velista/en/home');
+        }
+      }
+    );
+
+    it.each([
+      [
+        'another row',
+        { basketId: BASKET_ID },
+        row([entry({ lineId: 'zl-9' })]),
+        'row-bread',
+      ],
+      ['another basket', { basketId: 'b-other' }, row([entry()]), ROW_KEY],
+    ])(
+      "a note of %s at the same depths is not this view's page, which takes the row sheet's way in",
+      async (_name, address, notedRow, rowKey) => {
+        const { harness } = await routed(row([entry()]), {
+          via: 'page',
+          recorded: true,
+          noted: { address, row: { ...notedRow, rowKey } },
+          under: true,
+        });
+        const host = harness.fixture.nativeElement as HTMLElement;
+        host.querySelector<HTMLButtonElement>('.row-label .change')?.click();
+        await settleRouted(harness);
+        // This view on 1: two entries below it, as under the row's sheet.
+        expect(changeSheet(harness)?.landing()?.depth).toBe(-1);
+      }
+    );
+
+    it("a document loaded on this view takes the row sheet's way in, and its change walks to the basket page", async () => {
+      const { harness, location } = await routed(row([entry()]), {
+        via: 'page',
+      });
+      const history = TestBed.inject(AppHistory);
+      // The document loaded on the basket page and pushed this view, with no note,
+      // as after a reload: nothing tells this view the page is one entry below.
+      expect(history.depth()).toBe(0);
+      const host = harness.fixture.nativeElement as HTMLElement;
+      host.querySelector<HTMLButtonElement>('.row-label .change')?.click();
+      await settleRouted(harness);
+      const sheet = changeSheet(harness);
+      expect(sheet?.landing()?.depth).toBe(-2);
+
+      // Under the document's first entry: a replace onto the basket page, never a
+      // pop out of the app.
+      sheet?.changed();
+      await settleRouted(harness);
+      expect(location.path()).toBe(PAGE);
     });
 
     /** The change sheet drawn now, or undefined. */

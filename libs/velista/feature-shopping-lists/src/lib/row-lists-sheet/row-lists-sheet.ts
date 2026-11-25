@@ -425,13 +425,15 @@ export class RowListsSheet {
 
   /**
    * "Change product" on one list, or "Change for all lists" with null. A change
-   * lands on the basket page, at the depth the page recorded as it pushed the
-   * sheet this view came by (`ChangeLandingStore.pageBelow`): one entry below
-   * when the basket's "Add or find" opened this view itself (velista `0208`,
-   * target state 19), two when the row's sheet pushed it. A page that recorded
-   * nothing below (a document loaded on a sheet) is taken to be two entries
-   * below, as the row's sheet is the other way in. The change sheet is pushed
-   * one entry above this view, and only a sheet on that entry takes the landing
+   * lands on the basket page, at the depth the page noted for this basket and
+   * row as it pushed the sheet this view came by (`ChangeLandingStore.pageBelow`):
+   * one entry below when the basket's "Add or find" opened this view itself
+   * (velista `0208`, target state 19), two when the row's sheet pushed it. With
+   * no such note (a document loaded on a sheet), the page is taken to be two
+   * entries below, as the row's sheet is the other way in; a depth under the
+   * document's first entry walks to the basket page by a replace instead
+   * (`PageNavigation.backTo`). The change sheet is pushed one entry above this
+   * view, and only a sheet on that entry takes the landing
    * (`ChangeLandingStore.claim`).
    */
   protected change(lineId: string | null): void {
@@ -443,7 +445,9 @@ export class RowListsSheet {
     const landing = {
       rowKey: row.rowKey,
       lineId,
-      depth: this._landings.pageBelow(depth) ?? depth - 2,
+      depth:
+        this._landings.pageBelow(this._store.address(), row, depth) ??
+        depth - 2,
       sheetDepth: depth + 1,
     };
     this._landings.hold(landing);

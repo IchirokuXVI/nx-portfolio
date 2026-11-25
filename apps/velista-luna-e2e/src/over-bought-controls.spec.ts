@@ -751,66 +751,75 @@ test.describe('the basket asks about the extra (velista 0208, stage 4)', () => {
     ).toBe(0);
   });
 
-  test('"Change product" in the "Lists and amounts" the add opened lands on the basket, and back never shows that view again', async ({
+  test('"Change product" in the "Lists and amounts" the add opened lands on the basket after a catalog round trip, and back never shows that view again', async ({
     page,
   }) => {
     // Bread may also be Milk, so the change sheet offers a second product.
+    // `resetAliceWorld` puts Bread's products and favourite back.
     await setLineProducts(alice, LINE_BREAD_ID, [ITEM_BREAD_ID, ITEM_MILK_ID]);
     await alice.patch(`/v1/lines/${LINE_BREAD_ID}`, {
       favoriteItemId: ITEM_BREAD_ID,
     });
-    try {
-      const danaBasket = await basketOf(dana, 'Change product');
-      await buyBasketRow(dana, danaBasket, [LINE_BREAD_ID], {
-        quantity: 4,
-        from: 1,
-      });
-      const basketId = await basketOf(alice, 'Change product');
-      await signIn(page, ALICE_EMAIL);
-      await page.goto(`/en/shopping-lists/${basketId}`);
-      await expect(composerField(page)).toBeVisible();
+    const danaBasket = await basketOf(dana, 'Change product');
+    await buyBasketRow(dana, danaBasket, [LINE_BREAD_ID], {
+      quantity: 4,
+      from: 1,
+    });
+    const basketId = await basketOf(alice, 'Change product');
+    await signIn(page, ALICE_EMAIL);
+    await page.goto(`/en/shopping-lists/${basketId}`);
+    await expect(composerField(page)).toBeVisible();
 
-      await composerField(page).fill('Bread');
-      await page
-        .locator('lib-line-composer')
-        .getByRole('button', { name: 'Add', exact: true })
-        .click();
-      await page
-        .locator('.picker button.option')
-        .filter({
-          has: page.locator('.name').getByText('Groceries', { exact: true }),
-        })
-        .click();
+    await composerField(page).fill('Bread');
+    await page
+      .locator('lib-line-composer')
+      .getByRole('button', { name: 'Add', exact: true })
+      .click();
+    await page
+      .locator('.picker button.option')
+      .filter({
+        has: page.locator('.name').getByText('Groceries', { exact: true }),
+      })
+      .click();
 
-      await expect(page).toHaveURL(/\/sheet\/rows\/[^/]+\/lists(\?.*)?$/);
-      const view = page.locator('lib-row-lists-sheet');
-      await expect(question(page).locator('.question')).toBeVisible();
-      await question(page)
-        .getByRole('button', { name: /Still need/ })
-        .click();
-      await expect(question(page)).toHaveCount(0);
+    await expect(page).toHaveURL(/\/sheet\/rows\/[^/]+\/lists(\?.*)?$/);
+    const view = page.locator('lib-row-lists-sheet');
+    await expect(question(page).locator('.question')).toBeVisible();
+    await question(page)
+      .getByRole('button', { name: /Still need/ })
+      .click();
+    await expect(question(page)).toHaveCount(0);
 
-      await groceriesOf(view).locator('button.change').click();
-      await expect(page).toHaveURL(/\/sheet\/rows\/[^/]+\/change\/[^/?]+/);
-      const changeSheet = page.locator('lib-change-sheet');
-      await changeSheet.getByRole('radio', { checked: false }).first().click();
-      await changeSheet.locator('button.use').click();
+    const changeSheet = page.locator('lib-change-sheet');
+    // A round trip through the catalog first: it destroys the basket page, and
+    // the page drawn again under this view pushed nothing since.
+    await groceriesOf(view).locator('button.change').click();
+    await expect(page).toHaveURL(/\/sheet\/rows\/[^/]+\/change\/[^/?]+/);
+    await changeSheet.locator('button.catalog').click();
+    await expect(page).toHaveURL(/\/lines\/[^/]+\/products/);
+    await expect(view).toHaveCount(0);
+    await page.goBack();
+    await expect(page).toHaveURL(/\/sheet\/rows\/[^/]+\/change\/[^/?]+/);
+    await expect(changeSheet).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(changeSheet).toHaveCount(0);
+    await expect(page).toHaveURL(/\/sheet\/rows\/[^/]+\/lists(\?.*)?$/);
+    await expect(view).toBeVisible();
 
-      // On the basket page itself, with no sheet left over it or under it.
-      await expect(page).toHaveURL(
-        new RegExp(`/shopping-lists/${basketId}(\\?.*)?$`)
-      );
-      await expect(page.locator('lib-change-sheet')).toHaveCount(0);
-      await expect(view).toHaveCount(0);
+    await groceriesOf(view).locator('button.change').click();
+    await expect(page).toHaveURL(/\/sheet\/rows\/[^/]+\/change\/[^/?]+/);
+    await changeSheet.getByRole('radio', { checked: false }).first().click();
+    await changeSheet.locator('button.use').click();
 
-      await page.goBack();
-      await expect(page).not.toHaveURL(/\/sheet\//);
-      await expect(view).toHaveCount(0);
-    } finally {
-      await setLineProducts(alice, LINE_BREAD_ID, [ITEM_BREAD_ID]);
-      await alice.patch(`/v1/lines/${LINE_BREAD_ID}`, {
-        favoriteItemId: null,
-      });
-    }
+    // On the basket page itself, with no sheet left over it or under it.
+    await expect(page).toHaveURL(
+      new RegExp(`/shopping-lists/${basketId}(\\?.*)?$`)
+    );
+    await expect(page.locator('lib-change-sheet')).toHaveCount(0);
+    await expect(view).toHaveCount(0);
+
+    await page.goBack();
+    await expect(page).not.toHaveURL(/\/sheet\//);
+    await expect(view).toHaveCount(0);
   });
 });
