@@ -561,11 +561,11 @@ export class RowListsSheet {
       !finished &&
       entry.demandEditable &&
       (entry.listId !== null || row.entries.length === 1);
-    // Why the ask is locked (the owner, 2026-11-23). A served list is one the reader
-    // writes, and only an approved member of its group can write a list, so the
-    // reader is a member and a right on the list is missing (to manage it, or to
-    // decide on an approved line), not the membership. Any other list is one this
-    // reader was not served.
+    // Why the ask is locked (the owner, 2026-11-25). `demandEditable` reads the
+    // rights of the basket's owner on the list, never the reader's, so a member
+    // of the group who may change the list on its own page can still see it
+    // locked here. The text thus sends a served reader to the list itself. Any
+    // other list is one this reader was not served.
     const reason =
       editable || finished
         ? null

@@ -736,9 +736,9 @@ describe('RowListsSheet (velista 0200)', () => {
       expect(document.body.textContent).toContain('basket.lists.notInGroup');
     });
 
-    // The owner, 2026-11-23: a served list is one the reader writes, so the reader
-    // is a member of its group and a right on the list is missing, not membership.
-    it('says only people who manage the list may change it, to a member of its group', async () => {
+    // The owner, 2026-11-25: the lock reads the rights of the basket's owner, not
+    // the reader's, so the text sends a member of the group to the list itself.
+    it('sends a member of its group to the list itself', async () => {
       const { fixture } = await render({
         echoValues: true,
         row: row([entry({ demandEditable: false })]),
