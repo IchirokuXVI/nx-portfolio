@@ -9,7 +9,7 @@
 > Found on 2026-11-20 by the rehearsal of the harvester round on a copy of the staging data of
 > that day (itself a copy of production of 2026-11-19, after release tasks `0006` to `0008` ran
 > on staging). Release task `0007` (plan `0271`) left 73 products that hold a wash count as their
-> size. The owner decided on 2026-11-20 (decision 140a of the harvester round) that a wider
+> size. The owner decided on 2026-11-25 (decision 140a of the harvester round) that a wider
 > release task fixes them on production. This plan designs that task.
 >
 > Every anchor below was read on `origin/dev` at `b0f22b124` on 2026-11-25. Line numbers are of
@@ -345,4 +345,4 @@ selections are disjoint, so the order costs nothing); or the release after it.
 
 ## Decisions
 
-None yet. Decision 140a (owner, 2026-11-20) asks for this task; O1 to O3 are open.
+None yet. Decision 140a (owner, 2026-11-25) asks for this task; O1 to O3 are open.
