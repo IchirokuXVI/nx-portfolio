@@ -18,7 +18,7 @@ import { photoOf } from './photo-address';
 import type { RunContext } from './run-context';
 import type { RunReport } from './run-report';
 import type {
-  ReportedObservation,
+  SourceObservation,
   SourceObservationPrice,
 } from './source-ingest';
 
@@ -297,66 +297,66 @@ function reportCategoryPaths(
  * product, with no amount and no unit. The eight digit code LIDL keeps for a
  * weight item does not say it either: `product-short-code.json` carries one
  * and prints a fixed `400 g`. So the row is left as it is, and a person
- * decides the unit when the product is created. A week priced by the kilo
- * (owner decision 141a) does not change that either: the flag would flip
- * every week on a product the chain sells as a piece.
+ * decides the unit when the product is created. A `ca.` week priced by the
+ * kilo (owner decision 141a) does not change that either: the flag would
+ * flip every week on a product the chain sells as a piece.
  *
  * **It does state the weight of a tray printed `Aprox.`** (plan 0244, section
  * 5.2). LIDL prints one price for that tray and none per kilo, so it is a
  * piece priced as one: no size, the weight, and not sold by weight. A week
- * printed with a range states no weight, so the stored one stays.
+ * printed with a range of any prefix states no weight, so the stored one
+ * stays (owner decisions 141a and 144).
  *
- * **A product the week prices nowhere and prints no format for is read as a
- * listing alone** (owner decision 141a, part 2). LIDL prints the format only
- * inside a price block, so such a product states no format, and a full
- * observation would write that null over the format and size stored from a
- * week that priced it ("Empanada de atún" lost its `500 g`). A partial
- * observation writes no identity field at all, which keeps them. The cost:
- * its name, brand, EAN, category path, address and `extra` are not rewritten
- * that week, and a product the chain holds no row for is not created until
- * a week prices it. The ingest skips that one with a
- * `DETAIL_SKIPPED_UNKNOWN` warning.
+ * **A page that prints no format states no size** (owner decision 143a).
+ * LIDL prints the format only inside a price block, so a week that prices a
+ * product nowhere prints none for it. The format, the size, its unit, the
+ * weight and the count, which are all read out of the format, are then
+ * absent rather than null, and the ingest leaves the stored ones alone
+ * ("Empanada de atún" lost its `500 g` to a null before the decision). The
+ * product is still reported whole (plan 0089, section 8.1): a new one is
+ * created, and a known one has its name, brand, EAN, address and `extra`
+ * rewritten as any week rewrites them.
  */
-function observationOf(product: LidlProduct): ReportedObservation {
-  const imageUrl = photoOf(photoAddressRead(product), product.externalId);
-  if (product.prices.length === 0 && product.sizeFormat === null) {
-    return {
-      externalId: product.externalId,
-      detailFetched: false,
-      observedAt: product.observedAt,
-      // The index prints the photo whether or not the week priced the
-      // product, so it is stated here as a full read states it.
-      imageUrl,
-      prices: [],
-    };
-  }
+function observationOf(product: LidlProduct): SourceObservation {
+  const formatted = product.sizeFormat !== null;
   return {
     externalId: product.externalId,
     name: product.name,
     brand: product.brand,
     ean: product.ean,
-    unitSize: product.unitSize,
-    // The unit the adapter converted the printed size into (plan 0177): `75cl`
-    // is 750 here and `1,28 l` is 1.28, and this is what says which is which.
-    sizeUnit: product.unitSize === null ? null : sourceSizeUnitOf(product.unit),
-    // `Aprox. 350 g` (plan 0244, section 5.2): a tray priced as one piece. The
-    // adapter answers the grams here and no size, the price is the tray's, and
-    // the row is not sold by weight. A printed range parses to no size and
-    // states no weight: undefined, which leaves the stored weight alone
-    // (owner decision 141a).
+    ...(formatted
+      ? {
+          unitSize: product.unitSize,
+          // The unit the adapter converted the printed size into (plan 0177):
+          // `75cl` is 750 here and `1,28 l` is 1.28, and this is what says
+          // which is which.
+          sizeUnit:
+            product.unitSize === null ? null : sourceSizeUnitOf(product.unit),
+          // `Aprox. 350 g` (plan 0244, section 5.2): a tray priced as one
+          // piece. The adapter answers the grams here and no size, the price
+          // is the tray's, and the row is not sold by weight. A printed range
+          // parses to no size and states no weight: undefined, which leaves
+          // the stored weight alone (owner decisions 141a and 144).
+          approxWeight: product.approxWeight,
+          sizeFormat: product.sizeFormat,
+          packCount: product.packCount,
+        }
+      : {}),
     soldByWeight: false,
-    approxWeight: product.approxWeight,
-    sizeFormat: product.sizeFormat,
-    packCount: product.packCount,
+    // The need world path, the one `categoryPath` of the row. Every path of
+    // the product, `categoryPaths`, goes to the sink apart, once the walk
+    // ends (plan 0268, `reportCategoryPaths`).
     categoryPath: product.categoryPath,
     url: product.url,
     // The search row's `image`, else the first of its `imageList` (plan
     // 0198).
-    imageUrl,
+    imageUrl: photoOf(photoAddressRead(product), product.externalId),
     observedAt: product.observedAt,
     // Stored, shown in the queue and never interpreted. The short code is
     // LIDL's own number for a weight item, and the aisle is a proposal a person
-    // reads: neither may be written as an identifier or as a decision.
+    // reads: neither may be written as an identifier or as a decision. A
+    // range whose figure a person decides is named here too (owner decision
+    // 144).
     extra: extraOf(product),
     prices: lidlObservationPrices(product),
   };
@@ -372,12 +372,18 @@ function observationOf(product: LidlProduct): ReportedObservation {
  * because deriving one from the printed size would disagree with the chain in
  * the last cent on the field whose only purpose is comparison.
  *
- * **A block printed with a weight range prints the price of a kilo** (owner
- * decision 141a). `ca.220-360g` at 21.99 one week and `Aprox.300 g` at 6.60
- * the next are one sea bass fillet. So that figure is the unit price, under
- * the label `kg`, and the piece price is null: a shopper sees no LIDL price
- * that week rather than a wrong one. **No piece price is derived from the
- * weight** (the owner refused that, option b of the decision).
+ * **A block printed with a `ca.` weight range prints the price of a kilo**
+ * (owner decisions 141a and 144). `ca.220-360g` at 21.99 one week and
+ * `Aprox.300 g` at 6.60 the next are one sea bass fillet. So that figure is
+ * the unit price, under the label `kg`, and the piece price is null: a
+ * shopper sees no LIDL price that week rather than a wrong one. **No piece
+ * price is derived from the weight** (the owner refused that, option b of
+ * decision 141a).
+ *
+ * **A block printed with any other range keeps its figure as the piece
+ * price** (owner decision 144), as before decision 141a: nothing proves an
+ * `Aprox. 360-460g` figure is per kilo. `extraOf` names the range for a
+ * person and the curator, and the run report lists the product.
  */
 export function lidlObservationPrices(
   product: LidlProduct
@@ -414,7 +420,35 @@ function extraOf(product: LidlProduct): Record<string, unknown> | null {
   if (product.ian) {
     extra['ian'] = product.ian;
   }
+  const toReview = rangesToReview(product);
+  if (toReview.length > 0) {
+    extra[PRICE_BASIS_TO_REVIEW] = toReview.join(', ');
+  }
   return extra;
+}
+
+/**
+ * The key of `extra` that names a range whose figure a person decides (owner
+ * decision 144): the printed ranges, verbatim, such as `Aprox. 360-460g`.
+ *
+ * The figure beside such a range was written as the price of the piece, and
+ * it may be the price of a kilo: on `ca.` ranges it is, and nothing measured
+ * says which it is beside `Aprox.` or no prefix. The queue shows the key on
+ * the row, and the curation packet carries `extra` to the model. Nothing in
+ * the harvester reads it.
+ */
+export const PRICE_BASIS_TO_REVIEW = 'priceBasisToReview';
+
+/** The printed ranges of a product's blocks whose figure a person decides. */
+function rangesToReview(product: LidlProduct): string[] {
+  const printed = new Set<string>();
+  for (const price of product.prices) {
+    if (price.basisToReview) {
+      printed.add(price.sizeFormat ?? product.sizeFormat ?? '');
+    }
+  }
+  printed.delete('');
+  return [...printed];
 }
 
 /**
@@ -465,6 +499,25 @@ function describeRun(
     regionallyPriced: products.filter(
       (product) => new Set(product.prices.map((price) => price.price)).size > 1
     ).length,
+    /**
+     * The products priced beside a weight range that does not start with
+     * `ca.` (owner decision 144), by id, with the name and the range. Each
+     * figure was written as the price of the piece, and a person or the
+     * curator decides whether it is. The row carries the same range under
+     * `extra.priceBasisToReview`.
+     */
+    pricesToReview: products.flatMap((product) => {
+      const ranges = rangesToReview(product);
+      return ranges.length === 0
+        ? []
+        : [
+            {
+              externalId: product.externalId,
+              name: product.name,
+              sizeFormat: ranges.join(', '),
+            },
+          ];
+    }),
     requests,
   };
 }

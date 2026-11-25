@@ -57,8 +57,14 @@ const PRINTED_SIZE =
 /** A unit with no number in front of it: `Ud` is one of that unit. */
 const BARE_UNIT = /^([A-Za-zÀ-ÿ]{1,8})\.?$/;
 
-/** Prefixes the chain puts in front of a weight it does not promise exactly. */
-const APPROXIMATE = /^(?:aprox\.?|approx\.?|ca\.?|env\.?)\s*/i;
+/**
+ * Prefixes the chain puts in front of a weight it does not promise exactly,
+ * with every dot and space the chain prints after one: `Aprox.300 g`,
+ * `aprox..600-800 g`, `aprox.. 900-1000 g`. The word is captured, because a
+ * range reads differently after `ca.` than after any other prefix (owner
+ * decision 144).
+ */
+const APPROXIMATE = /^(aprox|approx|ca|env)[.\s]*/i;
 
 export interface LidlSize {
   /** What one pack holds, in {@link unit}. `6x200ml` is 1200 millilitres. */
@@ -127,33 +133,56 @@ const PRINTED_RANGE =
   /^\d+(?:[.,]\d+)?\s*-\s*\d+(?:[.,]\d+)?\s*([A-Za-zÀ-ÿ]{1,8})\.?$/;
 
 /**
- * Whether the printed size is a weight range (owner decision 141a): an
- * approximate prefix or none, two numbers, one unit of weight. `ca.220-360g`,
- * `ca. 200-300 g`, `ca. 0,8-1Kg`, `Aprox. 360-460g`.
+ * What a printed weight range says about the figure beside it (owner
+ * decisions 141a and 144).
  *
- * **Beside a range, LIDL's figure is the price of a kilo.** On one product id
- * the chain prints `ca.220-360g` at 21.99 in one week and `Aprox.300 g` at
- * 6.60 in the next, and 21.99 times 0.3 kg is 6.60. Read as the price of the
- * piece, the range weeks put sea bass at 61 to 100 € a kilo. So a price block
- * printed with a range is read as a price per kilo, and the range is never a
- * size and never a weight.
+ * - `PER_KILO`: the range starts with `ca.` (`ca.220-360g`, `ca. 0,8-1Kg`).
+ *   On one product id the chain prints `ca.220-360g` at 21.99 in one week and
+ *   `Aprox.300 g` at 6.60 in the next, and 21.99 times 0.3 kg is 6.60. Read as
+ *   the price of the piece, the range weeks put sea bass at 61 to 100 € a
+ *   kilo. So the figure beside a `ca.` range is the price of a kilo.
+ * - `TO_REVIEW`: any other prefix, or none (`Aprox. 360-460g`,
+ *   `aprox..600-800 g`, `400-600 g`). The proof covers `ca.` ranges only, so
+ *   the figure stays the price of the piece, as before, and a person or the
+ *   curator decides what it is.
+ */
+export type LidlWeightRange = 'PER_KILO' | 'TO_REVIEW';
+
+/**
+ * The kind of weight range the printed size is, or null when it is no weight
+ * range: two numbers and one unit of weight, after an approximate prefix or
+ * none. {@link LidlWeightRange} says what each kind means.
  *
- * A range of a unit that is not a weight (`1-2 l`) answers false: the owner's
+ * **Any range is never a size and never a weight.** It states two numbers,
+ * and neither is the weight of the piece.
+ *
+ * A range of a unit that is not a weight (`1-2 l`) answers null: the owner's
  * decision names the kilo, and nothing measured shows a volume range.
  */
+export function weightRangeOf(
+  printed: string | null | undefined
+): LidlWeightRange | null {
+  if (!printed) {
+    return null;
+  }
+  const trimmed = printed.replace(/\s+/g, ' ').trim();
+  const prefix = APPROXIMATE.exec(trimmed)?.[1]?.toLowerCase() ?? null;
+  const match = PRINTED_RANGE.exec(trimmed.replace(APPROXIMATE, ''));
+  if (!match) {
+    return null;
+  }
+  const token = UNITS[match[1].toLowerCase()];
+  if (token === undefined || GRAMS_IN[token.unit] === undefined) {
+    return null;
+  }
+  return prefix === 'ca' ? 'PER_KILO' : 'TO_REVIEW';
+}
+
+/** Whether the printed size is a weight range of any kind, {@link weightRangeOf}. */
 export function isPrintedWeightRange(
   printed: string | null | undefined
 ): boolean {
-  if (!printed) {
-    return false;
-  }
-  const stated = printed.replace(/\s+/g, ' ').trim().replace(APPROXIMATE, '');
-  const match = PRINTED_RANGE.exec(stated);
-  if (!match) {
-    return false;
-  }
-  const token = UNITS[match[1].toLowerCase()];
-  return token !== undefined && GRAMS_IN[token.unit] !== undefined;
+  return weightRangeOf(printed) !== null;
 }
 
 /**
@@ -184,9 +213,9 @@ const GRAMS_IN: Partial<Record<UnitOfMeasure, number>> = {
  * `Aprox. 350 g` is a tray whose weight varies: LIDL prints one price for it
  * and no price per kilo, so it is a piece priced as one, with a weight and no
  * size. A printed range (`Aprox. 360-460g`) parses to no size at all, so it
- * answers no weight either: {@link isPrintedWeightRange} says what it is, and
+ * answers no weight either: {@link weightRangeOf} says what it is, and
  * `normalizeProduct` then states no weight at all, so a stored one stays
- * (owner decision 141a). An approximate volume (`Aprox. 24 l`) is not a
+ * (owner decisions 141a and 144). An approximate volume (`Aprox. 24 l`) is not a
  * weight and answers null, and its size stays as printed.
  */
 export function approxWeightOf(size: LidlSize | null): number | null {

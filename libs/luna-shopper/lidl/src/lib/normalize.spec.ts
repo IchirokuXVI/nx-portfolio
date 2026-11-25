@@ -252,11 +252,14 @@ describe('normalizeProduct', () => {
     expect(product?.unitSize).toBeNull();
     expect(product?.unit).toBeNull();
     expect(product?.prices.length).toBeGreaterThan(0);
-    // The price of the tray, not of a kilo (owner decision 141a).
-    expect(product?.prices.every((price) => !price.perKilo)).toBe(true);
+    // The price of the tray, not of a kilo, and nothing to review (owner
+    // decisions 141a and 144).
+    expect(
+      product?.prices.every((price) => !price.perKilo && !price.basisToReview)
+    ).toBe(true);
   });
 
-  describe('a week printed with a weight range (owner decision 141a)', () => {
+  describe('a week printed with a weight range (owner decisions 141a and 144)', () => {
     /**
      * **Constructed, not captured.** No committed fixture holds a range week,
      * the range weeks of the walk of 2026-11-20 have ended, and this job may
@@ -338,7 +341,7 @@ describe('normalizeProduct', () => {
         observedAt: OBSERVED_AT,
       });
 
-    it('reads the figure of each region as a price per kilo, with no size and no weight', () => {
+    it('reads the figure of each region beside a ca. range as a price per kilo, with no size and no weight', () => {
       const product = read(
         pageOf('ca.220-360g', { mainland: 21.99, islands: 22.49 })
       );
@@ -354,14 +357,50 @@ describe('normalizeProduct', () => {
           regions: price.regions.map((each) => each.id),
           price: price.price,
           perKilo: price.perKilo,
+          basisToReview: price.basisToReview,
         }))
       ).toEqual([
-        { regions: ['1', '2'], price: 21.99, perKilo: true },
-        { regions: ['58'], price: 22.49, perKilo: true },
+        {
+          regions: ['1', '2'],
+          price: 21.99,
+          perKilo: true,
+          basisToReview: false,
+        },
+        { regions: ['58'], price: 22.49, perKilo: true, basisToReview: false },
       ]);
     });
 
-    it('reads a range in kilos the same way', () => {
+    it.each([
+      'Aprox. 360-460g',
+      'aprox..600-800 g',
+      'aprox.. 900-1000 g',
+      '400-600 g',
+    ])(
+      'keeps the figure beside %s as the price of the piece, marked for review, and states no weight',
+      (packaging) => {
+        const product = read(
+          pageOf(packaging, { mainland: 3.79, islands: 3.79 })
+        );
+
+        expect(product?.sizeFormat).toBe(packaging);
+        expect(product?.unitSize).toBeNull();
+        expect(product?.unit).toBeNull();
+        // Not stated, whatever the prefix and however many dots follow it.
+        expect(product?.approxWeight).toBeUndefined();
+        expect(
+          product?.prices.map((price) => [
+            price.price,
+            price.perKilo,
+            price.basisToReview,
+          ])
+        ).toEqual([
+          [3.79, false, true],
+          [3.79, false, true],
+        ]);
+      }
+    );
+
+    it('reads a ca. range in kilos the same way', () => {
       const product = read(
         pageOf('ca. 0,8-1Kg', { mainland: 4.39, islands: 4.39 })
       );

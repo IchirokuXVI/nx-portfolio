@@ -111,8 +111,9 @@ export const fetchLidl: RefreshFetcher = async (request) => {
       detailFetched: false,
       observedAt: product.observedAt,
       // The page has no field for it (plan 0181), so the row keeps its own.
-      // Each price as the walk writes it, a week printed with a weight range
-      // by the kilo (owner decision 141a).
+      // Each price as the walk writes it: beside a `ca.` weight range by the
+      // kilo, beside any other range as the piece price (owner decisions 141a
+      // and 144).
       prices: lidlObservationPrices(product),
     },
   };

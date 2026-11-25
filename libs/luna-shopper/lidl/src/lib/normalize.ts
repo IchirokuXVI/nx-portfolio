@@ -16,6 +16,7 @@ import {
   isPrintedWeightRange,
   packCountIn,
   parseSize,
+  weightRangeOf,
 } from './size';
 import {
   LIDL_BASE_URL,
@@ -196,9 +197,10 @@ export function normalizeProduct(
     readString(readRecord(readRecord(state, 'price'), 'packaging'), 'text') ??
     row.sizeFormat;
   const size = parseSize(sizeFormat);
-  // A printed weight range states no weight of the piece (owner decision
-  // 141a), so the product says nothing about one rather than null, which
-  // would clear the weight stored from a week that printed `Aprox.300 g`.
+  // A printed weight range of any prefix states no weight of the piece (owner
+  // decisions 141a and 144), so the product says nothing about one rather
+  // than null, which would clear the weight stored from a week that printed
+  // `Aprox.300 g`.
   const approxWeight = isPrintedWeightRange(sizeFormat)
     ? undefined
     : approxWeightOf(size);
@@ -260,8 +262,10 @@ export function normalizeProduct(
  * for the five Canary regions, and writing the mainland figure there would show
  * a shopper in Las Palmas a price the chain never published.
  *
- * **A block printed with a weight range is a price per kilo** (owner decision
- * 141a, {@link isPrintedWeightRange}). The block's own format decides, and
+ * **A block printed with a `ca.` weight range is a price per kilo** (owner
+ * decisions 141a and 144, {@link weightRangeOf}). A block printed with any
+ * other range keeps its figure as the price of the piece and says that a
+ * person decides (`basisToReview`). The block's own format decides, and
  * `sizeFormat`, the product's, stands in for a block that prints none.
  */
 export function normalizeRegionPrices(
@@ -300,11 +304,13 @@ export function normalizeRegionPrices(
       continue;
     }
     const blockFormat = readString(readRecord(current, 'packaging'), 'text');
+    const range = weightRangeOf(blockFormat ?? sizeFormat);
     prices.push({
       priceId,
       regions,
       price,
-      perKilo: isPrintedWeightRange(blockFormat ?? sizeFormat),
+      perKilo: range === 'PER_KILO',
+      basisToReview: range === 'TO_REVIEW',
       oldPrice: readNumber(current, 'oldPrice'),
       currency: readString(current, 'currencyCode') ?? 'EUR',
       // Next week's window is already published, and it is written with the

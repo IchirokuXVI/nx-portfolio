@@ -8,7 +8,10 @@ import {
 import type { SupermarketSource } from '../entities';
 import { mergeCategoryPaths } from './category-paths';
 import { FailingRunReport } from './failing-run-report.fake';
-import { LidlCatalogRunner } from './lidl-catalog.runner';
+import {
+  LidlCatalogRunner,
+  PRICE_BASIS_TO_REVIEW,
+} from './lidl-catalog.runner';
 import type { RunContext } from './run-context';
 import { RecordingRunReport } from './run-report';
 import { ReportWriteFailedError } from './run-report.sink';
@@ -417,18 +420,26 @@ describe('LidlCatalogRunner', () => {
       // The tray's price, unchanged.
       prices: [expect.objectContaining({ price: 4.99 })],
     });
+    expect(bySize['Aprox. 350 g'].extra).not.toHaveProperty(
+      PRICE_BASIS_TO_REVIEW
+    );
     // A printed range is no size, and it states no weight: absent, so the
-    // stored one stays (owner decision 141a). Its figure is per kilo.
+    // stored one stays (owner decisions 141a and 144). Only a `ca.` range is
+    // per kilo, so this figure is still the piece price, and the row names
+    // the range for a person to decide.
     expect(bySize['Aprox. 360-460g']).toMatchObject({
       unitSize: null,
       soldByWeight: false,
       prices: [
         expect.objectContaining({
-          price: null,
-          unitPrice: 4.99,
-          unitPriceLabel: 'kg',
+          price: 4.99,
+          unitPrice: null,
+          unitPriceLabel: null,
         }),
       ],
+      extra: expect.objectContaining({
+        [PRICE_BASIS_TO_REVIEW]: 'Aprox. 360-460g',
+      }),
     });
     expect(bySize['Aprox. 360-460g'].approxWeight).toBeUndefined();
     expect(bySize['500 g']).toMatchObject({
@@ -568,15 +579,14 @@ describe('LidlCatalogRunner', () => {
 
     await runner.run(context(), report, { supermarketId: CHAIN }, source());
 
-    // A product the page prints a format for, with no price this week. The
-    // catalog is allowed to know the article exists, so the product is
-    // reported whole with no price at all.
+    // 21 of the week's products look like this. The catalog is allowed to know
+    // the article exists, so the product is reported with no price at all.
     expect(report.products).toHaveLength(1);
     expect(report.products[0].prices).toEqual([]);
     expect(report.scopes).toEqual([]);
   });
 
-  it('reads a product with no price block and no format from the listing alone (owner decision 141a)', async () => {
+  it('reports a product with no price block and no format whole, stating no size (owner decision 143a)', async () => {
     const runner = new TestRunner({
       index: [
         row({
@@ -591,22 +601,35 @@ describe('LidlCatalogRunner', () => {
 
     await runner.run(context(), report, { supermarketId: CHAIN }, source());
 
-    // LIDL prints the format only inside a price block. A full observation
-    // would state a null format and size, and the ingest would write them
-    // over the `500 g` a priced week stored. A partial one states neither.
-    expect(report.products).toEqual([]);
-    expect(report.partialProducts).toEqual([
-      {
-        externalId: '1',
-        detailFetched: false,
-        observedAt: expect.any(Date),
-        imageUrl: 'https://www.lidl.es/assets/gcp1.png',
-        prices: [],
-      },
-    ]);
+    // Plan 0089, section 8.1: a product the week prices nowhere is still
+    // reported in full, so a new one is created and a known one refreshed.
+    expect(report.partialProducts).toEqual([]);
+    expect(report.products).toHaveLength(1);
+    const [empanada] = report.products;
+    expect(empanada).toMatchObject({
+      externalId: '1',
+      // The page's title, refreshed as any week refreshes it.
+      name: 'Product 1',
+      ean: '4335619207615',
+      imageUrl: 'https://www.lidl.es/assets/gcp1.png',
+      prices: [],
+    });
+    expect(empanada.detailFetched).not.toBe(false);
+    // LIDL prints the format only inside a price block. Every field read out
+    // of the format is absent, not null, so the ingest keeps the `500 g` a
+    // priced week stored.
+    for (const key of [
+      'sizeFormat',
+      'unitSize',
+      'sizeUnit',
+      'approxWeight',
+      'packCount',
+    ] as const) {
+      expect(empanada).not.toHaveProperty(key);
+    }
   });
 
-  it('writes the figure of a week printed with a weight range as a price per kilo, for each region (owner decision 141a)', async () => {
+  it('writes the figure of a week printed with a ca. weight range as a price per kilo, for each region (owner decisions 141a and 144)', async () => {
     const runner = new TestRunner({
       index: [
         row({
@@ -653,7 +676,72 @@ describe('LidlCatalogRunner', () => {
       ['2', null, 21.99, 'kg'],
       ['58', null, 22.49, 'kg'],
     ]);
+    // Proved, so nothing to review.
+    expect(lubina.extra).not.toHaveProperty(PRICE_BASIS_TO_REVIEW);
   });
+
+  it.each([
+    'Aprox. 360-460g',
+    'aprox..600-800 g',
+    'aprox.. 900-1000 g',
+    '400-600 g',
+  ])(
+    'writes the figure beside %s as the piece price, and names it for review (owner decision 144)',
+    async (printed) => {
+      const run = context();
+      const runner = new TestRunner({
+        index: [
+          row({
+            id: '11672806',
+            title: 'Costillas',
+            category: 'Food',
+            size: printed,
+          }),
+        ],
+        products: {
+          '/p/x/p11672806': product({
+            id: '11672806',
+            size: printed,
+            groups: [{ priceId: 'mainland', regions: ['1', '2'], price: 3.79 }],
+          }),
+        },
+      });
+
+      await runner.run(run, report, { supermarketId: CHAIN }, source());
+
+      const [costillas] = report.products;
+      expect(costillas).toMatchObject({
+        sizeFormat: printed,
+        unitSize: null,
+        sizeUnit: null,
+        soldByWeight: false,
+        extra: expect.objectContaining({ [PRICE_BASIS_TO_REVIEW]: printed }),
+      });
+      // Not stated, whatever the prefix, so a stored weight stays.
+      expect(costillas.approxWeight).toBeUndefined();
+      expect(
+        costillas.prices.map((price) => [
+          price.scopeKey,
+          price.price,
+          price.unitPrice,
+          price.unitPriceLabel,
+        ])
+      ).toEqual([
+        ['1', 3.79, null, null],
+        ['2', 3.79, null, null],
+      ]);
+      // The run report lists it, so a person finds every such product of the
+      // walk in one place.
+      const runReport = (run.setReport as jest.Mock).mock.calls[0][0];
+      expect(runReport.pricesToReview).toEqual([
+        {
+          externalId: '11672806',
+          name: 'Product 11672806',
+          sizeFormat: printed,
+        },
+      ]);
+    }
+  );
 
   it('lets a page that fails cost one product, and names it', async () => {
     const run = context();
@@ -770,6 +858,7 @@ describe('LidlCatalogRunner', () => {
       regionsDeclared: ['1'],
       observations: 1,
       regionallyPriced: 0,
+      pricesToReview: [],
     });
     // Nothing in the report claims the chain's assortment: the site publishes
     // a window, and `listed` is a count of what this window held.
@@ -893,6 +982,7 @@ describe('LidlCatalogRunner', () => {
         regionsDeclared: ['1', '2', '3'],
         observations: 4,
         regionallyPriced: 1,
+        pricesToReview: [],
         requests: runner.asked.length,
       });
       expect(idsOf()).toEqual(['1', '2', '3']);

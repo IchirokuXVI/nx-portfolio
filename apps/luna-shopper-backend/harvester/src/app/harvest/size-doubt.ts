@@ -47,7 +47,8 @@ export function hasSizeDoubt(
  * on, or undefined for a new one.
  *
  * A source that never reads a count or a weight leaves the stored one alone
- * (`packCount` and `approxWeight` absent), so the stored one is read.
+ * (`packCount` and `approxWeight` absent), so the stored one is read. So does
+ * a size it did not state this time (`unitSize` absent, owner decision 143a).
  */
 export function sizeDoubtOfFields(
   fields: SourceEntryFields,
@@ -58,10 +59,13 @@ export function sizeDoubtOfFields(
   if (!writesSize) {
     return 'leave';
   }
+  // A size the observation does not state is the stored one (owner decision
+  // 143a), and so is its unit.
+  const stated = fields.unitSize !== undefined;
   return decide(
     {
-      unitSize: fields.unitSize,
-      sizeUnit: fields.sizeUnit,
+      unitSize: stated ? (fields.unitSize ?? null) : (held?.unitSize ?? null),
+      sizeUnit: stated ? (fields.sizeUnit ?? null) : (held?.sizeUnit ?? null),
       soldByWeight: fields.soldByWeight,
       approxWeight:
         fields.approxWeight !== undefined
