@@ -82,6 +82,11 @@ export interface SuggestionHoldingChange {
   readonly to: number;
   /** True for a step the hold made. */
   readonly repeat: boolean;
+  /**
+   * The key of the card whose stepper moved, its `data-card`, so a page can point
+   * at that stepper (velista `0208`). One line can be held under several cards.
+   */
+  readonly cardKey?: string;
 }
 
 /** A suggestion chosen, and the button it was chosen with. */
@@ -382,6 +387,7 @@ export class SuggestionList {
       from: step.step.from,
       to: step.step.to,
       repeat: step.step.repeat,
+      cardKey: card.key,
     });
   }
 }

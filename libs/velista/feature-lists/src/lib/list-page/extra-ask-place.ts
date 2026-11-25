@@ -44,3 +44,33 @@ export function placeOver(origin: HTMLElement, control: HTMLElement): void {
   origin.style.width = `${box.width}px`;
   origin.style.height = `${box.height}px`;
 }
+
+/**
+ * A catalog card the results of "Add or find" draw, by its key, or null once they
+ * no longer draw it (velista `0208`, target state 16).
+ */
+export function cardOf(
+  column: HTMLElement,
+  cardKey: string
+): HTMLElement | null {
+  return (
+    Array.from(column.querySelectorAll<HTMLElement>('[data-card]')).find(
+      (card) => card.dataset['card'] === cardKey
+    ) ?? null
+  );
+}
+
+/** The stepper of one line under a card, or null when the card draws no such line. */
+export function cardStepperOf(
+  card: HTMLElement | null,
+  lineId: string
+): HTMLElement | null {
+  return (
+    Array.from(
+      card?.querySelectorAll<HTMLElement>(
+        'li[data-line] > lib-quantity-stepper'
+      ) ?? []
+    ).find((stepper) => stepper.parentElement?.dataset['line'] === lineId) ??
+    null
+  );
+}

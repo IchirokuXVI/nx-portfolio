@@ -60,6 +60,8 @@ function added(answer: LineAddResult): LineAddOutcome {
     merged: answer.outcome !== 'created',
     outcome: answer.outcome,
     alreadyOnList: answer.alreadyOnList,
+    // Only a raise took anything into the ask (velista `0208`, target state 16).
+    extra: answer.outcome === 'raised' ? (answer.extra ?? null) : null,
   };
 }
 
@@ -104,6 +106,12 @@ export type LineAddOutcome =
        */
       readonly outcome: AddOutcome;
       readonly alreadyOnList: readonly Line[];
+      /**
+       * What a `raised` add sent with `reportExtra` took into the ask (backend
+       * `0276`, velista `0208`), or null: not a raise, no report asked for, or one
+       * this build cannot read.
+       */
+      readonly extra: AbsorbedExtra | null;
     }
   | { readonly state: 'failed'; readonly error: unknown };
 

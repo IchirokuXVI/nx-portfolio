@@ -123,6 +123,7 @@ import {
   ErrorState,
   ExtraAskHost,
   ExtraAskPopover,
+  type ExtraAskRequest,
   FilterIcon,
   GearIcon,
   LineComposer,
@@ -156,7 +157,12 @@ import { selectDueLines } from '../select-due-lines';
 import { type ListStateCatalog, selectListState } from '../select-list-state';
 import { selectTripGroups } from '../select-trip-groups';
 import { voiceFailureCopy } from '../voice-error-copy';
-import { extraAskParts, placeOver } from './extra-ask-place';
+import {
+  cardOf,
+  cardStepperOf,
+  extraAskParts,
+  placeOver,
+} from './extra-ask-place';
 import {
   focusAfterLeaving,
   focusDropped,
@@ -212,6 +218,13 @@ interface ExtraReport {
   readonly extra: AbsorbedExtra;
   readonly quantity: number;
 }
+
+/**
+ * The control that stepped a line's open run last, which its question is asked on
+ * (velista `0208`): the zone list's row, or the stepper of a catalog card in the
+ * results of "Add or find", named by the card's key (target state 16).
+ */
+type RunControl = 'row' | { readonly card: string };
 
 interface ListRowPick {
   readonly from: typeof LIST_ROW_PICK;
@@ -1967,17 +1980,17 @@ export class ListPage {
     // (velista `0208`, target state 2), the hidden page's included. The teardown's
     // never does: nobody is left to ask, and the server takes the extra in anyway.
     // A lowering never reports and never asks.
-    // A run a catalog card of the results made alone is the catalog's, which keeps
-    // its call as it is. The flag goes when the net raise came from the row's
-    // control: a run both the row and a card stepped sends it, because the row was
-    // part of it, though some of its presses were the card's.
-    const fromRow = this._rowRuns.delete(lineId);
+    // A run of a catalog card in the results of "Add or find" reports too (target
+    // state 16), and asks on that card's stepper. A run both the row and a card
+    // stepped asks on the control that stepped it last.
+    const control = this._runControls.get(lineId) ?? null;
+    this._runControls.delete(lineId);
     if (this._teardown.destroying) {
       // A number the person watched move is written, and that is all.
       void this.changeQuantity({ lineId, delta });
       return;
     }
-    const reportExtra = fromRow && delta > 0;
+    const reportExtra = control !== null && delta > 0;
 
     const column = this._column()?.nativeElement;
     const drawn = this._inToBuy(lineId);
@@ -1988,7 +2001,12 @@ export class ListPage {
     // Locked before the store patches the 0, so the row is never hidden for a frame.
     const trashed = this._trashed === lineId;
     const answered = trashed ? this._lock(lineId) : null;
-    const written = this.changeQuantity({ lineId, delta, reportExtra });
+    const written = this.changeQuantity({
+      lineId,
+      delta,
+      reportExtra,
+      ...(control === null ? {} : { control }),
+    });
     // Unlocked as soon as the write answers, whatever it said, and before anything
     // below reads whether the row is still drawn.
     const writing = answered !== null ? written.finally(answered) : written;
@@ -2143,7 +2161,7 @@ export class ListPage {
     if (!this._step(event.lineId, event.step)) {
       return;
     }
-    this._rowRuns.add(event.lineId);
+    this._runControls.set(event.lineId, 'row');
     const { step } = event;
     if (step.to === 0 && step.from > 0 && !step.repeat) {
       this._trashed = event.lineId;
@@ -2165,7 +2183,7 @@ export class ListPage {
    */
   reelQuantity(event: { lineId: string; step: QuantityStep }): void {
     if (this._step(event.lineId, event.step)) {
-      this._rowRuns.add(event.lineId);
+      this._runControls.set(event.lineId, 'row');
       this.quantityRuns.flush(event.lineId);
     }
   }
@@ -2188,7 +2206,7 @@ export class ListPage {
     // back to where it started sent nothing and left its mark behind, which would
     // otherwise send the flag with a later run the row had no part in.
     if (!this.quantityRuns.pending().has(lineId)) {
-      this._rowRuns.delete(lineId);
+      this._runControls.delete(lineId);
     }
     this.quantityRuns.step(lineId, step);
     // A press on the control of the line whose question is open closes it with no
@@ -2219,6 +2237,8 @@ export class ListPage {
      * with something countable asks.
      */
     reportExtra?: boolean;
+    /** The control the question is asked on. Absent is the row. */
+    control?: RunControl;
   }): Promise<boolean> {
     const page = this.loaded();
     if (page !== null && !page.abilities.canDecide) {
@@ -2241,10 +2261,12 @@ export class ListPage {
         answer.extra !== null &&
         answer.quantity !== null
       ) {
-        this._extraAnswered(event.lineId, sent, {
-          extra: answer.extra,
-          quantity: answer.quantity,
-        });
+        this._extraAnswered(
+          event.lineId,
+          sent,
+          { extra: answer.extra, quantity: answer.quantity },
+          event.control ?? 'row'
+        );
       }
       return answer.state === 'succeeded';
     }
@@ -2301,8 +2323,9 @@ export class ListPage {
   async add(entry: LineComposerSubmit): Promise<void> {
     // Every add from the composer can be asked about, typed words and a chosen card
     // alike: two or more lines it meets are a question, never a guess (the owner's
-    // ruling of 2026-11-16, backend `0260` rule 4).
-    await this._send(entry, { askIfAmbiguous: true });
+    // ruling of 2026-11-16, backend `0260` rule 4). An add that raises a line answers
+    // what the raise took into the ask (velista `0208`, target state 16).
+    await this._send(entry, { askIfAmbiguous: true, reportExtra: true });
   }
 
   /**
@@ -2323,6 +2346,9 @@ export class ListPage {
     // (velista `0185`, section 4): a send that is not drawn calls `sent()` only on its
     // answer, and a failure never does.
     this.composerNotice.set(null);
+    // Every write of a line numbered before this add went out, so its answer can
+    // tell whether a run of the line it raised went out after it (velista `0208`).
+    const writesBefore = this._sentCount;
     const current = this.loaded();
     const drawn = this._lines.drawsBeforeAnswer(
       listId,
@@ -2356,6 +2382,13 @@ export class ListPage {
     );
 
     this._typedBusy.set(false);
+
+    if (this._teardown.destroying) {
+      // The page went while the add was out. The store holds what the server
+      // answered; nothing is left to mark, scroll or ask on (velista `0208`), and a
+      // render hook of a destroyed page would throw.
+      return;
+    }
 
     if (outcome.state === 'failed') {
       if (
@@ -2485,8 +2518,18 @@ export class ListPage {
 
     if (outcome.merged) {
       // The units went to a line already on the list, which stays where it is: the
-      // page shows it and marks its quantity (target 4).
-      this._markTook([outcome.line.id]);
+      // page shows it and marks its quantity (target 4). A raise that took extra
+      // into the ask asks about it on the row, once the row is in view (velista
+      // `0208`, target state 16).
+      const raised = outcome.line;
+      const extra = outcome.extra;
+      this._markTook(
+        [raised.id],
+        extra === null
+          ? undefined
+          : (shown) =>
+              this._addAnswered(listId, raised, extra, shown, writesBefore)
+      );
       this._announce(
         this._translator.t('list.addChoice.merged', undefined, this._locale(), {
           name: this._lineName(outcome.line),
@@ -2579,7 +2622,11 @@ export class ListPage {
       return;
     }
     this.addChoice.set(null);
-    void this._send(asked.entry, { intoLineId: lineId }, asked.listId);
+    void this._send(
+      asked.entry,
+      { intoLineId: lineId, reportExtra: true },
+      asked.listId
+    );
   }
 
   /** "A new line" was chosen: the same add, as a line of its own. */
@@ -2591,6 +2638,7 @@ export class ListPage {
       return;
     }
     this.addChoice.set(null);
+    // A new line raises nothing, so it asks for no report.
     void this._send(asked.entry, { newLine: true }, asked.listId);
   }
 
@@ -2655,11 +2703,12 @@ export class ListPage {
   readonly extraWords = this._extraHost.words;
 
   /**
-   * The lines whose open run a row's stepper or reel stepped (target 1). The mark
-   * is cleared by the run's write, and by the start of the line's next run, so a
-   * run that sent nothing leaves nothing behind.
+   * The lines whose open run a row's stepper or reel, or a catalog card's stepper in
+   * the results of "Add or find", stepped (target states 1 and 16), and which of them
+   * stepped it last. The mark is cleared by the run's write, and by the start of the
+   * line's next run, so a run that sent nothing leaves nothing behind.
    */
-  private readonly _rowRuns = new Set<string>();
+  private readonly _runControls = new Map<string, RunControl>();
 
   /**
    * The newest write sent for each line, numbered, so an answer can tell whether a
@@ -2704,7 +2753,8 @@ export class ListPage {
   private _extraAnswered(
     lineId: string,
     sent: number,
-    report: ExtraReport
+    report: ExtraReport,
+    control: RunControl = 'row'
   ): void {
     if (this._teardown.destroying) {
       return;
@@ -2714,9 +2764,13 @@ export class ListPage {
     if (line === undefined || column === undefined) {
       return;
     }
-    const parts = () => extraAskParts(column, lineId);
-    // No row of this page draws the line: nothing to point at, nothing asked.
-    if (parts() === null) {
+    const where =
+      control === 'row'
+        ? this._rowAskParts(column, lineId)
+        : this._cardAskParts(column, control.card, lineId);
+    // No row or card of this page draws the line: nothing to point at, nothing
+    // asked, and the amount set stands.
+    if (where.origin() === null) {
       return;
     }
     this._extraHost.ask({
@@ -2725,10 +2779,30 @@ export class ListPage {
       unit: line.unit,
       extra: report.extra,
       shown: report.quantity,
+      ...where,
+      count: () => this._countExtra(lineId, report),
+      inFront: () => !this._teardown.destroying && this._inFront(column),
+      atRest: () =>
+        !(where.origin()?.matches('lib-quantity-reel.open') ?? false),
+      current: () =>
+        this._sentRuns.get(lineId) === sent &&
+        !this.quantityRuns.pending().has(lineId),
+    });
+  }
+
+  /**
+   * Where a row's question goes: its amount control, the row kept in sight, and
+   * the mark laid over the control each time it opens, so the popover is held
+   * beside the row and never inside it, which is a button.
+   */
+  private _rowAskParts(
+    column: HTMLElement,
+    lineId: string
+  ): Pick<ExtraAskRequest, 'origin' | 'keepInSight' | 'holdAgainst'> {
+    const parts = () => extraAskParts(column, lineId);
+    return {
       origin: () => parts()?.anchor ?? null,
       keepInSight: () => parts()?.row ?? null,
-      // Laid over the amount control each time it opens, so the popover is held
-      // beside the row and never inside it, which is a button.
       holdAgainst: () => {
         const found = parts();
         if (found === null) {
@@ -2737,14 +2811,55 @@ export class ListPage {
         placeOver(found.origin, found.anchor);
         return found.origin;
       },
-      count: () => this._countExtra(lineId, report),
-      inFront: () => !this._teardown.destroying && this._inFront(column),
-      atRest: () =>
-        !(parts()?.anchor.matches('lib-quantity-reel.open') ?? false),
-      current: () =>
-        this._sentRuns.get(lineId) === sent &&
-        !this.quantityRuns.pending().has(lineId),
-    });
+    };
+  }
+
+  /**
+   * Where a catalog card's question goes (velista `0208`, target state 16): the
+   * stepper of the line under the card in the results of "Add or find", with the
+   * card kept in sight, below it as the catalog's cards ask (the board's frame 3).
+   * A card the results no longer draw (new words, the field emptied) takes the
+   * question with it.
+   */
+  private _cardAskParts(
+    column: HTMLElement,
+    cardKey: string,
+    lineId: string
+  ): Pick<ExtraAskRequest, 'origin' | 'keepInSight' | 'side'> {
+    const card = () => cardOf(column, cardKey);
+    return {
+      origin: () => cardStepperOf(card(), lineId),
+      keepInSight: () => card(),
+      side: 'below',
+    };
+  }
+
+  /**
+   * An add through "Add or find" answered (velista `0208`, target state 16). A
+   * raise that took extra into the ask asks on the raised line's row, once the page
+   * has brought it into view, with the flash; the field keeps its focus, so the
+   * question is said, not focused. A row the search or a filter leaves out is a
+   * control that is gone: nothing is asked and the amount set stands. So is a page
+   * that moved to another list, or a write of the line that went out after the add.
+   */
+  private _addAnswered(
+    listId: string,
+    line: Line,
+    extra: AbsorbedExtra,
+    shown: boolean,
+    writesBefore: number
+  ): void {
+    if (
+      !shown ||
+      this._teardown.destroying ||
+      listId !== this.listId() ||
+      (this._sentRuns.get(line.id) ?? 0) > writesBefore ||
+      this.quantityRuns.pending().has(line.id)
+    ) {
+      return;
+    }
+    const sent = this._noteSent(line.id);
+    this._extraAnswered(line.id, sent, { extra, quantity: line.quantity });
   }
 
   /**
@@ -3085,11 +3200,17 @@ export class ListPage {
   changeHolding(change: SuggestionHoldingChange): void {
     // Through the run and its guard, but not the trash's write at once: a card does
     // not hide a line at 0, so it waits the quiet beat (velista `0199`, scope).
-    this._step(change.holding.lineId, {
+    const lineId = change.holding.lineId;
+    const stepped = this._step(lineId, {
       from: change.from,
       to: change.to,
       repeat: change.repeat,
     });
+    // A raise asks on this card's stepper (velista `0208`, target state 16). A
+    // change that names no card has nothing to point at, and reports nothing.
+    if (stepped && change.cardKey !== undefined) {
+      this._runControls.set(lineId, { card: change.cardKey });
+    }
   }
 
   /**

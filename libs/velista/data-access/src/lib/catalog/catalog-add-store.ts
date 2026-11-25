@@ -1,4 +1,10 @@
-import { computed, inject, Injectable, signal } from '@angular/core';
+import {
+  computed,
+  ErrorHandler,
+  inject,
+  Injectable,
+  signal,
+} from '@angular/core';
 import {
   addAmount,
   addedToLine,
@@ -175,6 +181,8 @@ export class CatalogAddStore {
   private readonly _zones = inject<ZoneServiceI>(ZONE_SERVICE);
   private readonly _listService = inject<ListServiceI>(LIST_SERVICE);
   private readonly _lines = inject<LineServiceI>(LINE_SERVICE);
+  /** Where a page's callback that threw is reported (velista `0208`). */
+  private readonly _errors = inject(ErrorHandler);
   private readonly _session = inject(SessionStore);
   private readonly _browser = inject(BrowserFacade);
   /**
@@ -569,6 +577,13 @@ export class CatalogAddStore {
     }
     if (!open) {
       this._runOf.set(lineId, { product, from: line.quantity, options });
+    } else {
+      // The newest press's page hears the answer (velista `0208`): a run opened on
+      // one page and stepped on on another must not ask the page that is gone.
+      const run = this._runOf.get(lineId);
+      if (run !== undefined) {
+        this._runOf.set(lineId, { ...run, options });
+      }
     }
     this._move(lineId, step.to - line.quantity);
     // The run starts from what was drawn, so the change it writes is exactly how
@@ -964,8 +979,10 @@ export class CatalogAddStore {
         extra,
         quantity: line.quantity,
       });
-    } catch {
-      // Nobody is left to ask; the amount set stands.
+    } catch (error) {
+      // Nobody is left to ask; the amount set stands. The error is still the app's
+      // to hear, so a broken page is seen rather than silently asking nothing.
+      this._errors.handleError(error);
     }
   }
 
