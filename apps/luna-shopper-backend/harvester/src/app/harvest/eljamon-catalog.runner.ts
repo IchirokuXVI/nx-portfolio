@@ -86,6 +86,65 @@ export class SilentAttempts {
 }
 
 /**
+ * One El Jamón session per detail worker (plan 0169, notes of 2026-11-25).
+ *
+ * The shop draws the breadcrumb and the heading of a product page from a
+ * current product it keeps in the session, so two pages asked at the same time
+ * in one session can each come back with the other's breadcrumb. **A client
+ * here is used by one page at a time**: a page takes an idle client, or opens
+ * a new one with its own session, and gives it back when it is done. So the
+ * pool never holds more clients than pages were ever in flight at once, which
+ * is the source's `workers`, and no session ever has two requests in flight.
+ *
+ * Every client is opened with the run's one `acquire`, so the rate the owner
+ * set on the source row bounds all of them together, as it bounded one.
+ */
+export class SessionPool {
+  private readonly idle: ElJamonClient[] = [];
+  private readonly opened: ElJamonClient[] = [];
+
+  /**
+   * `first` is the listing's client, whose session is idle once the listing is
+   * read, so the first page reuses it rather than starting another.
+   */
+  constructor(
+    private readonly open: () => ElJamonClient,
+    first?: ElJamonClient
+  ) {
+    if (first) {
+      this.opened.push(first);
+      this.idle.push(first);
+    }
+  }
+
+  /** `work` on a client no other page is using, for as long as it runs. */
+  async use<T>(work: (client: ElJamonClient) => Promise<T>): Promise<T> {
+    const client = this.idle.pop() ?? this.openOne();
+    try {
+      return await work(client);
+    } finally {
+      this.idle.push(client);
+    }
+  }
+
+  /** How many sessions the run used, the listing's included. */
+  get size(): number {
+    return this.opened.length;
+  }
+
+  /** Every request of every client, retries and session starts included. */
+  get requests(): number {
+    return this.opened.reduce((sum, client) => sum + client.requests, 0);
+  }
+
+  private openOne(): ElJamonClient {
+    const client = this.open();
+    this.opened.push(client);
+    return client;
+  }
+}
+
+/**
  * `CATALOG_DISCOVERY` against the `eljamon-web` adapter (plan 0169, section 5).
  *
  * **One price list for every shop** (section 2). Five postal codes in five
@@ -143,6 +202,12 @@ export class SilentAttempts {
  * from the listing alone, and the ingest creates no row from that for a
  * product the chain does not hold yet.
  *
+ * **Each detail worker has its own session** ({@link SessionPool}), and a page
+ * whose breadcrumb names another product than its JSON-LD is read again once
+ * in that session. One that still disagrees keeps every field the JSON-LD
+ * gave and states no category path, so the stored one stays; it is counted on
+ * the report and marked for the next walk (plan 0169, notes of 2026-11-25).
+ *
  * **No number here claims the catalog is complete.** The sum of the counts
  * the categories printed is what the site said, and the report says it in those
  * words.
@@ -163,6 +228,12 @@ export class ElJamonCatalogRunner implements CatalogRunner {
       readString(source.config, 'postalCode') ?? ELJAMON_DEFAULT_POSTAL_CODE;
     const silence = new SilentAttempts();
     const client = this.createClient(context, source, postalCode, silence);
+    // The listing is serial, so it needs one session; the detail stage opens
+    // one more for each page in flight beyond it.
+    const sessions = new SessionPool(
+      () => this.createClient(context, source, postalCode, silence),
+      client
+    );
     const walk = new Walk();
     context.countProgressItself();
     const known = knownIds(input);
@@ -197,7 +268,7 @@ export class ElJamonCatalogRunner implements CatalogRunner {
     await context.report({ processed: walk.rows.size - fresh.length });
     const detail = await this.readDetails(
       context,
-      client,
+      sessions,
       report,
       walk,
       fresh,
@@ -268,7 +339,11 @@ export class ElJamonCatalogRunner implements CatalogRunner {
       report.categoryPaths(
         code,
         walk.pathsOf(code),
-        whole && walk.details.has(code) ? 'REPLACE' : 'ADD'
+        // A page whose breadcrumb named another product read no path, so it
+        // replaces nothing (plan 0169, notes of 2026-11-25).
+        whole && walk.details.has(code) && !walk.untrustedBreadcrumbs.has(code)
+          ? 'REPLACE'
+          : 'ADD'
       );
     }
     warnShortCategories(context, walk);
@@ -276,7 +351,7 @@ export class ElJamonCatalogRunner implements CatalogRunner {
 
     await context.flush();
     await context.setReport(
-      walk.toReport(postalCode, fresh.length, client.requests, detail)
+      walk.toReport(postalCode, fresh.length, sessions.requests, detail)
     );
   }
 
@@ -291,10 +366,15 @@ export class ElJamonCatalogRunner implements CatalogRunner {
    * page already in flight finishes or fails as it would have, its retries
    * included. What stopping costs is on the report, and in the
    * `DETAIL_UNREAD` warning the run writes.
+   *
+   * Each page runs on a session no other page is using at that moment (plan
+   * 0169, notes of 2026-11-25). A page whose breadcrumb names another product
+   * is read once more on the same session; a second answer that still
+   * disagrees is kept without its breadcrumb (see {@link observationOf}).
    */
   private async readDetails(
     context: RunContext,
-    client: ElJamonClient,
+    sessions: SessionPool,
     report: RunReport,
     walk: Walk,
     fresh: readonly ListedRow[],
@@ -306,6 +386,9 @@ export class ElJamonCatalogRunner implements CatalogRunner {
       failed: 0,
       timeouts: 0,
       silentAttempts: 0,
+      rereads: 0,
+      untrustedBreadcrumbs: 0,
+      sessions: 0,
       stopped: false,
     };
     // A listing that ended in silence is not this stage's to count.
@@ -324,12 +407,25 @@ export class ElJamonCatalogRunner implements CatalogRunner {
         signal: pool.signal,
         handle: async (listed) => {
           stage.pages += 1;
-          const product = await client.getProduct(listed.row.url);
-          if (!product) {
-            throw new Error('The page carried no product JSON-LD.');
-          }
+          const product = await sessions.use(async (client) => {
+            const first = await productPage(client, listed.row.url);
+            if (!first.contaminated) {
+              return first;
+            }
+            // Read again on the same session, which nothing else is using
+            // now, so the shop's current product is this one.
+            stage.rereads += 1;
+            return productPage(client, listed.row.url);
+          });
           walk.details.add(listed.row.code);
-          if (product.categoryPath.length > 0) {
+          if (product.contaminated) {
+            stage.untrustedBreadcrumbs += 1;
+            walk.untrustedBreadcrumbs.add(listed.row.code);
+            this.logger.warn(
+              `Run ${context.runId}: product ${listed.row.code}'s page drew ` +
+                'its breadcrumb for another product twice; its path is not stated'
+            );
+          } else if (product.categoryPath.length > 0) {
             walk.breadcrumbs.set(listed.row.code, product.categoryPath);
           }
           if (product.price !== null && product.price !== listed.row.price) {
@@ -394,6 +490,7 @@ export class ElJamonCatalogRunner implements CatalogRunner {
       context.signal.removeEventListener('abort', stopPool);
     }
     stage.silentAttempts = silence.total;
+    stage.sessions = sessions.size;
     return stage;
   }
 
@@ -652,6 +749,18 @@ function warnDetailUnread(
   });
 }
 
+/** One product page, or a failure for a page that carries no product. */
+async function productPage(
+  client: ElJamonClient,
+  url: string
+): Promise<ElJamonProduct> {
+  const product = await client.getProduct(url);
+  if (!product) {
+    throw new Error('The page carried no product JSON-LD.');
+  }
+  return product;
+}
+
 /**
  * Whether a product page failed because the chain said nothing: the
  * transport's idle timeout, or a socket that timed out below it.
@@ -719,6 +828,12 @@ function rowsHeld(input: CatalogDiscoveryInput): (id: string) => boolean {
  * observation says so in its `extra` for the next walk to read the page again.
  * An unread page of a row the chain may hold never reaches here, because this
  * states no photo and the top level category, and the ingest would write both.
+ *
+ * **A page whose breadcrumb named another product states no category path**
+ * (plan 0169, notes of 2026-11-25), so the ingest keeps the stored one and a
+ * new row starts with none. Everything else the page gives comes from its
+ * JSON-LD, which is the asked product's, and is kept. It is marked like a
+ * failed page, so the next `NEW` walk reads its page again for the path.
  */
 function observationOf(
   listed: ListedRow,
@@ -730,9 +845,17 @@ function observationOf(
   if (listed.row.previousPrice !== null) {
     extra['previousPrice'] = listed.row.previousPrice;
   }
-  if (!detail) {
+  if (!detail || detail.contaminated) {
     extra[DETAIL_FAILED_KEY] = true;
   }
+  const categoryPath = detail?.contaminated
+    ? {}
+    : {
+        categoryPath:
+          detail && detail.categoryPath.length > 0
+            ? detail.categoryPath
+            : [listed.category.name],
+      };
   return {
     externalId: listed.row.code,
     name: size.name,
@@ -748,10 +871,7 @@ function observationOf(
     soldByWeight: size.soldByWeight,
     sizeFormat: size.sizeFormat,
     packCount: size.packCount,
-    categoryPath:
-      detail && detail.categoryPath.length > 0
-        ? detail.categoryPath
-        : [listed.category.name],
+    ...categoryPath,
     url: listed.row.url,
     // The `image` of the product page's JSON-LD (plan 0198). A page that
     // failed states none.
@@ -824,6 +944,15 @@ interface DetailStage {
   timeouts: number;
   /** Attempts that timed out, retries included: what the stop counts. */
   silentAttempts: number;
+  /**
+   * Pages read a second time because their breadcrumb named another product
+   * than their JSON-LD (plan 0169, notes of 2026-11-25).
+   */
+  rereads: number;
+  /** Of those, the pages whose second answer disagreed too: no path stated. */
+  untrustedBreadcrumbs: number;
+  /** The sessions the run used, the listing's included: at most `workers`. */
+  sessions: number;
   /** Whether the silent attempts in a row stopped the stage. Not on the report. */
   stopped: boolean;
 }
@@ -870,6 +999,12 @@ class Walk {
    * breadcrumb named a level (plan 0268).
    */
   readonly breadcrumbs = new Map<string, string[]>();
+  /**
+   * Article codes whose page was read and whose breadcrumb named another
+   * product twice, so it states no path (plan 0169, notes of 2026-11-25).
+   * Named on the report.
+   */
+  readonly untrustedBreadcrumbs = new Set<string>();
   /**
    * Article code -> every top level category that listed it, in walk order
    * (plan 0268). The first is the one {@link rows} keeps.
@@ -953,10 +1088,14 @@ class Walk {
         failed: detail.failed,
         timeouts: detail.timeouts,
         silentAttempts: detail.silentAttempts,
+        rereads: detail.rereads,
+        untrustedBreadcrumbs: detail.untrustedBreadcrumbs,
+        sessions: detail.sessions,
       },
       /** Named, never only counted. */
       failedPages: this.failedPages,
       failedProducts: this.failedProducts,
+      untrustedBreadcrumbs: [...this.untrustedBreadcrumbs],
       priceDisagreements: this.priceDisagreements,
       requests,
     };

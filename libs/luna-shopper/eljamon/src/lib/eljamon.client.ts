@@ -25,6 +25,12 @@ import type {
  * session's previous page carried (section 5.1), so the listing walk is serial
  * per client. What the harvester shares between clients is the token bucket
  * passed as `acquire`.
+ *
+ * **Never send two requests at once through one client.** The shop draws parts
+ * of a product page (the breadcrumb, the heading) from a current product it
+ * keeps in the session, so two pages asked at the same time in one session
+ * can come back with each other's breadcrumb (plan 0169, notes of 2026-11-25).
+ * Concurrency is one client per worker, each with its own session.
  */
 export const ELJAMON_BASE_URL = 'https://www.supermercadoseljamon.com';
 

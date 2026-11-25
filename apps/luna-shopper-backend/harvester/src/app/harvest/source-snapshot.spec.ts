@@ -247,3 +247,32 @@ describe('a size the source did not state (owner decision 143a)', () => {
     });
   });
 });
+
+describe('a category path the source did not state (plan 0169, notes of 2026-11-25)', () => {
+  const holding = (categoryPath: string[]): SourceCatalogEntry =>
+    ({ ...row(null), categoryPath }) as SourceCatalogEntry;
+
+  it('leaves the stored path alone when the observation states none', () => {
+    // El Jamón's page whose breadcrumb was drawn for another product: the
+    // page was read, and its path is not stated.
+    const unstated = fields();
+    delete unstated.categoryPath;
+    const stored = holding(['Frescos', 'Charcutería envasada', 'Fiambres']);
+
+    applySourceGroup(stored, unstated);
+
+    expect(stored.categoryPath).toEqual([
+      'Frescos',
+      'Charcutería envasada',
+      'Fiambres',
+    ]);
+  });
+
+  it('writes a stated path, an empty one included', () => {
+    const stored = holding(['Frescos', 'Fiambres']);
+    applySourceGroup(stored, fields({ categoryPath: ['Bebidas', 'Aguas'] }));
+    expect(stored.categoryPath).toEqual(['Bebidas', 'Aguas']);
+    applySourceGroup(stored, fields({ categoryPath: [] }));
+    expect(stored.categoryPath).toEqual([]);
+  });
+});

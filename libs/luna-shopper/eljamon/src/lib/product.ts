@@ -1,5 +1,5 @@
 import { isNeverABrand } from '@portfolio/luna-shopper/contracts';
-import { decodeEntities, textOf } from './html';
+import { decodeEntities, decodeText, textOf } from './html';
 import type { ElJamonProduct } from './types';
 
 /**
@@ -31,6 +31,7 @@ export function parseProductPage(html: string): ElJamonProduct | null {
   // A word that is never a brand reads as no brand (plan 0178), as it does in
   // the listing, so the two readers cannot disagree about one product.
   const printedBrand = stringOf(brand['name']);
+  const contaminated = sessionPartsDisagree(html, name);
   return {
     code,
     name,
@@ -40,8 +41,72 @@ export function parseProductPage(html: string): ElJamonProduct | null {
         ? price
         : null,
     image: stringOf(ld['image']),
-    categoryPath: parseBreadcrumb(html),
+    // A breadcrumb that names another product is another product's path, so
+    // none is answered rather than a wrong one.
+    categoryPath: contaminated ? [] : parseBreadcrumb(html),
+    contaminated,
   };
+}
+
+/**
+ * Whether the parts of a product page that the shop draws from its session
+ * name another product than the JSON-LD does (plan 0169, notes of
+ * 2026-11-25).
+ *
+ * The shop keeps a current product in the session. Two product pages asked at
+ * the same time in one session can come back with the breadcrumb and the
+ * header `<h1>` of the other one, while the JSON-LD, the `<title>` and the
+ * `tituloProducto` heading stay those of the product the URL names. So the
+ * last breadcrumb item and the `page-act` heading, which print the product's
+ * name, are read against the JSON-LD name, and either one that differs marks
+ * the page. A part the page does not carry is no disagreement.
+ *
+ * Both sides print the same text, size suffix included (`fiambre york maxi,
+ * 450g`), so the comparison only undoes what the markup adds: entities, once
+ * or twice encoded (`0&amp;#37;` in an `<h1>`), case, runs of spaces, and the
+ * separator dot of a breadcrumb item.
+ */
+export function sessionPartsDisagree(html: string, name: string): boolean {
+  const expected = comparable(name);
+  return [lastBreadcrumbItem(html), pageActHeading(html)].some(
+    (part) => part !== null && comparable(part) !== expected
+  );
+}
+
+/** The text of the breadcrumb's `last` item, the product it was drawn for. */
+function lastBreadcrumbItem(html: string): string | null {
+  const list =
+    /<ul class="breadcrumbs[^"]*migas-custom[^"]*">([\s\S]*?)<\/ul>/.exec(html);
+  if (!list) {
+    return null;
+  }
+  const last = /<li class="last">([\s\S]*?)<\/li>/.exec(list[1]);
+  return last ? last[1] : null;
+}
+
+/** The heading beside the breadcrumb, drawn from the session as it is. */
+function pageActHeading(html: string): string | null {
+  return (
+    /<div class="page-act">\s*<h1[^>]*>([\s\S]*?)<\/h1>/.exec(html)?.[1] ?? null
+  );
+}
+
+/** A printed name as the comparison of {@link sessionPartsDisagree} reads it. */
+function comparable(markup: string): string {
+  let text = markup.replace(/<[^>]*>/g, ' ');
+  // Entities are undone until nothing changes, so a twice encoded `%` and a
+  // plain one read alike. Three rounds are more than the shop ever prints.
+  for (let round = 0; round < 3; round += 1) {
+    const decoded = decodeEntities(text);
+    if (decoded === text) {
+      break;
+    }
+    text = decoded;
+  }
+  return decodeText(text)
+    .replace(/\s*\.$/, '')
+    .normalize('NFC')
+    .toLocaleLowerCase('es');
 }
 
 /**

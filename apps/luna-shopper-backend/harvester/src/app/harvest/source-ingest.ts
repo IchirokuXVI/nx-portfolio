@@ -249,7 +249,15 @@ export interface SourceObservation {
    * stored count alone.
    */
   packCount?: number | null;
-  categoryPath: string[];
+  /**
+   * The chain's category path, root first. **Absent means the source did not
+   * state one this time**, and leaves the stored path alone; a new row gets
+   * `[]`. Only El Jamón sends it absent, for a product page whose breadcrumb
+   * the shop drew for another product (plan 0169, notes of 2026-11-25): the
+   * page was read and its other fields are true, and a wrong path must not
+   * replace a right one.
+   */
+  categoryPath?: string[];
   url: string | null;
   /**
    * The address of the photo the source prints for the product, as its own
@@ -1720,6 +1728,8 @@ export class SourceIngest {
       unitSize: fields.unitSize ?? null,
       sizeUnit: fields.sizeUnit ?? null,
       sizeFormat: fields.sizeFormat ?? null,
+      // Nor is a category path the observation did not state.
+      categoryPath: fields.categoryPath ?? [],
       timesSeen: 1,
       firstSeenAt: seenAt,
       lastSeenAt: seenAt,

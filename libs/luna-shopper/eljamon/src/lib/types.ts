@@ -111,8 +111,18 @@ export interface ElJamonProduct {
   /** `offers.price` of the JSON-LD, or null. */
   price: number | null;
   image: string | null;
-  /** The breadcrumb, top level first, without `Inicio` and the product. */
+  /**
+   * The breadcrumb, top level first, without `Inicio` and the product. Empty
+   * when the page carries none, and when {@link contaminated} is true.
+   */
   categoryPath: string[];
+  /**
+   * Whether the parts of the page the shop draws from its session (the
+   * breadcrumb and the `page-act` heading) name another product than the
+   * JSON-LD does. Every other field here is read from the JSON-LD, which is
+   * always the product the URL names, so only the breadcrumb is withheld.
+   */
+  contaminated: boolean;
 }
 
 export interface ElJamonClientOptions {
