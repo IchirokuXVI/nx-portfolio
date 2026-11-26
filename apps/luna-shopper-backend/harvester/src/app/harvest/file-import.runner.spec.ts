@@ -1206,6 +1206,49 @@ describe('FileImportRunner (plan 0086)', () => {
         });
       });
 
+      it.each([
+        ['with a size label', { size: { label: '250 g' } }, '250 g'],
+        ['with no size', {}, null],
+      ])(
+        'writes the size text of a stated piece weight that clears the size of a fixed pack, %s',
+        async (_case, size, sizeFormat) => {
+          const { runner, context, stored } = build({
+            rows: [
+              {
+                ...walked(),
+                sizeFormat: '1 L',
+                unitSize: 1000,
+                sizeUnit: UnitOfMeasure.MILLILITER,
+                soldByWeight: false,
+                approxWeight: null,
+              },
+            ],
+            document: document({
+              schema_version: 2,
+              products: [
+                {
+                  external_id: '1001',
+                  name: 'Leche entera',
+                  ...size,
+                  approx_weight: 240,
+                  prices: [],
+                },
+              ],
+            }),
+          });
+
+          await runner.run(context, asWalk);
+
+          // What `origin/dev` wrote: the document's text beside no size.
+          expect(stored[0]).toMatchObject({
+            sizeFormat,
+            unitSize: null,
+            sizeUnit: null,
+            approxWeight: 240,
+          });
+        }
+      );
+
       it('reads a stated quantity that converts to no size as a fixed pack with no size, as origin/dev did', async () => {
         // Rows from before plan 0270 still hold a wash count or a length as
         // their size.

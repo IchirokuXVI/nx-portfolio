@@ -2583,14 +2583,15 @@ function fieldsOf(
   // A row sold by weight states no size, held here for every adapter (plan
   // 0181): the weight is not the same on every pack, so a leaflet tile that
   // prints `1 kg aprox` beside its price per kilo has no size either.
-  // `sizeFormat` is not touched. It is half of the row's key.
+  // A walk writes its `sizeFormat` as observed; a document may leave it
+  // unwritten (below). It is half of the row's key.
   //
   // A size the observation does not state stays undefined (owner decision
   // 143a), so the stored size and its unit stay, unless a weight below says
   // the row holds no size. A document that states neither a flag nor a size
-  // quantity writes no size: its null is not written, so the size of a fixed pack
-  // stays, and a row that stays sold by weight keeps its piece weight
-  // (`approxWeight` below follows the size).
+  // quantity states no size: its null is not written, so the size of a
+  // fixed pack stays, and a row that stays sold by weight keeps its piece
+  // weight (`approxWeight` below follows the size).
   const stated = soldByWeight
     ? null
     : statesNothing
@@ -2633,9 +2634,11 @@ function fieldsOf(
     // the size it keeps, so the two never disagree. Its null would leave a
     // size with no text, and a label alone (`250 g` over a row of 1000
     // MILLILITER) a text that names another size than the row holds, a pair
-    // rung 4 would compare though no source printed it. A new row gets the
-    // document's text, which a row keyed on its name needs (`create`).
-    sizeFormat: statesNothing ? undefined : observation.sizeFormat,
+    // rung 4 would compare though no source printed it. A weight that clears
+    // the size writes the document's text with it, as `origin/dev` did. A new
+    // row gets the document's text, which a row keyed on its name needs
+    // (`create`).
+    sizeFormat: statesNothing && !weighed ? undefined : observation.sizeFormat,
     packaging: observation.packaging,
     packCount: observation.packCount,
     categoryPath: observation.categoryPath,

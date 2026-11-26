@@ -2797,6 +2797,51 @@ describe('SourceIngest, rows sold by weight bound to one product (plan 0181)', (
         soldByWeight: false,
       });
     });
+
+    it.each([
+      ['with a size text', '250 g'],
+      ['with no size text', null],
+    ])(
+      'writes the size text of a weight that clears the size of a known pack, %s',
+      async (_case, sizeFormat) => {
+        const { ingest, context, saved } = build({
+          rows: [
+            {
+              externalId: '1001',
+              name: 'Leche',
+              soldByWeight: false,
+              sizeFormat: '1 L',
+              unitSize: 1000,
+              sizeUnit: UnitOfMeasure.MILLILITER,
+              approxWeight: null,
+            },
+          ],
+        });
+
+        await ingest.ingest(context, {
+          ...session,
+          observations: [
+            documentOf({
+              externalId: '1001',
+              name: 'Leche',
+              sizeFormat,
+              unitSize: null,
+              sizeUnit: null,
+              approxWeight: 240,
+            }),
+          ],
+        });
+
+        // What `origin/dev` wrote: the document's text beside no size, never
+        // `1 L` beside a size the row no longer holds.
+        expect(saved[0]).toMatchObject({
+          sizeFormat,
+          unitSize: null,
+          sizeUnit: null,
+          approxWeight: 240,
+        });
+      }
+    );
   });
 });
 
