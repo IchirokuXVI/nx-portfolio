@@ -1,3 +1,5 @@
+> **PR:** [#1112](https://github.com/IchirokuXVI/nx-portfolio/pull/1112)
+
 # 0279 A release task takes the wash count off sums and short words
 
 > Picked up on 2026-11-26 from backlog `0029`, after the owner answered O1 to O3 (see
