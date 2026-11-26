@@ -5,6 +5,7 @@ import {
   ItemSourceMatch,
   PriceSourceKind,
   SourceEntryStatus,
+  UnitOfMeasure,
   type HarvestDocument,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -20,6 +21,7 @@ import {
 } from '../entities';
 import type { CatalogClient } from '../harvest/catalog-client.service';
 import { FileImportRunner } from '../harvest/file-import.runner';
+import { buildHarvestDocument } from '../harvest/harvest-export';
 import { entryKey } from '../harvest/matching';
 import type { PlatformAdminService } from '../harvest/platform-admin.service';
 import { PriceScopeResolver } from '../harvest/price-scope-resolver';
@@ -599,6 +601,621 @@ describeIntegration('the one source product schema (real Postgres)', () => {
       // is written, and a product with none writes none.
       expect(byName.get('Pan de molde')?.categoryPaths).toEqual([]);
       expect(counters.categoryPathsWritten).toBe(1);
+    });
+  });
+
+  describe('the round trip of an export (plan 0086, section 6.2)', () => {
+    const SOURCE_RUN = '5efa0000-0000-4000-a000-00000000c101';
+    const TARGET_RUN = '5efa0000-0000-4000-a000-00000000c102';
+    const ITEM = '5efa0000-0000-4000-a000-00000000d101';
+    const PHOTO = 'https://prod-mercadona.imgix.net/images/4241.jpg?fit=crop';
+    const LINK = 'https://tienda.mercadona.es/product/4241/leche-entera';
+    const DAIRY = ['Lácteos', 'Leche y bebidas vegetales', 'Leche entera'];
+    const BREAKFAST = ['Desayuno', 'Leche'];
+    const WRONG = ['Bebidas', 'Refrescos'];
+
+    /** What catalog was sent, recorded rather than answered by a stub. */
+    let linked: { sourceEntryId: string; url: string }[];
+    let unlinked: string[];
+    let owed: { observedAt?: string; price?: number | null }[];
+
+    beforeEach(() => {
+      linked = [];
+      unlinked = [];
+      owed = [];
+    });
+
+    function importer(): FileImportRunner {
+      const catalog = {
+        listAllPriceScopes: async () => [],
+        searchItems: async () => ({ items: [], nextCursor: null }),
+        addPrices: async (_scope: string, entries: typeof owed) => {
+          owed.push(...entries);
+          return { inserted: entries.length, confirmed: 0, declined: [] };
+        },
+        findItemByEan: async () => ({ item: null }),
+        linkItemImages: async (links: typeof linked) => {
+          linked.push(...links);
+          return {
+            linked: links.length,
+            moved: 0,
+            unchanged: 0,
+            rejected: [],
+          };
+        },
+        unlinkItemImages: async (ids: string[]) => {
+          unlinked.push(...ids);
+          return { unlinked: ids.length };
+        },
+      } as unknown as CatalogClient;
+      return new FileImportRunner(
+        new SourceIngest(entries, prices, catalog),
+        new PriceScopeResolver(catalog)
+      );
+    }
+
+    function importContext(document: HarvestDocument): RunContext {
+      return {
+        runId: RUN,
+        run: { id: RUN, input: { document } },
+        signal: new AbortController().signal,
+        setStage: async () => undefined,
+        setTotalPlanned: async () => undefined,
+        report: async () => undefined,
+        advance: async () => undefined,
+        warn: () => undefined,
+        flush: async () => undefined,
+      } as unknown as RunContext;
+    }
+
+    const asWalk = {
+      supermarketId: CHAIN,
+      priceScopeId: NORTH,
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      adapterKey: 'mercadona-api',
+    };
+
+    /**
+     * A row a walk wrote and a person bound to a product, so the product shows
+     * the chain photo, with this run's price of the scope.
+     */
+    async function walkedRow(
+      runId: string,
+      patch: Partial<SourceCatalogEntry>,
+      price: { amount: number; observedAt: string }
+    ): Promise<SourceCatalogEntry> {
+      const saved = await entries.save(
+        row({
+          externalId: '4241',
+          name: 'Leche entera Hacendado',
+          sizeFormat: 'brik 1 L',
+          sourceKind: PriceSourceKind.OFFICIAL_WEB,
+          status: SourceEntryStatus.ACTIVE,
+          itemId: ITEM,
+          matchedBy: ItemSourceMatch.MANUAL,
+          confidence: 1,
+          decidedAt: new Date('2026-10-01T10:00:00Z'),
+          brand: 'Hacendado',
+          ean: '8480000102412',
+          url: LINK,
+          imageUrl: PHOTO,
+          extra: { packaging: 'Brik' },
+          firstRunId: runId,
+          lastRunId: runId,
+          ...patch,
+        })
+      );
+      await prices.save(
+        prices.create({
+          entryId: saved.id,
+          priceScopeId: NORTH,
+          sourceKind: PriceSourceKind.OFFICIAL_WEB,
+          price: price.amount,
+          currency: 'EUR',
+          observedAt: new Date(price.observedAt),
+          runId,
+        })
+      );
+      return saved;
+    }
+
+    /** The export of a run, read as `SourceEntryService.exportRun` reads it. */
+    async function exportOf(runId: string): Promise<HarvestDocument> {
+      const observed = await entries.find({
+        where: {
+          supermarketId: CHAIN,
+          lastRunId: runId,
+          prices: { runId },
+        },
+        relations: { prices: true },
+      });
+      return buildHarvestDocument({
+        run: { id: runId, supermarketId: CHAIN, priceScopeId: NORTH },
+        entries: observed,
+        producedAt: new Date('2026-11-02T08:00:00Z'),
+      });
+    }
+
+    /**
+     * The target holds the same walked row, from a walk of its own, except
+     * that its trail is wrong, and its price is newer than the file's.
+     */
+    async function target(): Promise<SourceCatalogEntry> {
+      return walkedRow(
+        TARGET_RUN,
+        { categoryPath: WRONG, categoryPaths: [WRONG] },
+        { amount: 1.05, observedAt: '2026-11-20T09:00:00Z' }
+      );
+    }
+
+    async function exported(): Promise<HarvestDocument> {
+      await walkedRow(
+        SOURCE_RUN,
+        { categoryPath: DAIRY, categoryPaths: [DAIRY, BREAKFAST] },
+        { amount: 0.95, observedAt: '2026-11-01T09:00:00Z' }
+      );
+      const document = await exportOf(SOURCE_RUN);
+      // The second state is another cluster: nothing of the first survives.
+      await clean();
+      return document;
+    }
+
+    it('keeps the photo linked, the link, the bag and the EAN, and adds the trails', async () => {
+      const document = await exported();
+      expect(document.products[0]).toMatchObject({
+        image_url: PHOTO,
+        category_path: DAIRY,
+        category_paths: [DAIRY, BREAKFAST],
+      });
+      const held = await target();
+
+      await importer().run(importContext(document), asWalk);
+
+      const after = await entries.findOneByOrFail({ id: held.id });
+      expect(after).toMatchObject({
+        imageUrl: PHOTO,
+        url: LINK,
+        extra: { packaging: 'Brik' },
+        ean: '8480000102412',
+        brand: 'Hacendado',
+        status: SourceEntryStatus.ACTIVE,
+        itemId: ITEM,
+        // The one path the walk filed it under, as a walk there writes it.
+        categoryPath: DAIRY,
+        // ADD: no run replaced the source row's paths whole, so the export
+        // does not state them complete, and the wrong trail stays beside the
+        // two the walk met.
+        categoryPaths: [WRONG, DAIRY, BREAKFAST],
+      });
+      // The bound product keeps its chain photo: its link is sent again, on
+      // the address it held, and nothing is unlinked.
+      expect(unlinked).toEqual([]);
+      expect(linked).toEqual([
+        expect.objectContaining({ sourceEntryId: held.id, url: PHOTO }),
+      ]);
+    });
+
+    it('changes none of them for a plain file that states none', async () => {
+      const held = await target();
+
+      await importer().run(
+        importContext({
+          schema_version: 2,
+          sha256: DIGEST,
+          producer: { name: MARK, produced_at: '2026-11-21T08:00:00Z' },
+          products: [
+            {
+              external_id: '4241',
+              name: 'Leche entera Hacendado',
+              size: { label: 'brik 1 L' },
+              prices: [{ amount: 1.05, currency: 'EUR' }],
+            },
+          ],
+        }),
+        asWalk
+      );
+
+      const after = await entries.findOneByOrFail({ id: held.id });
+      expect(after).toMatchObject({
+        imageUrl: PHOTO,
+        url: LINK,
+        extra: { packaging: 'Brik' },
+        ean: '8480000102412',
+        brand: 'Hacendado',
+        categoryPath: WRONG,
+        categoryPaths: [WRONG],
+      });
+      expect(unlinked).toEqual([]);
+    });
+
+    describe('a row sold by weight (plan 0181)', () => {
+      /** A cheese a walk sells by the kilo: no size, the label kept. */
+      const KILO: Partial<SourceCatalogEntry> = {
+        externalId: '3401',
+        name: 'Queso curado Hacendado',
+        sizeFormat: '1 kg',
+        unitSize: null,
+        sizeUnit: null,
+        soldByWeight: true,
+        ean: '8480000340108',
+      };
+
+      it('stays sold by weight through a round trip, on a known row and on a new one', async () => {
+        await walkedRow(SOURCE_RUN, KILO, {
+          amount: 12.5,
+          observedAt: '2026-11-01T09:00:00Z',
+        });
+        const document = await exportOf(SOURCE_RUN);
+        expect(document.products[0]).toMatchObject({ sold_by_weight: true });
+        await clean();
+
+        // A cluster that holds the row: the walk there sold it by weight too.
+        const held = await walkedRow(TARGET_RUN, KILO, {
+          amount: 12.9,
+          observedAt: '2026-11-20T09:00:00Z',
+        });
+        await importer().run(importContext(document), asWalk);
+
+        expect(await entries.findOneByOrFail({ id: held.id })).toMatchObject({
+          soldByWeight: true,
+          unitSize: null,
+          sizeFormat: '1 kg',
+        });
+
+        // A cluster that holds nothing: the row the import makes says what
+        // the walk said.
+        await clean();
+        await importer().run(importContext(document), asWalk);
+
+        const [created] = await entries.find({
+          where: { supermarketId: CHAIN },
+        });
+        expect(created).toMatchObject({
+          externalId: '3401',
+          soldByWeight: true,
+          unitSize: null,
+        });
+      });
+
+      it('keeps the flag for a plain file that does not say, and writes the one it states', async () => {
+        const held = await walkedRow(TARGET_RUN, KILO, {
+          amount: 12.9,
+          observedAt: '2026-11-20T09:00:00Z',
+        });
+        const plain = (over: Record<string, unknown>): HarvestDocument => ({
+          schema_version: 2,
+          sha256: DIGEST,
+          producer: { name: MARK, produced_at: '2026-11-21T08:00:00Z' },
+          products: [
+            {
+              external_id: '3401',
+              name: 'Queso curado Hacendado',
+              size: { label: '1 kg' },
+              prices: [],
+              ...over,
+            },
+          ],
+        });
+
+        await importer().run(importContext(plain({})), asWalk);
+        expect(
+          (await entries.findOneByOrFail({ id: held.id })).soldByWeight
+        ).toBe(true);
+
+        await importer().run(
+          importContext(plain({ sold_by_weight: false })),
+          asWalk
+        );
+        expect(
+          (await entries.findOneByOrFail({ id: held.id })).soldByWeight
+        ).toBe(false);
+      });
+
+      it('never holds a size on a row sold by weight, and keeps the piece weight of a file that states no size', async () => {
+        const held = await walkedRow(
+          TARGET_RUN,
+          { ...KILO, approxWeight: 950 },
+          { amount: 12.9, observedAt: '2026-11-20T09:00:00Z' }
+        );
+        const plain = (
+          sha256: string,
+          over: Record<string, unknown>
+        ): HarvestDocument => ({
+          schema_version: 2,
+          sha256,
+          producer: { name: MARK, produced_at: '2026-11-21T08:00:00Z' },
+          products: [
+            {
+              external_id: '3401',
+              name: 'Queso curado Hacendado',
+              prices: [],
+              extra: { basis: 'unit' },
+              ...over,
+            },
+          ],
+        });
+        const stored = async () => {
+          const after = await entries.findOneByOrFail({ id: held.id });
+          return {
+            soldByWeight: after.soldByWeight,
+            unitSize: after.unitSize === null ? null : Number(after.unitSize),
+            sizeUnit: after.sizeUnit,
+            approxWeight:
+              after.approxWeight === null ? null : Number(after.approxWeight),
+          };
+        };
+
+        // No flag and no size quantity: it says nothing about how the cheese
+        // is sold, so the flag and the weight of a piece stay.
+        await importer().run(
+          importContext(plain(DIGEST, { size: { label: '1 kg' } })),
+          asWalk
+        );
+        expect(await stored()).toEqual({
+          soldByWeight: true,
+          unitSize: null,
+          sizeUnit: null,
+          approxWeight: 950,
+        });
+
+        // A size quantity and no flag says a fixed pack, as `origin/dev`
+        // wrote it: the flag goes false with the size, never true beside it.
+        await importer().run(
+          importContext(
+            plain('b'.repeat(64), {
+              size: { label: '500 g', quantity: 500, unit: 'g' },
+            })
+          ),
+          asWalk
+        );
+        expect(await stored()).toEqual({
+          soldByWeight: false,
+          unitSize: 500,
+          sizeUnit: 'GRAM',
+          approxWeight: null,
+        });
+      });
+    });
+
+    it('keeps the size, its unit and its text for a file that states no size, and counts the row unchanged', async () => {
+      const held = await walkedRow(
+        TARGET_RUN,
+        {
+          externalId: '9001',
+          name: 'Leche',
+          sizeFormat: '1 L',
+          unitSize: 1000,
+          sizeUnit: UnitOfMeasure.MILLILITER,
+          soldByWeight: false,
+        },
+        { amount: 0.99, observedAt: '2026-11-20T09:00:00Z' }
+      );
+
+      const counters = await importer().run(
+        importContext({
+          schema_version: 2,
+          sha256: DIGEST,
+          producer: { name: MARK, produced_at: '2026-11-21T08:00:00Z' },
+          products: [{ external_id: '9001', name: 'Leche', prices: [] }],
+        }),
+        asWalk
+      );
+
+      const after = await entries.findOneByOrFail({ id: held.id });
+      expect({
+        sizeFormat: after.sizeFormat,
+        unitSize: after.unitSize === null ? null : Number(after.unitSize),
+        sizeUnit: after.sizeUnit,
+      }).toEqual({ sizeFormat: '1 L', unitSize: 1000, sizeUnit: 'MILLILITER' });
+      expect(counters).toMatchObject({ unchanged: 1, updated: 0 });
+    });
+
+    describe('trails a walk read whole (164a)', () => {
+      /** The export of a walk whose drain replaced the row's paths whole. */
+      async function exportedWhole(
+        patch: Partial<SourceCatalogEntry> = {}
+      ): Promise<HarvestDocument> {
+        const walked = await walkedRow(
+          SOURCE_RUN,
+          { categoryPath: DAIRY, ...patch },
+          { amount: 0.95, observedAt: '2026-11-01T09:00:00Z' }
+        );
+        // What the drain of a walk calls for a product it read whole.
+        await new SourceIngest(
+          entries,
+          prices,
+          {} as CatalogClient
+        ).writeCategoryPaths(SOURCE_RUN, [
+          { entryId: walked.id, paths: [DAIRY, BREAKFAST], mode: 'REPLACE' },
+        ]);
+        const document = await exportOf(SOURCE_RUN);
+        await clean();
+        return document;
+      }
+
+      /** The target's row, with a wrong trail and a price older than the file's. */
+      async function wronglyFiled(
+        patch: Partial<SourceCatalogEntry> = {}
+      ): Promise<SourceCatalogEntry> {
+        return walkedRow(
+          TARGET_RUN,
+          { categoryPath: WRONG, categoryPaths: [WRONG], ...patch },
+          { amount: 1.05, observedAt: '2026-10-20T09:00:00Z' }
+        );
+      }
+
+      it('replaces the wrong trail of the target, names the import on it, and its export says so again', async () => {
+        const document = await exportedWhole();
+        expect(document.products[0]).toMatchObject({
+          category_paths: [DAIRY, BREAKFAST],
+          category_paths_complete: true,
+        });
+        const held = await wronglyFiled();
+
+        const counters = await importer().run(importContext(document), asWalk);
+
+        expect(await entries.findOneByOrFail({ id: held.id })).toMatchObject({
+          categoryPath: DAIRY,
+          categoryPaths: [DAIRY, BREAKFAST],
+          categoryPathsReplacedByRunId: RUN,
+        });
+        expect(counters.categoryPathsWritten).toBe(1);
+        // The import's own export carries the statement on.
+        const again = await exportOf(RUN);
+        expect(again.products[0]).toMatchObject({
+          category_paths: [DAIRY, BREAKFAST],
+          category_paths_complete: true,
+        });
+      });
+
+      it('replaces with the stated paths alone, never bringing back the stale category_path the export writes', async () => {
+        // The source row kept `categoryPath` from an earlier full
+        // observation; its walk replaced the paths without it.
+        const STALE = ['Navidad'];
+        const document = await exportedWhole({ categoryPath: STALE });
+        expect(document.products[0]).toMatchObject({
+          category_path: STALE,
+          category_paths: [DAIRY, BREAKFAST],
+          category_paths_complete: true,
+        });
+        const held = await wronglyFiled();
+
+        await importer().run(importContext(document), asWalk);
+
+        expect(await entries.findOneByOrFail({ id: held.id })).toMatchObject({
+          categoryPaths: [DAIRY, BREAKFAST],
+          categoryPathsReplacedByRunId: RUN,
+        });
+        const again = await exportOf(RUN);
+        expect(again.products[0]).toMatchObject({
+          category_paths: [DAIRY, BREAKFAST],
+          category_paths_complete: true,
+        });
+      });
+
+      it('only adds for a product that does not state its paths whole', async () => {
+        const document = await exportedWhole();
+        const plain = {
+          ...document,
+          products: document.products.map((product) => {
+            const rest = { ...product };
+            delete rest.category_paths_complete;
+            return rest;
+          }),
+        };
+        const held = await wronglyFiled({
+          categoryPathsReplacedByRunId: TARGET_RUN,
+        });
+
+        await importer().run(importContext(plain), asWalk);
+
+        expect(await entries.findOneByOrFail({ id: held.id })).toMatchObject({
+          categoryPaths: [WRONG, DAIRY, BREAKFAST],
+          categoryPathsReplacedByRunId: TARGET_RUN,
+        });
+      });
+
+      it('never replaces through an import of a leaflet kind', async () => {
+        const document = await exportedWhole();
+        const held = await wronglyFiled();
+
+        await importer().run(importContext(document), {
+          ...asWalk,
+          sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+        });
+
+        const after = await entries.findOneByOrFail({ id: held.id });
+        expect(after.categoryPaths).toEqual([WRONG, DAIRY, BREAKFAST]);
+        expect(after.categoryPathsReplacedByRunId).toBeNull();
+      });
+
+      it('states nothing whole for a row whose paths another run replaced', async () => {
+        const walked = await walkedRow(
+          SOURCE_RUN,
+          { categoryPath: DAIRY, categoryPaths: [DAIRY] },
+          { amount: 0.95, observedAt: '2026-11-01T09:00:00Z' }
+        );
+        await new SourceIngest(
+          entries,
+          prices,
+          {} as CatalogClient
+        ).writeCategoryPaths(LATER_RUN, [
+          { entryId: walked.id, paths: [DAIRY], mode: 'REPLACE' },
+        ]);
+
+        const document = await exportOf(SOURCE_RUN);
+
+        expect(Object.keys(document.products[0])).not.toContain(
+          'category_paths_complete'
+        );
+      });
+    });
+
+    describe('a price older than the one the row holds (165a)', () => {
+      it('is skipped and counted, and the rest of the product is written', async () => {
+        const document = await exported();
+        const held = await target();
+
+        const counters = await importer().run(importContext(document), asWalk);
+
+        const stored = await prices.find({
+          where: {
+            entryId: held.id,
+            priceScopeId: NORTH,
+            sourceKind: PriceSourceKind.OFFICIAL_WEB,
+          },
+        });
+        expect(stored).toHaveLength(1);
+        expect(Number(stored[0].price)).toBe(1.05);
+        expect(stored[0].observedAt.toISOString()).toBe(
+          '2026-11-20T09:00:00.000Z'
+        );
+        expect(stored[0].runId).toBe(TARGET_RUN);
+        // Catalog is sent no current observation for it.
+        expect(owed).toEqual([]);
+        expect(counters).toMatchObject({
+          pricesSkippedOlder: 1,
+          pricesRecorded: 0,
+        });
+        // The trails of the file are still added.
+        expect(
+          (await entries.findOneByOrFail({ id: held.id })).categoryPaths
+        ).toEqual([WRONG, DAIRY, BREAKFAST]);
+      });
+
+      it('writes a newer one, and one at the same instant', async () => {
+        const document = await exported();
+        const held = await walkedRow(
+          TARGET_RUN,
+          { categoryPath: WRONG, categoryPaths: [WRONG] },
+          { amount: 1.05, observedAt: '2026-10-20T09:00:00Z' }
+        );
+
+        const newer = await importer().run(importContext(document), asWalk);
+
+        const [stored] = await prices.find({
+          where: { entryId: held.id, sourceKind: PriceSourceKind.OFFICIAL_WEB },
+        });
+        expect(Number(stored.price)).toBe(0.95);
+        expect(stored.observedAt.toISOString()).toBe(
+          '2026-11-01T09:00:00.000Z'
+        );
+        expect(newer.pricesSkippedOlder).toBe(0);
+        expect(owed).toEqual([
+          expect.objectContaining({
+            price: 0.95,
+            observedAt: '2026-11-01T09:00:00.000Z',
+          }),
+        ]);
+
+        // The same file again: an equal instant writes, as before.
+        const same = await importer().run(
+          importContext({ ...document, sha256: 'b'.repeat(64) }),
+          asWalk
+        );
+        expect(same.pricesSkippedOlder).toBe(0);
+        expect(same.pricesRecorded).toBe(1);
+      });
     });
   });
 });

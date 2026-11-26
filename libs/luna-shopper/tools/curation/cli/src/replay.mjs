@@ -64,8 +64,11 @@ export const IN_PROGRESS_NOTE =
   'The run had not finished when this file was written. In a write run, a line still of class apply and without written was in flight or not yet sent, and its outcome is not known. A line with sentInLostRequest was sent in a request whose answer was lost, so the target may hold it.';
 
 /**
- * What a line with `checked: false` says, of any class: its request was sent
- * and the run ended before direct evidence settled it.
+ * What a product line with `checked: false` says: its request was sent and
+ * the run ended before direct evidence settled it. Such a product line is
+ * always of class `outcome unknown` (see `markUnsettled`). A decision row with
+ * `checked: false` is of that class too (see `markDecisionsUnsettled`, owner
+ * decision 163a), and it keeps its own `detail` in place of this reason.
  */
 export const UNKNOWN_OUTCOME_REASON =
   'its request was sent and its outcome is not known: the target may hold it. Run the dry run again to settle it';
@@ -82,11 +85,16 @@ export const CLASS = Object.freeze({
   CONFLICT: 'conflict',
   APPLY: 'apply',
   REFUSED: 'refused',
-  /**
-   * Sent in the request the run stopped on, and not on the target after it.
-   * With `checked: false` the outcome is not known: the target may hold it.
-   */
+  /** Sent in the request the run stopped on, and not on the target after it. */
   NOT_WRITTEN: 'not written',
+  /**
+   * Sent in a request whose outcome nothing later proved: the target may hold
+   * it. Only `markOutcomeUnknown` gives this class, always with
+   * `checked: false`, and the line keeps the class it held before under
+   * `lastKnownClass`. A report written before this class existed has such a
+   * line as `not written` (or another class) with `checked: false`.
+   */
+  OUTCOME_UNKNOWN: 'outcome unknown',
   /** Never sent, because the run stopped before it. */
   NOT_SENT: 'not sent',
 });
@@ -192,6 +200,29 @@ export const WASH_FIELDS = new Set(['unitSize', 'defaultUnit']);
 /** What a report line says about a size left to the wash task. */
 export const WASH_NOTE =
   'the size was left to release task 0009; check this product after it has run on the target';
+
+/**
+ * What the note adds when the dropped size took a unit change with it: the
+ * task only clears the size, so nobody carries the unit. Only a change to a
+ * unit other than `UNIT` needs it: a wash candidate's target product holds
+ * `UNIT` already (see `washCandidate`).
+ */
+export function washUnitNote(field) {
+  return `the unit change (defaultUnit from ${field.from ?? 'none'} to ${field.to ?? 'none'}) was not carried, and release task 0009 will not carry it either, because it only clears the size: set the unit on the target by hand`;
+}
+
+/**
+ * The note of a line whose size was left to the wash task: `WASH_NOTE`, and
+ * the unit sentence when the dropped fields hold a unit change whose `to` the
+ * target does not hold yet. The target holds `UNIT` (see `washCandidate`), so
+ * a change to `UNIT` is there already and the note does not name it.
+ */
+export function washNote(dropped) {
+  const unit = dropped.find(
+    (field) => field.field === 'defaultUnit' && field.to !== 'UNIT'
+  );
+  return unit ? `${WASH_NOTE}. ${washUnitNote(unit)}` : WASH_NOTE;
+}
 
 // ---------------------------------------------------------------------------
 // The target, as a paced client
@@ -399,10 +430,11 @@ export function classify(
   const count = washCandidate(change, item);
   const excludedBy = count === null ? null : washRow(count, washRows);
   if (excludedBy) {
+    const dropped = line.fields.filter((field) => WASH_FIELDS.has(field.field));
     const washTask = {
       count,
       text: excludedBy.sizeFormat,
-      note: WASH_NOTE,
+      note: washNote(dropped),
     };
     const rest = line.fields.filter((field) => !WASH_FIELDS.has(field.field));
     if (rest.length === 0) {
@@ -410,9 +442,7 @@ export function classify(
     }
     // Only the size is the task's: the other fields go on to be judged and
     // sent under their guard, and the line keeps what was left out.
-    washTask.fields = line.fields.filter((field) =>
-      WASH_FIELDS.has(field.field)
-    );
+    washTask.fields = dropped;
     line.fields = rest;
     line.washTask = washTask;
   }
@@ -534,21 +564,51 @@ function settle(line) {
 /**
  * The end of a run, in every path (the end of the write, a stop, a signal, a
  * failed report write): every line that still carries the flag, of any class,
- * is not checked, so the counts and stderr tell the operator to run the dry
- * run again. A line still waiting to be sent is `not written`, never
- * `not sent`, since its first send may land.
+ * becomes `outcome unknown` and is not checked, so the counts and stderr tell
+ * the operator to run the dry run again. The class it held is kept as
+ * `lastKnownClass`; a line still waiting to be sent held `not written`, never
+ * `not sent`, since its first send may land. `markOutcomeUnknown` is the one
+ * place that gives the class and `checked: false`, so the two always agree.
  */
 export function markUnsettled(lines) {
   for (const line of lines) {
-    if (!line.sentInLostRequest) {
-      continue;
+    if (line.sentInLostRequest && markOutcomeUnknown(line)) {
+      line.reason = UNKNOWN_OUTCOME_REASON;
     }
-    if (line.class === CLASS.APPLY && !line.written) {
-      line.class = CLASS.NOT_WRITTEN;
-    }
-    line.checked = false;
-    line.reason = UNKNOWN_OUTCOME_REASON;
   }
+}
+
+/**
+ * The decisions' side of `markUnsettled` (owner decision 163a): every
+ * decision row with `checked: false`, whose part was sent and whose outcome
+ * nothing proved, becomes `outcome unknown` by the same rule. The row keeps
+ * its `code` and its `detail`, which say why its outcome is not known.
+ */
+export function markDecisionsUnsettled(lines) {
+  for (const line of lines) {
+    if (line.checked === false) {
+      markOutcomeUnknown(line);
+    }
+  }
+}
+
+/**
+ * Gives one line, a product or a decision row, the class `outcome unknown`
+ * and `checked: false`, and keeps the class it held as `lastKnownClass`. A
+ * line of that class already is left as it is, so marking twice changes
+ * nothing. Answers whether it marked the line.
+ */
+function markOutcomeUnknown(line) {
+  if (line.class === CLASS.OUTCOME_UNKNOWN) {
+    return false;
+  }
+  line.lastKnownClass =
+    line.class === CLASS.APPLY && !line.written
+      ? CLASS.NOT_WRITTEN
+      : line.class;
+  line.class = CLASS.OUTCOME_UNKNOWN;
+  line.checked = false;
+  return true;
 }
 
 /** The fields of an expectation failure, as the report reads them. */
@@ -696,14 +756,17 @@ function markWritten(group) {
  * - Anything else stops the run: a 429 after the client's waits, a 401 or 403
  *   after the session's new login, a second 413, any other 5xx, an answer
  *   lost a fourth time. The products of the request in flight are
- *   `not written` (or `already there` when a read back shows they landed),
- *   every product after them is `not sent`, and a `ReplayStopped` is thrown.
+ *   `not written`, `already there` when a read back shows they landed, or
+ *   `outcome unknown` when the request may have landed and nothing proved it
+ *   (see below). Every product after them is `not sent`, and a
+ *   `ReplayStopped` is thrown.
  *
  * A product sent in a request whose outcome is not known (any lost answer, a
  * 2xx whose body could not be read among them, or a 5xx) carries
  * `sentInLostRequest: true` until direct evidence settles it (see `settle`).
- * When the write ends, in any way, a product that still carries it has
- * `checked: false` whatever its class (see `markUnsettled`).
+ * When the write ends, in any way, a product that still carries it is
+ * `outcome unknown` with `checked: false`, whatever its class was (see
+ * `markUnsettled`).
  *
  * `progress.current` holds the group in flight, so a signal handler can mark
  * it, and `onAnswer` is called after every answer is sorted.
@@ -767,6 +830,13 @@ export async function writeApply(
             line.afterLostAnswer = true;
           }
         } else {
+          // Suspected, not confirmed, and no test reproduces it: a request is
+          // lost, then someone changes the brand or the name on the target,
+          // and the resend is refused here naming that field. The settle above
+          // has cleared the flag, so the line may end `identity changed`
+          // without `checked: false`, although the lost request may have
+          // landed (its fields would then hold `to`). The owner decided on
+          // 2026-11-26 to leave this case unchecked (not investigated) for now.
           line.class =
             fields.includes('name') || fields.includes('brand')
               ? CLASS.IDENTITY
@@ -1020,16 +1090,10 @@ export function countLines(lines) {
   let written = 0;
   let landedAfterLostAnswer = 0;
   let sizeLeftToWashTask = 0;
-  let outcomeUnknown = 0;
   for (const line of lines) {
     classes[line.class] = (classes[line.class] ?? 0) + 1;
     if (line.written) {
       written += 1;
-    }
-    // Counted inside `not written` too, and apart here, so a product the
-    // target may hold does not hide among those it does not.
-    if (line.checked === false) {
-      outcomeUnknown += 1;
     }
     // Landed through a request whose answer was lost, so the target holds an
     // audit row for it while `written` does not count it.
@@ -1046,7 +1110,8 @@ export function countLines(lines) {
     classes,
     written,
     landedAfterLostAnswer,
-    outcomeUnknown,
+    // The class itself, so the count and the class cannot disagree.
+    outcomeUnknown: classes[CLASS.OUTCOME_UNKNOWN],
     fieldsSent,
     sizeLeftToWashTask,
   };
@@ -1406,6 +1471,12 @@ export const DECISION_CLASS = Object.freeze({
   REFUSED: 'refused',
   /** In the part whose answer was lost, and not decided on the target after it. */
   NOT_WRITTEN: 'not written',
+  /**
+   * In a part whose outcome nothing proved: the target may hold it. The same
+   * class as a product's, given by `markDecisionsUnsettled`, always with
+   * `checked: false` and the class it held before as `lastKnownClass`.
+   */
+  OUTCOME_UNKNOWN: CLASS.OUTCOME_UNKNOWN,
   NOT_SENT: 'not sent',
 });
 
@@ -1527,12 +1598,13 @@ export function dropUnits(records, dropped) {
  *
  * Only an `accept` that names a product can be read: its row is listed by
  * that product's source rows. A row that is no longer pending is
- * `decided on target`. A row still pending is `not written`, and with
- * `checked: false` unless `settles` (the answer was a 2xx, so the server had
- * finished): after a timeout, no answer or a 5xx the part may still land after
- * the read. Every other row (a `createItem`, an `accept` onto a product the
- * part made, a row the product does not list, a read that failed) is
- * `not written` with `checked: false`: its outcome is not known. After one
+ * `decided on target`. A row still pending is `not written` if `settles` (the
+ * answer was a 2xx, so the server had finished), and else `outcome unknown`:
+ * after a timeout, no answer or a 5xx the part may still land after the read.
+ * Every other row (a `createItem`, an `accept` onto a product the part made, a
+ * row the product does not list, a read that failed) is `outcome unknown`
+ * too. Such a row has `checked: false` and `not written` as its
+ * `lastKnownClass` (see `markDecisionsUnsettled`). After one
  * failed read the rest are not read, so a target that hangs is not asked once
  * a row.
  */
@@ -1545,12 +1617,15 @@ export async function readBackDecisions(
   const lines = [];
   const rowsOf = new Map();
   let reachable = Boolean(client);
-  const unknown = (record, why) =>
-    decisionLine(record, DECISION_CLASS.NOT_WRITTEN, {
+  const unknown = (record, why) => {
+    const line = decisionLine(record, DECISION_CLASS.NOT_WRITTEN, {
       code: answer.code,
       detail: `the answer to this part was lost (${answer.message}), and ${why}`,
       checked: false,
     });
+    markDecisionsUnsettled([line]);
+    return line;
+  };
   for (const record of records) {
     if (record.decision !== 'LINK' || !record.itemId) {
       lines.push(
@@ -1863,6 +1938,9 @@ export async function runReplay({
         .filter((record) => !seen.has(record.entryId))
         .map((record) => decisionLine(record, DECISION_CLASS.NOT_SENT));
       const all = [...decisionLines, ...unseen];
+      // In every path (a snapshot, the end, a stop, a signal), so the class
+      // and the count below agree. A row marked already is left as it is.
+      markDecisionsUnsettled(all);
       report.decisions = {
         file: decisions.file,
         counts: countDecisions(all),
@@ -2088,18 +2166,21 @@ export async function runReplayIdentity({
   return keeper.close(failure);
 }
 
-/** Decided rows per class. */
+/**
+ * Decided rows per class. `outcomeUnknown` is the count of the class itself,
+ * as for the products, so the count and the class cannot disagree.
+ */
 export function countDecisions(lines) {
   const classes = {};
   for (const name of Object.values(DECISION_CLASS)) {
     classes[name] = 0;
   }
-  let outcomeUnknown = 0;
   for (const line of lines) {
     classes[line.class] = (classes[line.class] ?? 0) + 1;
-    if (line.checked === false) {
-      outcomeUnknown += 1;
-    }
   }
-  return { rows: lines.length, classes, outcomeUnknown };
+  return {
+    rows: lines.length,
+    classes,
+    outcomeUnknown: classes[DECISION_CLASS.OUTCOME_UNKNOWN],
+  };
 }

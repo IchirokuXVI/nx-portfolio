@@ -531,7 +531,7 @@ export function installInterrupt({
  *
  * A replay has no slot to take down and nothing to finish, so the first
  * signal does all of it at once: `stop(signal)` writes the report over what
- * is known (the request in flight as not written and not checked, the rest
+ * is known (the request in flight as outcome unknown and not checked, the rest
  * not sent), and the process ends with the signal's exit code. The request in
  * flight is not waited for, because a target that hangs is the usual reason
  * to press Ctrl+C.
@@ -550,7 +550,7 @@ export function installReplayInterrupt({
     if (!asked) {
       asked = true;
       stderr.write(
-        `\n${signal}: stopping. The request in flight is reported as not written and not checked, and the report is written.\n`
+        `\n${signal}: stopping. The request in flight is reported as outcome unknown and not checked, and the report is written.\n`
       );
       try {
         stop(signal);

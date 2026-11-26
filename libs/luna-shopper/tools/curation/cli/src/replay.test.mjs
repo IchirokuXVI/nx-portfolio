@@ -21,14 +21,19 @@ import {
   RENAME_TRIES,
   ReplayStopped,
   SHORT_WASH_WORD,
+  WASH_NOTE,
   WASH_SUM,
   batchEntry,
   capturingFetch,
   classify,
+  countDecisions,
   countLines,
   countsLine,
   dropUnits,
+  identityChanges,
   makeTargetClient,
+  markDecisionsUnsettled,
+  markUnsettled,
   prepareDecisions,
   replayChanges,
   replayDecisions,
@@ -693,17 +698,22 @@ test('three lost answers in a row stop the run, and nothing is resent a fourth t
   assert.equal(calls.filter((call) => call.path === LOOKUP_PATH).length, 5);
   assert.deepEqual(
     lines.map((line) => line.class),
-    [CLASS.NOT_WRITTEN, CLASS.NOT_WRITTEN]
+    [CLASS.OUTCOME_UNKNOWN, CLASS.OUTCOME_UNKNOWN]
   );
   assert.equal(lines[0].error.code, 'no_answer');
-  // A 504 may still commit after the last read back: not checked.
+  // A 504 may still commit after the last read back: not checked, and of
+  // its own class, with the class it held before kept beside it.
   for (const line of lines) {
+    assert.equal(line.lastKnownClass, CLASS.NOT_WRITTEN);
     assert.equal(line.checked, false);
     assert.equal(line.sentInLostRequest, true);
     assert.match(line.reason, /request was sent and its outcome is not known/);
   }
   const counts = countLines(lines);
   assert.equal(counts.outcomeUnknown, 2);
+  assert.equal(counts.classes[CLASS.OUTCOME_UNKNOWN], 2);
+  assert.equal(counts.classes[CLASS.NOT_WRITTEN], 0);
+  assert.match(countsLine(counts), /: outcome unknown 2;/);
   assert.match(
     countsLine(counts),
     /; 2 products were sent and their outcome is not known, run the dry run again$/
@@ -778,8 +788,8 @@ test('a 200 with an unreadable body whose read back fails leaves the products no
   assert.deepEqual(
     report.lines.map((line) => [line.class, line.checked]),
     [
-      [CLASS.NOT_WRITTEN, false],
-      [CLASS.NOT_WRITTEN, false],
+      [CLASS.OUTCOME_UNKNOWN, false],
+      [CLASS.OUTCOME_UNKNOWN, false],
     ]
   );
   assert.equal(report.counts.outcomeUnknown, 2);
@@ -789,7 +799,7 @@ test('a 200 with an unreadable body whose read back fails leaves the products no
   );
 });
 
-test('a resend refused for its content after a late commit is refused and not checked', async () => {
+test('a resend refused for its content after a late commit is outcome unknown, last known refused', async () => {
   // Sent, 504, read back too early (old values), committed, sent again: the
   // brand check runs before the guard, so the refusal says nothing of the
   // first send.
@@ -808,7 +818,8 @@ test('a resend refused for its content after a late commit is refused and not ch
   assert.equal(failure, null);
   assert.equal(store.get(id(1)).unitSize, 450);
   const [line] = report.lines;
-  assert.equal(line.class, CLASS.REFUSED);
+  assert.equal(line.class, CLASS.OUTCOME_UNKNOWN);
+  assert.equal(line.lastKnownClass, CLASS.REFUSED);
   assert.equal(line.code, 'brand_not_registered');
   assert.equal(line.checked, false);
   assert.equal(line.sentInLostRequest, true);
@@ -834,7 +845,7 @@ test('a refused line that was never in a lost request stays checked', async () =
   assert.doesNotMatch(stderr, /outcome is not known/);
 });
 
-test('a report snapshot that fails after a lost answer leaves the products not written and not checked, never not sent', async () => {
+test('a report snapshot that fails after a lost answer leaves the products outcome unknown, never not sent', async () => {
   // Batch 1 of 2 loses its answer, the read back sees the old values and the
   // first send commits after that read.
   const { client, calls, store } = fakeTarget(products(3), {
@@ -860,8 +871,8 @@ test('a report snapshot that fails after a lost answer leaves the products not w
   assert.deepEqual(
     lines.map((line) => [line.class, line.checked]),
     [
-      [CLASS.NOT_WRITTEN, false],
-      [CLASS.NOT_WRITTEN, false],
+      [CLASS.OUTCOME_UNKNOWN, false],
+      [CLASS.OUTCOME_UNKNOWN, false],
       [CLASS.NOT_SENT, undefined],
     ]
   );
@@ -918,10 +929,11 @@ test('a run that stops on batch 2 of 3 keeps batch 1 written and batch 3 not sen
     written.lines.map((line) => [line.class, Boolean(line.written)]),
     [
       [CLASS.APPLY, true],
-      [CLASS.NOT_WRITTEN, false],
+      [CLASS.OUTCOME_UNKNOWN, false],
       [CLASS.NOT_SENT, false],
     ]
   );
+  assert.equal(written.lines[1].lastKnownClass, CLASS.NOT_WRITTEN);
   assert.equal(written.lines[1].error.status, 500);
   assert.equal(written.lines[1].error.code, 'internal');
   assert.match(written.header.stoppedBy, /answered 500/);
@@ -962,13 +974,14 @@ for (const [status, body] of [
       (error) => error instanceof ReplayStopped && error.status === status
     );
     assert.equal(patches(calls).length, 1);
+    // A 500 may hide a write that commits after the read back, so its
+    // products are outcome unknown; a 429 or a 403 refused the request.
+    const stopped = status === 500 ? CLASS.OUTCOME_UNKNOWN : CLASS.NOT_WRITTEN;
     assert.deepEqual(
       lines.map((line) => line.class),
-      [...Array(4).fill(CLASS.NOT_WRITTEN), ...Array(4).fill(CLASS.NOT_SENT)]
+      [...Array(4).fill(stopped), ...Array(4).fill(CLASS.NOT_SENT)]
     );
     assert.equal(lines[0].error.status, status);
-    // A 500 may hide a write that commits after the read back; a 429 or a
-    // 403 refused the request.
     assert.equal(lines[0].checked, status === 500 ? false : undefined);
   });
 }
@@ -1232,6 +1245,78 @@ test('the wash rule drops only the size: the other fields of the product are sti
   );
 });
 
+test('a unit change dropped with a wash size says that nobody carries it and a person sets it', () => {
+  const rows = [{ status: 'ACTIVE', sizeFormat: '40lav' }];
+  const unitNote =
+    'the unit change (defaultUnit from UNIT to KILOGRAM) was not carried, and release task 0009 will not carry it either, because it only clears the size: set the unit on the target by hand';
+
+  // Excluded whole: the size and the unit were the only fields.
+  const whole = classify(
+    change(17, [
+      { field: 'unitSize', from: 40, to: null },
+      { field: 'defaultUnit', from: 'UNIT', to: 'KILOGRAM' },
+    ]),
+    product(17, { unitSize: 40, defaultUnit: 'UNIT' }),
+    { washRows: rows }
+  );
+  assert.equal(whole.class, CLASS.WASH);
+  assert.equal(whole.washTask.note, `${WASH_NOTE}. ${unitNote}`);
+
+  // Another field is still sent, and the note on the line says the same.
+  const partly = classify(
+    change(18, [
+      { field: 'unitSize', from: 40, to: null },
+      { field: 'defaultUnit', from: 'UNIT', to: 'KILOGRAM' },
+      { field: 'packCount', from: null, to: 2 },
+    ]),
+    product(18, { unitSize: 40, defaultUnit: 'UNIT', packCount: null }),
+    { washRows: rows }
+  );
+  assert.equal(partly.class, CLASS.APPLY);
+  assert.equal(partly.washTask.note, `${WASH_NOTE}. ${unitNote}`);
+  assert.equal(batchEntry(partly).defaultUnit, undefined);
+
+  // A size alone keeps the plain note.
+  const sizeOnly = classify(
+    change(19, [{ field: 'unitSize', from: 40, to: null }]),
+    product(19, { unitSize: 40, defaultUnit: 'UNIT' }),
+    { washRows: rows }
+  );
+  assert.equal(sizeOnly.washTask.note, WASH_NOTE);
+  assert.doesNotMatch(sizeOnly.washTask.note, /unit change/);
+});
+
+test('a unit change to UNIT dropped with a wash size keeps the plain note, since the target holds UNIT', () => {
+  const rows = [{ status: 'ACTIVE', sizeFormat: '40lav' }];
+
+  // Excluded whole: the size and the unit were the only fields.
+  const whole = classify(
+    change(20, [
+      { field: 'unitSize', from: 40, to: null },
+      { field: 'defaultUnit', from: 'GRAM', to: 'UNIT' },
+    ]),
+    product(20, { unitSize: 40, defaultUnit: 'UNIT' }),
+    { washRows: rows }
+  );
+  assert.equal(whole.class, CLASS.WASH);
+  assert.equal(whole.washTask.note, WASH_NOTE);
+  assert.doesNotMatch(whole.washTask.note, /unit change|by hand/);
+
+  // Another field is still sent, and the unit change is still not sent.
+  const partly = classify(
+    change(21, [
+      { field: 'unitSize', from: 40, to: null },
+      { field: 'defaultUnit', from: 'GRAM', to: 'UNIT' },
+      { field: 'packCount', from: null, to: 2 },
+    ]),
+    product(21, { unitSize: 40, defaultUnit: 'UNIT', packCount: null }),
+    { washRows: rows }
+  );
+  assert.equal(partly.class, CLASS.APPLY);
+  assert.equal(partly.washTask.note, WASH_NOTE);
+  assert.equal(batchEntry(partly).defaultUnit, undefined);
+});
+
 test('the two wash literals are the source of release task 0007 wash-sizes.ts', () => {
   const path = fileURLToPath(
     new URL(
@@ -1390,6 +1475,77 @@ test('--only sends only the named products, under the target name and brand from
   ]);
   assert.equal(store.get(id(1)).unitSize, 500);
   assert.equal(store.get(id(2)).unitSize, 450);
+});
+
+test('the identity pass reads a report of the old version and one with outcome unknown lines alike', () => {
+  const base = identityReport('http://localhost:43700');
+  const unsettled = (n, klass) => ({
+    itemId: id(n),
+    class: klass,
+    fields: [{ field: 'unitSize', from: 500, to: 450, target: 500 }],
+    identity: { local: null, target: null },
+    checked: false,
+    sentInLostRequest: true,
+  });
+  // The old version left such a line as `not written` with `checked: false`.
+  const old = {
+    ...base,
+    lines: [...base.lines, unsettled(3, CLASS.NOT_WRITTEN)],
+  };
+  const current = {
+    ...base,
+    lines: [
+      ...base.lines,
+      { ...unsettled(3, CLASS.OUTCOME_UNKNOWN), lastKnownClass: 'not written' },
+    ],
+  };
+  for (const report of [old, current]) {
+    assert.deepEqual(
+      identityChanges(report).map((change) => change.itemId),
+      [id(1), id(2)]
+    );
+    assert.deepEqual(
+      identityChanges(report, { only: [id(2), id(3)] }).map(
+        (change) => change.itemId
+      ),
+      [id(2)]
+    );
+  }
+});
+
+test('markUnsettled gives a flagged line its own class once, and the count follows the class', () => {
+  const line = (n, over) => ({
+    itemId: id(n),
+    class: CLASS.APPLY,
+    fields: [],
+    identity: { local: null, target: null },
+    ...over,
+  });
+  const lines = [
+    line(1, { sentInLostRequest: true }),
+    line(2, { class: CLASS.REFUSED, sentInLostRequest: true }),
+    line(3, { written: true }),
+    line(4, { class: CLASS.NOT_WRITTEN }),
+  ];
+  markUnsettled(lines);
+  // A second call, as the keeper makes after the write, changes nothing.
+  markUnsettled(lines);
+  assert.deepEqual(
+    lines.map((entry) => [entry.class, entry.lastKnownClass, entry.checked]),
+    [
+      [CLASS.OUTCOME_UNKNOWN, CLASS.NOT_WRITTEN, false],
+      [CLASS.OUTCOME_UNKNOWN, CLASS.REFUSED, false],
+      [CLASS.APPLY, undefined, undefined],
+      [CLASS.NOT_WRITTEN, undefined, undefined],
+    ]
+  );
+  const counts = countLines(lines);
+  assert.equal(counts.outcomeUnknown, 2);
+  assert.equal(counts.classes[CLASS.OUTCOME_UNKNOWN], 2);
+  assert.equal(
+    lines.filter((entry) => entry.checked === false).length,
+    counts.outcomeUnknown
+  );
 });
 
 // --- Section 6: decisions ----------------------------------------------------
@@ -1699,12 +1855,14 @@ test('a signal during batch 2 writes the report: batch 1 written, 2 not checked,
     written.lines.map((line) => [line.class, Boolean(line.written)]),
     [
       [CLASS.APPLY, true],
-      [CLASS.NOT_WRITTEN, false],
+      [CLASS.OUTCOME_UNKNOWN, false],
       [CLASS.NOT_SENT, false],
     ]
   );
   assert.equal(written.lines[1].checked, false);
+  assert.equal(written.lines[1].lastKnownClass, CLASS.NOT_WRITTEN);
   assert.equal(written.lines[1].error.code, 'interrupted');
+  assert.equal(written.counts.outcomeUnknown, 1);
   assert.equal(written.lines[0].checked, undefined);
   assert.match(written.header.stoppedBy, /stopped with SIGINT/);
   assert.equal(written.header.inProgress, undefined);
@@ -1757,7 +1915,7 @@ test('a signal during the lookup reports every product not sent', async () => {
   assert.deepEqual(calls, [LOOKUP_PATH]);
 });
 
-test('a commit that lands after the timeout and after the read back, then a signal, leaves the products not written and not checked', async () => {
+test('a commit that lands after the timeout and after the read back, then a signal, leaves the products outcome unknown', async () => {
   // Batch 1 of 2 gets no answer; the read back sees the old values; the
   // server commits right after that read; the operator stops the run before
   // the batch is sent again.
@@ -1801,8 +1959,8 @@ test('a commit that lands after the timeout and after the read back, then a sign
   assert.deepEqual(
     stopped.lines.map((line) => [line.class, line.checked]),
     [
-      [CLASS.NOT_WRITTEN, false],
-      [CLASS.NOT_WRITTEN, false],
+      [CLASS.OUTCOME_UNKNOWN, false],
+      [CLASS.OUTCOME_UNKNOWN, false],
       [CLASS.NOT_SENT, undefined],
     ]
   );
@@ -2058,18 +2216,26 @@ test('a lost answer to a decisions part reads the rows back and classes them by 
     ReplayStopped
   );
   const byEntry = Object.fromEntries(
-    lines.map((line) => [line.entryId, [line.class, line.checked]])
+    lines.map((line) => [
+      line.entryId,
+      [line.class, line.checked, line.lastKnownClass],
+    ])
   );
   assert.deepEqual(byEntry, {
-    e1: [DECISION_CLASS.DECIDED_ON_TARGET, undefined],
+    e1: [DECISION_CLASS.DECIDED_ON_TARGET, undefined, undefined],
     // Still pending right after a part with no answer: the part may land
-    // after the read, so the row is not checked.
-    e2: [DECISION_CLASS.NOT_WRITTEN, false],
-    e3: [DECISION_CLASS.NOT_WRITTEN, false],
-    e4: [DECISION_CLASS.NOT_WRITTEN, false],
+    // after the read, so the row's outcome is not known (decision 163a).
+    e2: [DECISION_CLASS.OUTCOME_UNKNOWN, false, DECISION_CLASS.NOT_WRITTEN],
+    e3: [DECISION_CLASS.OUTCOME_UNKNOWN, false, DECISION_CLASS.NOT_WRITTEN],
+    e4: [DECISION_CLASS.OUTCOME_UNKNOWN, false, DECISION_CLASS.NOT_WRITTEN],
   });
   assert.equal(lines[0].targetStatus, 'ACTIVE');
+  // Each row keeps its own detail and code, which say why.
   assert.match(lines[1].detail, /may still land after that read/);
+  assert.match(lines[2].detail, /does not list this row/);
+  assert.match(lines[3].detail, /no product of its own/);
+  assert.equal(lines[3].reason, undefined);
+  assert.equal(countDecisions(lines).outcomeUnknown, 3);
 });
 
 test('a decisions part that timed out, or got a 504, leaves a pending row not checked; a 2xx settles it', async () => {
@@ -2081,10 +2247,10 @@ test('a decisions part that timed out, or got a 504, leaves a pending row not ch
   const gateway = new HttpError(504);
   const unreadable = new HttpError(201);
   unreadable.body = '<html>ok</html>';
-  for (const [lost, checked] of [
-    [timeout, false],
-    [gateway, false],
-    [unreadable, undefined],
+  for (const [lost, klass, checked] of [
+    [timeout, DECISION_CLASS.OUTCOME_UNKNOWN, false],
+    [gateway, DECISION_CLASS.OUTCOME_UNKNOWN, false],
+    [unreadable, DECISION_CLASS.NOT_WRITTEN, undefined],
   ]) {
     const { client } = fakeTarget([], { entries });
     const lines = [];
@@ -2110,10 +2276,200 @@ test('a decisions part that timed out, or got a 504, leaves a pending row not ch
     );
     assert.deepEqual(
       lines.map((line) => [line.class, line.checked]),
-      [[DECISION_CLASS.NOT_WRITTEN, checked]],
+      [[klass, checked]],
       lost.message
     );
   }
+});
+
+/** A run of one CREATE decision whose part gets `applyFile`'s answer. */
+function decisionsRun({
+  applyFile,
+  writeFile,
+  controls = {},
+  stderr = sink(),
+}) {
+  const { client } = fakeTarget([product(1)]);
+  const changeList = sizeChangeList(0);
+  return runReplay({
+    changeFile: 'changes.jsonl',
+    changeList,
+    folded: foldChanges(changeList),
+    targetUrl: 'http://localhost:43700',
+    write: true,
+    batchSize: 1,
+    reportPath: 'report.json',
+    client,
+    stderr,
+    controls,
+    writeFile,
+    decisions: {
+      file: 'd.jsonl',
+      prepared: {
+        header: { header: true, runId: 'r' },
+        records: [createRow(1), createRow(2)],
+      },
+      splitParts: (records) => records.map((record) => [record]),
+      applyFile,
+    },
+  });
+}
+
+test('markDecisionsUnsettled gives an unchecked decision row the class once, and the count follows the class', () => {
+  const row = (n, over) => ({ entryId: `e${n}`, op: 'accept', ...over });
+  const lines = [
+    row(1, { class: DECISION_CLASS.NOT_WRITTEN, checked: false, detail: 'x' }),
+    row(2, { class: DECISION_CLASS.NOT_WRITTEN }),
+    row(3, { class: DECISION_CLASS.APPLIED }),
+    row(4, { class: DECISION_CLASS.REFUSED, code: 'APPLY', checked: false }),
+  ];
+  markDecisionsUnsettled(lines);
+  // A second call, as the report makes on every write, changes nothing.
+  markDecisionsUnsettled(lines);
+  assert.deepEqual(
+    lines.map((line) => [line.class, line.lastKnownClass, line.checked]),
+    [
+      [DECISION_CLASS.OUTCOME_UNKNOWN, DECISION_CLASS.NOT_WRITTEN, false],
+      [DECISION_CLASS.NOT_WRITTEN, undefined, undefined],
+      [DECISION_CLASS.APPLIED, undefined, undefined],
+      [DECISION_CLASS.OUTCOME_UNKNOWN, DECISION_CLASS.REFUSED, false],
+    ]
+  );
+  assert.equal(lines[0].detail, 'x');
+  assert.equal(lines[3].code, 'APPLY');
+  const counts = countDecisions(lines);
+  assert.equal(counts.outcomeUnknown, 2);
+  assert.equal(counts.classes[DECISION_CLASS.OUTCOME_UNKNOWN], 2);
+  assert.equal(counts.classes[DECISION_CLASS.NOT_WRITTEN], 1);
+  // The count is the class: an unchecked row the marking never saw is not
+  // counted as unknown, so class and count cannot disagree.
+  assert.equal(
+    countDecisions([
+      row(5, { class: DECISION_CLASS.NOT_WRITTEN, checked: false }),
+    ]).outcomeUnknown,
+    0
+  );
+});
+
+test('a decisions part stopped on a 5xx is reported outcome unknown, and the count and stderr agree', async () => {
+  let report = null;
+  const stderr = sink();
+  await assert.rejects(
+    () =>
+      decisionsRun({
+        stderr,
+        writeFile: (path, text) => {
+          if (path === 'report.json') {
+            report = JSON.parse(text);
+          }
+        },
+        applyFile: async () => {
+          throw new HttpError(503);
+        },
+      }),
+    ReplayStopped
+  );
+  assert.deepEqual(
+    report.decisions.lines.map((line) => [
+      line.entryId,
+      line.class,
+      line.checked,
+      line.lastKnownClass,
+    ]),
+    [
+      ['e1', DECISION_CLASS.OUTCOME_UNKNOWN, false, DECISION_CLASS.NOT_WRITTEN],
+      ['e2', DECISION_CLASS.NOT_SENT, undefined, undefined],
+    ]
+  );
+  assert.match(
+    report.decisions.lines[0].detail,
+    /answer to this part was lost/
+  );
+  assert.equal(report.decisions.counts.outcomeUnknown, 1);
+  assert.equal(
+    report.decisions.counts.classes[DECISION_CLASS.OUTCOME_UNKNOWN],
+    1
+  );
+  assert.equal(report.decisions.counts.classes[DECISION_CLASS.NOT_WRITTEN], 0);
+  assert.match(
+    stderr.text(),
+    /2 decided rows: outcome unknown 1, not sent 1; 1 rows were sent and their outcome is not known, run the dry run again/
+  );
+});
+
+test('a signal while a decisions part is in flight writes that row as outcome unknown', async () => {
+  let entered;
+  const inFlight = new Promise((resolve) => {
+    entered = resolve;
+  });
+  const controls = {};
+  const stderr = sink();
+  let written = null;
+  decisionsRun({
+    controls,
+    stderr,
+    writeFile: (path, text) => {
+      if (path === 'report.json') {
+        written = JSON.parse(text);
+      }
+    },
+    applyFile: () => {
+      entered();
+      return new Promise(() => undefined);
+    },
+  });
+  await inFlight;
+  assert.equal(controls.interrupt('SIGINT'), true);
+  assert.deepEqual(
+    written.decisions.lines.map((line) => [
+      line.entryId,
+      line.class,
+      line.checked,
+      line.lastKnownClass,
+      line.code,
+    ]),
+    [
+      [
+        'e1',
+        DECISION_CLASS.OUTCOME_UNKNOWN,
+        false,
+        DECISION_CLASS.NOT_WRITTEN,
+        'interrupted',
+      ],
+      ['e2', DECISION_CLASS.NOT_SENT, undefined, undefined, undefined],
+    ]
+  );
+  assert.match(written.decisions.lines[0].detail, /stopped with SIGINT/);
+  assert.equal(written.decisions.counts.outcomeUnknown, 1);
+  assert.match(written.header.stoppedBy, /stopped with SIGINT/);
+  assert.match(
+    stderr.text(),
+    /outcome unknown 1, not sent 1; 1 rows were sent and their outcome is not known/
+  );
+});
+
+test('a report that cannot be written after a lost decisions part still prints the row as outcome unknown', async () => {
+  const stderr = sink();
+  await assert.rejects(
+    () =>
+      decisionsRun({
+        stderr,
+        writeFile: (path, text) => {
+          if (path === 'report.json' && JSON.parse(text).header.stoppedBy) {
+            throw new Error('EBUSY: resource busy or locked');
+          }
+        },
+        applyFile: async () => {
+          throw new Error('socket hang up');
+        },
+      }),
+    /the report could not be written to report\.json: EBUSY/
+  );
+  assert.match(
+    stderr.text(),
+    /2 decided rows: outcome unknown 1, not sent 1; 1 rows were sent and their outcome is not known/
+  );
+  assert.match(stderr.text(), /the decisions stopped/);
 });
 
 test('the products a decisions part left orphaned are copied into the report', async () => {

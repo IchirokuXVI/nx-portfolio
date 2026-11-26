@@ -6,7 +6,8 @@ import type { SourceCatalogEntry } from '../entities';
  * whose repository of entries is an array.
  *
  * - `update(criteria, values)` changes the row whose `id` the criteria name,
- *   only when every other key of the criteria holds for it, and answers
+ *   or every row of an `In([...])` of ids (reported to `onWrite` as not
+ *   plain), only when every other key of the criteria holds for it, and answers
  *   `affected` as Postgres does. A guard is thus evaluated against the row as
  *   the array holds it, which is the row before the decision, because the
  *   ingest no longer mutates a row before its guarded write. A value that is
@@ -38,6 +39,22 @@ export function withEntryWrites<T extends object>(
       criteria: Record<string, unknown>,
       values: Record<string, unknown>
     ) => {
+      // A write of many rows by `In([...])` ids: the column the write of
+      // the category paths names on the rows a run replaced whole (164a).
+      if (criteria['id'] instanceof FindOperator) {
+        const rows = [...new Set(rowsOf())].filter((each) =>
+          matches(each, criteria)
+        );
+        for (const each of rows) {
+          for (const [column, value] of Object.entries(values)) {
+            if (typeof value !== 'function') {
+              (each as unknown as Record<string, unknown>)[column] = value;
+            }
+          }
+          onWrite(each, false);
+        }
+        return { affected: rows.length, raw: [], generatedMaps: [] };
+      }
       const row = [...rowsOf()].find((each) => each.id === criteria['id']);
       if (!row || !matches(row, criteria)) {
         return { affected: 0, raw: [], generatedMaps: [] };

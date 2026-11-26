@@ -427,6 +427,179 @@ describe('the harvest document, version 2', () => {
     expect(result.valid).toBe(true);
   });
 
+  it('accepts the photo address and every category path an export states (plans 0198 and 0268)', () => {
+    const result = validateHarvestDocument(
+      v2({
+        scopes: null,
+        products: [
+          {
+            name: 'Leche entera',
+            image_url: 'https://prod-mercadona.imgix.net/images/1.jpg',
+            category_path: ['Lácteos', 'Leche'],
+            category_paths: [
+              ['Lácteos', 'Leche'],
+              ['Desayuno', 'Leche'],
+            ],
+            prices: [],
+          },
+          { name: 'Pan', image_url: null, category_paths: null, prices: [] },
+        ],
+      })
+    );
+
+    expect(result.failures).toEqual([]);
+  });
+
+  it('refuses a category paths entry that is not a path, and a photo longer than its column', () => {
+    const result = validateHarvestDocument(
+      v2({
+        scopes: null,
+        products: [
+          {
+            id: 'p-1',
+            name: 'Leche entera',
+            category_paths: ['Lácteos'] as unknown as string[][],
+            image_url: `https://prod-mercadona.imgix.net/${'a'.repeat(500)}`,
+            prices: [],
+          },
+        ],
+      })
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.failures.map((failure) => failure.path).sort()).toEqual([
+      '/products/0/category_paths/0',
+      '/products/0/image_url',
+    ]);
+  });
+
+  it('accepts category paths at their bounds: 50 paths of 12 names of 200 characters', () => {
+    const name = 'a'.repeat(200);
+    const path = Array.from({ length: 12 }, () => name);
+    const result = validateHarvestDocument(
+      v2({
+        scopes: null,
+        products: [
+          {
+            name: 'Leche entera',
+            category_paths: Array.from({ length: 50 }, () => path),
+            prices: [],
+          },
+        ],
+      })
+    );
+
+    expect(result.failures).toEqual([]);
+  });
+
+  it('refuses category paths past their bounds', () => {
+    const result = validateHarvestDocument(
+      v2({
+        scopes: null,
+        products: [
+          {
+            id: 'p-1',
+            name: 'Leche entera',
+            category_paths: Array.from({ length: 51 }, () => ['Lácteos']),
+            prices: [],
+          },
+          {
+            id: 'p-2',
+            name: 'Leche desnatada',
+            category_paths: [Array.from({ length: 13 }, () => 'Lácteos')],
+            prices: [],
+          },
+          {
+            id: 'p-3',
+            name: 'Leche sin lactosa',
+            category_paths: [['Lácteos', 'a'.repeat(201)]],
+            prices: [],
+          },
+        ],
+      })
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.failures.map((failure) => failure.path).sort()).toEqual([
+      '/products/0/category_paths',
+      '/products/1/category_paths/0',
+      '/products/2/category_paths/0/1',
+    ]);
+  });
+
+  it('accepts how a product is sold, and refuses anything but true or false (plan 0181)', () => {
+    const accepted = validateHarvestDocument(
+      v2({
+        scopes: null,
+        products: [
+          { name: 'Queso curado', sold_by_weight: true, prices: [] },
+          { name: 'Leche entera', sold_by_weight: false, prices: [] },
+        ],
+      })
+    );
+    const refused = validateHarvestDocument(
+      v2({
+        scopes: null,
+        products: [
+          {
+            id: 'p-1',
+            name: 'Queso curado',
+            sold_by_weight: 'kg' as unknown as boolean,
+            prices: [],
+          },
+        ],
+      })
+    );
+
+    expect(accepted.failures).toEqual([]);
+    expect(refused.failures.map((failure) => failure.path)).toEqual([
+      '/products/0/sold_by_weight',
+    ]);
+  });
+
+  it('accepts whether the category paths are complete, and refuses anything but true or false', () => {
+    const accepted = validateHarvestDocument(
+      v2({
+        scopes: null,
+        products: [
+          {
+            name: 'Leche entera',
+            category_paths: [['Lácteos', 'Leche']],
+            category_paths_complete: true,
+            prices: [],
+          },
+          { name: 'Pan', category_paths_complete: false, prices: [] },
+        ],
+      })
+    );
+    const refused = validateHarvestDocument(
+      v2({
+        scopes: null,
+        products: [
+          {
+            id: 'p-1',
+            name: 'Leche entera',
+            category_paths: [['Lácteos', 'Leche']],
+            category_paths_complete: 'yes' as unknown as boolean,
+            prices: [],
+          },
+          {
+            id: 'p-2',
+            name: 'Pan',
+            category_paths_complete: null as unknown as boolean,
+            prices: [],
+          },
+        ],
+      })
+    );
+
+    expect(accepted.failures).toEqual([]);
+    expect(refused.failures.map((failure) => failure.path).sort()).toEqual([
+      '/products/0/category_paths_complete',
+      '/products/1/category_paths_complete',
+    ]);
+  });
+
   it('reads version 1 for good, and turns it into the version 2 shape', () => {
     // A leaflet extractor writes version 1, the fixtures are written in it, and
     // a format that stops reading its own past is a format nobody trusts to

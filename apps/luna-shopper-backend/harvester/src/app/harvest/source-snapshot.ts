@@ -27,10 +27,20 @@ export interface SourceEntryFields {
   externalId: string;
   sourceKind: PriceSourceKind;
   name: string;
-  brand: string | null;
-  /** The brand's key, derived and written beside it (plan 0115, section 6). */
-  brandKey: string | null;
-  ean: string | null;
+  /**
+   * The brand as the source prints it. **Absent means the source did not
+   * state it this time**, and leaves the stored brand and its key alone: a
+   * document that names no brand (a file the harvester exported from a row
+   * with none, a leaflet tile). Null is a statement, and is written. The same
+   * holds for {@link ean}, {@link url}, {@link imageUrl} and {@link extra}.
+   */
+  brand?: string | null;
+  /**
+   * The brand's key, derived and written beside it (plan 0115, section 6).
+   * Absent exactly when {@link brand} is.
+   */
+  brandKey?: string | null;
+  ean?: string | null;
   /**
    * The size of the pack, in {@link sizeUnit}.
    *
@@ -52,8 +62,12 @@ export interface SourceEntryFields {
    * Whether the product is sold by weight (plan 0181). When it is, `unitSize`
    * and `sizeUnit` are both null: the weight is not the same on every pack,
    * so it is not a size.
+   *
+   * **Absent means the source did not state it this time**, as for
+   * {@link approxWeight}: it leaves the stored flag alone. Only a document
+   * that names no way of selling sends it absent; a walk always states it.
    */
-  soldByWeight: boolean;
+  soldByWeight?: boolean;
   /**
    * The approximate weight of one piece in grams, or null (plan 0244). Null
    * whenever `unitSize` is set.
@@ -92,14 +106,14 @@ export interface SourceEntryFields {
    * 2026-11-25).
    */
   categoryPath?: string[];
-  url: string | null;
+  url?: string | null;
   /**
    * The photo address the source prints for the product, or null (plan 0198).
-   * Null is a statement, and is written.
+   * Null is a statement, and is written. Absent leaves the stored one.
    */
-  imageUrl: string | null;
+  imageUrl?: string | null;
   /** The last observation's free bag. Stored and shown, never read (D6). */
-  extra: Record<string, unknown> | null;
+  extra?: Record<string, unknown> | null;
 }
 
 /**
@@ -116,8 +130,10 @@ export function sourceGroupChanged(
 ): boolean {
   return (
     existing.name !== fields.name ||
-    existing.brand !== fields.brand ||
-    existing.ean !== fields.ean ||
+    // A field the observation does not state is no change: the stored one
+    // stays, so it cannot differ. The same rule as the size fields below.
+    (fields.brand !== undefined && existing.brand !== fields.brand) ||
+    (fields.ean !== undefined && existing.ean !== fields.ean) ||
     // A size field the observation does not state is no change (owner
     // decision 143a): the stored one stays, so it cannot differ.
     (fields.sizeFormat !== undefined &&
@@ -133,13 +149,15 @@ export function sourceGroupChanged(
     // did not say before.
     (fields.sizeUnit !== undefined &&
       (existing.sizeUnit ?? null) !== fields.sizeUnit) ||
-    (existing.soldByWeight ?? false) !== fields.soldByWeight ||
+    (fields.soldByWeight !== undefined &&
+      (existing.soldByWeight ?? false) !== fields.soldByWeight) ||
     (fields.approxWeight !== undefined &&
       numeric(existing.approxWeight) !== numeric(fields.approxWeight)) ||
-    existing.url !== fields.url ||
+    (fields.url !== undefined && existing.url !== fields.url) ||
     // A row from before plan 0198 holds none, so the first run that states
     // one reports it `updated`, which is true.
-    (existing.imageUrl ?? null) !== fields.imageUrl ||
+    (fields.imageUrl !== undefined &&
+      (existing.imageUrl ?? null) !== fields.imageUrl) ||
     existing.sourceKind !== fields.sourceKind
   );
 }
@@ -158,11 +176,18 @@ export function applySourceGroup(
   row.externalId = fields.externalId;
   row.sourceKind = fields.sourceKind;
   row.name = fields.name;
-  row.brand = fields.brand;
-  // The key follows the brand and is never compared on its own, which is why
-  // {@link sourceGroupChanged} above says nothing about it.
-  row.brandKey = fields.brandKey;
-  row.ean = fields.ean;
+  // Each identity field the observation does not state is left as stored, as
+  // the size fields below are, so a document that names no brand, EAN, link,
+  // photo or bag never blanks what a walk stored.
+  if (fields.brand !== undefined) {
+    row.brand = fields.brand;
+    // The key follows the brand and is never compared on its own, which is
+    // why {@link sourceGroupChanged} above says nothing about it.
+    row.brandKey = fields.brandKey ?? null;
+  }
+  if (fields.ean !== undefined) {
+    row.ean = fields.ean;
+  }
   // Each size field the observation does not state is left as stored (owner
   // decision 143a), as the weight, the container and the count are.
   if (fields.unitSize !== undefined) {
@@ -171,7 +196,9 @@ export function applySourceGroup(
   if (fields.sizeUnit !== undefined) {
     row.sizeUnit = fields.sizeUnit;
   }
-  row.soldByWeight = fields.soldByWeight;
+  if (fields.soldByWeight !== undefined) {
+    row.soldByWeight = fields.soldByWeight;
+  }
   if (fields.approxWeight !== undefined) {
     row.approxWeight = fields.approxWeight;
   }
@@ -189,9 +216,15 @@ export function applySourceGroup(
   if (fields.categoryPath !== undefined) {
     row.categoryPath = fields.categoryPath;
   }
-  row.url = fields.url;
-  row.imageUrl = fields.imageUrl;
-  row.extra = fields.extra;
+  if (fields.url !== undefined) {
+    row.url = fields.url;
+  }
+  if (fields.imageUrl !== undefined) {
+    row.imageUrl = fields.imageUrl;
+  }
+  if (fields.extra !== undefined) {
+    row.extra = fields.extra;
+  }
 }
 
 /**

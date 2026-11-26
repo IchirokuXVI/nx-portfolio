@@ -143,6 +143,8 @@ function build(
     pushFails?: Record<number, Error>;
     /** The category paths each row holds before the run, by external id (plan 0268). */
     storedPaths?: Record<string, string[][]>;
+    /** The run each row's paths were last replaced by, by external id (164a). */
+    replacedBy?: Record<string, string>;
     /** Whether the run's signal is aborted by the time it drains. */
     aborted?: boolean;
     /** The update of category paths, by its index from 0, that rejects. */
@@ -195,6 +197,15 @@ function build(
     ])
   );
   const pathUpdates: Array<{ id: string; categoryPaths: string[][] }> = [];
+  // The run each row's paths were last replaced by (164a), and the writes of
+  // that column alone, for a row whose paths a REPLACE left as they were.
+  const replacedBy = new Map<string, string>(
+    Object.entries(options.replacedBy ?? {}).map(([externalId, runId]) => [
+      `entry-${externalId}`,
+      runId,
+    ])
+  );
+  const replacedByUpdates: Array<{ ids: string[]; runId: string }> = [];
   let pathUpdateCalls = 0;
   const pathsRepository = {
     find: jest.fn(async (query: { where: { id: FindOperator<string[]> } }) =>
@@ -204,17 +215,40 @@ function build(
             storedPaths.has(id) ||
             pushed.flat().some((each) => `entry-${each.externalId}` === id)
         )
-        .map((id) => ({ id, categoryPaths: storedPaths.get(id) ?? [] }))
+        .map((id) => ({
+          id,
+          categoryPaths: storedPaths.get(id) ?? [],
+          categoryPathsReplacedByRunId: replacedBy.get(id) ?? null,
+        }))
     ),
     update: jest.fn(
-      async (where: { id: string }, values: { categoryPaths: string[][] }) => {
+      async (
+        where: { id: string | FindOperator<string[]> },
+        values: {
+          categoryPaths?: string[][];
+          categoryPathsReplacedByRunId?: string;
+        }
+      ) => {
+        if (typeof where.id !== 'string') {
+          const ids = where.id.value as unknown as string[];
+          const runId = values.categoryPathsReplacedByRunId as string;
+          for (const id of ids) {
+            replacedBy.set(id, runId);
+          }
+          replacedByUpdates.push({ ids, runId });
+          return { affected: ids.length };
+        }
         const call = pathUpdateCalls;
         pathUpdateCalls += 1;
         if (options.pathUpdateFails?.at === call) {
           throw options.pathUpdateFails.error;
         }
-        storedPaths.set(where.id, values.categoryPaths);
-        pathUpdates.push({ id: where.id, categoryPaths: values.categoryPaths });
+        const paths = values.categoryPaths as string[][];
+        storedPaths.set(where.id, paths);
+        if (values.categoryPathsReplacedByRunId !== undefined) {
+          replacedBy.set(where.id, values.categoryPathsReplacedByRunId);
+        }
+        pathUpdates.push({ id: where.id, categoryPaths: paths });
         return { affected: 1 };
       }
     ),
@@ -226,7 +260,7 @@ function build(
   );
   const writeCategoryPaths = jest.fn(
     (writes: readonly CategoryPathsWrite[], onWritten?: () => void) =>
-      pathsIngest.writeCategoryPaths(writes, onWritten)
+      pathsIngest.writeCategoryPaths(RUN, writes, onWritten)
   );
   const closed = jest.fn(async () => totalsOf());
   /** What the chunks so far wrote, without a close (plan 0269, D9). */
@@ -463,6 +497,8 @@ function build(
     totals,
     storedPaths,
     pathUpdates,
+    replacedBy,
+    replacedByUpdates,
     pathsRepository,
     writeCategoryPaths,
   };
@@ -2040,6 +2076,62 @@ describe('RunReportSink, the category paths of a run (plan 0268)', () => {
 
     expect(pathUpdates).toEqual([]);
     expect(written.categoryPathsWritten).toBe(0);
+  });
+
+  it('names the run on a row it replaced, changed or not, and on no row it added to (164a)', async () => {
+    const EARLIER = '33333333-3333-4333-8333-000000000001';
+    const { sink, storedPaths, pathUpdates, replacedBy, replacedByUpdates } =
+      build({
+        storedPaths: {
+          moved: [IBERICOS],
+          same: [COLA, PACKS],
+          added: [IBERICOS],
+          already: [COLA],
+        },
+        replacedBy: { added: EARLIER, already: RUN },
+      });
+
+    for (const externalId of ['moved', 'same', 'added', 'already', 'fresh']) {
+      sink.product(observation({ externalId }));
+    }
+    sink.categoryPaths('moved', [COLA], 'REPLACE');
+    sink.categoryPaths('same', [COLA, PACKS], 'REPLACE');
+    sink.categoryPaths('added', [COLA], 'ADD');
+    sink.categoryPaths('already', [COLA], 'REPLACE');
+    sink.categoryPaths('fresh', [PACKS], 'REPLACE');
+    const written = await sink.drain();
+
+    // The paths and their count are what they were before the column.
+    expect(pathUpdates).toEqual([
+      { id: 'entry-moved', categoryPaths: [COLA] },
+      { id: 'entry-added', categoryPaths: [IBERICOS, COLA] },
+      { id: 'entry-fresh', categoryPaths: [PACKS] },
+    ]);
+    expect(written.categoryPathsWritten).toBe(3);
+    expect(storedPaths.get('entry-same')).toEqual([COLA, PACKS]);
+    // A row already naming this run is not written again.
+    expect(replacedByUpdates).toEqual([{ ids: ['entry-same'], runId: RUN }]);
+    expect(replacedBy.get('entry-moved')).toBe(RUN);
+    expect(replacedBy.get('entry-same')).toBe(RUN);
+    expect(replacedBy.get('entry-fresh')).toBe(RUN);
+    expect(replacedBy.get('entry-already')).toBe(RUN);
+    expect(replacedBy.get('entry-added')).toBe(EARLIER);
+  });
+
+  it('names no run on any row of an aborted run, which writes every call as ADD (164a)', async () => {
+    const { sink, replacedBy, replacedByUpdates } = build({
+      storedPaths: { a: [COLA], b: [IBERICOS] },
+      aborted: true,
+    });
+
+    sink.product(observation({ externalId: 'a' }));
+    sink.product(observation({ externalId: 'b' }));
+    sink.categoryPaths('a', [COLA], 'REPLACE');
+    sink.categoryPaths('b', [COLA], 'REPLACE');
+    await sink.drain();
+
+    expect(replacedByUpdates).toEqual([]);
+    expect(replacedBy.size).toBe(0);
   });
 
   it('drops a repeated path and a path that a longer one of the product covers', async () => {

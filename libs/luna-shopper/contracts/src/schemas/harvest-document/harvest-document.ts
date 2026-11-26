@@ -187,6 +187,14 @@ export interface HarvestDocumentProduct {
    */
   approx_weight?: number | null;
   /**
+   * Whether the source sells the product by weight, version 2 (plan 0181):
+   * each price is then the price of a kilo, and the row holds no size. The
+   * harvester's export states the flag its row holds. Absent leaves the flag
+   * of a known row alone, and a new row is not sold by weight, unless the
+   * leaflet producer's `extra.basis` is `kg`.
+   */
+  sold_by_weight?: boolean;
+  /**
    * The till price for **one unit**, version 1 only.
    *
    * Version 2 states {@link HarvestDocumentProduct.prices} instead, and the
@@ -207,8 +215,41 @@ export interface HarvestDocumentProduct {
   validity?: HarvestDocumentValidity | null;
   /** ISO 8601. Defaults to `producer.produced_at`, then to the import's start. */
   observed_at?: string | null;
+  /**
+   * The chain's category path of the product, root first. The row's
+   * `categoryPath`, which the category map reads by its deepest node.
+   * Absent leaves the path a row holds alone.
+   */
   category_path?: string[] | null;
+  /**
+   * Every path the chain files the product under, each root first, version 2
+   * (plan 0268). The harvester's export states the paths a row holds. The
+   * import adds them to the paths of the row, with `category_path`, and
+   * removes none: a file does not say that a stored path is gone, unless it
+   * states {@link HarvestDocumentProduct.category_paths_complete}.
+   */
+  category_paths?: string[][] | null;
+  /**
+   * Whether {@link HarvestDocumentProduct.category_paths} is every path the
+   * chain files the product under, version 2. The harvester's export states
+   * `true` only for a row whose paths the exported run replaced whole, and
+   * never for a list it trimmed to the schema's bounds; it states nothing
+   * otherwise. An import as `OFFICIAL_WEB` or `OFFICIAL_API` then replaces
+   * the paths of the row with the stated ones. Any other kind, a `false`, an
+   * absent field, or no paths stated only adds, so a file cannot clear the
+   * paths of a row by stating none.
+   */
+  category_paths_complete?: boolean;
   url?: string | null;
+  /**
+   * The address of the photo the chain prints for the product, version 2
+   * (plan 0198). The harvester's export states the address a walk stored.
+   * The import keeps it only when it passes the host rule of the importing
+   * chain's own adapter, the rule a walk's address passed, and leaves the
+   * stored address alone when it does not. Null is a statement that the
+   * source prints none. Absent leaves the stored address alone.
+   */
+  image_url?: string | null;
   /**
    * Everything the producer knows and the import does not read: a leaflet's
    * page, raw text, promotion, loyalty block and confidence, a chain that sells

@@ -9,6 +9,7 @@ export {
   harvestDocument1Schema,
 } from './harvest-document-1.schema';
 export {
+  HARVEST_CATEGORY_PATHS_BOUNDS,
   HARVEST_DOCUMENT_2_SCHEMA_ID,
   HARVEST_DOCUMENT_2_VERSION,
   harvestDocument2Schema,

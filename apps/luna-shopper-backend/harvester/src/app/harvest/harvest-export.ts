@@ -1,4 +1,5 @@
 import {
+  HARVEST_CATEGORY_PATHS_BOUNDS,
   HARVEST_DOCUMENT_CURRENT_VERSION,
   PriceSourceKind,
   type HarvestDocument,
@@ -10,6 +11,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { createHash } from 'node:crypto';
 import type { SourceCatalogEntry, SourceEntryPrice } from '../entities';
+import { distinctCategoryPaths } from './category-paths';
 
 /**
  * A run, as a file (plan 0086, section 6.2).
@@ -84,8 +86,16 @@ export interface HarvestExportInput {
   producedAt: Date;
 }
 
-/** The export format's own version, which is not the service's. */
-export const HARVEST_PRODUCER_VERSION = '2';
+/**
+ * The export format's own version, which is not the service's.
+ *
+ * `3` states the photo address, every category path of a row, how it is
+ * sold, and whether its paths are whole (`image_url`, `category_paths`,
+ * `sold_by_weight`, `category_paths_complete`). The schema stays version 2:
+ * the four are optional there, as `approx_weight` is, so every version 2
+ * file a person or the leaflet extractor writes still validates unchanged.
+ */
+export const HARVEST_PRODUCER_VERSION = '3';
 
 /**
  * What names the harvester and the run in a file it produced.
@@ -113,7 +123,9 @@ export function buildHarvestDocument(
       .map((scope) => [scope.id, scope])
   );
   const used = new Set<string>();
-  const products = input.entries.map((entry) => toProduct(entry, byId, used));
+  const products = input.entries.map((entry) =>
+    toProduct(entry, input.run.id, byId, used)
+  );
   const kind = dominantKind(input.entries);
 
   const document: HarvestDocument = {
@@ -185,10 +197,22 @@ export function digestOf(document: HarvestDocument): string {
  */
 function toProduct(
   entry: SourceCatalogEntry,
+  runId: string,
   scopes: ReadonlyMap<string, HarvestExportScope>,
   used: Set<string>
 ): HarvestDocumentProduct {
   const size = sizeOf(entry);
+  const stored = Array.isArray(entry.categoryPaths) ? entry.categoryPaths : [];
+  const distinct = distinctCategoryPaths(stored);
+  const paths = exportablePaths(distinct);
+  // The paths are whole only when this run replaced them whole (164a) and
+  // the file states every one of them: a list the bounds trimmed, or one
+  // the import rule would read shorter than the row holds, is not whole.
+  const complete =
+    entry.categoryPathsReplacedByRunId === runId &&
+    paths.length > 0 &&
+    paths.length === distinct.length &&
+    distinct.length === stored.length;
   const rows = (entry.prices ?? []).filter(
     (price) => price.price !== null || price.unitPrice !== null
   );
@@ -211,17 +235,55 @@ function toProduct(
     !size?.quantity
       ? { approx_weight: Number(entry.approxWeight) }
       : {}),
+    // How the row is sold (plan 0181), so the import writes the flag the walk
+    // stored rather than reading one out of a bag that a walk never fills.
+    ...(typeof entry.soldByWeight === 'boolean'
+      ? { sold_by_weight: entry.soldByWeight }
+      : {}),
     prices: rows.map((price) => toPrice(price, scopes)),
     observed_at: (rows[0]?.observedAt ?? entry.lastSeenAt).toISOString(),
     ...(entry.categoryPath?.length
       ? { category_path: entry.categoryPath }
       : {}),
+    // Every path the row holds (plan 0268), so an import adds the trails
+    // the walk met beside the one `category_path` names. Through the rule
+    // the import reads them by, so a stored element that is not a list of
+    // names, or a path with none, never reaches the file.
+    ...(paths.length ? { category_paths: paths } : {}),
+    // And that they are every path, only when this run read them whole
+    // (164a), so an import of a walk's kind replaces the row's trails. Left
+    // out otherwise, never written false: absent already says nothing.
+    ...(complete ? { category_paths_complete: true } : {}),
     ...(entry.url ? { url: entry.url } : {}),
+    // The photo address the walk stored (plan 0198). The import keeps it only
+    // under the host rule of its own chain's adapter, the rule it passed here.
+    ...(entry.imageUrl ? { image_url: entry.imageUrl } : {}),
     // Carried through untouched, which is the whole point of the bag: whatever
     // the producer of the original observation knew and the import does not
     // read survives the round trip.
     ...(entry.extra ? { extra: entry.extra } : {}),
   };
+}
+
+/**
+ * The paths the schema takes (`HARVEST_CATEGORY_PATHS_BOUNDS`), so one row
+ * never makes the whole file fail validation at upload.
+ *
+ * **A path past the bounds of a path is left out whole**, never cut: a path
+ * with its last names cut off, or a name cut short, files the product under
+ * a shelf the chain does not have. Of the rest the first ones are kept, up
+ * to the count the schema takes.
+ */
+function exportablePaths(paths: readonly string[][]): string[][] {
+  const { paths: most, names, nameLength } = HARVEST_CATEGORY_PATHS_BOUNDS;
+  return paths
+    .filter(
+      (path) =>
+        path.length <= names &&
+        // Counted in code points, as the schema's `maxLength` counts them.
+        path.every((name) => [...name].length <= nameLength)
+    )
+    .slice(0, most);
 }
 
 /** One `source_entry_prices` row, as a price of the file. */

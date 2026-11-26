@@ -39,6 +39,17 @@ export const HARVEST_DOCUMENT_2_SCHEMA_ID =
 export const HARVEST_DOCUMENT_2_VERSION = 2;
 
 /**
+ * The bounds of `category_paths` (plan 0268): at most `paths` paths, `names`
+ * names in a path and `nameLength` characters in a name. Exported so that a
+ * producer, the harvester's export first, writes only what this schema takes.
+ */
+export const HARVEST_CATEGORY_PATHS_BOUNDS = {
+  paths: 50,
+  names: 12,
+  nameLength: 200,
+} as const;
+
+/**
  * A window of local days in Spain. **Both bounds are required inside it.** A
  * producer that read only an end date carries no `validity` and says so in
  * `warnings`, and the spawn's own override supplies the window, which is what
@@ -146,6 +157,11 @@ const product: JsonSchema = {
       description:
         'The approximate weight of one piece in grams (plan 0244): a cheese sold by the kilo, a tray priced as one piece. Refused beside size.quantity.',
     },
+    sold_by_weight: {
+      type: 'boolean',
+      description:
+        "Whether the source sells the product by weight (plan 0181), each price then the price of a kilo. The harvester's export states the flag its row holds. Absent leaves the flag of a known row alone, and a new row is not sold by weight, unless extra.basis is kg.",
+    },
     prices: {
       type: ['array', 'null'],
       description:
@@ -164,7 +180,32 @@ const product: JsonSchema = {
       type: ['array', 'null'],
       items: { type: 'string' },
     },
+    category_paths: {
+      type: ['array', 'null'],
+      description:
+        'Every path the chain files the product under, each root first (plan 0268). The import adds them to the paths the row holds and removes none, unless category_paths_complete is true.',
+      maxItems: HARVEST_CATEGORY_PATHS_BOUNDS.paths,
+      items: {
+        type: 'array',
+        maxItems: HARVEST_CATEGORY_PATHS_BOUNDS.names,
+        items: {
+          type: 'string',
+          maxLength: HARVEST_CATEGORY_PATHS_BOUNDS.nameLength,
+        },
+      },
+    },
+    category_paths_complete: {
+      type: 'boolean',
+      description:
+        "Whether category_paths is every path the chain files the product under. The harvester's export states true only for a row whose paths the exported run replaced whole, and never for a list it had to trim. An import as OFFICIAL_WEB or OFFICIAL_API then replaces the paths of the row with the stated ones; any other kind, a false, an absent field, or no paths stated only adds.",
+    },
     url: { type: ['string', 'null'] },
+    image_url: {
+      type: ['string', 'null'],
+      maxLength: 500,
+      description:
+        "The photo address the chain prints (plan 0198). Kept only when it passes the host rule of the importing chain's adapter. Null states that the source prints none; absent leaves the stored one.",
+    },
     extra: {
       type: ['object', 'null'],
       additionalProperties: true,
