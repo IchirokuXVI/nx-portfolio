@@ -2202,16 +2202,49 @@ export interface SettleItemAtChainResult {
 /**
  * The row as the decisions file saw it, and the check that it still says so.
  *
- * Two fields, because two are enough: a row whose status has moved was decided
- * by somebody else, and a row whose `lastSeenAt` has moved was observed again
- * by a later run and may now say something different from what was decided
- * about. Either one makes the recorded judgment a judgment about a different
- * row.
+ * A row whose status has moved was decided by somebody else, so `status` is
+ * always compared. Beside it an operation carries `lastSeenAt`, `observed`, or
+ * both, and each one present is compared (plan 0277):
+ *
+ * - `lastSeenAt` refuses a row that a later run observed again, because it may
+ *   now say something different from what was decided about (plan 0100). It
+ *   stands in for that question, and it also refuses every row a walk saw
+ *   again unchanged, which is most of them.
+ * - `observed` asks the question itself: the fields the decision was made on,
+ *   as the decider read them. A row that still says the same is the row that
+ *   was decided about, however often a walk saw it since, and a row that says
+ *   something else is refused.
+ *
+ * A file with neither is refused as malformed by the harvester.
  */
 export interface SourceEntryExpectation {
   status: SourceEntryStatus;
   /** ISO 8601, exactly as `SourceCatalogEntryView.lastSeenAt` printed it. */
-  lastSeenAt: string;
+  lastSeenAt?: string;
+  /** The fields the decision was made on, as the queue view printed them. */
+  observed?: SourceEntryObserved;
+}
+
+/**
+ * The content of a queued row that a decision depends on (plan 0277, section
+ * 1), each field exactly as {@link SourceCatalogEntryView} prints it. Every
+ * field is present, with `null` where the row holds nothing, so a reader can
+ * tell what was guarded.
+ *
+ * Prices are left out on purpose: a bind writes the prices the row holds when
+ * the file lands, and a price that moves every week would refuse a decision
+ * that does not depend on it.
+ */
+export interface SourceEntryObserved {
+  name: string;
+  brand: string | null;
+  ean: string | null;
+  sizeFormat: string | null;
+  unitSize: number | null;
+  sizeUnit: SourceSizeUnit | null;
+  packCount: number | null;
+  soldByWeight: boolean;
+  approxWeight: number | null;
 }
 
 /** Bind a queued row to a product, named directly or by a `ref` of this request. */

@@ -227,6 +227,18 @@ as it is for the other combinations (DTO comment, `harvest.dto.ts` lines 513 to 
 - **The replay to another cluster.** That is curation CLI plan `0006` section 6.
 - **Prices in the check.** Section 1.
 
+## Decisions
+
+**D1 (builder, 2026-11-26, O1 A, pending the owner):** a stale row refuses the whole file, as
+today. The route has no `skipStale` flag and no per row outcome.
+
+**D2 (builder, 2026-11-26, O2 A, pending the owner):** `categoryPath` stays out of `observed`.
+
+**D3 (builder, 2026-11-26, O3 A, pending the owner):** the back office stays as it is. It sends
+`expect` as the file holds it and keeps its warning for a file decided against another gateway.
+
+Each A is the smallest build, and the other options can be added later.
+
 ## Open decisions for the owner
 
 **O1. Does a stale row refuse the whole file, or only itself?**

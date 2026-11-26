@@ -15,12 +15,14 @@ import {
   PostalCodeDiscoveryStatus,
   PriceSourceKind,
   SOURCE_ADAPTER_KEYS,
+  SOURCE_SIZE_UNITS,
   SourceEntryStatus,
   SourceLocationStatus,
   UnitOfMeasure,
   type ContentLocale,
   type HarvestDocument,
   type SourceAdapterKey,
+  type SourceSizeUnit,
 } from '@portfolio/luna-shopper/contracts';
 import { asQueryFlag, PageQueryDto } from '@portfolio/luna-shopper/platform';
 import { Transform, Type } from 'class-transformer';
@@ -43,6 +45,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 
@@ -490,24 +493,100 @@ export class CreateItemFromEntryDto {
 }
 
 /**
- * The row as the decisions file saw it (plan 0100).
+ * The content of a queued row a decision was made on (plan 0277, section 1),
+ * each field as the queue listing printed it.
  *
- * Two fields, because two are enough: a row whose status has moved was decided
- * by somebody else, and a row whose `lastSeenAt` has moved was observed again by
- * a later run and may say something different from what was decided about.
+ * Every field is required and null is a value: a partial `observed` would
+ * guard less than it seems to, and a reader of the file could not tell. So
+ * each nullable field carries `@ValidateIf` for null alone, and an absent one
+ * still fails its validators.
+ */
+export class SourceEntryObservedDto {
+  @ApiProperty({ minLength: 1 })
+  @IsString()
+  @MinLength(1)
+  name!: string;
+
+  @ApiProperty({ type: String, nullable: true })
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  brand!: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  ean!: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  sizeFormat!: string | null;
+
+  @ApiProperty({ type: Number, nullable: true })
+  @ValidateIf((_, value) => value !== null)
+  @IsNumber()
+  unitSize!: number | null;
+
+  @ApiProperty({ enum: SOURCE_SIZE_UNITS, nullable: true })
+  @ValidateIf((_, value) => value !== null)
+  @IsIn([...SOURCE_SIZE_UNITS])
+  sizeUnit!: SourceSizeUnit | null;
+
+  @ApiProperty({
+    type: 'integer',
+    nullable: true,
+    minimum: PACK_COUNT_MIN,
+    maximum: PACK_COUNT_MAX,
+  })
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(PACK_COUNT_MIN)
+  @Max(PACK_COUNT_MAX)
+  packCount!: number | null;
+
+  @ApiProperty()
+  @IsBoolean()
+  soldByWeight!: boolean;
+
+  @ApiProperty({ type: Number, nullable: true })
+  @ValidateIf((_, value) => value !== null)
+  @IsNumber()
+  approxWeight!: number | null;
+}
+
+/**
+ * The row as the decisions file saw it (plan 0100, and plan 0277).
+ *
+ * A row whose status has moved was decided by somebody else. Beside the
+ * status, `lastSeenAt`, `observed` or both, and each one present is compared:
+ * a moved `lastSeenAt` means a later run observed the row again, and a moved
+ * field of `observed` means the row says something else now. Both are optional
+ * here; the harvester refuses an operation that carries neither, as it checks
+ * the other combinations of {@link SourceEntryDecisionDto}.
  */
 export class SourceEntryExpectationDto {
   @ApiProperty({ enum: SourceEntryStatus })
   @IsEnum(SourceEntryStatus)
   status!: SourceEntryStatus;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     format: 'date-time',
     description:
-      'Exactly the string the queue listing printed for this row. A row observed again since then fails the check.',
+      'Exactly the string the queue listing printed for this row. When present, a row observed again since then fails the check, whatever it says. At least one of this and `observed` is present.',
   })
+  @IsOptional()
   @IsDateString()
-  lastSeenAt!: string;
+  lastSeenAt?: string;
+
+  @ApiPropertyOptional({
+    type: SourceEntryObservedDto,
+    description:
+      'The fields the decision was made on, exactly as the queue listing printed them, every one present with null where the row holds nothing. When present, each field is compared with the row under the route’s lock, and a field that differs fails the operation with `EXPECT_MISMATCH` naming it. A row a later walk saw again but that says the same passes. Prices are not compared. At least one of this and `lastSeenAt` is present.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SourceEntryObservedDto)
+  observed?: SourceEntryObservedDto;
 }
 
 /**

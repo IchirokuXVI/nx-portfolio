@@ -225,6 +225,71 @@ describe('the bulk decision routes', () => {
       ).toBe(400);
       expect(context.send).not.toHaveBeenCalled();
     });
+
+    describe('an expect may carry what the row says (plan 0277)', () => {
+      const observed = {
+        name: 'Leche semidesnatada',
+        brand: null,
+        ean: null,
+        sizeFormat: '1 L',
+        unitSize: 1,
+        sizeUnit: UnitOfMeasure.LITER,
+        packCount: null,
+        soldByWeight: false,
+        approxWeight: null,
+      };
+
+      it('forwards an expect with observed and no lastSeenAt, untouched', async () => {
+        const operation = {
+          ...accept(ENTRY),
+          expect: { status: SourceEntryStatus.UNRESOLVED, observed },
+        };
+
+        const response = await post(context.origin, PATH, {
+          operations: [operation],
+        });
+
+        expect(response.status).toBe(201);
+        const [, payload] = context.send.mock.calls[0] as [
+          string,
+          { operations: { expect: unknown }[] },
+        ];
+        expect(payload.operations[0].expect).toEqual(operation.expect);
+      });
+
+      it('lets an expect with neither through, since the harvester refuses it per operation', async () => {
+        const response = await post(context.origin, PATH, {
+          operations: [
+            {
+              ...accept(ENTRY),
+              expect: { status: SourceEntryStatus.UNRESOLVED },
+            },
+          ],
+        });
+
+        expect(response.status).toBe(201);
+      });
+
+      it('refuses an observed with a field left out', async () => {
+        const partial: Record<string, unknown> = { ...observed };
+        delete partial['ean'];
+
+        const response = await post(context.origin, PATH, {
+          operations: [
+            {
+              ...accept(ENTRY),
+              expect: {
+                status: SourceEntryStatus.UNRESOLVED,
+                observed: partial,
+              },
+            },
+          ],
+        });
+
+        expect(response.status).toBe(400);
+        expect(context.send).not.toHaveBeenCalled();
+      });
+    });
   });
 
   describe('POST /v1/admin/catalog/items/batch', () => {

@@ -65,6 +65,7 @@ import {
   validateMessageResponse,
 } from './index';
 import { BASKET_SCHEMA_IDS } from './messages/basket.schemas';
+import { HARVEST_SCHEMA_IDS } from './messages/harvest.schemas';
 import { PURCHASE_SCHEMA_IDS } from './messages/purchase.schemas';
 import { messageRequestSchemaId, messageResponseSchemaId } from './registry';
 import { validateSchema } from './validator';
@@ -3657,6 +3658,65 @@ describe('a line holds up to 99 999 of its unit (plan 0262, 2026-11-17)', () => 
         unit: 'UNIT',
         quantity: 99999,
         from: 100000,
+      }).valid
+    ).toBe(true);
+  });
+});
+
+describe('a decision may expect what the row says (plan 0277)', () => {
+  const observed = {
+    name: 'Leche semidesnatada',
+    brand: 'Marca',
+    ean: null,
+    sizeFormat: '1 L',
+    unitSize: 1,
+    sizeUnit: 'LITER',
+    packCount: null,
+    soldByWeight: false,
+    approxWeight: null,
+  };
+  const valid = (expectation: unknown) =>
+    validateSchema(HARVEST_SCHEMA_IDS.sourceEntryExpectation, expectation)
+      .valid;
+
+  it('takes the status with observed, with lastSeenAt, or with both', () => {
+    expect(valid({ status: 'UNRESOLVED', observed })).toBe(true);
+    expect(
+      valid({ status: 'UNRESOLVED', lastSeenAt: '2026-01-01T00:00:00.000Z' })
+    ).toBe(true);
+    expect(
+      valid({
+        status: 'CANDIDATE',
+        lastSeenAt: '2026-01-01T00:00:00.000Z',
+        observed,
+      })
+    ).toBe(true);
+  });
+
+  it('refuses an observed with a field left out, since a partial one guards less', () => {
+    for (const field of Object.keys(observed)) {
+      const partial: Record<string, unknown> = { ...observed };
+      delete partial[field];
+      expect(valid({ status: 'UNRESOLVED', observed: partial })).toBe(false);
+    }
+  });
+
+  it('refuses an expectation with no status', () => {
+    expect(valid({ observed })).toBe(false);
+  });
+
+  it('reaches the decisions request inside an operation', () => {
+    expect(
+      validateMessageRequest('sourceEntry.applyDecisions', {
+        userId: 'u',
+        operations: [
+          {
+            op: 'accept',
+            entryId: 'e',
+            itemId: 'i',
+            expect: { status: 'UNRESOLVED', observed },
+          },
+        ],
       }).valid
     ).toBe(true);
   });

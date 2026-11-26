@@ -191,6 +191,8 @@ export const HARVEST_SCHEMA_IDS = {
   createItemFromEntryRequest: schemaId('msg/sourceEntry.createItem/request'),
   // Plan 0100: a whole decisions file, in one call.
   sourceEntryExpectation: schemaId('harvest/SourceEntryExpectation'),
+  // Plan 0277: the row's content as the decider read it.
+  sourceEntryObserved: schemaId('harvest/SourceEntryObserved'),
   acceptEntryOperation: schemaId('harvest/AcceptSourceEntryOperation'),
   createItemEntryOperation: schemaId(
     'harvest/CreateItemFromSourceEntryOperation'
@@ -1833,17 +1835,51 @@ const createItemFromEntryRequest = object(
 // --- A whole decisions file, in one call (plan 0100) ------------------------
 
 /**
- * The row as the decisions file saw it. Two fields are enough: a moved status
- * means somebody else decided, and a moved `lastSeenAt` means a later run
- * observed the row again and it may no longer say what was decided about.
+ * The content of a queued row a decision depends on (plan 0277), each field
+ * as the entry view prints it. Every field is required, with null where the
+ * row holds nothing, because a partial one would guard less than it seems to.
+ */
+const sourceEntryObserved = object(
+  HARVEST_SCHEMA_IDS.sourceEntryObserved,
+  {
+    name: nonEmptyString(),
+    brand: nullableString(),
+    ean: nullableString(),
+    sizeFormat: nullableString(),
+    unitSize: numberOrNull(),
+    sizeUnit: sizeUnitOrNull(),
+    packCount: packCountOrNull(),
+    soldByWeight: boolean(),
+    approxWeight: numberOrNull(),
+  },
+  [
+    'name',
+    'brand',
+    'ean',
+    'sizeFormat',
+    'unitSize',
+    'sizeUnit',
+    'packCount',
+    'soldByWeight',
+    'approxWeight',
+  ]
+);
+
+/**
+ * The row as the decisions file saw it. A moved status means somebody else
+ * decided. Beside it, `lastSeenAt`, `observed` or both: a moved `lastSeenAt`
+ * means a later run observed the row again, and a moved field of `observed`
+ * means the row says something else now (plan 0277). The harvester refuses an
+ * operation that carries neither, so the schema leaves both optional.
  */
 const sourceEntryExpectation = object(
   HARVEST_SCHEMA_IDS.sourceEntryExpectation,
   {
     status: ref(HARVEST_SCHEMA_IDS.sourceEntryStatus),
     lastSeenAt: nonEmptyString(),
+    observed: ref(HARVEST_SCHEMA_IDS.sourceEntryObserved),
   },
-  ['status', 'lastSeenAt']
+  ['status']
 );
 
 const acceptEntryOperation = object(
@@ -2180,6 +2216,7 @@ export const harvestSchemas: JsonSchema[] = [
   sourceEntryPriceWithheld,
   acceptEntryRequest,
   createItemFromEntryRequest,
+  sourceEntryObserved,
   sourceEntryExpectation,
   acceptEntryOperation,
   createItemEntryOperation,
