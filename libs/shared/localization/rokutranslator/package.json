@@ -7,6 +7,6 @@
   "types": "./src/index.d.ts",
   "dependencies": {
     "tslib": "^2.3.0",
-    "i18next": "^25.5.2"
+    "i18next": "^27.0.0"
   }
 }
