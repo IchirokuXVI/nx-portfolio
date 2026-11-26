@@ -184,8 +184,18 @@ export interface SourceObservation {
    */
   detailFetched?: true;
   name: string;
-  brand: string | null;
-  ean: string | null;
+  /**
+   * The brand the source prints. Null is a statement that it prints none.
+   *
+   * **Undefined means the source did not state it this time**, and leaves
+   * the stored brand alone. The same holds for {@link ean}, {@link url},
+   * {@link imageUrl} and {@link extra}. Only the file import passes
+   * undefined, for a product whose document does not name the field: a file
+   * is not the chain, and a field it leaves out says nothing about the
+   * product. The key stays required, so an adapter cannot forget to say.
+   */
+  brand: string | null | undefined;
+  ean: string | null | undefined;
   /**
    * The size of the pack, in {@link sizeUnit}. Null is a statement that the
    * source prints none, and clears the stored one.
@@ -258,18 +268,19 @@ export interface SourceObservation {
    * replace a right one.
    */
   categoryPath?: string[];
-  url: string | null;
+  url: string | null | undefined;
   /**
    * The address of the photo the source prints for the product, as its own
    * adapter library answered it (plan 0198, section 2): `https`, on a host of
    * the chain's list, verbatim. Required, so an adapter cannot forget to say:
-   * null is the answer of a source that prints none.
+   * null is the answer of a source that prints none. Undefined is a document
+   * that states none, as for {@link brand}.
    *
    * It is an address and nothing else. No code here requests it.
    */
-  imageUrl: string | null;
+  imageUrl: string | null | undefined;
   observedAt: Date;
-  extra: Record<string, unknown> | null;
+  extra: Record<string, unknown> | null | undefined;
   /**
    * Every price the source stated for this product, one per scope it named.
    *
@@ -706,7 +717,10 @@ export class SourceIngest {
       }
       if (
         observation.detailFetched !== false &&
-        (!known || writesSourceGroup(known, input.sourceKind))
+        (!known || writesSourceGroup(known, input.sourceKind)) &&
+        // An observation that does not state an EAN writes none, so the
+        // row keeps the one it holds and the count with it.
+        observation.ean !== undefined
       ) {
         eans.note(observation.externalId, observation.ean);
         if (observation.ean) {
@@ -1641,7 +1655,11 @@ export class SourceIngest {
     counters: SourceIngestCounters
   ): Promise<SourceEntryOutcome> {
     const writes = writesSourceGroup(row, fields.sourceKind);
-    const learnedEan = writes && fields.ean !== null && row.ean !== fields.ean;
+    const learnedEan =
+      writes &&
+      fields.ean !== null &&
+      fields.ean !== undefined &&
+      row.ean !== fields.ean;
     if (writes) {
       applySourceGroup(row, fields);
     }
@@ -1655,9 +1673,12 @@ export class SourceIngest {
     let rung: 1 | 2 = 1;
     if (learnedEan && undecided(row)) {
       const match = items.match({
-        ean: fields.ean,
+        // The row's own EAN and brand, which `applySourceGroup` wrote: the
+        // EAN is the one just learned, and a brand the observation did not
+        // state is the stored one.
+        ean: row.ean,
         name: fields.name,
-        brand: fields.brand,
+        brand: row.brand,
         // The row's own size, which `applySourceGroup` wrote: an observation
         // that did not state one left the stored one (owner decision 143a).
         unitSize: row.unitSize === null ? null : Number(row.unitSize),
@@ -1668,7 +1689,7 @@ export class SourceIngest {
       // made at the very moment the identifier that makes fuzziness unnecessary
       // arrived. An EAN another row of the chain carries only proposes.
       if (match && match.matchedBy === ItemSourceMatch.EAN) {
-        const decision: Partial<DecidedFields> = eans.shared(fields.ean)
+        const decision: Partial<DecidedFields> = eans.shared(row.ean)
           ? sharedEanProposal(match.itemId)
           : {
               itemId: match.itemId,
@@ -1730,6 +1751,14 @@ export class SourceIngest {
       sizeFormat: fields.sizeFormat ?? null,
       // Nor is a category path the observation did not state.
       categoryPath: fields.categoryPath ?? [],
+      // Nor any identity field: a document that states none of them creates
+      // a row that holds none.
+      brand: fields.brand ?? null,
+      brandKey: fields.brandKey ?? null,
+      ean: fields.ean ?? null,
+      url: fields.url ?? null,
+      imageUrl: fields.imageUrl ?? null,
+      extra: fields.extra ?? null,
       timesSeen: 1,
       firstSeenAt: seenAt,
       lastSeenAt: seenAt,
@@ -1754,8 +1783,8 @@ export class SourceIngest {
     // and writes nothing.
     const match = items.match({
       name: observation.name,
-      brand: observation.brand,
-      ean: observation.ean,
+      brand: draft.brand,
+      ean: draft.ean,
       // The row's size and not the observation's: a row sold by weight holds
       // none, whatever the source printed beside it (plan 0181).
       unitSize: draft.unitSize,
@@ -1763,7 +1792,7 @@ export class SourceIngest {
       // 0244, section 5.8), so a piece never proposes one of another weight.
       approxWeight: fields.approxWeight ?? null,
     });
-    if (match && isSharedEan(match, observation.ean, eans)) {
+    if (match && isSharedEan(match, draft.ean, eans)) {
       Object.assign(draft, sharedEanProposal(match.itemId));
       rung = 2;
     } else if (match) {
@@ -2492,8 +2521,10 @@ function fieldsOf(
     name: observation.name,
     brand: observation.brand,
     // Derived here rather than at the call sites, so every observation that
-    // reaches a row carries the key (plan 0115, section 6).
-    brandKey: brandKey(observation.brand),
+    // reaches a row carries the key (plan 0115, section 6). Absent with the
+    // brand, so a brand left unstated keeps its stored key too.
+    brandKey:
+      observation.brand === undefined ? undefined : brandKey(observation.brand),
     ean: observation.ean,
     unitSize,
     // Held to the size here as well as in every adapter: a unit beside no
@@ -2515,21 +2546,27 @@ function fieldsOf(
     packaging: observation.packaging,
     packCount: observation.packCount,
     categoryPath: observation.categoryPath,
+    // Each passed through as stated, undefined included: an absent field
+    // leaves the stored one alone (`applySourceGroup`), and a new row writes
+    // null for it (`create`).
     url: observation.url,
-    imageUrl: observation.imageUrl ?? null,
+    imageUrl: observation.imageUrl,
     extra: observation.extra,
   };
 }
 
 /**
  * The free bag a price row carries: the observation's, or for a partial one the
- * stored row's, which is what the last full read said.
+ * stored row's, which is what the last full read said. A full observation
+ * that states no bag carries none on its price.
  */
 function extraOf(
   observation: ReportedObservation,
   entry: SourceCatalogEntry
 ): Record<string, unknown> | null {
-  return observation.detailFetched === false ? entry.extra : observation.extra;
+  return observation.detailFetched === false
+    ? entry.extra
+    : (observation.extra ?? null);
 }
 
 function priceEntryFor(

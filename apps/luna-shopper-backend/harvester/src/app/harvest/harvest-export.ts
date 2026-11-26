@@ -84,8 +84,15 @@ export interface HarvestExportInput {
   producedAt: Date;
 }
 
-/** The export format's own version, which is not the service's. */
-export const HARVEST_PRODUCER_VERSION = '2';
+/**
+ * The export format's own version, which is not the service's.
+ *
+ * `3` states the photo address and every category path of a row
+ * (`image_url`, `category_paths`). The schema stays version 2: both fields
+ * are optional there, as `approx_weight` is, so every version 2 file a
+ * person or the leaflet extractor writes still validates unchanged.
+ */
+export const HARVEST_PRODUCER_VERSION = '3';
 
 /**
  * What names the harvester and the run in a file it produced.
@@ -216,7 +223,17 @@ function toProduct(
     ...(entry.categoryPath?.length
       ? { category_path: entry.categoryPath }
       : {}),
+    // Every path the row holds (plan 0268), so an import adds the trails
+    // the walk met beside the one `category_path` names. Not whether the
+    // walk read every shelf: the run keeps no record of that per row, so
+    // the import only adds.
+    ...(entry.categoryPaths?.length
+      ? { category_paths: entry.categoryPaths }
+      : {}),
     ...(entry.url ? { url: entry.url } : {}),
+    // The photo address the walk stored (plan 0198). The import keeps it only
+    // under the host rule of its own chain's adapter, the rule it passed here.
+    ...(entry.imageUrl ? { image_url: entry.imageUrl } : {}),
     // Carried through untouched, which is the whole point of the bag: whatever
     // the producer of the original observation knew and the import does not
     // read survives the round trip.

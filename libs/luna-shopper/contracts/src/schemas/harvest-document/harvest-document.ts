@@ -207,8 +207,29 @@ export interface HarvestDocumentProduct {
   validity?: HarvestDocumentValidity | null;
   /** ISO 8601. Defaults to `producer.produced_at`, then to the import's start. */
   observed_at?: string | null;
+  /**
+   * The chain's category path of the product, root first. The row's
+   * `categoryPath`, which the category map reads by its deepest node.
+   * Absent leaves the path a row holds alone.
+   */
   category_path?: string[] | null;
+  /**
+   * Every path the chain files the product under, each root first, version 2
+   * (plan 0268). The harvester's export states the paths a row holds. The
+   * import adds them to the paths of the row, with `category_path`, and
+   * removes none: a file does not say that a stored path is gone.
+   */
+  category_paths?: string[][] | null;
   url?: string | null;
+  /**
+   * The address of the photo the chain prints for the product, version 2
+   * (plan 0198). The harvester's export states the address a walk stored.
+   * The import keeps it only when it passes the host rule of the importing
+   * chain's own adapter, the rule a walk's address passed, and leaves the
+   * stored address alone when it does not. Null is a statement that the
+   * source prints none. Absent leaves the stored address alone.
+   */
+  image_url?: string | null;
   /**
    * Everything the producer knows and the import does not read: a leaflet's
    * page, raw text, promotion, loyalty block and confidence, a chain that sells

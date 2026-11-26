@@ -276,3 +276,63 @@ describe('a category path the source did not state (plan 0169, notes of 2026-11-
     expect(stored.categoryPath).toEqual([]);
   });
 });
+
+describe('an identity field the observation does not state', () => {
+  const PHOTO = 'https://prod-mercadona.imgix.net/images/a.jpg';
+  const held = (): SourceCatalogEntry =>
+    ({
+      ...row(null),
+      brand: 'Hacendado',
+      brandKey: 'hacendado',
+      ean: '8480000123456',
+      url: 'https://tienda.mercadona.es/product/1',
+      imageUrl: PHOTO,
+      extra: { packaging: 'Brik' },
+    }) as SourceCatalogEntry;
+  const unstated = (): SourceEntryFields => {
+    const each = fields();
+    for (const key of [
+      'brand',
+      'brandKey',
+      'ean',
+      'url',
+      'imageUrl',
+      'extra',
+    ] as const) {
+      delete each[key];
+    }
+    return each;
+  };
+
+  it('leaves the stored brand, EAN, link, photo and bag alone, and is no change', () => {
+    const stored = held();
+    expect(sourceGroupChanged(stored, unstated())).toBe(false);
+
+    applySourceGroup(stored, unstated());
+
+    expect(stored).toMatchObject({
+      brand: 'Hacendado',
+      brandKey: 'hacendado',
+      ean: '8480000123456',
+      url: 'https://tienda.mercadona.es/product/1',
+      imageUrl: PHOTO,
+      extra: { packaging: 'Brik' },
+    });
+  });
+
+  it('still writes the null a source states', () => {
+    const stored = held();
+    expect(sourceGroupChanged(stored, fields())).toBe(true);
+
+    applySourceGroup(stored, fields());
+
+    expect(stored).toMatchObject({
+      brand: null,
+      brandKey: null,
+      ean: null,
+      url: null,
+      imageUrl: null,
+      extra: null,
+    });
+  });
+});

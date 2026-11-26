@@ -13,6 +13,7 @@ import {
   type SourceSize,
 } from '@portfolio/luna-shopper/contracts';
 import { distinctCategoryPaths } from './category-paths';
+import { documentPhotoOf } from './document-photo';
 import { readHarvestDocument } from './harvest-document.reader';
 import { resolveImportWindow, type ImportWindow } from './import-window';
 import { entryKey } from './matching';
@@ -179,6 +180,7 @@ export class FileImportRunner {
         documentWindow,
         fallbackObservedAt,
         duplicates,
+        adapterKey: input.adapterKey,
       })
     );
 
@@ -266,14 +268,17 @@ export class FileImportRunner {
   }
 
   /**
-   * The one category path each product of the document states, added to the
-   * paths its row holds (plan 0268, section 3). `onWritten` is called once
-   * for each row whose paths changed, as it lands.
+   * The category paths each product of the document states, added to the
+   * paths its row holds (plan 0268, section 3): every path of
+   * `category_paths`, then `category_path` when it is not among them.
+   * `onWritten` is called once for each row whose paths changed, as it lands.
    *
    * **Always `ADD`.** A document is one reading of one source: a leaflet
-   * shows one department of a product, not every shelf it sits on, and the
-   * harvester's own export of a walk keeps one `category_path` of the several
-   * the walk met. Neither has shown that a stored path no longer holds.
+   * shows one department of a product, not every shelf it sits on. The
+   * harvester's own export of a walk states every path the row holds, and
+   * not whether the walk read every shelf of the product, because the run
+   * keeps no record of that per row. Neither has shown that a stored path no
+   * longer holds.
    *
    * Written after the ingest, so each row the import created exists, as a
    * walk writes its paths at the drain after the last chunk. An ingest that
@@ -294,15 +299,22 @@ export class FileImportRunner {
   ): Promise<void> {
     const byEntry = new Map<string, string[][]>();
     outcomes.forEach((outcome, index) => {
-      const path = products[index]?.category_path ?? [];
-      if (path.length === 0) {
+      const product = products[index];
+      const paths = [
+        ...(product?.category_paths ?? []),
+        product?.category_path ?? [],
+      ].filter((path) => path.length > 0);
+      if (paths.length === 0) {
         return;
       }
       const held = byEntry.get(outcome.entry.id);
       if (held) {
-        held.push([...path]);
+        held.push(...paths.map((path) => [...path]));
       } else {
-        byEntry.set(outcome.entry.id, [[...path]]);
+        byEntry.set(
+          outcome.entry.id,
+          paths.map((path) => [...path])
+        );
       }
     });
     const writes = [...byEntry]
@@ -331,6 +343,8 @@ export class FileImportRunner {
       documentWindow: ImportWindow | null;
       fallbackObservedAt: Date;
       duplicates: Set<string>;
+      /** The importing chain's adapter, whose host rule a photo passes. */
+      adapterKey: string | null;
     }
   ): SourceObservation {
     const sizeFormat = product.size?.label ?? product.size?.unit ?? null;
@@ -347,8 +361,14 @@ export class FileImportRunner {
     return {
       externalId,
       name: product.name,
-      brand: product.brand ?? null,
-      ean: product.ean ?? null,
+      // **Absent stays absent.** A field the document does not state is
+      // passed as undefined, and the ingest leaves the stored value of the
+      // row alone, whatever the kind of the import. Only a stated value, a
+      // null included, writes. A file is not the chain: a field it leaves
+      // out says nothing about the product, and a harvester export leaves
+      // out every field its row holds as null.
+      brand: product.brand,
+      ean: product.ean,
       // `size.quantity` in the unit `size.unit` names (plan 0177). The unit
       // used to be dropped, which left a 750 read from `75 cl` with nothing to
       // say it was already millilitres.
@@ -363,17 +383,27 @@ export class FileImportRunner {
         ? {}
         : { approxWeight: product.approx_weight }),
       sizeFormat,
-      categoryPath: product.category_path ?? [],
-      url: product.url ?? null,
-      // A file names no photo (plan 0198): a document that an admin uploads
-      // cannot name an address a shopper's browser will load. On a row that
-      // a walk owns this null is not written, like the rest of the group.
-      imageUrl: null,
+      // A null path is a statement that the source files it nowhere.
+      categoryPath:
+        product.category_path === undefined
+          ? undefined
+          : (product.category_path ?? []),
+      url: product.url,
+      // A document names a photo only through the rule a walk's address
+      // passed (plan 0198): the host list of the importing chain's own
+      // adapter library. An address that fails it is not written, so a
+      // document cannot make a shopper's browser load an arbitrary host,
+      // and the stored address stays.
+      imageUrl: documentPhotoOf(
+        product.image_url,
+        context.adapterKey,
+        externalId
+      ),
       observedAt:
         parseInstant(product.observed_at) ?? context.fallbackObservedAt,
       // Stored and shown, never interpreted (D6). Whatever the producer knew
       // that the import does not read is in here and stays in here.
-      extra: product.extra ?? null,
+      extra: product.extra,
       prices: context.duplicates.has(externalId)
         ? []
         : pricesOf(product, window),

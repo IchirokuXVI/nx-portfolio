@@ -215,6 +215,9 @@ function observation(
     sizeFormat: null,
     categoryPath: [],
     url: null,
+    // A source that prints no photo, as every adapter states it. Undefined
+    // is a document that names none, which the import cases pass themselves.
+    imageUrl: null,
     observedAt: new Date('2026-09-05T10:00:00.000Z'),
     extra: null,
     prices: price ? [{ scopeKey: null, ...price }] : [],

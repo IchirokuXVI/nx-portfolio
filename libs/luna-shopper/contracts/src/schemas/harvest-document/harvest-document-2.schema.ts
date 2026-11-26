@@ -164,7 +164,19 @@ const product: JsonSchema = {
       type: ['array', 'null'],
       items: { type: 'string' },
     },
+    category_paths: {
+      type: ['array', 'null'],
+      description:
+        'Every path the chain files the product under, each root first (plan 0268). The import adds them to the paths the row holds and removes none.',
+      items: { type: 'array', items: { type: 'string' } },
+    },
     url: { type: ['string', 'null'] },
+    image_url: {
+      type: ['string', 'null'],
+      maxLength: 500,
+      description:
+        "The photo address the chain prints (plan 0198). Kept only when it passes the host rule of the importing chain's adapter. Null states that the source prints none; absent leaves the stored one.",
+    },
     extra: {
       type: ['object', 'null'],
       additionalProperties: true,

@@ -20,6 +20,7 @@ import {
 } from '../entities';
 import type { CatalogClient } from '../harvest/catalog-client.service';
 import { FileImportRunner } from '../harvest/file-import.runner';
+import { buildHarvestDocument } from '../harvest/harvest-export';
 import { entryKey } from '../harvest/matching';
 import type { PlatformAdminService } from '../harvest/platform-admin.service';
 import { PriceScopeResolver } from '../harvest/price-scope-resolver';
@@ -599,6 +600,264 @@ describeIntegration('the one source product schema (real Postgres)', () => {
       // is written, and a product with none writes none.
       expect(byName.get('Pan de molde')?.categoryPaths).toEqual([]);
       expect(counters.categoryPathsWritten).toBe(1);
+    });
+  });
+
+  describe('the round trip of an export (plan 0086, section 6.2)', () => {
+    const SOURCE_RUN = '5efa0000-0000-4000-a000-00000000c101';
+    const TARGET_RUN = '5efa0000-0000-4000-a000-00000000c102';
+    const ITEM = '5efa0000-0000-4000-a000-00000000d101';
+    const PHOTO = 'https://prod-mercadona.imgix.net/images/4241.jpg?fit=crop';
+    const LINK = 'https://tienda.mercadona.es/product/4241/leche-entera';
+    const DAIRY = ['Lácteos', 'Leche y bebidas vegetales', 'Leche entera'];
+    const BREAKFAST = ['Desayuno', 'Leche'];
+    const WRONG = ['Bebidas', 'Refrescos'];
+
+    /** What catalog was sent, recorded rather than answered by a stub. */
+    let linked: { sourceEntryId: string; url: string }[];
+    let unlinked: string[];
+    let owed: { observedAt?: string; price?: number | null }[];
+
+    beforeEach(() => {
+      linked = [];
+      unlinked = [];
+      owed = [];
+    });
+
+    function importer(): FileImportRunner {
+      const catalog = {
+        listAllPriceScopes: async () => [],
+        searchItems: async () => ({ items: [], nextCursor: null }),
+        addPrices: async (_scope: string, entries: typeof owed) => {
+          owed.push(...entries);
+          return { inserted: entries.length, confirmed: 0, declined: [] };
+        },
+        findItemByEan: async () => ({ item: null }),
+        linkItemImages: async (links: typeof linked) => {
+          linked.push(...links);
+          return {
+            linked: links.length,
+            moved: 0,
+            unchanged: 0,
+            rejected: [],
+          };
+        },
+        unlinkItemImages: async (ids: string[]) => {
+          unlinked.push(...ids);
+          return { unlinked: ids.length };
+        },
+      } as unknown as CatalogClient;
+      return new FileImportRunner(
+        new SourceIngest(entries, prices, catalog),
+        new PriceScopeResolver(catalog)
+      );
+    }
+
+    function importContext(document: HarvestDocument): RunContext {
+      return {
+        runId: RUN,
+        run: { id: RUN, input: { document } },
+        signal: new AbortController().signal,
+        setStage: async () => undefined,
+        setTotalPlanned: async () => undefined,
+        report: async () => undefined,
+        advance: async () => undefined,
+        warn: () => undefined,
+        flush: async () => undefined,
+      } as unknown as RunContext;
+    }
+
+    const asWalk = {
+      supermarketId: CHAIN,
+      priceScopeId: NORTH,
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      adapterKey: 'mercadona-api',
+    };
+
+    /**
+     * A row a walk wrote and a person bound to a product, so the product shows
+     * the chain photo, with this run's price of the scope.
+     */
+    async function walkedRow(
+      runId: string,
+      patch: Partial<SourceCatalogEntry>,
+      price: { amount: number; observedAt: string }
+    ): Promise<SourceCatalogEntry> {
+      const saved = await entries.save(
+        row({
+          externalId: '4241',
+          name: 'Leche entera Hacendado',
+          sizeFormat: 'brik 1 L',
+          sourceKind: PriceSourceKind.OFFICIAL_WEB,
+          status: SourceEntryStatus.ACTIVE,
+          itemId: ITEM,
+          matchedBy: ItemSourceMatch.MANUAL,
+          confidence: 1,
+          decidedAt: new Date('2026-10-01T10:00:00Z'),
+          brand: 'Hacendado',
+          ean: '8480000102412',
+          url: LINK,
+          imageUrl: PHOTO,
+          extra: { packaging: 'Brik' },
+          firstRunId: runId,
+          lastRunId: runId,
+          ...patch,
+        })
+      );
+      await prices.save(
+        prices.create({
+          entryId: saved.id,
+          priceScopeId: NORTH,
+          sourceKind: PriceSourceKind.OFFICIAL_WEB,
+          price: price.amount,
+          currency: 'EUR',
+          observedAt: new Date(price.observedAt),
+          runId,
+        })
+      );
+      return saved;
+    }
+
+    /** The export of a run, read as `SourceEntryService.exportRun` reads it. */
+    async function exportOf(runId: string): Promise<HarvestDocument> {
+      const observed = await entries.find({
+        where: {
+          supermarketId: CHAIN,
+          lastRunId: runId,
+          prices: { runId },
+        },
+        relations: { prices: true },
+      });
+      return buildHarvestDocument({
+        run: { id: runId, supermarketId: CHAIN, priceScopeId: NORTH },
+        entries: observed,
+        producedAt: new Date('2026-11-02T08:00:00Z'),
+      });
+    }
+
+    /**
+     * The target holds the same walked row, from a walk of its own, except
+     * that its trail is wrong, and its price is newer than the file's.
+     */
+    async function target(): Promise<SourceCatalogEntry> {
+      return walkedRow(
+        TARGET_RUN,
+        { categoryPath: WRONG, categoryPaths: [WRONG] },
+        { amount: 1.05, observedAt: '2026-11-20T09:00:00Z' }
+      );
+    }
+
+    async function exported(): Promise<HarvestDocument> {
+      await walkedRow(
+        SOURCE_RUN,
+        { categoryPath: DAIRY, categoryPaths: [DAIRY, BREAKFAST] },
+        { amount: 0.95, observedAt: '2026-11-01T09:00:00Z' }
+      );
+      const document = await exportOf(SOURCE_RUN);
+      // The second state is another cluster: nothing of the first survives.
+      await clean();
+      return document;
+    }
+
+    it('keeps the photo linked, the link, the bag and the EAN, and adds the trails', async () => {
+      const document = await exported();
+      expect(document.products[0]).toMatchObject({
+        image_url: PHOTO,
+        category_path: DAIRY,
+        category_paths: [DAIRY, BREAKFAST],
+      });
+      const held = await target();
+
+      await importer().run(importContext(document), asWalk);
+
+      const after = await entries.findOneByOrFail({ id: held.id });
+      expect(after).toMatchObject({
+        imageUrl: PHOTO,
+        url: LINK,
+        extra: { packaging: 'Brik' },
+        ean: '8480000102412',
+        brand: 'Hacendado',
+        status: SourceEntryStatus.ACTIVE,
+        itemId: ITEM,
+        // The one path the walk filed it under, as a walk there writes it.
+        categoryPath: DAIRY,
+        // ADD, for every product: the export does not state that the walk
+        // read every shelf of the product, because the run keeps no record of
+        // it per row, so no product replaces its trails and the wrong one
+        // stays beside the two the walk met.
+        categoryPaths: [WRONG, DAIRY, BREAKFAST],
+      });
+      // The bound product keeps its chain photo: its link is sent again, on
+      // the address it held, and nothing is unlinked.
+      expect(unlinked).toEqual([]);
+      expect(linked).toEqual([
+        expect.objectContaining({ sourceEntryId: held.id, url: PHOTO }),
+      ]);
+    });
+
+    it('changes none of them for a plain file that states none', async () => {
+      const held = await target();
+
+      await importer().run(
+        importContext({
+          schema_version: 2,
+          sha256: DIGEST,
+          producer: { name: MARK, produced_at: '2026-11-21T08:00:00Z' },
+          products: [
+            {
+              external_id: '4241',
+              name: 'Leche entera Hacendado',
+              size: { label: 'brik 1 L' },
+              prices: [{ amount: 1.05, currency: 'EUR' }],
+            },
+          ],
+        }),
+        asWalk
+      );
+
+      const after = await entries.findOneByOrFail({ id: held.id });
+      expect(after).toMatchObject({
+        imageUrl: PHOTO,
+        url: LINK,
+        extra: { packaging: 'Brik' },
+        ean: '8480000102412',
+        brand: 'Hacendado',
+        categoryPath: WRONG,
+        categoryPaths: [WRONG],
+      });
+      expect(unlinked).toEqual([]);
+    });
+
+    it('replaces the newer price of the row with the older one the file states (today, an owner choice)', async () => {
+      // Not a guard: what the ingest does today, pinned so a change to it is
+      // a decision someone takes. `source_entry_prices` keeps one row per
+      // (row, scope, kind), and an import of that kind upserts it with the
+      // file's values whatever their date. Catalog is sent the older
+      // observation too, and its own read keeps the newer row current,
+      // because the current price is the latest `observedAt`.
+      const document = await exported();
+      const held = await target();
+
+      await importer().run(importContext(document), asWalk);
+
+      const stored = await prices.find({
+        where: {
+          entryId: held.id,
+          priceScopeId: NORTH,
+          sourceKind: PriceSourceKind.OFFICIAL_WEB,
+        },
+      });
+      expect(stored).toHaveLength(1);
+      expect(Number(stored[0].price)).toBe(0.95);
+      expect(stored[0].observedAt.toISOString()).toBe(
+        '2026-11-01T09:00:00.000Z'
+      );
+      expect(owed).toEqual([
+        expect.objectContaining({
+          price: 0.95,
+          observedAt: '2026-11-01T09:00:00.000Z',
+        }),
+      ]);
     });
   });
 });

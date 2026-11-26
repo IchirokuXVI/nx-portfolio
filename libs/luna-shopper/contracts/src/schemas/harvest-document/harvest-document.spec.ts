@@ -427,6 +427,52 @@ describe('the harvest document, version 2', () => {
     expect(result.valid).toBe(true);
   });
 
+  it('accepts the photo address and every category path an export states (plans 0198 and 0268)', () => {
+    const result = validateHarvestDocument(
+      v2({
+        scopes: null,
+        products: [
+          {
+            name: 'Leche entera',
+            image_url: 'https://prod-mercadona.imgix.net/images/1.jpg',
+            category_path: ['Lácteos', 'Leche'],
+            category_paths: [
+              ['Lácteos', 'Leche'],
+              ['Desayuno', 'Leche'],
+            ],
+            prices: [],
+          },
+          { name: 'Pan', image_url: null, category_paths: null, prices: [] },
+        ],
+      })
+    );
+
+    expect(result.failures).toEqual([]);
+  });
+
+  it('refuses a category paths entry that is not a path, and a photo longer than its column', () => {
+    const result = validateHarvestDocument(
+      v2({
+        scopes: null,
+        products: [
+          {
+            id: 'p-1',
+            name: 'Leche entera',
+            category_paths: ['Lácteos'] as unknown as string[][],
+            image_url: `https://prod-mercadona.imgix.net/${'a'.repeat(500)}`,
+            prices: [],
+          },
+        ],
+      })
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.failures.map((failure) => failure.path).sort()).toEqual([
+      '/products/0/category_paths/0',
+      '/products/0/image_url',
+    ]);
+  });
+
   it('reads version 1 for good, and turns it into the version 2 shape', () => {
     // A leaflet extractor writes version 1, the fixtures are written in it, and
     // a format that stops reading its own past is a format nobody trusts to

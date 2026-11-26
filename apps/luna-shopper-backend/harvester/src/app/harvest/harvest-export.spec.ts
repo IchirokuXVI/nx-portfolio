@@ -162,6 +162,39 @@ describe('buildHarvestDocument', () => {
     expect(Object.keys(product)).not.toContain('confidence');
   });
 
+  it('carries the photo address and every category path of the row (plans 0198 and 0268)', async () => {
+    const PHOTO = 'https://prod-mercadona.imgix.net/images/4241.jpg';
+    const SECOND = ['Desayuno', 'Leche'];
+    const document = build([
+      entry({
+        imageUrl: PHOTO,
+        categoryPaths: [['Lácteos', 'Leche'], SECOND],
+      }),
+    ]);
+    const [product] = productsOf(document);
+
+    expect(product).toMatchObject({
+      image_url: PHOTO,
+      category_path: ['Lácteos', 'Leche'],
+      category_paths: [['Lácteos', 'Leche'], SECOND],
+    });
+    // Still a document the schema reads, unchanged in its version.
+    expect(document['schema_version']).toBe(2);
+    expect(validateHarvestDocument(document).valid).toBe(true);
+  });
+
+  it('states no photo and no paths for a row that holds none', async () => {
+    const [product] = productsOf(
+      build([entry({ imageUrl: null, categoryPaths: [], ean: null })])
+    );
+
+    // Absent rather than null: a file never states an absence it did not
+    // read, so its import leaves the importing row's own value alone.
+    expect(Object.keys(product)).not.toContain('image_url');
+    expect(Object.keys(product)).not.toContain('category_paths');
+    expect(Object.keys(product)).not.toContain('ean');
+  });
+
   it('takes every price this run wrote, each naming its own scope', async () => {
     // **The fix to plan 0103, section 1.1.** This asked for one scope before,
     // so a LIDL run, which is refused a single scope and writes 59 regions,
