@@ -575,6 +575,27 @@ only decisions files are.
 read from `CURATION_TARGET_PASSWORD` set for the one command. A replay refuses
 `--main-password`.
 
+**157a (owner, 2026-11-26): the wash exclusion.**
+
+- (i) The report lists every excluded product as its own line of class `excluded: wash task`,
+  with the product id and the source row text that excluded it (`washTask.text`), and the
+  summary counts them. The README tells the operator to check those products after release
+  task `0009` has run on the target: a product the task held back, for example one whose other
+  chain states the same number as units, stays uncorrected and a person decides it.
+- (ii) The exclusion drops only the size fields of the product's change: `unitSize`, and
+  `defaultUnit` when the change moves it too. Any other carried field of the same product is
+  still judged and sent under its guard, and the line carries a `washTask` that says the size
+  was left to the task. A change whose only fields are the size is excluded whole, as before.
+
+**158a (owner, 2026-11-26): confirmation before a write.**
+
+- (i) Every `--write` (the replay, the identity pass and the decisions replay) needs
+  `--confirm-host <host>`, equal to the host name of `--target-url`, compared case
+  insensitively with no scheme, port or path. When it is missing or differs, the run stops
+  before the password is asked, before login and before any request, with a message that names
+  both hosts. A dry run needs no confirmation.
+- (ii) `--replay-identity --write` needs `--only`. Without it the run stops before login.
+
 **Builder choices, 2026-11-26:**
 
 - The export runs a plain `SELECT` under `psql -Atq` instead of `COPY ... TO STDOUT`, because the

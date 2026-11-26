@@ -13,6 +13,8 @@ import {
   WASH_SUM,
   batchEntry,
   classify,
+  countLines,
+  countsLine,
   dropUnits,
   makeTargetClient,
   prepareDecisions,
@@ -954,6 +956,9 @@ test('the wash rule: a sum and a short word, at a UNIT size equal to the count',
     [{ status: 'ACTIVE', sizeFormat: '35+18 lavados' }]
   );
   assert.equal(excluded.line.class, CLASS.WASH);
+  assert.equal(excluded.line.itemId, id(11));
+  assert.equal(excluded.line.washTask.text, '35+18 lavados');
+  assert.equal(excluded.line.washTask.count, 53);
   assert.equal(excluded.reads, 1);
 
   const otherCount = await run(
@@ -974,6 +979,60 @@ test('the wash rule: a sum and a short word, at a UNIT size equal to the count',
     [{ status: 'CANDIDATE', sizeFormat: '40lav' }]
   );
   assert.equal(candidate.line.class, CLASS.APPLY);
+});
+
+test('the wash rule drops only the size: the other fields of the product are still sent', () => {
+  const rows = [{ status: 'ACTIVE', sizeFormat: '40lav' }];
+  const item = product(15, {
+    unitSize: 40,
+    defaultUnit: 'UNIT',
+    packCount: null,
+  });
+  const line = classify(
+    change(15, [
+      { field: 'unitSize', from: 40, to: null },
+      { field: 'defaultUnit', from: 'UNIT', to: 'GRAM' },
+      { field: 'packCount', from: null, to: 2 },
+    ]),
+    item,
+    { washRows: rows }
+  );
+  assert.equal(line.class, CLASS.APPLY);
+  assert.deepEqual(
+    line.fields.map((field) => field.field),
+    ['packCount']
+  );
+  assert.equal(line.washTask.text, '40lav');
+  assert.deepEqual(
+    line.washTask.fields.map((field) => field.field),
+    ['unitSize', 'defaultUnit']
+  );
+  assert.match(line.washTask.note, /size was left/);
+  assert.deepEqual(batchEntry(line), {
+    itemId: id(15),
+    packCount: 2,
+    expect: {
+      packCount: null,
+      name: { es: 'Producto 15', en: 'Product 15' },
+      brand: 'Marca',
+    },
+  });
+
+  const whole = classify(
+    change(16, [{ field: 'unitSize', from: 40, to: null }]),
+    product(16, { unitSize: 40, defaultUnit: 'UNIT' }),
+    { washRows: rows }
+  );
+  assert.equal(whole.class, CLASS.WASH);
+
+  const counts = countLines([line, whole]);
+  assert.equal(counts.classes[CLASS.WASH], 1);
+  assert.equal(counts.classes[CLASS.APPLY], 1);
+  assert.equal(counts.sizeLeftToWashTask, 1);
+  assert.match(
+    countsLine(counts),
+    /excluded: wash task 1, apply 1; the size of 1 more left to the wash task/
+  );
 });
 
 test('the two wash literals are the source of release task 0007 wash-sizes.ts', () => {

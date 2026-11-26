@@ -195,6 +195,8 @@ test('a write through main sends the batch under an expect', async () => {
       '--target-url',
       TARGET,
       '--write',
+      '--confirm-host',
+      'localhost',
       '--report',
       join(dir, 'r.json'),
     ],
@@ -299,6 +301,8 @@ test('a write through main that stops on batch 2 of 3 still writes the report, a
           '--target-url',
           TARGET,
           '--write',
+          '--confirm-host',
+          'localhost',
           '--batch-size',
           '1',
           '--report',
@@ -355,6 +359,128 @@ test('--replay-identity refuses a report of another url before it signs in', asy
     /Refusing/
   );
   assert.equal(calls.length, 0);
+});
+
+/** Runs `main` with a fake gateway, and answers its calls and its outcome. */
+async function runMain(argv, { password = true } = {}) {
+  const { calls, fetchImpl } = fakeGateway();
+  let error = null;
+  try {
+    await main(argv, {
+      stderr: sink(),
+      env: password ? { [REPLAY_PASSWORD_ENV]: 'p' } : {},
+      isTty: false,
+      fetchImpl,
+      spawn: async () => ({ code: 1, stdout: '', stderr: '' }),
+      sleep: async () => undefined,
+    });
+  } catch (caught) {
+    error = caught;
+  }
+  return { calls, error };
+}
+
+test('a write without --confirm-host is refused before login, naming the target host', async () => {
+  const { dir, file } = changeFile();
+  const { calls, error } = await runMain([
+    '--replay',
+    file,
+    '--target-url',
+    TARGET,
+    '--write',
+    '--report',
+    join(dir, 'r.json'),
+  ]);
+  assert.match(error?.message ?? '', /--write needs --confirm-host localhost/);
+  assert.match(error.message, /The target is localhost/);
+  assert.equal(calls.length, 0);
+});
+
+test('a write whose --confirm-host names another host is refused before login, naming both', async () => {
+  const { dir, file } = changeFile();
+  const { calls, error } = await runMain([
+    '--replay',
+    file,
+    '--target-url',
+    TARGET,
+    '--write',
+    '--confirm-host',
+    'staging.example.test',
+    '--report',
+    join(dir, 'r.json'),
+  ]);
+  assert.match(
+    error?.message ?? '',
+    /--confirm-host names staging\.example\.test, and --target-url names localhost/
+  );
+  assert.equal(calls.length, 0);
+});
+
+test('a write whose --confirm-host is the target host, in any case and with or without a port, is sent', async () => {
+  for (const host of ['localhost', 'LocalHost', 'localhost:43700']) {
+    const { dir, file } = changeFile();
+    const { calls, error } = await runMain([
+      '--replay',
+      file,
+      '--target-url',
+      `${TARGET}/`,
+      '--write',
+      '--confirm-host',
+      host,
+      '--report',
+      join(dir, 'r.json'),
+    ]);
+    assert.equal(error, null, host);
+    assert.equal(
+      calls.filter((call) => call.method === 'PATCH').length,
+      1,
+      host
+    );
+  }
+});
+
+test('a dry run needs no --confirm-host', async () => {
+  const { dir, file } = changeFile();
+  const { calls, error } = await runMain([
+    '--replay',
+    file,
+    '--target-url',
+    TARGET,
+    '--report',
+    join(dir, 'r.json'),
+  ]);
+  assert.equal(error, null);
+  assert.equal(calls.filter((call) => call.method === 'PATCH').length, 0);
+});
+
+test('--replay-identity --write without --only is refused before login', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'curation-replay-'));
+  const report = join(dir, 'report.json');
+  writeFileSync(
+    report,
+    JSON.stringify({ header: { targetUrl: TARGET }, lines: [] })
+  );
+  const { calls, error } = await runMain([
+    '--replay-identity',
+    report,
+    '--target-url',
+    TARGET,
+    '--write',
+    '--confirm-host',
+    'localhost',
+  ]);
+  assert.match(error?.message ?? '', /--replay-identity --write needs --only/);
+  assert.equal(calls.length, 0);
+
+  const missingHost = await runMain([
+    '--replay-identity',
+    report,
+    '--target-url',
+    TARGET,
+    '--write',
+  ]);
+  assert.match(missingHost.error?.message ?? '', /needs --confirm-host/);
+  assert.equal(missingHost.calls.length, 0);
 });
 
 test('--export-changes refuses a run without --since before it reads anything', async () => {

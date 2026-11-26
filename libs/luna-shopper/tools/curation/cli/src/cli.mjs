@@ -81,6 +81,7 @@ import {
 import { IMPLEMENTATION_NAMES, deciderPath, makeDecider } from './decider.mjs';
 import { runCuration } from './orchestrator.mjs';
 import {
+  assertConfirmedHost,
   assertReportTarget,
   capturingFetch,
   defaultReportPath,
@@ -194,13 +195,17 @@ ${indent}holds; a dry run unless --write
 ${line('  --target-url <url>', 'required, no default, never from a file')}
 ${line('  --write', 'send the apply class through the items')}
 ${indent}batch, each edit under an expect
+${line('  --confirm-host <host>', 'required with --write: the host name of')}
+${indent}--target-url, typed a second time
 ${line('  --batch-size <n>', 'default 100, at most 1000')}
 ${line('  --report <file>', 'default beside the change list')}
 ${line('  --decisions <file>', 'also replay a suggestions decisions file')}
 ${line('--replay-identity <report>', "send a report's identity changed class,")}
 ${indent}guarded by the target's name and brand;
-${indent}takes --target-url, --write, --report
-${line('  --only <file>', 'one product id a line: only those')}
+${indent}takes --target-url, --write, --confirm-host,
+${indent}--report
+${line('  --only <file>', 'one product id a line: only those;')}
+${indent}required with --write
 
   A replay signs in as --main-user (default ${DEFAULT_ADMIN_USERNAME}). The password is
   asked at the terminal, or read from ${REPLAY_PASSWORD_ENV} when stdin is
@@ -711,6 +716,17 @@ async function replayMode({
   }
   const targetUrl = normalizeTargetUrl(stringFlag(flags, 'target-url'));
   const write = flags.write === true;
+  // Owner decision 158a: a write names its host twice, and an identity write
+  // names the products a person looked at. Both are refused here, before the
+  // password is asked and before any request.
+  if (write) {
+    assertConfirmedHost(targetUrl, stringFlag(flags, 'confirm-host'));
+    if (identityPass && stringFlag(flags, 'only') === null) {
+      throw new Error(
+        '--replay-identity --write needs --only <file>, the ids of the products you looked at, one a line. Nothing was sent.'
+      );
+    }
+  }
   const batchSize = parseBatchSize(flags['batch-size']);
   const reportPath =
     stringFlag(flags, 'report') ??
