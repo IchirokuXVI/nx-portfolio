@@ -1375,12 +1375,19 @@ export async function proposeBrands({
  * server decided, and this function passes it through beside `failedStep`,
  * `error` and `orphanedItemIds`. The CLI turns a false verdict into a non zero
  * exit, so a shell replaying a stale file is not told it succeeded.
+ *
+ * **`targetUrl` replaces the header's url, and only the replay passes it**
+ * (curation CLI plan 0006, section 6). It does so only for a file whose every
+ * operation expects the row's content (backend plan 0277) and no
+ * `lastSeenAt`, which is what makes a file decided on one cluster safe to send
+ * to another. Without it a file decided against another url is refused.
  */
 export async function apply({
   mainUrl,
   mainUser,
   mainPassword,
   file,
+  targetUrl = null,
   route = BULK_ENTRY_DECISIONS_PATH,
   makeSession = defaultMakeSession,
   session = null,
@@ -1392,7 +1399,10 @@ export async function apply({
   if (!header) {
     throw new Error(`${file} has no header line. It is not a decisions file.`);
   }
-  if (normalizeUrl(header.mainUrl) !== normalizeUrl(mainUrl)) {
+  if (
+    targetUrl === null &&
+    normalizeUrl(header.mainUrl) !== normalizeUrl(mainUrl)
+  ) {
     throw new Error(
       `${file} was decided against ${header.mainUrl} and you are applying it to ${normalizeUrl(mainUrl)}. Refusing.`
     );
@@ -1421,10 +1431,10 @@ export async function apply({
   const admin =
     session ??
     makeSession({
-      baseUrl: mainUrl,
+      baseUrl: targetUrl ?? mainUrl,
       username: mainUser,
       password: mainPassword,
-      label: 'main',
+      label: targetUrl === null ? 'main' : 'target',
     });
 
   const answer = await admin.fetch(route, {

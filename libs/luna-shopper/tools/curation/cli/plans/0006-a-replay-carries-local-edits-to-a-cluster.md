@@ -547,6 +547,58 @@ network and no docker:
 - [ ] Nothing committed names a product, an entry or a production id.
 - [ ] `npx nx test luna-shopper/curation-cli` and `npx nx lint luna-shopper/curation-cli` pass.
 
+## Decisions
+
+The owner answered every open decision with its recommended option on 2026-11-26.
+
+**O1 (owner, 2026-11-26): A.** The change list comes from the local `catalog_audit`, read by
+`psql` in the local slot's container. No new route.
+
+**O2 (owner, 2026-11-26): A.** The wash rule is two literals in `replay.mjs`, tied to
+`wash-sizes.ts` by a test that reads it as text and compares the source and flags of
+`SHORT_WASH_WORD` and `WASH_SUM`. The test finds each declaration by name, so code added around
+them in that file does not break it.
+
+**O3 (owner, 2026-11-26): A.** Edits to `ean`, `sku`, `imageUrl` and `productGroupId` are
+reported, never sent.
+
+**O4 (owner, 2026-11-26): A.** Local merges are reported only.
+
+**O5 (owner, 2026-11-26): A.** `--replay-identity` is built.
+
+**O6 (owner, 2026-11-26): B.** Queue rows decided by hand in the back office are not carried;
+only decisions files are.
+
+**O7 (owner, 2026-11-26): A.** The password is asked at the terminal when stdin is one, else
+read from `CURATION_TARGET_PASSWORD` set for the one command. A replay refuses
+`--main-password`.
+
+**Builder choices, 2026-11-26:**
+
+- The export runs a plain `SELECT` under `psql -Atq` instead of `COPY ... TO STDOUT`, because the
+  text format of `COPY` doubles every backslash and so breaks a JSON string that holds a quote.
+  The session is still set read only first.
+- The carried fields are one list, `CARRIED_FIELDS` in `changes.mjs`, one line per field. It
+  holds `quantityStep` too, because the `expect` guards it since plan 0261. Backend plan 0278
+  adds `pieceCount` to the `expect`; it joins the list as one line once that plan is merged.
+- A field the trail records that is neither carried nor derived (`linkedImages`, for example) is
+  reported with the unguarded fields and never sent. The chain check of section 2.4 runs on every
+  field that is not derived.
+- A lost answer (a 502, 503, 504, or no answer) is read back and sent again at most three
+  times; after that the products left are `refused` with the code `no_answer`.
+- A 429 is waited out for `details.retryAfterSeconds` of the problem document, the number the
+  gateway names, or 60 seconds when it names none.
+- The session cuts a failed body at 500 characters, which can cut the failure list of a batch,
+  so the replay wraps the fetch it gives the session and keeps the whole body. The auth package
+  is not changed.
+- `--replay-identity` reads the products again and judges them as the first pass does, with the
+  target's recorded identity, and skips the wash rule (those products passed it already).
+- In section 6, a dropped `createItem` takes every row that names its `ref` with it; a dropped
+  `accept` takes nothing else. A part refused for a reason no single row carries stops the
+  decisions replay, and the parts after it are reported `not sent`.
+- The suggestions decider's `apply` takes `targetUrl`; when it is given, the header's url is not
+  compared and the request goes to the target.
+
 ## Open decisions for the owner
 
 **O1. Source of the change list (recommended, owner to confirm).** The local `catalog_audit` is
