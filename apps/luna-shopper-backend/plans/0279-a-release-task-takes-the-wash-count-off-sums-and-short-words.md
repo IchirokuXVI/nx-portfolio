@@ -1,10 +1,9 @@
-# 0029 (backlog) A release task takes the wash count off sums and short words
+> **PR:** [#1112](https://github.com/IchirokuXVI/nx-portfolio/pull/1112)
 
-> **Status: backlog. Not scheduled for development.**
-> Plans in `plans/backlog/` are designed and agreed but are not part of the build order, and
-> nothing in them has been built. They carry their own numbering starting at `0001`, separate
-> from the sequence in `plans/`. When one is picked up it moves into `plans/` and takes the next
-> free number there, so parking a design never burns a number in the build sequence.
+# 0279 A release task takes the wash count off sums and short words
+
+> Picked up on 2026-11-26 from backlog `0029`, after the owner answered O1 to O3 (see
+> "Decisions"). It is built as release task `0009`.
 
 > Found on 2026-11-20 by the rehearsal of the harvester round on a copy of the staging data of
 > that day (itself a copy of production of 2026-11-19, after release tasks `0006` to `0008` ran
@@ -54,8 +53,11 @@ deletes nothing, counts before it writes, and leaves a review list of what it co
   the count.
 - **What the counts said.** On the copy, before any fix, `wash-sizes.js --count` printed
   `products 0`, `short-wash-word 60`, `sum 15` (`evidence/release-task-counts-before.txt`). A
-  note counts rows, not products. The 75 rows belong to 73 products: 12 DEZA sums, and 61 El
-  Jamón products (58 short words, 3 short sums such as `30+6lav`).
+  note counts rows, not products. The 75 rows belong to 74 products: 12 DEZA sums, and 62 El
+  Jamón products (59 short words, 3 short sums such as `30+6lav`). One of the 62 is a capsule
+  product whose `10lav` a DEZA row confirms as `10 ud`; decision 156b holds it back (section
+  1.5), so the task corrects 73: 12 DEZA and 61 El Jamón (58 short words, 3 short sums). The
+  build measured these on the copy of 2026-11-20.
 - **What the rehearsal did.** It cleared the 73 sizes on the local copy only, through
   `PATCH /v1/admin/catalog/items/{id}` (class F1 of `fixes-applied.tsv`). After that, and after
   the walks of the rehearsal, the count printed `short-wash-word 1` and `sum 0`. That one row is
@@ -70,22 +72,22 @@ deletes nothing, counts before it writes, and leaves a review list of what it co
 
 ### Target state
 
-1. A task directory `k8s/release-tasks/tasks/<NNNN>-wash-sums-and-short-words-leave-products/`
+1. A task directory `k8s/release-tasks/tasks/0009-wash-sums-and-short-words-leave-products/`
    with `task.env`, `check.sh` and `post.sh`, in the shape of task `0007`.
 2. A selection for this task in the harvester's wash command (section 3), with `--count`,
    `--review <file>` and `--max <n> --review <file>`, as `0007` has.
 3. Every product that section 1 selects has no size after the task. Its pack count stays.
-4. The review list is in the ConfigMap `release-task-<NNNN>-review` of the namespace, and no line
+4. The review list is in the ConfigMap `release-task-0009-review` of the namespace, and no line
    of it reached the deploy log.
 5. Task `0007` answers exactly what it answered before, on the same data.
 6. No price row, no `source_catalog_entries` row, and no product outside the selection changes.
 
 ### Scope
 
-- `k8s/release-tasks/tasks/<NNNN>-.../`: `task.env`, `check.sh`, `post.sh`.
+- `k8s/release-tasks/tasks/0009-.../`: `task.env`, `check.sh`, `post.sh`.
 - `apps/luna-shopper-backend/harvester`: the selection of section 1 in the wash command and its
   specs (section 3).
-- `k8s/release-tasks/README.md`: a section "Task <NNNN>", like the one of task `0007`.
+- `k8s/release-tasks/README.md`: a section "Task 0009", like the one of task `0007`.
 - Nothing else. No catalog change, no migration, no adapter change, no `openapi.json` change.
   Classes F2, F3 and F4 of the rehearsal are not in scope unless the owner answers O1 otherwise.
 
@@ -116,7 +118,7 @@ deletes nothing, counts before it writes, and leaves a review list of what it co
 
 The `--count` output of the new selection on the copy before and after a write run (the second
 printing `products 0`), `0007`'s `--count` on the same copy before and after your change (equal
-before the write run), the review list of the rehearsal kept in `tmp/plan-<NNNN>/` of the main
+before the write run), the review list of the rehearsal kept in `tmp/plan-0279/` of the main
 checkout, the specs, `node k8s/release-tasks/check-tasks.mjs`, and `check.sh` and `post.sh` run
 against the copy through the `WASH_SIZES` override.
 
@@ -138,8 +140,9 @@ The rows are found with `SELECT_WASH_ROWS_SQL` (lines 223 to 227) as today. Its 
 ### 1.2 The products
 
 A product qualifies when one of its qualifying rows has `C` equal to its `unitSize`, and its
-`defaultUnit` is `UNIT`. This is `selects` (lines 415 to 421), unchanged. Nothing wider and
-nothing narrower. A merged or missing product counts as `held`, as in `0007`.
+`defaultUnit` is `UNIT`. This is `selects` (lines 415 to 421), unchanged. Nothing wider, and
+nothing narrower but the hold of section 1.5 (decision 156b). A merged or missing product
+counts as `held`, as in `0007`.
 
 ### 1.3 How this differs from `0007`, and why
 
@@ -150,12 +153,14 @@ nothing narrower. A merged or missing product counts as `held`, as in `0007`.
 | `40 lavados`, `2x40 lavados` | corrected | not read |
 | Pack count | cleared when it is the printed `N` | never cleared: neither shape prints a pack |
 
-The two selections are disjoint on purpose. The check phase runs before `0007` writes on a
-cluster, so a selection that also held `0007`'s rule would count `0007`'s products too (76 on
-production on 2026-11-19, plan `0271`'s ceiling note) and refuse above its own ceiling. With
-disjoint rules each task counts only its own products, in any order, and neither depends on the
-other. A product that both tasks would select (one row `40 lavados`, another `40lav`, both
-matching) is corrected by `0007`, and this task then finds it has no size and leaves it alone.
+The two selections are disjoint by row on purpose, not by product. The check phase runs before
+`0007` writes on a cluster, so a selection that also held `0007`'s rule would count `0007`'s
+products too (76 on production on 2026-11-19, plan `0271`'s ceiling note) and refuse above its
+own ceiling. With disjoint rules no row qualifies under both, and neither count depends on the
+other task having run. A product bound to both shapes (one row `40 lavados`, another `40lav`,
+both matching) is still counted by both check phases, because both run before either writes. It
+is corrected by whichever task writes first (`0007`, in the order of release `0.20.0`), and the
+other then finds it has no size and leaves it alone.
 
 `pack-of-units` (Carrefour) and `mercadona-per-wash` stay notes. See O2.
 
@@ -163,6 +168,28 @@ matching) is corrected by `0007`, and this task then finds it has no size and le
 
 As `0007`: the command reads each product again right before its update, and skips it if it no
 longer holds `C` `UNIT`.
+
+### 1.5 A count a chain confirms (decision 156b)
+
+A product that section 1.2 selects is held back when another ACTIVE row bound to it states the
+same number `C` as a count of units. The rule reads stored row fields only, never a name
+(`statesUnitCount` in `wash-sizes.ts`). The other row:
+
+- has a trimmed `sizeFormat` that is a count of pieces: a whole number, then `u`, `ud`, `uds`,
+  `unid`, `unids`, `unidad` or `unidades`, at most a full stop (`10 ud`, `10 uds.`), or the bare
+  word with no number, as Mercadona stores it (`ud`). A number it prints is `C`. So a wash text
+  (`10 lavados`, `10lav`), a sum and a volume (`1.6 L`) never confirm, and neither do
+  `10 dosis` or `10 cápsulas`, because a dose can be a wash;
+- stores `C` as its size in `UNIT` (`unitSize`, `sizeUnit`), which is how DEZA stores `10 ud`;
+- states no pack (`packCount` null);
+- is not priced per wash (its latest price label is not `lv`).
+
+Only ACTIVE bound rows are read, so a CANDIDATE row confirms nothing. A held product is counted
+as `confirmed-units` in `--count` (after `held`, under this selection only), noted under the
+kind `confirmed-units` with the confirming row's chain and text in `row_size_format`, and never
+written. The ceiling counts `products` only. On the copy of 2026-11-20 the hold catches 1
+product (El Jamón `10lav`, DEZA `10 ud`). The other 7 capsule products among the 74 have no
+second row, so the task corrects them.
 
 ## 2. The corrected value
 
@@ -206,7 +233,7 @@ is the one of section 1.3 and Target state 5: `0007` answers what it answered be
 
 ```sh
 # Take the wash count off the products whose size is a printed sum or short word
-# (backend backlog plan 0029, built as plan <NNNN>).
+# (backend backlog plan 0029, built as plan 0279).
 UNIT="velista"
 RUN_UNTIL_STAGING="<a UTC date, at most 14 days after the commit that writes it>"
 RUN_UNTIL_PRODUCTION="<a UTC date, at most 14 days after the commit that writes it>"
@@ -240,7 +267,7 @@ To tell an old command from a new one, the builder may run `--selection sum-and-
 ### 4.3 `post.sh`
 
 Copy `0007`'s: count, refuse as `check.sh` does, do nothing at `products 0`, write with
-`--max <ceiling>`, count again. Copy the review list into `release-task-<NNNN>-review` with
+`--max <ceiling>`, count again. Copy the review list into `release-task-0009-review` with
 `kubectl apply`, merged with what an earlier run recorded, as `0007` does. Print only the line
 counts and the ConfigMap name. Refuse where the pod has no new command, so the task stays at
 `pre-done` and the next deploy finishes it.
@@ -256,7 +283,7 @@ Same columns as `0007` (plan `0271` section 5). `wash_size_format` holds the sum
 word. Read it on the host as the `deploy` user:
 
 ```sh
-kubectl -n luna-shopper get configmap release-task-<NNNN>-review \
+kubectl -n luna-shopper get configmap release-task-0009-review \
   -o jsonpath='{.data.review\.tsv}'
 ```
 
@@ -275,9 +302,11 @@ the curator's input. After this task, those products join the wash products with
    outputs are equal. On staging data of 2026-11-20 they print `products 0`, `short-wash-word
    60`, `sum 15`.
 4. Run `--selection sum-and-short-word --count`. Expect `chain deza 12`, `chain eljamon 61`,
-   `products 73`, `pack 0`, `unread 0`. Explain any other number before you go on, including the
-   one `short-wash-word` row that the 2026-11-20 rehearsal still saw after its fixes.
-5. `--review tmp/plan-<NNNN>/review.tsv`, then the write run with `--max 80`, then `--count`
+   `products 73`, `pack 0`, `unread 0`, `confirmed-units 1`. Explain any other number before you
+   go on, including the one `short-wash-word` row that the 2026-11-20 rehearsal still saw after
+   its fixes: it is the product section 1.5 holds back, and `0007`'s count still notes it after
+   this task.
+5. `--review tmp/plan-0279/review.tsv`, then the write run with `--max 80`, then `--count`
    again: `products 0`. `0007`'s count now prints `short-wash-word 0` and `sum 0`.
 6. Assert on the copy: no `item_prices` row and no `supermarket_items` price changed; only the
    selected products changed, and only `unitSize`.
@@ -298,7 +327,15 @@ the curator's input. After this task, those products join the wash products with
   `short-wash-word` are corrected and not noted.
 - Arguments: an unknown `--selection` value is refused.
 - The ConfigMap name of each task is its own.
-- The parsers: the readings of section 2 state no size.
+- The parsers: the readings of section 2 state no size, also for `60lv` and `60 lv.`.
+- The hold (section 1.5): `10lav` beside `10 ud` is held, counted as `confirmed-units` and
+  never written; no hold when the other row states `12 ud`, is not ACTIVE, is a wash text
+  (`10 lavados`) or states a volume (`1.6 L`); the default selection answers the same with such
+  rows present.
+- Near misses that are never selected: `40  lav`, `4x10lav`, `2+1`, `10 ud`, `40 toallitas`,
+  `3+1 L`. A product whose rows disagree (`40lav` beside `1.6 L`) is corrected and counted
+  under `content`.
+- The usage text of the older command, which `check.sh` and `post.sh` match on, is pinned.
 
 ## Acceptance criteria
 
@@ -345,4 +382,18 @@ selections are disjoint, so the order costs nothing); or the release after it.
 
 ## Decisions
 
-None yet. Decision 140a (owner, 2026-11-25) asks for this task; O1 to O3 are open.
+Decision 140a (owner, 2026-11-25) asks for this task. The owner answered O1 to O3 on
+2026-11-26:
+
+- **O1: A.** Classes F2, F3 and F4 (the 26 writes that set a value) stay manual. They are not
+  in this task.
+- **O2: a note.** Carrefour `pack-of-units` stays a note, and is not in the selection.
+- **O3: `0.20.0`.** The task ships in velista release `0.20.0`, in order after tasks `0007` and
+  `0008`.
+
+Decision 156b (owner, 2026-11-26), after the build counted 74 where the plan said 73: the task
+holds back a product when another ACTIVE row bound to it states the same number as a count of
+units. El Jamón prints `10lav`, the product holds 10 `UNIT`, and DEZA states `10 ud`: the 10 is a
+real count a chain confirms (a capsule product, one capsule per wash), and the task must not
+clear it. Section 1.5 states the rule. The owner approved 73 products on the staging copy; with
+the hold the task corrects 73 and holds 1.

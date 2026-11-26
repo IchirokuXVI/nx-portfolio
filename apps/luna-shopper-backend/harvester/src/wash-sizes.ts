@@ -32,7 +32,7 @@ const ASK_TIMEOUT_MS = 30_000;
  * The harvester's one off command of backend plan 0271, INSIDE the image.
  *
  * `webpack.config.js` emits it as `wash-sizes.js` beside `main.js`, and
- * release task 0007 runs it with `kubectl exec deploy/luna-shopper-backend-harvester
+ * release tasks 0007 and 0009 run it with `kubectl exec deploy/luna-shopper-backend-harvester
  * -- node wash-sizes.js`. It reads the harvester's own database with raw
  * SELECTs on a plain `DataSource`, as `kilo-pieces.ts` does, and speaks to
  * catalog over NATS as the harvester's service actor.
@@ -62,6 +62,15 @@ const ASK_TIMEOUT_MS = 30_000;
  *       means none). Every line it holds stays in the lists written, and
  *       each `planned` line whose product catalog now holds with no size and
  *       as `UNIT` is written `corrected` (the reconcile, which only reads).
+ *
+ *   ... --selection sum-and-short-word
+ *       with any mode: release task 0009's selection (backend plan 0279), the
+ *       products whose size is a printed sum (`35+18 lavados`) or El Jamón's
+ *       short word (`40lav`), instead of task 0007's printed wash count. The
+ *       same lines are printed; `pack` is always 0, and the notes keep only
+ *       `pack-of-units` and `mercadona-per-wash`. Refusals of a recorded list
+ *       name `configmap/release-task-0009-review`. With no `--selection` (or
+ *       `--selection printed-count`) the command is task 0007's, unchanged.
  *
  * It needs HARVESTER_DB_URL, NATS_URL and HARVESTER_ACTOR_ID, which the pod
  * already has. Catalog knows that actor as a service (`SERVICE_ACTOR_IDS`).
