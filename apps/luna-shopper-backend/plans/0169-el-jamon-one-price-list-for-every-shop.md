@@ -546,4 +546,5 @@ or marked for the next walk exactly as before, and the run ends `COMPLETED` with
 `DETAIL_UNREAD` warning whose words name the dropped sessions. The report's `detail` gains
 `droppedSessionsInARow` (the longest run of the walk, 0 on a normal run) and `stoppedBy`
 (`SILENCE`, `DROPPED_SESSIONS` or null). A failed page that meets both limits at once stops on
-`SILENCE`, so the silence stop fires where it did before.
+`SILENCE`, so the silence stop fires where it did before. Built in
+[#1108](https://github.com/IchirokuXVI/nx-portfolio/pull/1108).
