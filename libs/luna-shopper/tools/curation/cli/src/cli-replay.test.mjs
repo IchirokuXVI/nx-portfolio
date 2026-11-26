@@ -324,7 +324,7 @@ test('a write through main that stops on batch 2 of 3 still writes the report, a
   const written = JSON.parse(readFileSync(report, 'utf8'));
   assert.deepEqual(
     written.lines.map((line) => line.class),
-    ['apply', 'not written', 'not sent']
+    ['apply', 'outcome unknown', 'not sent']
   );
   assert.equal(written.lines[0].written, true);
   assert.deepEqual(written.lines[1].error, {
@@ -716,7 +716,7 @@ test('SIGINT while batch 2 hangs writes the report and exits 130', async () => {
     written.lines.map((line) => [line.itemId, line.class, line.checked]),
     [
       [ids[0], 'apply', undefined],
-      [ids[1], 'not written', false],
+      [ids[1], 'outcome unknown', false],
       [ids[2], 'not sent', undefined],
     ]
   );
