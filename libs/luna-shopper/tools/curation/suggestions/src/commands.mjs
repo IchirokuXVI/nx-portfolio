@@ -1481,6 +1481,9 @@ export function observedOf(entry) {
     packCount: entry.packCount ?? null,
     soldByWeight: entry.soldByWeight ?? false,
     approxWeight: entry.approxWeight ?? null,
+    // The container the chain printed (decision 154a): the matcher tells a can
+    // from a bottle of one name and size by it.
+    packaging: entry.packaging ?? null,
   };
 }
 

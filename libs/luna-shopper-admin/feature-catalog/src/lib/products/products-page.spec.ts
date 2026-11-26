@@ -240,14 +240,14 @@ describe('the product list', () => {
   });
 
   /** Six cartons of a litre, which a size of 6 L alone would not say. */
-  it('writes a pack as its count and the size of one', async () => {
+  it('writes a pack as its whole size, its count and the size of one', async () => {
     const fixture = await boot();
 
     expect(
       page(fixture)
         .products()
         .find((row) => row.id === 'it_milk_6pack')?.size
-    ).toBe('6 x 1 L');
+    ).toBe('6 L (6 x 1 L)');
   });
 
   it('opens a product on its own page, and the form of a new one', async () => {
@@ -330,7 +330,7 @@ describe('the category tree beside the product list', () => {
     tree.choose.emit('');
     await settle(fixture);
     expect(page(fixture).category()).toBe('');
-    expect(page(fixture).products()).toHaveLength(5);
+    expect(page(fixture).products()).toHaveLength(9);
   });
 
   it('opens already narrowed by the category a link names, and marks it', async () => {
@@ -473,6 +473,10 @@ describe('"Prices at" on the product list', () => {
         'it_olive_oil_1l',
         'it_dish_soap',
         'it_tomato_loose',
+        'it_burgers_4pack',
+        'it_candies_2bags',
+        'it_candies_bag',
+        'it_breadsticks_7pack',
       ],
     });
     // And the scope never reaches the product read.
@@ -563,7 +567,7 @@ describe('"Prices at" on the product list', () => {
 
     expect(page(fixture).store.filters()['query'] ?? '').toBe('');
     expect(page(fixture).scope()?.scope.id).toBe('ps_mercadona_4661');
-    expect(page(fixture).products()).toHaveLength(5);
+    expect(page(fixture).products()).toHaveLength(9);
   });
 });
 
@@ -654,7 +658,7 @@ describe('the states of a price at the chosen scope', () => {
     await settle(fixture);
     await settle(fixture);
     expect(q(fixture, 'lib-resource-filters')).not.toBeNull();
-    expect(page(fixture).products()).toHaveLength(5);
+    expect(page(fixture).products()).toHaveLength(9);
   });
 
   /**
@@ -753,7 +757,7 @@ describe('the states of a price at the chosen scope', () => {
     const listed = page(fixture)
       .products()
       .map((row) => row.id);
-    expect(listed).toHaveLength(3);
+    expect(listed).toHaveLength(7);
     expect(listed).not.toContain('it_milk_1l');
     expect(listed).not.toContain('it_olive_oil_1l');
     expect(
@@ -764,7 +768,7 @@ describe('the states of a price at the chosen scope', () => {
 
     const pressed = q(fixture, '[data-state="noPrice"]');
     expect(pressed?.getAttribute('aria-pressed')).toBe('true');
-    expect(q(fixture, '[data-state-count]')?.textContent?.trim()).toBe('3');
+    expect(q(fixture, '[data-state-count]')?.textContent?.trim()).toBe('7');
     expect(pressed?.textContent).toContain('catalog.pricesAt.state.noPrice');
   });
 
@@ -831,7 +835,7 @@ describe('the states of a price at the chosen scope', () => {
     await settle(fixture);
 
     expect(q(fixture, '[data-state-count]')).toBeNull();
-    expect(page(fixture).products()).toHaveLength(5);
+    expect(page(fixture).products()).toHaveLength(9);
   });
 
   it('opens on "No price" when a link names the scope and the state', async () => {
@@ -840,7 +844,7 @@ describe('the states of a price at the chosen scope', () => {
     );
 
     expect(page(fixture).state()).toBe('noPrice');
-    expect(page(fixture).products()).toHaveLength(3);
+    expect(page(fixture).products()).toHaveLength(7);
   });
 
   it('drops the state with the scope', async () => {
@@ -855,7 +859,7 @@ describe('the states of a price at the chosen scope', () => {
 
     expect(page(fixture).state()).toBeNull();
     expect(page(fixture).store.filters()['priceState'] ?? '').toBe('');
-    expect(page(fixture).products()).toHaveLength(5);
+    expect(page(fixture).products()).toHaveLength(9);
   });
 });
 
@@ -888,7 +892,7 @@ describe('ticking products', () => {
 
     head?.dispatchEvent(new Event('change'));
     await settle(fixture);
-    expect(page(fixture).selectedRows()).toHaveLength(5);
+    expect(page(fixture).selectedRows()).toHaveLength(9);
     expect(page(fixture).allPicked()).toBe(true);
 
     head?.dispatchEvent(new Event('change'));

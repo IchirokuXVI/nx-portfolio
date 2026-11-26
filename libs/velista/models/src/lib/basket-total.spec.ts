@@ -50,6 +50,8 @@ function product(
 ): BasketProduct {
   return {
     id,
+    packCount: null,
+    pieceCount: null,
     quantityStep: null,
     name: { en: id, es: id },
     brand: null,

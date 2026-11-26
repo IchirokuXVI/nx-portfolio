@@ -616,6 +616,8 @@ describe('listsCaption', () => {
 describe('basketRowName', () => {
   const milk: BasketProduct = {
     id: 'p-milk',
+    packCount: null,
+    pieceCount: null,
     quantityStep: null,
     name: { en: '', es: 'Leche semidesnatada' },
     brand: 'Hacendado',

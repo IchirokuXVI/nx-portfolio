@@ -184,6 +184,8 @@ function product(
 ): CatalogProduct {
   return {
     id: 'milk',
+    packCount: null,
+    pieceCount: null,
     quantityStep: null,
     name: { en: 'Milk', es: 'Leche' },
     brand: null,

@@ -143,9 +143,9 @@ describe('Add items on a product group', () => {
     await settle(fixture, 300);
 
     const boxes = all(fixture, '[data-pick-item]');
-    // `it_dish_soap` and `it_tomato_loose` are the products in no group in
-    // the seed, the soap first.
-    expect(boxes).toHaveLength(2);
+    // `it_dish_soap`, `it_tomato_loose` and the four counted products are
+    // the products in no group in the seed, the soap first.
+    expect(boxes).toHaveLength(6);
     expect(
       boxes[0].closest('label')?.querySelector('.title')?.textContent
     ).toMatch(/Dishwashing liquid|Lavavajillas/);
@@ -269,7 +269,7 @@ describe('Set group on the product list', () => {
     const { fixture, assign } = await boot('/products');
 
     const boxes = all(fixture, '[data-pick-row]');
-    expect(boxes.length).toBe(5);
+    expect(boxes.length).toBe(9);
     // The bar at the bottom is drawn only while rows are ticked (admin plan
     // 0043, target 2).
     expect(q(fixture, '[data-bulk-bar]')).toBeNull();

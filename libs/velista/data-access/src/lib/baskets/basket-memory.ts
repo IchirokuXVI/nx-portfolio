@@ -187,6 +187,8 @@ const PRODUCTS: readonly BasketProduct[] = [
     categories: [memoryCategory('milk')],
     sectionIds: null,
     approxWeight: null,
+    packCount: null,
+    pieceCount: null,
   },
   {
     id: 'item-milk-pascual',
@@ -206,6 +208,8 @@ const PRODUCTS: readonly BasketProduct[] = [
     categories: [memoryCategory('milk')],
     sectionIds: null,
     approxWeight: null,
+    packCount: null,
+    pieceCount: null,
   },
   {
     id: 'item-milk-central',
@@ -225,6 +229,8 @@ const PRODUCTS: readonly BasketProduct[] = [
     categories: [memoryCategory('milk')],
     sectionIds: null,
     approxWeight: null,
+    packCount: null,
+    pieceCount: null,
   },
   {
     id: 'item-eggs',
@@ -241,6 +247,8 @@ const PRODUCTS: readonly BasketProduct[] = [
     categories: [memoryCategory('eggs')],
     sectionIds: null,
     approxWeight: null,
+    packCount: null,
+    pieceCount: null,
   },
 ];
 

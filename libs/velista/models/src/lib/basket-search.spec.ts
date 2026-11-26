@@ -43,6 +43,8 @@ function product(
 ): BasketProduct {
   return {
     id: 'item-1',
+    packCount: null,
+    pieceCount: null,
     quantityStep: null,
     name: { en, es },
     brand,

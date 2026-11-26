@@ -610,10 +610,14 @@ export interface CatalogItem {
   readonly imageUrl: string | null;
   /**
    * How many units the pack holds, a whole number from 2, or null for a product
-   * that is not a pack (backend `0162`). A number rather than the words a chain
-   * prints, so the card renders "Pack 6" or "Pack de 6" itself.
+   * that is not a pack (backend `0162`). The size is the whole pack.
    */
   readonly packCount: number | null;
+  /**
+   * How many pieces the whole product holds, across its pack, a whole number
+   * from 2, or null (backend `0278`). Only beside a size in grams or millilitres.
+   */
+  readonly pieceCount: number | null;
   /**
    * What {@link ProductOffer.unitPrice} on {@link offer} is counted in, or null
    * when unknown or when there is no offer (velista `0101`). The card's "1,09 € /

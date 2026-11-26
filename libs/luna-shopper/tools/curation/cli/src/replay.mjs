@@ -1353,7 +1353,12 @@ function markProductsInterrupted({ lines, inFlight, write, answer }) {
 // Queue decisions (section 6, after backend plan 0277)
 // ---------------------------------------------------------------------------
 
-/** The fields `expect.observed` holds, every one of them (plan 0277, section 1). */
+/**
+ * The fields `expect.observed` holds, every one of them (plan 0277, section 1;
+ * `packaging` since decision 154a). A file written before that decision lacks
+ * it and the server refuses it with a 400, so it is refused here before
+ * anything is sent.
+ */
 export const OBSERVED_FIELDS = [
   'name',
   'brand',
@@ -1364,6 +1369,7 @@ export const OBSERVED_FIELDS = [
   'packCount',
   'soldByWeight',
   'approxWeight',
+  'packaging',
 ];
 
 /** The classes of a replayed decision. */

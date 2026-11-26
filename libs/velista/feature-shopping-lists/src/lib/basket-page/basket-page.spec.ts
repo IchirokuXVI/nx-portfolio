@@ -1701,6 +1701,8 @@ describe('searching the basket', () => {
   ): BasketProduct {
     return {
       id,
+      packCount: null,
+      pieceCount: null,
       quantityStep: null,
       name: { en, es },
       brand,
@@ -3632,6 +3634,7 @@ describe('the composer and the list it adds to', () => {
           items: [
             {
               id: 'item-a',
+              pieceCount: null,
               quantityStep: null,
               name: { es: 'Leche entera', en: 'Whole milk' },
               brand: 'Hacendado',
@@ -3913,6 +3916,8 @@ describe('the composer and the list it adds to', () => {
       it('says the raised row as it draws it, its name and its number', async () => {
         const WHOLE_MILK: BasketProduct = {
           id: 'i-milk',
+          packCount: null,
+          pieceCount: null,
           quantityStep: null,
           name: { en: 'Whole milk', es: 'Whole milk' },
           brand: null,
@@ -3961,6 +3966,8 @@ describe('the composer and the list it adds to', () => {
       describe('an add that meets a line already on the list (velista 0185)', () => {
         const WHOLE_MILK: BasketProduct = {
           id: 'i-milk',
+          packCount: null,
+          pieceCount: null,
           name: { en: 'Whole milk', es: 'Whole milk' },
           brand: null,
           imageUrl: null,
@@ -4414,6 +4421,7 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
     kind: 'item',
     item: {
       id: 'item-milk',
+      pieceCount: null,
       quantityStep: null,
       name: { es: 'Leche entera', en: 'Whole milk' },
       brand: 'Hacendado',
@@ -4701,6 +4709,8 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
     const RICE: CatalogSuggestion = { kind: 'item', item: RICE_ITEM };
     const RICE_PRODUCT: BasketProduct = {
       id: RICE_ITEM.id,
+      packCount: null,
+      pieceCount: null,
       quantityStep: 250,
       name: RICE_ITEM.name,
       brand: null,
@@ -4937,6 +4947,8 @@ describe('similar products on the basket', () => {
 
   const GROUPED: BasketProduct = {
     id: 'i-milk',
+    packCount: null,
+    pieceCount: null,
     quantityStep: null,
     name: { en: 'Milk', es: 'Leche' },
     brand: null,
@@ -4960,6 +4972,7 @@ describe('similar products on the basket', () => {
 
   const member = (id: string, unitPrice: number): CatalogItem => ({
     id,
+    pieceCount: null,
     quantityStep: null,
     name: { en: id, es: id },
     brand: null,
@@ -5232,6 +5245,8 @@ describe('BasketPage: the aisles of the shop you are in', () => {
   ): BasketProduct {
     return {
       id,
+      packCount: null,
+      pieceCount: null,
       quantityStep: null,
       name: { en: name, es: name },
       brand: null,
@@ -5426,6 +5441,8 @@ describe('BasketPage: the map of the shop you are in', () => {
 
   const MILK: BasketProduct = {
     id: 'i-milk',
+    packCount: null,
+    pieceCount: null,
     quantityStep: null,
     name: { en: 'Milk', es: 'Leche' },
     brand: null,
@@ -5701,6 +5718,8 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
   function yogurt(atShop: number | null = null): BasketProduct {
     return {
       id: 'item-yogurt',
+      packCount: null,
+      pieceCount: null,
       quantityStep: null,
       name: { en: 'Yogurt', es: 'Yogur' },
       brand: null,
@@ -6263,6 +6282,7 @@ describe('BasketPage: the basket asks about the extra (velista 0208)', () => {
     kind: 'item',
     item: {
       id: 'item-milk',
+      pieceCount: null,
       quantityStep: null,
       name: { es: 'Leche entera', en: 'Whole milk' },
       brand: 'Hacendado',

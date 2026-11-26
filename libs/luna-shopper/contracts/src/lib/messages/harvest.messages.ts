@@ -2245,6 +2245,12 @@ export interface SourceEntryObserved {
   packCount: number | null;
   soldByWeight: boolean;
   approxWeight: number | null;
+  /**
+   * The container the chain printed (decision 154a): the matcher tells a can
+   * from a bottle of one name and size by it, so a row whose packaging moved
+   * is no longer the row the decision was about.
+   */
+  packaging: string | null;
 }
 
 /** Bind a queued row to a product, named directly or by a `ref` of this request. */

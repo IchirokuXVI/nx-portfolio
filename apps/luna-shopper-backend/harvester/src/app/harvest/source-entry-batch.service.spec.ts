@@ -1234,6 +1234,7 @@ describe('SourceEntryBatchService', () => {
       packCount: null,
       soldByWeight: false,
       approxWeight: null,
+      packaging: null,
     };
     const LATER = new Date('2026-09-17T09:00:00.000Z');
 
@@ -1367,18 +1368,45 @@ describe('SourceEntryBatchService', () => {
       expect(manager.transaction).not.toHaveBeenCalled();
     });
 
-    it('documents current behaviour: a row whose packaging alone changed is not refused, since packaging is not in observed', async () => {
-      // The owner is deciding whether packaging joins `observed`. Until then a
-      // walk that rewrote only the container the chain states passes the check.
+    it('refuses a row whose packaging alone changed, naming packaging (decision 154a)', async () => {
+      // The matcher tells a can from a bottle of one name and size by the
+      // container, so a decision made on "lata" does not hold for "botella".
       const rows = [entry({ packaging: 'botella' })];
+      const { service, saved } = build({ rows });
+
+      const result = await service.applyDecisions(
+        request([
+          accept({
+            status: SourceEntryStatus.UNRESOLVED,
+            observed: { ...observed, packaging: 'lata' },
+          }),
+        ])
+      );
+
+      expect(result.applied).toBe(false);
+      expect(result.failedStep).toBe('VALIDATE');
+      expect(result.results[0].error).toEqual({
+        code: BulkOperationErrorCode.EXPECT_MISMATCH,
+        detail:
+          'Source entry e-1 says something else now: packaging was "lata", ' +
+          'is "botella".',
+      });
+      expect(saved).toEqual([]);
+    });
+
+    it('refuses a row that gained a packaging the decision saw as null', async () => {
+      const rows = [entry({ packaging: 'Brik' })];
       const { service, saved } = build({ rows });
 
       const result = await service.applyDecisions(
         request([accept({ status: SourceEntryStatus.UNRESOLVED, observed })])
       );
 
-      expect(result.applied).toBe(true);
-      expect(saved.map((row) => row.id)).toEqual(['e-1']);
+      expect(result.results[0].error?.detail).toBe(
+        'Source entry e-1 says something else now: packaging was null, ' +
+          'is "Brik".'
+      );
+      expect(saved).toEqual([]);
     });
 
     it('holds both when both are present', async () => {

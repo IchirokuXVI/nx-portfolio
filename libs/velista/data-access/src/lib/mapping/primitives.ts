@@ -76,6 +76,18 @@ export function quantityStepOf(value: unknown): number | null {
 }
 
 /**
+ * How many units a pack holds (backend `0162`) or how many pieces a product
+ * holds (backend `0278`): a whole number from 2, or null. Anything else reads as
+ * no count, because "Pack 1" or "2,5 pieces" drawn beside a product is worse
+ * than drawing nothing. A field an older gateway does not send reads as null.
+ */
+export function countOf(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 2
+    ? value
+    : null;
+}
+
+/**
  * Narrows a string to one of a known set, falling back when it is not among them.
  *
  * This is the function that makes a newer backend safe: a status this build has never

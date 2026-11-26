@@ -178,6 +178,39 @@ export function measuredUnitOf(held: Partial<Item>): 'g' | 'ml' | null {
   return held.defaultUnit === 'LITER' ? 'ml' : null;
 }
 
+/**
+ * Whether this product may carry a piece count (backend plan 0278 section 2,
+ * admin plan 0075): it has a size, and the size is in grams or millilitres.
+ * A size in units is already a count, and a product sold by the kilo has no
+ * fixed content. The rule is the server's `requirePiecesOnSizedProduct`,
+ * restated here as {@link measuredUnitOf} restates the step's, and read over
+ * the row as the form holds it. The server stays the authority.
+ */
+export function carriesPieceCount(held: Partial<Item>): boolean {
+  return (
+    !blank(held.unitSize) &&
+    (held.defaultUnit === 'GRAM' || held.defaultUnit === 'MILLILITER')
+  );
+}
+
+/**
+ * The line under "Pieces inside" when the form holds a piece count that is
+ * not above the pack count. The server refuses that save (backend plan 0278
+ * section 2, rule 3); the line says so before it.
+ */
+function pieceCountNote(held: Partial<Item>): FieldNote | null {
+  if (blank(held.pieceCount) || blank(held.packCount)) {
+    return null;
+  }
+  // The draft holds strings and the row numbers, so they meet as numbers.
+  const pieces = Number(held.pieceCount);
+  const units = Number(held.packCount);
+  if (!Number.isFinite(pieces) || !Number.isFinite(units) || pieces > units) {
+    return null;
+  }
+  return { text: fieldMessage('catalog.items.pieceCountNotAbovePack') };
+}
+
 /** A step in grams: "250 g", "1 kg". */
 const GRAM_STEP: NumberUnit = { word: 'g', format: formatGrams };
 
@@ -311,6 +344,34 @@ export const ITEMS = defineResource<Item>({
       shown: (row) => row.defaultUnit !== 'KILOGRAM',
       // A size or a weight, never both (backend plan 0244, section 1).
       excludes: 'approxWeight',
+    },
+    {
+      // How many units the pack holds, the size being the whole pack (backend
+      // plan 0162). Empty: not a pack.
+      kind: 'number',
+      name: 'packCount',
+      label: 'catalog.items.packCount',
+      help: 'catalog.items.packCountHelp',
+      nullable: true,
+      integer: true,
+      min: 2,
+      max: 1000,
+    },
+    {
+      // How many pieces the whole product holds, across its pack (backend plan
+      // 0278). Only beside a size in grams or millilitres. Hidden, it holds
+      // its empty value, so the edit that clears the size or changes the unit
+      // sends `pieceCount: null` beside it, which the server asks of that edit.
+      kind: 'number',
+      name: 'pieceCount',
+      label: 'catalog.items.pieceCount',
+      help: 'catalog.items.pieceCountHelp',
+      nullable: true,
+      integer: true,
+      min: 2,
+      max: 10000,
+      shown: (held) => carriesPieceCount(held),
+      note: pieceCountNote,
     },
     {
       // The grams of one piece, for a product with no size: a cheese sold by
@@ -506,6 +567,8 @@ export const ITEMS = defineResource<Item>({
         fields: [
           'defaultUnit',
           'unitSize',
+          'packCount',
+          'pieceCount',
           'approxWeight',
           'quantityStep',
           'imageUrl',
@@ -536,7 +599,8 @@ export const ITEMS = defineResource<Item>({
   },
 
   // What the server refuses about a product's categories is said under them,
-  // and a refusal about its size, weight or step under the field it names.
+  // and a refusal about its size, weight, step or pieces under the field it
+  // names.
   errorFields: {
     category_not_a_leaf: 'categoryIds',
     item_needs_a_category: 'categoryIds',
@@ -544,6 +608,7 @@ export const ITEMS = defineResource<Item>({
     item_kilogram_has_size: 'unitSize',
     item_approx_weight_beside_size: 'approxWeight',
     item_quantity_step_not_allowed: 'quantityStep',
+    item_piece_count_not_allowed: 'pieceCount',
   },
 
   gateway: () => {

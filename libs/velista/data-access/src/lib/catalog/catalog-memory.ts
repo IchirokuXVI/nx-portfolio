@@ -30,7 +30,7 @@ const MILK: readonly CatalogItem[] = [
   item('item-milk-hacendado', 'Leche entera Hacendado', 'Whole milk', 'Hacendado', 1, 'LITER', 'group-milk', 'milk'),
   item('item-milk-hacendado-half', 'Leche entera Hacendado', 'Whole milk', 'Hacendado', 0.5, 'LITER', 'group-milk', 'milk'),
   item('item-milk-pascual', 'Leche entera Pascual', 'Whole milk', 'Pascual', 1, 'LITER', 'group-milk', 'milk'),
-  item('item-milk-semi', 'Leche semidesnatada Hacendado, 6 x 1 L', 'Semi-skimmed milk, 6 x 1 L', 'Hacendado', 6, 'LITER', 'group-milk', 'milk'),
+  { ...item('item-milk-semi', 'Leche semidesnatada Hacendado, 6 x 1 L', 'Semi-skimmed milk, 6 x 1 L', 'Hacendado', 6, 'LITER', 'group-milk', 'milk'), packCount: 6 },
   item('item-milk-oat', 'Bebida de avena Oatly', 'Oat drink', 'Oatly', 1, 'LITER', 'group-milk', 'plant-based-drinks-and-horchata'),
 ];
 
@@ -224,6 +224,7 @@ function item(
     chainPrices: [],
     imageUrl: null,
     packCount: null,
+    pieceCount: null,
     unitBasis: null,
     approxWeight: null,
   };

@@ -3768,6 +3768,7 @@ describe('a decision may expect what the row says (plan 0277)', () => {
     packCount: null,
     soldByWeight: false,
     approxWeight: null,
+    packaging: 'Brik',
   };
   const valid = (expectation: unknown) =>
     validateSchema(HARVEST_SCHEMA_IDS.sourceEntryExpectation, expectation)
@@ -3797,6 +3798,18 @@ describe('a decision may expect what the row says (plan 0277)', () => {
 
   it('refuses an expectation with no status', () => {
     expect(valid({ observed })).toBe(false);
+  });
+
+  it('takes a null packaging and refuses one that is not a string (decision 154a)', () => {
+    expect(
+      valid({
+        status: 'UNRESOLVED',
+        observed: { ...observed, packaging: null },
+      })
+    ).toBe(true);
+    expect(
+      valid({ status: 'UNRESOLVED', observed: { ...observed, packaging: 5 } })
+    ).toBe(false);
   });
 
   it('reaches the decisions request inside an operation', () => {

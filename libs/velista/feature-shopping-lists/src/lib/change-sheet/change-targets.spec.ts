@@ -178,6 +178,7 @@ describe('basketProductOf', () => {
     chainPrices: [],
     imageUrl: null,
     packCount: null,
+    pieceCount: null,
     unitBasis: null,
     approxWeight: null,
     quantityStep: null,

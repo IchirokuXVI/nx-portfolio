@@ -233,6 +233,7 @@ describe('the bulk decision routes', () => {
         packCount: null,
         soldByWeight: false,
         approxWeight: null,
+        packaging: 'Brik',
       };
 
       it('forwards an expect with observed and no lastSeenAt, untouched', async () => {
@@ -286,6 +287,44 @@ describe('the bulk decision routes', () => {
         expect(context.send).not.toHaveBeenCalled();
       });
 
+      it('refuses an observed without packaging, a file written before decision 154a', async () => {
+        const nine: Record<string, unknown> = { ...observed };
+        delete nine['packaging'];
+
+        const response = await post(context.origin, PATH, {
+          operations: [
+            {
+              ...accept(ENTRY),
+              expect: { status: SourceEntryStatus.UNRESOLVED, observed: nine },
+            },
+          ],
+        });
+
+        expect(response.status).toBe(400);
+        expect(context.send).not.toHaveBeenCalled();
+      });
+
+      it('forwards a null packaging, a row whose chain prints none', async () => {
+        const operation = {
+          ...accept(ENTRY),
+          expect: {
+            status: SourceEntryStatus.UNRESOLVED,
+            observed: { ...observed, packaging: null },
+          },
+        };
+
+        const response = await post(context.origin, PATH, {
+          operations: [operation],
+        });
+
+        expect(response.status).toBe(201);
+        const [, payload] = context.send.mock.calls[0] as [
+          string,
+          { operations: { expect: unknown }[] },
+        ];
+        expect(payload.operations[0].expect).toEqual(operation.expect);
+      });
+
       function withExpect(expectation: Record<string, unknown>) {
         return {
           operations: [
@@ -302,6 +341,7 @@ describe('the bulk decision routes', () => {
         ['unitSize', '360'],
         ['packCount', '4'],
         ['brand', 5],
+        ['packaging', 5],
       ])(
         'refuses observed.%s sent as %p, a value of the wrong JSON type, rather than converting it',
         async (field, value) => {

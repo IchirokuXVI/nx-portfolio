@@ -100,6 +100,13 @@ describe('gatewayErrorKey', () => {
     ).toBe('resource.error.itemQuantityStepNotAllowed');
   });
 
+  /** A piece count where none applies (backend plan 0278, admin plan 0075). */
+  it('names the refusal of a piece count apart', () => {
+    expect(
+      gatewayErrorKey(failure({ code: 'item_piece_count_not_allowed' }))
+    ).toBe('resource.error.itemPieceCountNotAllowed');
+  });
+
   /** The shop section refusals (backend plan 0200, admin plan 0063). */
   it('names each shop section refusal apart', () => {
     expect(

@@ -566,6 +566,13 @@ export class SourceEntryObservedDto {
   @ValidateIf((_, value) => value !== null)
   @IsNumber()
   approxWeight!: number | null;
+
+  /** The container the chain printed, compared since decision 154a. */
+  @ApiProperty({ type: String, nullable: true })
+  @Transform(asSent)
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  packaging!: string | null;
 }
 
 /**
