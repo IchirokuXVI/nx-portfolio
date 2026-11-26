@@ -8,6 +8,7 @@ import {
   isEditable,
   recordLayout,
   recordTabs,
+  settleDraft,
   toInput,
   toRecordValue,
   type FieldDescriptor,
@@ -36,6 +37,7 @@ import { CATEGORIES } from './categories';
 import { ChainCounts } from './chains/chain-context';
 import { CHAIN_RESOURCES } from './chains/chains-routes';
 import {
+  carriesPieceCount,
   ITEMS,
   measuredUnitOf,
   QUANTITY_STEP_CHOICES,
@@ -1242,6 +1244,8 @@ describe('the record of a product', () => {
         [
           'defaultUnit',
           'unitSize',
+          'packCount',
+          'pieceCount',
           'approxWeight',
           'quantityStep',
           'imageUrl',
@@ -1308,7 +1312,7 @@ describe('the record of a product', () => {
     expect(ITEMS.record?.facts).toBeUndefined();
   });
 
-  it('says three refusals under the categories, and one under each of size, weight and step', () => {
+  it('says three refusals under the categories, and one under each of size, weight, step and pieces', () => {
     expect(ITEMS.errorFields).toEqual({
       category_not_a_leaf: 'categoryIds',
       item_needs_a_category: 'categoryIds',
@@ -1316,7 +1320,147 @@ describe('the record of a product', () => {
       item_kilogram_has_size: 'unitSize',
       item_approx_weight_beside_size: 'approxWeight',
       item_quantity_step_not_allowed: 'quantityStep',
+      item_piece_count_not_allowed: 'pieceCount',
     });
+  });
+});
+
+/**
+ * The pack and the pieces of a product (backend plan 0278, admin plan 0075):
+ * two whole number fields with the server's bounds, the pieces only beside a
+ * size in grams or millilitres.
+ */
+describe('the pack and piece counts of a product', () => {
+  const pack = fieldOf(ITEMS, 'packCount');
+  const pieces = fieldOf(ITEMS, 'pieceCount');
+
+  /** A row of the size fields and both counts, as the page reads it. */
+  const counted = (
+    defaultUnit: Item['defaultUnit'],
+    unitSize: number | null,
+    packCount: number | null = null,
+    pieceCount: number | null = null
+  ): Item =>
+    ({
+      ...ITEM_SEED[0],
+      defaultUnit,
+      unitSize,
+      approxWeight: null,
+      packCount,
+      pieceCount,
+    }) as Item;
+
+  it('takes the server bounds, as nullable whole numbers', () => {
+    expect(pack).toMatchObject({
+      kind: 'number',
+      label: 'catalog.items.packCount',
+      help: 'catalog.items.packCountHelp',
+      nullable: true,
+      integer: true,
+      min: 2,
+      max: 1000,
+    });
+    expect(pieces).toMatchObject({
+      kind: 'number',
+      label: 'catalog.items.pieceCount',
+      help: 'catalog.items.pieceCountHelp',
+      nullable: true,
+      integer: true,
+      min: 2,
+      max: 10000,
+    });
+    // The pack applies to any product, so it is always drawn.
+    expect(pack?.shown).toBeUndefined();
+  });
+
+  it.each([
+    ['GRAM', 70, true],
+    ['GRAM', null, false],
+    ['MILLILITER', 750, true],
+    ['MILLILITER', null, false],
+    ['UNIT', 12, false],
+    ['UNIT', null, false],
+    ['PACK', 6, false],
+    ['PACK', null, false],
+    ['KILOGRAM', 1, false],
+    ['KILOGRAM', null, false],
+    ['LITER', 1, false],
+    ['LITER', null, false],
+  ] as const)(
+    'carries pieces for %s with a size of %s: %s',
+    (defaultUnit, unitSize, carries) => {
+      const row = counted(defaultUnit, unitSize);
+      expect(carriesPieceCount(row)).toBe(carries);
+      expect(pieces?.shown?.(row)).toBe(carries);
+    }
+  );
+
+  it('reads the size as the form holds it, as text', () => {
+    const held = (unitSize: string) =>
+      ({ defaultUnit: 'GRAM', unitSize }) as unknown as Item;
+
+    expect(carriesPieceCount(held('70'))).toBe(true);
+    expect(carriesPieceCount(held(''))).toBe(false);
+    expect(carriesPieceCount(held('  '))).toBe(false);
+  });
+
+  it('sends pieceCount null when the size is cleared, and when the unit leaves grams', () => {
+    const row = counted('GRAM', 70, 2, 100);
+    const draft = draftFor(ITEMS, row, 'edit');
+
+    const cleared = settleDraft(
+      ITEMS,
+      { ...draft, unitSize: '' },
+      row,
+      'unitSize'
+    );
+    expect(cleared['pieceCount']).toBe('');
+    expect(toInput(ITEMS, cleared, 'edit', draft)).toEqual({
+      unitSize: null,
+      pieceCount: null,
+    });
+
+    const units = settleDraft(
+      ITEMS,
+      { ...draft, defaultUnit: 'UNIT' },
+      row,
+      'defaultUnit'
+    );
+    expect(toInput(ITEMS, units, 'edit', draft)).toEqual({
+      defaultUnit: 'UNIT',
+      pieceCount: null,
+    });
+  });
+
+  it('sends null for an emptied count, which clears it', () => {
+    const row = counted('GRAM', 360, 4);
+    const draft = draftFor(ITEMS, row, 'edit');
+
+    expect(toInput(ITEMS, { ...draft, packCount: '' }, 'edit', draft)).toEqual({
+      packCount: null,
+    });
+  });
+
+  it('warns under the pieces when they are not more than the units', () => {
+    const note = (packCount: unknown, pieceCount: unknown) => {
+      const held = {
+        ...counted('GRAM', 70),
+        packCount,
+        pieceCount,
+      } as unknown as Item;
+      return pieces?.note?.(held, held) ?? null;
+    };
+    const warning = {
+      text: { kind: 'key', key: 'catalog.items.pieceCountNotAbovePack' },
+    };
+
+    expect(note('4', '4')).toEqual(warning);
+    expect(note('4', '3')).toEqual(warning);
+    expect(note(4, 2)).toEqual(warning);
+    expect(note('2', '100')).toBeNull();
+    expect(note('', '4')).toBeNull();
+    expect(note('4', '')).toBeNull();
+    expect(note(null, null)).toBeNull();
   });
 });
 
@@ -1518,6 +1662,10 @@ describe('the step of a product', () => {
       ['it_olive_oil_1l', null],
       ['it_dish_soap', null],
       ['it_tomato_loose', 100],
+      ['it_burgers_4pack', null],
+      ['it_candies_2bags', null],
+      ['it_candies_bag', null],
+      ['it_breadsticks_7pack', null],
     ]);
     const tomato = ITEM_SEED.find((item) => item.id === 'it_tomato_loose');
     expect(tomato === undefined ? null : measuredUnitOf(tomato)).toBe('g');

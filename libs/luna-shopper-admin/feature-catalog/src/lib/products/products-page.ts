@@ -38,7 +38,7 @@ import {
 import type { Item } from '../items';
 import { CategoryTreeStore } from './category-nodes';
 import { PriceScopePicker } from './price-scope-picker';
-import { formatPrice, formatSeen, formatSize } from './product-format';
+import { formatPrice, formatProductSize, formatSeen } from './product-format';
 import {
   PRICE_STATE_FILTER,
   PRICES_AT_FILTER,
@@ -1144,7 +1144,17 @@ export class ProductsPage extends ResourceListPage {
         id: view.id,
         name: view.title === '' ? view.id : view.title,
         brand: typeof row.brand === 'string' ? row.brand : '',
-        size: row.partial === true ? '' : formatSize(row, locale),
+        size:
+          row.partial === true
+            ? ''
+            : formatProductSize(row, locale, (count, figure) =>
+                this._translate.t(
+                  'catalog.items.sizePieces',
+                  undefined,
+                  undefined,
+                  { count, figure }
+                )
+              ),
         barcode: typeof row.ean === 'string' ? row.ean : '',
         group: view.cells['productGroupId'] ?? {
           text: '',

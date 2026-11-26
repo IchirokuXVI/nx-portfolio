@@ -319,6 +319,8 @@ describe('a product, on the record page', () => {
         [
           'defaultUnit',
           'unitSize',
+          'packCount',
+          'pieceCount',
           'approxWeight',
           'quantityStep',
           'imageUrl',
@@ -471,9 +473,11 @@ describe('a product, on the record page', () => {
 
     it('offers no size for the kilo, and offers it again for grams', async () => {
       const { fixture, store } = await editing('it_milk_1l');
+      // A litre size carries no pieces (admin plan 0075).
       expect(soldRows(fixture)).toEqual([
         'defaultUnit',
         'unitSize',
+        'packCount',
         'approxWeight',
         'imageUrl',
         'shownPhoto',
@@ -485,6 +489,7 @@ describe('a product, on the record page', () => {
       // (admin plan 0070).
       expect(soldRows(fixture)).toEqual([
         'defaultUnit',
+        'packCount',
         'approxWeight',
         'quantityStep',
         'imageUrl',
