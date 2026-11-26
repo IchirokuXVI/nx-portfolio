@@ -27,6 +27,8 @@ import { SourceIngest } from './source-ingest';
  *     npx nx run luna-shopper-backend-harvester:test-integration
  */
 const CHAIN = '02680268-0000-4000-a000-0000000000c1';
+const RUN = '02680268-0000-4000-a000-0000000000a1';
+const EARLIER_RUN = '02680268-0000-4000-a000-0000000000a0';
 
 const COLA = ['Agua y refrescos', 'Cola'];
 const PACKS = ['Agua y refrescos', 'Packs de agua y refrescos'];
@@ -71,7 +73,8 @@ describeIntegration('SourceIngest.writeCategoryPaths (real Postgres)', () => {
 
   async function entry(
     externalId: string,
-    categoryPaths?: string[][]
+    categoryPaths?: string[][],
+    categoryPathsReplacedByRunId?: string
   ): Promise<SourceCatalogEntry> {
     return entries.save(
       entries.create({
@@ -82,9 +85,21 @@ describeIntegration('SourceIngest.writeCategoryPaths (real Postgres)', () => {
         status: SourceEntryStatus.UNRESOLVED,
         categoryPath: COLA,
         ...(categoryPaths ? { categoryPaths } : {}),
+        ...(categoryPathsReplacedByRunId
+          ? { categoryPathsReplacedByRunId }
+          : {}),
       })
     );
   }
+
+  /** The run each row's paths were last replaced by (164a), by id. */
+  const replacedBy = async (id: string) =>
+    (
+      await entries.findOneOrFail({
+        select: { id: true, categoryPathsReplacedByRunId: true },
+        where: { id },
+      })
+    ).categoryPathsReplacedByRunId;
 
   const stored = async (id: string) =>
     (
@@ -105,7 +120,7 @@ describeIntegration('SourceIngest.writeCategoryPaths (real Postgres)', () => {
     const known = await entry('38406', [IBERICOS]);
     expect(await stored(fresh.id)).toEqual([]);
 
-    const changed = await ingest.writeCategoryPaths([
+    const changed = await ingest.writeCategoryPaths(RUN, [
       { entryId: fresh.id, paths: [COLA, PACKS], mode: 'REPLACE' },
       { entryId: known.id, paths: [COLA, IBERICOS], mode: 'ADD' },
     ]);
@@ -118,7 +133,7 @@ describeIntegration('SourceIngest.writeCategoryPaths (real Postgres)', () => {
   it('replaces what the table holds now, and leaves every other column alone', async () => {
     const row = await entry('38406', [IBERICOS, COLA]);
 
-    await ingest.writeCategoryPaths([
+    await ingest.writeCategoryPaths(RUN, [
       { entryId: row.id, paths: [PACKS], mode: 'REPLACE' },
     ]);
 
@@ -132,7 +147,7 @@ describeIntegration('SourceIngest.writeCategoryPaths (real Postgres)', () => {
   it('writes nothing for a row that already holds the paths, or no longer exists', async () => {
     const row = await entry('659', [COLA, PACKS]);
 
-    const changed = await ingest.writeCategoryPaths([
+    const changed = await ingest.writeCategoryPaths(RUN, [
       { entryId: row.id, paths: [COLA, PACKS], mode: 'REPLACE' },
       { entryId: row.id, paths: [PACKS], mode: 'ADD' },
       {
@@ -155,6 +170,7 @@ describeIntegration('SourceIngest.writeCategoryPaths (real Postgres)', () => {
 
     const landed: number[] = [];
     const changed = await ingest.writeCategoryPaths(
+      RUN,
       [
         { entryId: short.id, paths: [AB], mode: 'ADD' },
         { entryId: two.id, paths: [AB], mode: 'ADD' },
@@ -166,5 +182,54 @@ describeIntegration('SourceIngest.writeCategoryPaths (real Postgres)', () => {
     expect(landed).toEqual([1, 2]);
     expect(await stored(short.id)).toEqual([A, AB]);
     expect(await stored(two.id)).toEqual([A, C, AB]);
+  });
+
+  it('names the run on a row it replaced, in the statement of the paths, and on none it added to (164a)', async () => {
+    const fresh = await entry('659');
+    const known = await entry('38406', [IBERICOS], EARLIER_RUN);
+    const before = await entries.findOneByOrFail({ id: known.id });
+
+    const changed = await ingest.writeCategoryPaths(RUN, [
+      { entryId: fresh.id, paths: [COLA, PACKS], mode: 'REPLACE' },
+      { entryId: known.id, paths: [COLA], mode: 'ADD' },
+    ]);
+
+    expect(changed).toBe(2);
+    expect(await replacedBy(fresh.id)).toBe(RUN);
+    expect(await replacedBy(known.id)).toBe(EARLIER_RUN);
+    // Nothing else of the added row moved, but for the clock its changed
+    // paths move, as before the column.
+    const after = await entries.findOneByOrFail({ id: known.id });
+    expect({
+      ...after,
+      categoryPaths: before.categoryPaths,
+      updatedAt: before.updatedAt,
+    }).toEqual(before);
+  });
+
+  it('names the run on a row whose paths a REPLACE left as they were, and counts no write (164a)', async () => {
+    const same = await entry('659', [COLA, PACKS], EARLIER_RUN);
+    const already = await entry('660', [COLA], RUN);
+    const before = await entries.findOneByOrFail({ id: same.id });
+
+    const landed: string[] = [];
+    const changed = await ingest.writeCategoryPaths(
+      RUN,
+      [
+        { entryId: same.id, paths: [COLA, PACKS], mode: 'REPLACE' },
+        { entryId: already.id, paths: [COLA], mode: 'REPLACE' },
+      ],
+      () => landed.push('row')
+    );
+
+    expect(changed).toBe(0);
+    expect(landed).toEqual([]);
+    expect(await replacedBy(same.id)).toBe(RUN);
+    expect(await replacedBy(already.id)).toBe(RUN);
+    // Every other column, the clock included, is what it was.
+    const after = await entries.findOneByOrFail({ id: same.id });
+    expect({ ...after, categoryPathsReplacedByRunId: EARLIER_RUN }).toEqual(
+      before
+    );
   });
 });

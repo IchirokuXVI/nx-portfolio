@@ -278,6 +278,82 @@ describe('buildHarvestDocument', () => {
     expect(validateHarvestDocument(document).failures).toEqual([]);
   });
 
+  describe('whether the paths are whole (164a)', () => {
+    const DAIRY = ['Lácteos', 'Leche'];
+    const SECOND = ['Desayuno', 'Leche'];
+
+    it('states them whole for a row this run replaced, and the file validates', async () => {
+      const document = build([
+        entry({
+          categoryPaths: [DAIRY, SECOND],
+          categoryPathsReplacedByRunId: RUN,
+        }),
+      ]);
+      const [product] = productsOf(document);
+
+      expect(product['category_paths']).toEqual([DAIRY, SECOND]);
+      expect(product['category_paths_complete']).toBe(true);
+      expect(validateHarvestDocument(document).failures).toEqual([]);
+    });
+
+    it.each([
+      ['an earlier run replaced', 'run-sunday'],
+      ['no run replaced', null],
+    ])('states nothing for a row whose paths %s', async (_, replacedBy) => {
+      const [product] = productsOf(
+        build([
+          entry({
+            categoryPaths: [DAIRY, SECOND],
+            categoryPathsReplacedByRunId: replacedBy,
+          }),
+        ])
+      );
+
+      expect(product['category_paths']).toEqual([DAIRY, SECOND]);
+      // Left out, never false: absent already says nothing.
+      expect(Object.keys(product)).not.toContain('category_paths_complete');
+    });
+
+    it('states nothing for a row this run replaced with no path', async () => {
+      const [product] = productsOf(
+        build([entry({ categoryPaths: [], categoryPathsReplacedByRunId: RUN })])
+      );
+
+      expect(Object.keys(product)).not.toContain('category_paths');
+      expect(Object.keys(product)).not.toContain('category_paths_complete');
+    });
+
+    it.each([
+      [
+        'a path past the bounds of a path',
+        [DAIRY, Array.from({ length: 13 }, (_, i) => `Nivel ${i + 1}`)],
+      ],
+      ['a name past its length', [DAIRY, ['Lácteos', 'a'.repeat(201)]]],
+      [
+        'more paths than the schema takes',
+        Array.from({ length: 51 }, (_, i) => ['Pasillo', `Estante ${i + 1}`]),
+      ],
+      [
+        'an element the import would not read',
+        [DAIRY, 'Lácteos'] as unknown as string[][],
+      ],
+    ])(
+      'states nothing for a row it had to trim, %s',
+      async (_, categoryPaths) => {
+        const document = build([
+          entry({ categoryPaths, categoryPathsReplacedByRunId: RUN }),
+        ]);
+        const [product] = productsOf(document);
+
+        expect((product['category_paths'] as unknown[]).length).toBeGreaterThan(
+          0
+        );
+        expect(Object.keys(product)).not.toContain('category_paths_complete');
+        expect(validateHarvestDocument(document).failures).toEqual([]);
+      }
+    );
+  });
+
   it('states no paths when no stored element is one', async () => {
     const [product] = productsOf(
       build([

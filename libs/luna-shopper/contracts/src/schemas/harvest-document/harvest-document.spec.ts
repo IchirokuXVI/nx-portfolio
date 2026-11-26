@@ -557,6 +557,49 @@ describe('the harvest document, version 2', () => {
     ]);
   });
 
+  it('accepts whether the category paths are complete, and refuses anything but true or false', () => {
+    const accepted = validateHarvestDocument(
+      v2({
+        scopes: null,
+        products: [
+          {
+            name: 'Leche entera',
+            category_paths: [['Lácteos', 'Leche']],
+            category_paths_complete: true,
+            prices: [],
+          },
+          { name: 'Pan', category_paths_complete: false, prices: [] },
+        ],
+      })
+    );
+    const refused = validateHarvestDocument(
+      v2({
+        scopes: null,
+        products: [
+          {
+            id: 'p-1',
+            name: 'Leche entera',
+            category_paths: [['Lácteos', 'Leche']],
+            category_paths_complete: 'yes' as unknown as boolean,
+            prices: [],
+          },
+          {
+            id: 'p-2',
+            name: 'Pan',
+            category_paths_complete: null as unknown as boolean,
+            prices: [],
+          },
+        ],
+      })
+    );
+
+    expect(accepted.failures).toEqual([]);
+    expect(refused.failures.map((failure) => failure.path).sort()).toEqual([
+      '/products/0/category_paths_complete',
+      '/products/1/category_paths_complete',
+    ]);
+  });
+
   it('reads version 1 for good, and turns it into the version 2 shape', () => {
     // A leaflet extractor writes version 1, the fixtures are written in it, and
     // a format that stops reading its own past is a format nobody trusts to

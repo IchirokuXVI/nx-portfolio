@@ -7,7 +7,7 @@ import {
   UnitOfMeasure,
   type HarvestRunWarning,
 } from '@portfolio/luna-shopper/contracts';
-import type { Repository } from 'typeorm';
+import type { FindOperator, Repository } from 'typeorm';
 import type { SourceCatalogEntry, SourceEntryPrice } from '../entities';
 import { DEZA_RENAMES_2026_10_16 } from './__fixtures__/deza-renames-2026-10-16';
 import type { CatalogClient } from './catalog-client.service';
@@ -143,6 +143,21 @@ function build(options: {
       return undefined;
     }),
   } as unknown as Repository<SourceEntryPrice>;
+  // When the stored price rows of a kind were observed (165a), answered from
+  // the rows above, and recorded so a case can say a walk reads none.
+  const priceReads = jest.fn(
+    async (query: {
+      where: { entryId: FindOperator<string[]>; sourceKind: PriceSourceKind };
+    }) =>
+      priceRows.filter(
+        (row) =>
+          row.sourceKind === query.where.sourceKind &&
+          (query.where.entryId.value as unknown as string[]).includes(
+            row.entryId
+          )
+      )
+  );
+  Object.assign(prices, { find: priceReads });
 
   const catalog = {
     searchItems: jest.fn(async () => ({
@@ -184,6 +199,7 @@ function build(options: {
     saved,
     stored,
     priceRows,
+    priceReads,
     catalog,
     reported,
     advanced,
@@ -5161,5 +5177,203 @@ describe('a category path the observation does not state (plan 0169, notes of 20
     expect(outcomes[0].created).toBe(true);
     expect(outcomes[0].entry.categoryPath).toEqual([]);
     expect(counters).toMatchObject({ created: 1 });
+  });
+});
+
+describe('SourceIngest, a document price older than the one the row holds (165a)', () => {
+  const session = {
+    supermarketId: CHAIN,
+    defaultPriceScopeId: SCOPE,
+    sourceKind: PriceSourceKind.OFFICIAL_WEB,
+  };
+  const HELD_AT = new Date('2026-11-20T10:00:00.000Z');
+  /** A walked row bound to a product, holding a price observed on the 20th. */
+  const bound = (): Partial<SourceCatalogEntry> => ({
+    externalId: '1001',
+    name: 'Leche entera',
+    sourceKind: PriceSourceKind.OFFICIAL_WEB,
+    status: SourceEntryStatus.ACTIVE,
+    itemId: 'item-milk',
+    matchedBy: ItemSourceMatch.EAN,
+    confidence: 1,
+  });
+  const heldPrice = (): PriceRow => ({
+    entryId: 'held-1',
+    priceScopeId: SCOPE,
+    sourceKind: PriceSourceKind.OFFICIAL_WEB,
+    price: 1.05,
+    currency: 'EUR',
+    unitPrice: null,
+    unitPriceLabel: null,
+    validFrom: null,
+    validUntil: null,
+    details: null,
+    observedAt: HELD_AT,
+    runId: OTHER_RUN,
+    copiedFromScopeId: null,
+  });
+  const read = (observedAt: string, fromDocument: boolean) =>
+    ({
+      ...observation({
+        externalId: '1001',
+        name: 'Leche entera',
+        brand: 'Marca nueva',
+        observedAt: new Date(observedAt),
+        price: { ...PRICE, price: 0.95 },
+      }),
+      ...(fromDocument
+        ? { fromDocument: true, statesSizeQuantity: false }
+        : {}),
+    }) as SourceObservation;
+
+  it('skips an older price of a document, sends nothing to catalog, and writes the rest', async () => {
+    const { ingest, context, saved, priceRows, catalog } = build({
+      rows: [bound()],
+    });
+    priceRows.push(heldPrice());
+
+    const { counters } = await ingest.ingest(context, {
+      ...session,
+      observations: [read('2026-11-01T10:00:00.000Z', true)],
+    });
+
+    expect(priceRows).toEqual([heldPrice()]);
+    expect(catalog.addPrices).not.toHaveBeenCalled();
+    expect(counters).toMatchObject({
+      pricesSkippedOlder: 1,
+      pricesRecorded: 0,
+      pricesWritten: 0,
+    });
+    expect(saved[0].brand).toBe('Marca nueva');
+  });
+
+  it.each([
+    ['at the same instant', '2026-11-20T10:00:00.000Z'],
+    ['newer', '2026-11-21T10:00:00.000Z'],
+  ])('writes a price of a document observed %s', async (_, observedAt) => {
+    const { ingest, context, priceRows, catalog } = build({ rows: [bound()] });
+    priceRows.push(heldPrice());
+
+    const { counters } = await ingest.ingest(context, {
+      ...session,
+      observations: [read(observedAt, true)],
+    });
+
+    expect(priceRows).toHaveLength(1);
+    expect(priceRows[0]).toMatchObject({
+      price: 0.95,
+      observedAt: new Date(observedAt),
+    });
+    expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+    expect(counters.pricesSkippedOlder).toBe(0);
+  });
+
+  it('writes an older price of a document for a kind the row holds no price of', async () => {
+    const { ingest, context, priceRows } = build({ rows: [bound()] });
+    priceRows.push({
+      ...heldPrice(),
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+    });
+
+    const { counters } = await ingest.ingest(context, {
+      ...session,
+      observations: [read('2026-11-01T10:00:00.000Z', true)],
+    });
+
+    expect(priceRows).toHaveLength(2);
+    expect(counters.pricesSkippedOlder).toBe(0);
+  });
+
+  it('writes the older price of a walk as before, and reads no stored price for it', async () => {
+    const { ingest, context, priceRows, priceReads, catalog } = build({
+      rows: [bound()],
+    });
+    priceRows.push(heldPrice());
+
+    const { counters } = await ingest.ingest(context, {
+      ...session,
+      observations: [read('2026-11-01T10:00:00.000Z', false)],
+    });
+
+    expect(priceReads).not.toHaveBeenCalled();
+    expect(priceRows).toHaveLength(1);
+    expect(priceRows[0]).toMatchObject({
+      price: 0.95,
+      observedAt: new Date('2026-11-01T10:00:00.000Z'),
+    });
+    expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+    expect(counters.pricesSkippedOlder).toBe(0);
+  });
+});
+
+describe('SourceIngest.writeCategoryPaths, the run that replaced the paths (164a)', () => {
+  const COLA = ['Agua y refrescos', 'Cola'];
+  const PACKS = ['Agua y refrescos', 'Packs de agua y refrescos'];
+
+  it('names the run on a replaced row, changed or not, and on no added one, counting only changed paths', async () => {
+    const { ingest, stored } = build({
+      rows: [
+        { id: 'moved', externalId: 'a', name: 'A', categoryPaths: [PACKS] },
+        { id: 'same', externalId: 'b', name: 'B', categoryPaths: [COLA] },
+        {
+          id: 'added',
+          externalId: 'c',
+          name: 'C',
+          categoryPaths: [PACKS],
+          categoryPathsReplacedByRunId: OTHER_RUN,
+        },
+      ],
+    });
+    const landed: string[] = [];
+
+    const changed = await ingest.writeCategoryPaths(
+      RUN,
+      [
+        { entryId: 'moved', paths: [COLA], mode: 'REPLACE' },
+        { entryId: 'same', paths: [COLA], mode: 'REPLACE' },
+        { entryId: 'added', paths: [COLA], mode: 'ADD' },
+      ],
+      () => landed.push('row')
+    );
+
+    expect(changed).toBe(2);
+    expect(landed).toHaveLength(2);
+    const byId = new Map(stored.map((row) => [row.id, row]));
+    expect(byId.get('moved')).toMatchObject({
+      categoryPaths: [COLA],
+      categoryPathsReplacedByRunId: RUN,
+    });
+    expect(byId.get('same')).toMatchObject({
+      categoryPaths: [COLA],
+      categoryPathsReplacedByRunId: RUN,
+    });
+    expect(byId.get('added')).toMatchObject({
+      categoryPaths: [PACKS, COLA],
+      categoryPathsReplacedByRunId: OTHER_RUN,
+    });
+  });
+
+  it('is told the run of the session that writes the paths', async () => {
+    const { ingest, context } = build({ runId: OTHER_RUN });
+    const writes = jest
+      .spyOn(ingest, 'writeCategoryPaths')
+      .mockResolvedValue(0);
+    const opened = await ingest.open(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+    });
+    const onWritten = () => undefined;
+
+    await opened.writeCategoryPaths(
+      [{ entryId: 'e-1', paths: [COLA], mode: 'REPLACE' }],
+      onWritten
+    );
+
+    expect(writes).toHaveBeenCalledWith(
+      OTHER_RUN,
+      [{ entryId: 'e-1', paths: [COLA], mode: 'REPLACE' }],
+      onWritten
+    );
   });
 });

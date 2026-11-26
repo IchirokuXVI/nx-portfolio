@@ -525,6 +525,14 @@ export interface SourceIngestCounters {
    */
   pricesSoldAnotherWay: number;
   /**
+   * Prices of a document that were not written because the row already
+   * holds a newer observation for the same scope and kind (165a): the
+   * document's `observedAt` is strictly older than the stored price row's.
+   * One per price, not per product. Neither stored on the row nor sent to
+   * catalog. A walk never counts one.
+   */
+  pricesSkippedOlder: number;
+  /**
    * Rows this run proposed by the second key of rung 4, the words of the name
    * in any order (plan 0221): new rows and waiting rows together. Each is a
    * `CANDIDATE` with `NAME_WORDS_SIZE`, most often a reworded DEZA name, and
@@ -745,6 +753,12 @@ export class SourceIngest {
       siblings
     );
 
+    // When each known row's price was observed, for a document's prices only
+    // (165a): a walk reads nothing here and skips nothing below.
+    const storedObservedAt = writesPrices
+      ? await this.storedPriceInstants(input.sourceKind, reported, byExternalId)
+      : new Map<string, Date>();
+
     // Every EAN this chunk states, counted before the ladder runs (plan 0155).
     // A full observation writes its EAN onto its row verbatim, a null included,
     // so the count is what the rows hold once the chunk is written, and the
@@ -900,9 +914,25 @@ export class SourceIngest {
           observation.externalId,
           price
         );
-        if (priceScopeId) {
-          placed.push({ price, priceScopeId, copiedFromScopeId: null });
+        if (!priceScopeId) {
+          continue;
         }
+        // A document's price older than the one the row holds for this scope
+        // and kind is not written, and not sent to catalog (165a). The rest
+        // of the product is written as usual.
+        if (
+          !outcome.created &&
+          olderThanStored(
+            storedObservedAt,
+            outcome.entry.id,
+            priceScopeId,
+            observation
+          )
+        ) {
+          counters.pricesSkippedOlder += 1;
+          continue;
+        }
+        placed.push({ price, priceScopeId, copiedFromScopeId: null });
       }
       placed.push(...copiesFor(placed, input.copiesOf));
       placedByIndex.push(placed);
@@ -1075,8 +1105,18 @@ export class SourceIngest {
    *
    * `onWritten` is called as each update lands, so a caller that counts
    * through it holds the true count when an update midway rejects.
+   *
+   * **A `REPLACE` names the run on the row** (164a):
+   * `categoryPathsReplacedByRunId` takes `runId`, in the same statement as
+   * the paths when they change. When they do not, the run has still read
+   * them whole, so the column alone is written, one statement for the rows
+   * of a chunk that do not hold `runId` yet, with `updatedAt` left as it
+   * was. Neither counts as a written
+   * row: the count and `onWritten` stay what they were, rows whose paths
+   * changed. An `ADD` leaves the column alone.
    */
   async writeCategoryPaths(
+    runId: string,
     writes: readonly CategoryPathsWrite[],
     onWritten: () => void = () => undefined
   ): Promise<number> {
@@ -1084,28 +1124,93 @@ export class SourceIngest {
     for (let i = 0; i < writes.length; i += DECISION_READ_CHUNK) {
       const chunk = writes.slice(i, i + DECISION_READ_CHUNK);
       const rows = await this.entries.find({
-        select: { id: true, categoryPaths: true },
+        select: {
+          id: true,
+          categoryPaths: true,
+          categoryPathsReplacedByRunId: true,
+        },
         where: { id: In(chunk.map((write) => write.entryId)) },
       });
-      const stored = new Map(rows.map((row) => [row.id, row.categoryPaths]));
+      const stored = new Map(rows.map((row) => [row.id, row]));
+      /** Rows a `REPLACE` of this run read whole and left as they were. */
+      const confirmed: string[] = [];
       for (const write of chunk) {
-        if (!stored.has(write.entryId)) {
+        const row = stored.get(write.entryId);
+        if (!row) {
           continue;
         }
-        const before = stored.get(write.entryId);
+        const before = row.categoryPaths;
         const after = mergeCategoryPaths(before, write.paths, write.mode);
+        const replaces = write.mode === 'REPLACE';
         // jsonb holds exactly what was written, so the text says it all.
         if (JSON.stringify(before ?? []) === JSON.stringify(after)) {
+          if (
+            replaces &&
+            row.categoryPathsReplacedByRunId !== runId &&
+            !confirmed.includes(write.entryId)
+          ) {
+            confirmed.push(write.entryId);
+          }
           continue;
         }
         await this.entries.update({ id: write.entryId }, {
           categoryPaths: after,
+          ...(replaces ? { categoryPathsReplacedByRunId: runId } : {}),
         } as QueryDeepPartialEntity<SourceCatalogEntry>);
         changed += 1;
         onWritten();
       }
+      if (confirmed.length > 0) {
+        // `updatedAt` kept as it is: nothing a walk wrote before this column
+        // changes on these rows, its clock included.
+        await this.entries.update({ id: In(confirmed) }, {
+          categoryPathsReplacedByRunId: runId,
+          updatedAt: () => '"updatedAt"',
+        } as QueryDeepPartialEntity<SourceCatalogEntry>);
+      }
     }
     return changed;
+  }
+
+  /**
+   * When the price rows of this kind that the chunk's known rows hold were
+   * observed, by row and scope (165a), for the rows a document's priced
+   * product landed on. A chunk with no such product reads nothing, which is
+   * every chunk of a walk.
+   */
+  private async storedPriceInstants(
+    sourceKind: PriceSourceKind,
+    reported: readonly ReportedObservation[],
+    byExternalId: ReadonlyMap<string, SourceCatalogEntry>
+  ): Promise<Map<string, Date>> {
+    const entryIds = [
+      ...new Set(
+        reported
+          .filter(
+            (observation) =>
+              'fromDocument' in observation && observation.prices.length > 0
+          )
+          .map((observation) => byExternalId.get(observation.externalId)?.id)
+          .filter((id): id is string => id !== undefined)
+      ),
+    ];
+    const instants = new Map<string, Date>();
+    for (let i = 0; i < entryIds.length; i += DECISION_READ_CHUNK) {
+      const rows = await this.prices.find({
+        select: { entryId: true, priceScopeId: true, observedAt: true },
+        where: {
+          entryId: In(entryIds.slice(i, i + DECISION_READ_CHUNK)),
+          sourceKind,
+        },
+      });
+      for (const row of rows) {
+        instants.set(
+          priceRowKey(row.entryId, row.priceScopeId),
+          row.observedAt
+        );
+      }
+    }
+    return instants;
   }
 
   /**
@@ -2157,6 +2262,7 @@ function emptyCounters(): SourceIngestCounters {
     pricesConfirmed: 0,
     pricesConflicted: 0,
     pricesSoldAnotherWay: 0,
+    pricesSkippedOlder: 0,
     wordOrderProposals: 0,
     wordOrderRejectedPointers: 0,
     sizesDisproved: 0,
@@ -2355,6 +2461,32 @@ function copiesFor(
 }
 
 /** The item an observation resolves to, which only an `ACTIVE` row states. */
+/** The key {@link SourceIngest.storedPriceInstants} answers by. */
+function priceRowKey(entryId: string, priceScopeId: string): string {
+  return `${entryId}|${priceScopeId}`;
+}
+
+/**
+ * Whether a document's price at this scope is older than the price row the
+ * row already holds there for the run's kind (165a). Strictly older: an
+ * equal instant writes, as does a scope the row holds no price for. Always
+ * false for a walk's observation, whose prices are its own reading of now.
+ */
+function olderThanStored(
+  stored: ReadonlyMap<string, Date>,
+  entryId: string,
+  priceScopeId: string,
+  observation: ReportedObservation
+): boolean {
+  if (!('fromDocument' in observation)) {
+    return false;
+  }
+  const held = stored.get(priceRowKey(entryId, priceScopeId));
+  return (
+    held !== undefined && observation.observedAt.getTime() < held.getTime()
+  );
+}
+
 function activeItemOf(row: SourceCatalogEntry): string | null {
   return row.status === SourceEntryStatus.ACTIVE ? row.itemId : null;
 }
@@ -2766,6 +2898,7 @@ export class SourceIngestSession {
     this.counters.pricesConfirmed += result.counters.pricesConfirmed;
     this.counters.pricesConflicted += result.counters.pricesConflicted;
     this.counters.pricesSoldAnotherWay += result.counters.pricesSoldAnotherWay;
+    this.counters.pricesSkippedOlder += result.counters.pricesSkippedOlder;
     this.counters.wordOrderProposals += result.counters.wordOrderProposals;
     this.counters.wordOrderRejectedPointers +=
       result.counters.wordOrderRejectedPointers;
@@ -2811,7 +2944,12 @@ export class SourceIngestSession {
     writes: readonly CategoryPathsWrite[],
     onWritten?: () => void
   ): Promise<number> {
-    return this.ingest.writeCategoryPaths(writes, onWritten);
+    // The run that states the paths, which a `REPLACE` names on the row.
+    return this.ingest.writeCategoryPaths(
+      this.context.runId,
+      writes,
+      onWritten
+    );
   }
 
   /**

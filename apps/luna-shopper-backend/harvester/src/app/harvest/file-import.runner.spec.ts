@@ -6,9 +6,10 @@ import {
   UnitOfMeasure,
   validateHarvestDocument,
   type HarvestDocument,
+  type HarvestDocumentProduct,
   type HarvestRunWarning,
 } from '@portfolio/luna-shopper/contracts';
-import type { Repository } from 'typeorm';
+import type { FindOperator, Repository } from 'typeorm';
 import type {
   HarvestRun,
   SourceCatalogEntry,
@@ -59,6 +60,11 @@ function build(options: {
   rows?: Partial<SourceCatalogEntry>[];
   items?: unknown[];
   storedWindow?: { validFrom: string; validUntil: string };
+  /** The `source_entry_prices` rows the rows already hold (165a). */
+  storedPrices?: Pick<
+    SourceEntryPrice,
+    'entryId' | 'priceScopeId' | 'sourceKind' | 'observedAt'
+  >[];
 }) {
   const stored = (options.rows ?? []).map(
     (row, index) =>
@@ -111,6 +117,19 @@ function build(options: {
       priceRows.push(...rows);
       return undefined;
     }),
+    // When the stored price rows of a kind were observed (165a).
+    find: jest.fn(
+      async (query: {
+        where: { entryId: FindOperator<string[]>; sourceKind: string };
+      }) =>
+        (options.storedPrices ?? []).filter(
+          (row) =>
+            row.sourceKind === query.where.sourceKind &&
+            (query.where.entryId.value as unknown as string[]).includes(
+              row.entryId
+            )
+        )
+    ),
   } as unknown as Repository<SourceEntryPrice>;
 
   const catalog = {
@@ -1399,6 +1418,253 @@ describe('FileImportRunner (plan 0086)', () => {
       expect(stored[0].categoryPaths).toEqual([WRONG, DAIRY, SECOND]);
       expect(counters.categoryPathsWritten).toBe(1);
     });
+
+    describe('paths the document states whole (164a)', () => {
+      const WRONG = ['Bebidas'];
+      const SECOND = ['Desayuno', 'Leche'];
+      const EARLIER = '33333333-3333-4333-8333-000000000001';
+      const product = (
+        over: Partial<HarvestDocumentProduct> = {}
+      ): HarvestDocumentProduct => ({
+        external_id: '1001',
+        name: 'Leche entera',
+        size: { label: '1 L' },
+        category_path: DAIRY,
+        category_paths: [DAIRY, SECOND],
+        category_paths_complete: true,
+        prices: [],
+        ...over,
+      });
+      const importing = (
+        products: HarvestDocumentProduct[],
+        row: Partial<SourceCatalogEntry> = {}
+      ) =>
+        build({
+          rows: [
+            {
+              ...walked(),
+              categoryPaths: [WRONG],
+              categoryPathsReplacedByRunId: EARLIER,
+              ...row,
+            },
+          ],
+          document: document({ schema_version: 2, products }),
+        });
+
+      it.each([PriceSourceKind.OFFICIAL_WEB, PriceSourceKind.OFFICIAL_API])(
+        'replaces the wrong trail of the row as %s, and names the import on it',
+        async (sourceKind) => {
+          const { runner, context, stored } = importing([product()]);
+
+          const counters = await runner.run(context, { ...asWalk, sourceKind });
+
+          expect(stored[0].categoryPaths).toEqual([DAIRY, SECOND]);
+          expect(stored[0].categoryPathsReplacedByRunId).toBe(RUN);
+          expect(counters.categoryPathsWritten).toBe(1);
+        }
+      );
+
+      it('names the import on a row whose paths it states as they are, and counts no write', async () => {
+        const { runner, context, stored } = importing([product()], {
+          categoryPaths: [DAIRY, SECOND],
+        });
+
+        const counters = await runner.run(context, asWalk);
+
+        expect(stored[0].categoryPaths).toEqual([DAIRY, SECOND]);
+        expect(stored[0].categoryPathsReplacedByRunId).toBe(RUN);
+        expect(counters.categoryPathsWritten).toBe(0);
+      });
+
+      it.each([
+        PriceSourceKind.OFFICIAL_LEAFLET,
+        PriceSourceKind.ADMIN,
+        PriceSourceKind.USER_RECEIPT,
+        PriceSourceKind.USER_REPORTED,
+      ])('only adds as %s', async (sourceKind) => {
+        const { runner, context, stored } = importing([product()]);
+
+        await runner.run(context, { ...asWalk, sourceKind });
+
+        expect(stored[0].categoryPaths).toEqual([WRONG, DAIRY, SECOND]);
+        expect(stored[0].categoryPathsReplacedByRunId).toBe(EARLIER);
+      });
+
+      it.each([
+        ['false', { category_paths_complete: false }],
+        ['absent', { category_paths_complete: undefined }],
+      ])(
+        'only adds for a statement of completeness that is %s',
+        async (_, over) => {
+          const { runner, context, stored } = importing([product(over)]);
+
+          await runner.run(context, asWalk);
+
+          expect(stored[0].categoryPaths).toEqual([WRONG, DAIRY, SECOND]);
+          expect(stored[0].categoryPathsReplacedByRunId).toBe(EARLIER);
+        }
+      );
+
+      it.each([
+        ['no paths', { category_paths: undefined }],
+        ['null paths', { category_paths: null }],
+        ['an empty list', { category_paths: [] }],
+        ['only empty paths', { category_paths: [[]] }],
+      ])(
+        'never replaces for a whole statement beside %s, so a file cannot wipe a trail',
+        async (_, over) => {
+          const { runner, context, stored } = importing([
+            product({ ...over, category_path: undefined }),
+          ]);
+
+          const counters = await runner.run(context, asWalk);
+
+          expect(stored[0].categoryPaths).toEqual([WRONG]);
+          expect(stored[0].categoryPathsReplacedByRunId).toBe(EARLIER);
+          expect(counters.categoryPathsWritten).toBe(0);
+        }
+      );
+
+      it('only adds the one category_path beside a whole statement with no paths', async () => {
+        const { runner, context, stored } = importing([
+          product({ category_paths: [] }),
+        ]);
+
+        await runner.run(context, asWalk);
+
+        expect(stored[0].categoryPaths).toEqual([WRONG, DAIRY]);
+        expect(stored[0].categoryPathsReplacedByRunId).toBe(EARLIER);
+      });
+
+      it('replaces with the union of two products of one row only when both state their paths whole', async () => {
+        const OTHER = ['Navidad'];
+        const both = importing([
+          product({ category_path: undefined, category_paths: [DAIRY] }),
+          product({ category_path: undefined, category_paths: [OTHER] }),
+        ]);
+        const one = importing([
+          product({ category_path: undefined, category_paths: [DAIRY] }),
+          product({
+            category_path: undefined,
+            category_paths: [OTHER],
+            category_paths_complete: undefined,
+          }),
+        ]);
+
+        await both.runner.run(both.context, asWalk);
+        await one.runner.run(one.context, asWalk);
+
+        expect(both.warnings.map((warning) => warning.code)).toContain(
+          HarvestWarningCode.DUPLICATE_KEY
+        );
+        expect(both.stored[0].categoryPaths).toEqual([DAIRY, OTHER]);
+        expect(both.stored[0].categoryPathsReplacedByRunId).toBe(RUN);
+        expect(one.stored[0].categoryPaths).toEqual([WRONG, DAIRY, OTHER]);
+        expect(one.stored[0].categoryPathsReplacedByRunId).toBe(EARLIER);
+      });
+
+      it('only adds when the second product of the row states no path at all', async () => {
+        const { runner, context, stored } = importing([
+          product({ category_path: undefined, category_paths: [DAIRY] }),
+          product({ category_path: undefined, category_paths: undefined }),
+        ]);
+
+        await runner.run(context, asWalk);
+
+        expect(stored[0].categoryPaths).toEqual([WRONG, DAIRY]);
+        expect(stored[0].categoryPathsReplacedByRunId).toBe(EARLIER);
+      });
+    });
+
+    describe('a price older than the one the row holds (165a)', () => {
+      const HELD_AT = new Date('2026-11-20T10:00:00.000Z');
+      const OTHER_SCOPE = '22222222-2222-4222-8222-000000000002';
+      const priced = (observedAt: string) =>
+        document({
+          products: [
+            {
+              external_id: '1001',
+              name: 'Leche entera',
+              size: { label: '1 L' },
+              price: { amount: 0.95, currency: 'EUR' },
+              observed_at: observedAt,
+              category_path: ['Desayuno'],
+              brand: 'Marca nueva',
+            },
+          ],
+        });
+      const held = (
+        over: Partial<SourceEntryPrice> = {}
+      ): Pick<
+        SourceEntryPrice,
+        'entryId' | 'priceScopeId' | 'sourceKind' | 'observedAt'
+      > => ({
+        entryId: 'held-1',
+        priceScopeId: SCOPE,
+        sourceKind: PriceSourceKind.OFFICIAL_WEB,
+        observedAt: HELD_AT,
+        ...over,
+      });
+
+      it('skips it, sends nothing to catalog, counts it, and writes the rest of the product', async () => {
+        const { runner, context, stored, priceRows, catalog } = build({
+          rows: [walked()],
+          storedPrices: [held()],
+          document: priced('2026-11-01T10:00:00.000Z'),
+        });
+
+        const counters = await runner.run(context, asWalk);
+
+        expect(priceRows).toEqual([]);
+        expect(catalog.addPrices).not.toHaveBeenCalled();
+        expect(counters.pricesSkippedOlder).toBe(1);
+        expect(counters.pricesRecorded).toBe(0);
+        // The source group and the paths are written as usual.
+        expect(stored[0].brand).toBe('Marca nueva');
+        expect(stored[0].categoryPaths).toEqual([DAIRY, ['Desayuno']]);
+      });
+
+      it.each([
+        ['at the same instant', '2026-11-20T10:00:00.000Z'],
+        ['newer', '2026-11-21T10:00:00.000Z'],
+      ])('writes a price observed %s', async (_, observedAt) => {
+        const { runner, context, priceRows, catalog } = build({
+          rows: [walked()],
+          storedPrices: [held()],
+          document: priced(observedAt),
+        });
+
+        const counters = await runner.run(context, asWalk);
+
+        expect(priceRows).toHaveLength(1);
+        expect(priceRows[0]).toMatchObject({
+          price: 0.95,
+          observedAt: new Date(observedAt),
+        });
+        expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+        expect(counters.pricesSkippedOlder).toBe(0);
+      });
+
+      it.each([
+        ['another scope', { priceScopeId: OTHER_SCOPE }],
+        ['another kind', { sourceKind: PriceSourceKind.OFFICIAL_LEAFLET }],
+        ['another row', { entryId: 'held-2' }],
+      ])(
+        'writes an older price for a scope and kind the row holds no price at, the stored one being of %s',
+        async (_, over) => {
+          const { runner, context, priceRows } = build({
+            rows: [walked()],
+            storedPrices: [held(over)],
+            document: priced('2026-11-01T10:00:00.000Z'),
+          });
+
+          const counters = await runner.run(context, asWalk);
+
+          expect(priceRows).toHaveLength(1);
+          expect(counters.pricesSkippedOlder).toBe(0);
+        }
+      );
+    });
   });
 
   describe('a step that fails after the ingest wrote (owner decisions 96c and 102b)', () => {
@@ -1455,7 +1721,7 @@ describe('FileImportRunner (plan 0086)', () => {
           jest
             .spyOn(ingest, 'writeCategoryPaths')
             .mockImplementation(
-              async (_writes, onWritten = () => undefined) => {
+              async (_runId, _writes, onWritten = () => undefined) => {
                 onWritten();
                 throw new Error('connection terminated');
               }
