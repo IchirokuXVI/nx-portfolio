@@ -21,6 +21,7 @@ import { PriceScopeResolver } from './price-scope-resolver';
 import type { RunContext } from './run-context';
 import {
   SourceIngest,
+  type DocumentObservation,
   type SourceEntryOutcome,
   type SourceIngestCounters,
   type SourceObservation,
@@ -346,10 +347,16 @@ export class FileImportRunner {
       /** The importing chain's adapter, whose host rule a photo passes. */
       adapterKey: string | null;
     }
-  ): SourceObservation {
+  ): DocumentObservation {
     const sizeFormat = product.size?.label ?? product.size?.unit ?? null;
+    const soldByWeight = soldByWeightOf(product);
     const externalId =
       product.external_id ?? entryKey(product.name, sizeFormat);
+    const imageUrl = documentPhotoOf(
+      product.image_url,
+      context.adapterKey,
+      externalId
+    );
     // The product's own window beats the document's, and neither is required.
     const window = product.validity
       ? resolveImportWindow({
@@ -359,6 +366,9 @@ export class FileImportRunner {
       : context.documentWindow;
 
     return {
+      // The one observation that may leave a field unstated, and the mark
+      // that it is a document's.
+      fromDocument: true,
       externalId,
       name: product.name,
       // **Absent stays absent.** A field the document does not state is
@@ -373,9 +383,11 @@ export class FileImportRunner {
       // used to be dropped, which left a 750 read from `75 cl` with nothing to
       // say it was already millilitres.
       ...sizeOf(product.size),
-      // A tile priced by the kilo (plan 0181). The ingest then writes the row
-      // with no size, whatever the tile printed as one.
-      soldByWeight: soldByWeightOf(product),
+      // How the product is sold (plan 0181): stated by the export, or a tile
+      // priced by the kilo. The ingest then writes the row with no size,
+      // whatever the tile printed as one. Absent when the document does not
+      // say, so a known row keeps its flag, as for the weight below.
+      soldByWeight,
       // The weight of one piece in grams (plan 0244, section 5.5). The reader
       // refused it beside a size. Absent stays absent, so a document that
       // states none leaves the weight a row holds alone.
@@ -394,11 +406,7 @@ export class FileImportRunner {
       // adapter library. An address that fails it is not written, so a
       // document cannot make a shopper's browser load an arbitrary host,
       // and the stored address stays.
-      imageUrl: documentPhotoOf(
-        product.image_url,
-        context.adapterKey,
-        externalId
-      ),
+      imageUrl,
       observedAt:
         parseInstant(product.observed_at) ?? context.fallbackObservedAt,
       // Stored and shown, never interpreted (D6). Whatever the producer knew
@@ -454,7 +462,7 @@ function pricesOf(
   product: HarvestDocumentProduct,
   window: ImportWindow | null
 ): SourceObservation['prices'] {
-  const soldByWeight = soldByWeightOf(product);
+  const soldByWeight = soldByWeightOf(product) === true;
   const unpayable = unpayableForOne(product);
   return (product.prices ?? []).map((price) => {
     const own = price.validity
@@ -480,20 +488,30 @@ function pricesOf(
 }
 
 /**
- * Whether a product of the document is sold by weight (plan 0181).
+ * Whether a product of the document is sold by weight (plan 0181), or
+ * undefined when the document does not say.
  *
- * **It reads `extra.basis`, and it is the one rule that reads `extra`.** The
- * file schema has no field for how a product is sold. The leaflet producer
- * writes the tile's basis into `extra` (`unit`, `kg`, `l`), and a tile whose
- * basis is `kg` prints the price of a kilo: a piece of cheese, a tray of
- * meat, loose fruit.
+ * **`sold_by_weight` first**, which the harvester's export states from the
+ * flag its row holds, true or false.
  *
- * **A litre basis is not a way to sell.** It is the comparison figure of a
- * bottle, and the bottle has a size and a price of its own. So `l` answers
- * false and its price stays null when the producer stated none.
+ * **Then `extra.basis`, the one rule that reads `extra`.** The leaflet
+ * producer writes no `sold_by_weight`. It writes the tile's basis into
+ * `extra` (`unit`, `kg`, `l`), and a tile whose basis is `kg` prints the
+ * price of a kilo: a piece of cheese, a tray of meat, loose fruit.
+ *
+ * **Any other basis, or none, says nothing**, and answers undefined: a known
+ * row keeps how it is sold, and a new row is not sold by weight. A litre
+ * basis is not a way to sell either. It is the comparison figure of a
+ * bottle, and the bottle has a size and a price of its own, so its price
+ * stays null when the producer stated none.
  */
-export function soldByWeightOf(product: HarvestDocumentProduct): boolean {
-  return product.extra?.['basis'] === 'kg';
+export function soldByWeightOf(
+  product: HarvestDocumentProduct
+): boolean | undefined {
+  if (typeof product.sold_by_weight === 'boolean') {
+    return product.sold_by_weight;
+  }
+  return product.extra?.['basis'] === 'kg' ? true : undefined;
 }
 
 /**

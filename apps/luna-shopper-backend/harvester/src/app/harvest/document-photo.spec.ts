@@ -1,3 +1,4 @@
+import type { Logger } from '@nestjs/common';
 import { PHOTO_HOSTS as CARREFOUR } from '@portfolio/luna-shopper/carrefour';
 import { PHOTO_HOSTS as DIA } from '@portfolio/luna-shopper/dia';
 import { PHOTO_HOSTS as ELJAMON } from '@portfolio/luna-shopper/eljamon';
@@ -10,6 +11,24 @@ import { documentPhotoOf } from './document-photo';
  * own adapter library (plan 0198, section 2).
  */
 describe('documentPhotoOf', () => {
+  /**
+   * A copy of the module and of the logger it writes to, so the refusals of
+   * the other cases do not count towards the ten it logs one by one.
+   */
+  const fresh = () => {
+    let loaded:
+      | { read: typeof documentPhotoOf; logger: typeof Logger }
+      | undefined;
+    jest.isolateModules(() => {
+      loaded = {
+        read: (require('./document-photo') as typeof import('./document-photo'))
+          .documentPhotoOf,
+        logger: (require('@nestjs/common') as typeof import('@nestjs/common'))
+          .Logger,
+      };
+    });
+    return loaded as { read: typeof documentPhotoOf; logger: typeof Logger };
+  };
   const ADAPTERS: [string, readonly string[]][] = [
     ['mercadona-api', MERCADONA],
     ['dia-api', DIA],
@@ -53,6 +72,41 @@ describe('documentPhotoOf', () => {
     const address = `https://${MERCADONA[0]}/images/1.jpg`;
     expect(documentPhotoOf(address, 'deza-web', '1')).toBeUndefined();
     expect(documentPhotoOf(address, null, '1')).toBeUndefined();
+  });
+
+  it('logs that the stored address stays, not that the row states none', () => {
+    const { read, logger } = fresh();
+    const warn = jest
+      .spyOn(logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      read('https://example.com/7.jpg', 'mercadona-api', '7');
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      const [line] = warn.mock.calls[0] as [string];
+      expect(line).toContain('Product 7');
+      expect(line).toContain('https://example.com/7.jpg');
+      expect(line).toContain('the row keeps the photo it holds');
+      expect(line).not.toContain('states no photo');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('logs nothing for an address it keeps, or for none', () => {
+    const { read, logger } = fresh();
+    const warn = jest
+      .spyOn(logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      read(`https://${MERCADONA[0]}/1.jpg`, 'mercadona-api', '1');
+      read(undefined, 'mercadona-api', '1');
+      read(null, 'mercadona-api', '1');
+
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('passes an absent address and a stated null through', () => {

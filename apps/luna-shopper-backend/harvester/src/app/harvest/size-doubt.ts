@@ -66,7 +66,12 @@ export function sizeDoubtOfFields(
     {
       unitSize: stated ? (fields.unitSize ?? null) : (held?.unitSize ?? null),
       sizeUnit: stated ? (fields.sizeUnit ?? null) : (held?.sizeUnit ?? null),
-      soldByWeight: fields.soldByWeight,
+      // A flag the observation does not state is the stored one, as the
+      // weight and the count are.
+      soldByWeight:
+        fields.soldByWeight !== undefined
+          ? fields.soldByWeight
+          : held?.soldByWeight === true,
       approxWeight:
         fields.approxWeight !== undefined
           ? fields.approxWeight

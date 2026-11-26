@@ -187,15 +187,14 @@ export interface SourceObservation {
   /**
    * The brand the source prints. Null is a statement that it prints none.
    *
-   * **Undefined means the source did not state it this time**, and leaves
-   * the stored brand alone. The same holds for {@link ean}, {@link url},
-   * {@link imageUrl} and {@link extra}. Only the file import passes
-   * undefined, for a product whose document does not name the field: a file
-   * is not the chain, and a field it leaves out says nothing about the
-   * product. The key stays required, so an adapter cannot forget to say.
+   * Required and never undefined, as {@link ean}, {@link url},
+   * {@link imageUrl} and {@link extra} are, so an adapter cannot forget to
+   * say: a walk that left one out would keep a stale value on every row. The
+   * one source that may leave them unstated is an uploaded document, which
+   * reports a {@link DocumentObservation} instead.
    */
-  brand: string | null | undefined;
-  ean: string | null | undefined;
+  brand: string | null;
+  ean: string | null;
   /**
    * The size of the pack, in {@link sizeUnit}. Null is a statement that the
    * source prints none, and clears the stored one.
@@ -268,19 +267,18 @@ export interface SourceObservation {
    * replace a right one.
    */
   categoryPath?: string[];
-  url: string | null | undefined;
+  url: string | null;
   /**
    * The address of the photo the source prints for the product, as its own
    * adapter library answered it (plan 0198, section 2): `https`, on a host of
    * the chain's list, verbatim. Required, so an adapter cannot forget to say:
-   * null is the answer of a source that prints none. Undefined is a document
-   * that states none, as for {@link brand}.
+   * null is the answer of a source that prints none.
    *
    * It is an address and nothing else. No code here requests it.
    */
-  imageUrl: string | null | undefined;
+  imageUrl: string | null;
   observedAt: Date;
-  extra: Record<string, unknown> | null | undefined;
+  extra: Record<string, unknown> | null;
   /**
    * Every price the source stated for this product, one per scope it named.
    *
@@ -338,8 +336,50 @@ export interface PartialSourceObservation {
   prices: readonly SourceObservationPrice[];
 }
 
-/** A product as a runner reports it: read whole, or from the listing alone. */
-export type ReportedObservation = SourceObservation | PartialSourceObservation;
+/** The fields a document may leave unstated, which a runner must state. */
+type DocumentUnstated =
+  | 'brand'
+  | 'ean'
+  | 'url'
+  | 'imageUrl'
+  | 'extra'
+  | 'soldByWeight';
+
+/**
+ * One product of an uploaded document, read whole: the one full observation
+ * that may leave an identity field unstated. Only `FileImportRunner.observe`
+ * builds it, and {@link fromDocument} says so.
+ *
+ * **A field the document does not state is absent here**, and leaves the
+ * stored value of a known row alone; a new row gets null for it. A stated
+ * value, a null included, writes as a walk's does. A file is not the chain:
+ * a field it leaves out says nothing about the product, and a harvester
+ * export leaves out every field its row holds as null.
+ *
+ * {@link soldByWeight} follows the same rule, and here alone absent is not
+ * false: a known row keeps how it is sold, and a new row is not sold by
+ * weight.
+ */
+export interface DocumentObservation extends Omit<
+  SourceObservation,
+  DocumentUnstated
+> {
+  fromDocument: true;
+  brand?: string | null;
+  ean?: string | null;
+  url?: string | null;
+  imageUrl?: string | null;
+  extra?: Record<string, unknown> | null;
+  soldByWeight?: boolean;
+}
+
+/** A product read whole, by a walk or from a document. */
+export type FullObservation = SourceObservation | DocumentObservation;
+
+/**
+ * A product as a runner reports it: read whole, or from the listing alone.
+ */
+export type ReportedObservation = FullObservation | PartialSourceObservation;
 
 /** What a session writes for, decided once and held across every chunk. */
 export interface SourceIngestSessionInput {
@@ -1478,7 +1518,7 @@ export class SourceIngest {
   private warnSoldAnotherWay(
     context: RunContext,
     row: SourceCatalogEntry,
-    observation: SourceObservation
+    observation: FullObservation
   ): void {
     const byWeight = observation.soldByWeight === true;
     context.warn({
@@ -1734,7 +1774,7 @@ export class SourceIngest {
     supermarketId: string,
     runId: string,
     seenAt: Date,
-    observation: SourceObservation,
+    observation: FullObservation,
     items: ItemMatchIndex,
     siblings: SiblingEntryIndex,
     eans: ChainEanIndex,
@@ -1752,7 +1792,8 @@ export class SourceIngest {
       // Nor is a category path the observation did not state.
       categoryPath: fields.categoryPath ?? [],
       // Nor any identity field: a document that states none of them creates
-      // a row that holds none.
+      // a row that holds none, and is not sold by weight.
+      soldByWeight: fields.soldByWeight ?? false,
       brand: fields.brand ?? null,
       brandKey: fields.brandKey ?? null,
       ean: fields.ean ?? null,
@@ -2116,12 +2157,17 @@ function emptyCounters(): SourceIngestCounters {
  * Only then. An observation that writes the group writes `soldByWeight` with
  * it, so the row and its price agree by construction. A partial observation
  * has its own rule in `see`, which moves the flag with the price.
+ *
+ * A document that does not state how the product is sold is read as a fixed
+ * pack here, as before the field existed: its prices are figures for a pack,
+ * and on a row a walk sells by weight they would be stored as the price of a
+ * kilo.
  */
 function sellsAnotherWay(
   held: SourceCatalogEntry | undefined,
   observation: ReportedObservation,
   sourceKind: PriceSourceKind
-): observation is SourceObservation {
+): observation is FullObservation {
   return (
     held !== undefined &&
     observation.detailFetched !== false &&
@@ -2497,10 +2543,18 @@ function rewordedProposal(itemId: string): DecidedFields {
 }
 
 function fieldsOf(
-  observation: SourceObservation,
+  observation: FullObservation,
   sourceKind: PriceSourceKind
 ): SourceEntryFields {
-  const soldByWeight = observation.soldByWeight === true;
+  // Absent is false for a walk, which always means it: an adapter with no
+  // field for it sells nothing by weight. A document that does not state it
+  // says nothing, so the stored flag stays (`applySourceGroup`) and a new
+  // row gets false (`create`).
+  const soldByWeightStated =
+    'fromDocument' in observation && observation.soldByWeight === undefined
+      ? undefined
+      : observation.soldByWeight === true;
+  const soldByWeight = soldByWeightStated === true;
   // A row sold by weight states no size, held here for every adapter (plan
   // 0181): the weight is not the same on every pack, so a leaflet tile that
   // prints `1 kg aprox` beside its price per kilo has no size either.
@@ -2533,7 +2587,7 @@ function fieldsOf(
       unitSize === null || unitSize === undefined
         ? unitSize
         : (observation.sizeUnit ?? null),
-    soldByWeight,
+    soldByWeight: soldByWeightStated,
     // The weight of one piece (plan 0244), held only beside no size: a size
     // writes a null weight whatever the observation said. With no size, or
     // none stated, a source that never reads a weight leaves the stored one

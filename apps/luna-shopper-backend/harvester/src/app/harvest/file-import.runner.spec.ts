@@ -1016,6 +1016,103 @@ describe('FileImportRunner (plan 0086)', () => {
       expect(unlinked).toEqual(['held-1']);
     });
 
+    describe('how the product is sold (plan 0181)', () => {
+      /** A row a walk sells by the kilo: no size, the label kept. */
+      const weighed = (): Partial<SourceCatalogEntry> => ({
+        ...walked(),
+        externalId: '3401',
+        name: 'Queso curado',
+        sizeFormat: '1 kg',
+        unitSize: null,
+        sizeUnit: null,
+        soldByWeight: true,
+      });
+      const product = (over: Record<string, unknown> = {}) =>
+        document({
+          schema_version: 2,
+          products: [
+            {
+              external_id: '3401',
+              name: 'Queso curado',
+              size: { label: '1 kg' },
+              prices: [],
+              ...over,
+            },
+          ],
+        });
+
+      it('keeps the flag of a walked row when the document does not say', async () => {
+        const { runner, context, stored } = build({
+          rows: [weighed()],
+          document: product(),
+        });
+
+        await runner.run(context, asWalk);
+
+        expect(stored[0].soldByWeight).toBe(true);
+      });
+
+      it('keeps it for a basis that is not kg too, which says nothing either', async () => {
+        const { runner, context, stored } = build({
+          rows: [weighed()],
+          document: product({ extra: { basis: 'unit' } }),
+        });
+
+        await runner.run(context, asWalk);
+
+        expect(stored[0].soldByWeight).toBe(true);
+      });
+
+      it('writes the flag the document states, false included', async () => {
+        const { runner, context, stored } = build({
+          rows: [weighed(), { ...walked(), soldByWeight: false }],
+          document: document({
+            schema_version: 2,
+            products: [
+              {
+                external_id: '3401',
+                name: 'Queso curado',
+                size: { label: '1 kg' },
+                sold_by_weight: false,
+                prices: [],
+              },
+              {
+                external_id: '1001',
+                name: 'Leche entera',
+                size: { label: '1 L', quantity: 1, unit: 'l' },
+                sold_by_weight: true,
+                prices: [],
+              },
+            ],
+          }),
+        });
+
+        await runner.run(context, asWalk);
+
+        expect(stored[0].soldByWeight).toBe(false);
+        // Sold by weight holds no size, whatever the document printed.
+        expect(stored[1]).toMatchObject({ soldByWeight: true, unitSize: null });
+      });
+
+      it('writes a stated flag over the kg basis of the bag', async () => {
+        const { runner, context, saved } = build({
+          document: product({ sold_by_weight: false, extra: { basis: 'kg' } }),
+        });
+
+        await runner.run(context, asWalk);
+
+        expect(saved[0].soldByWeight).toBe(false);
+      });
+
+      it('makes a new row the document does not say about a fixed pack', async () => {
+        const { runner, context, saved } = build({ document: product() });
+
+        await runner.run(context, asWalk);
+
+        expect(saved[0].soldByWeight).toBe(false);
+      });
+    });
+
     describe('the photo link a document states (plan 0198)', () => {
       const MOVED = 'https://prod-mercadona.imgix.net/images/1001-b.jpg';
       const stating = (imageUrl: string) =>

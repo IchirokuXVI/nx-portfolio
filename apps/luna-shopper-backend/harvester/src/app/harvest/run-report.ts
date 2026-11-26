@@ -1,9 +1,9 @@
 import type { PostalCodeSource } from '@portfolio/luna-shopper/contracts';
 import type { ScopeDeclaration } from './price-scope-resolver';
 import type {
+  FullObservation,
   PartialSourceObservation,
   ReportedObservation,
-  SourceObservation,
 } from './source-ingest';
 
 export type { ScopeDeclaration } from './price-scope-resolver';
@@ -234,7 +234,7 @@ export interface RecordedNotWhole {
  */
 export class RecordingRunReport implements RunReport {
   readonly scopes: ScopeDeclaration[] = [];
-  readonly products: SourceObservation[] = [];
+  readonly products: FullObservation[] = [];
   /** The products reported from the listing alone (plan 0119), apart. */
   readonly partialProducts: PartialSourceObservation[] = [];
   readonly places: ObservedPlace[] = [];

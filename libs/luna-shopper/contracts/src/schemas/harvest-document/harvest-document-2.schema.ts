@@ -146,6 +146,11 @@ const product: JsonSchema = {
       description:
         'The approximate weight of one piece in grams (plan 0244): a cheese sold by the kilo, a tray priced as one piece. Refused beside size.quantity.',
     },
+    sold_by_weight: {
+      type: 'boolean',
+      description:
+        "Whether the source sells the product by weight (plan 0181), each price then the price of a kilo. The harvester's export states the flag its row holds. Absent leaves the flag of a known row alone, and a new row is not sold by weight, unless extra.basis is kg.",
+    },
     prices: {
       type: ['array', 'null'],
       description:
@@ -168,7 +173,12 @@ const product: JsonSchema = {
       type: ['array', 'null'],
       description:
         'Every path the chain files the product under, each root first (plan 0268). The import adds them to the paths the row holds and removes none.',
-      items: { type: 'array', items: { type: 'string' } },
+      maxItems: 50,
+      items: {
+        type: 'array',
+        maxItems: 12,
+        items: { type: 'string', maxLength: 200 },
+      },
     },
     url: { type: ['string', 'null'] },
     image_url: {

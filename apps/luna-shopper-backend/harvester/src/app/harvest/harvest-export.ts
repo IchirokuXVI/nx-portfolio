@@ -10,6 +10,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { createHash } from 'node:crypto';
 import type { SourceCatalogEntry, SourceEntryPrice } from '../entities';
+import { distinctCategoryPaths } from './category-paths';
 
 /**
  * A run, as a file (plan 0086, section 6.2).
@@ -87,9 +88,10 @@ export interface HarvestExportInput {
 /**
  * The export format's own version, which is not the service's.
  *
- * `3` states the photo address and every category path of a row
- * (`image_url`, `category_paths`). The schema stays version 2: both fields
- * are optional there, as `approx_weight` is, so every version 2 file a
+ * `3` states the photo address, every category path of a row and how it is
+ * sold (`image_url`, `category_paths`, `sold_by_weight`). The schema stays
+ * version 2: the three are optional there, as `approx_weight` is, so every
+ * version 2 file a
  * person or the leaflet extractor writes still validates unchanged.
  */
 export const HARVEST_PRODUCER_VERSION = '3';
@@ -196,6 +198,9 @@ function toProduct(
   used: Set<string>
 ): HarvestDocumentProduct {
   const size = sizeOf(entry);
+  const paths = Array.isArray(entry.categoryPaths)
+    ? distinctCategoryPaths(entry.categoryPaths)
+    : [];
   const rows = (entry.prices ?? []).filter(
     (price) => price.price !== null || price.unitPrice !== null
   );
@@ -218,6 +223,11 @@ function toProduct(
     !size?.quantity
       ? { approx_weight: Number(entry.approxWeight) }
       : {}),
+    // How the row is sold (plan 0181), so the import writes the flag the walk
+    // stored rather than reading one out of a bag that a walk never fills.
+    ...(typeof entry.soldByWeight === 'boolean'
+      ? { sold_by_weight: entry.soldByWeight }
+      : {}),
     prices: rows.map((price) => toPrice(price, scopes)),
     observed_at: (rows[0]?.observedAt ?? entry.lastSeenAt).toISOString(),
     ...(entry.categoryPath?.length
@@ -226,10 +236,10 @@ function toProduct(
     // Every path the row holds (plan 0268), so an import adds the trails
     // the walk met beside the one `category_path` names. Not whether the
     // walk read every shelf: the run keeps no record of that per row, so
-    // the import only adds.
-    ...(entry.categoryPaths?.length
-      ? { category_paths: entry.categoryPaths }
-      : {}),
+    // the import only adds. Through the rule the import reads them by, so a
+    // stored element that is not a list of names, or a path with none, never
+    // reaches the file.
+    ...(paths.length ? { category_paths: paths } : {}),
     ...(entry.url ? { url: entry.url } : {}),
     // The photo address the walk stored (plan 0198). The import keeps it only
     // under the host rule of its own chain's adapter, the rule it passed here.

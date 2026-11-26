@@ -62,8 +62,12 @@ export interface SourceEntryFields {
    * Whether the product is sold by weight (plan 0181). When it is, `unitSize`
    * and `sizeUnit` are both null: the weight is not the same on every pack,
    * so it is not a size.
+   *
+   * **Absent means the source did not state it this time**, as for
+   * {@link approxWeight}: it leaves the stored flag alone. Only a document
+   * that names no way of selling sends it absent; a walk always states it.
    */
-  soldByWeight: boolean;
+  soldByWeight?: boolean;
   /**
    * The approximate weight of one piece in grams, or null (plan 0244). Null
    * whenever `unitSize` is set.
@@ -145,7 +149,8 @@ export function sourceGroupChanged(
     // did not say before.
     (fields.sizeUnit !== undefined &&
       (existing.sizeUnit ?? null) !== fields.sizeUnit) ||
-    (existing.soldByWeight ?? false) !== fields.soldByWeight ||
+    (fields.soldByWeight !== undefined &&
+      (existing.soldByWeight ?? false) !== fields.soldByWeight) ||
     (fields.approxWeight !== undefined &&
       numeric(existing.approxWeight) !== numeric(fields.approxWeight)) ||
     (fields.url !== undefined && existing.url !== fields.url) ||
@@ -191,7 +196,9 @@ export function applySourceGroup(
   if (fields.sizeUnit !== undefined) {
     row.sizeUnit = fields.sizeUnit;
   }
-  row.soldByWeight = fields.soldByWeight;
+  if (fields.soldByWeight !== undefined) {
+    row.soldByWeight = fields.soldByWeight;
+  }
   if (fields.approxWeight !== undefined) {
     row.approxWeight = fields.approxWeight;
   }

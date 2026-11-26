@@ -1,10 +1,11 @@
+import { Logger } from '@nestjs/common';
 import { photoAddressRead as carrefourPhoto } from '@portfolio/luna-shopper/carrefour';
 import type { AdapterKey } from '@portfolio/luna-shopper/contracts';
 import { photoAddressRead as diaPhoto } from '@portfolio/luna-shopper/dia';
 import { photoAddressRead as eljamonPhoto } from '@portfolio/luna-shopper/eljamon';
 import { photoAddressRead as lidlPhoto } from '@portfolio/luna-shopper/lidl';
 import { photoAddressRead as mercadonaPhoto } from '@portfolio/luna-shopper/mercadona';
-import { photoOf, type PhotoRead } from './photo-address';
+import type { PhotoRead } from './photo-address';
 
 /**
  * The photo address a document states, read through the rule a walk's
@@ -42,7 +43,8 @@ const READERS: Partial<Record<AdapterKey, (address: string) => PhotoRead>> = {
  * - An address it refuses, or rewrites (DIA makes a path absolute, which a
  *   file has no reason to need), or any address for a chain whose adapter
  *   reads no photo (DEZA, a chain with no source row): undefined, and the
- *   refusal is logged as a walk's is. **A refusal is not a statement that
+ *   refusal is logged with a line of its own, which says the stored address
+ *   stays. **A refusal is not a statement that
  *   the chain prints none**, so the stored address stays.
  */
 export function documentPhotoOf(
@@ -59,8 +61,32 @@ export function documentPhotoOf(
     : { url: null, refused: stated };
   const kept = read.url === stated ? read.url : null;
   if (kept === null) {
-    photoOf({ url: null, refused: stated }, externalId);
+    logRefusal(stated, externalId);
     return undefined;
   }
   return kept;
+}
+
+/** How many refusals are logged one by one before only every hundredth is. */
+const LOGGED_ONE_BY_ONE = 10;
+
+const logger = new Logger('DocumentPhoto');
+let refusals = 0;
+
+/**
+ * The warning for a document's address the rule refused. Its own, not a
+ * walk's: a walk that refuses an address writes no photo, and a document
+ * that does leaves the stored one, which is what this line says.
+ */
+function logRefusal(stated: string, externalId: string): void {
+  refusals += 1;
+  if (refusals <= LOGGED_ONE_BY_ONE || refusals % 100 === 0) {
+    logger.warn(
+      `Product ${externalId}: the document's photo address ` +
+        `"${stated.slice(0, 200)}" is not one the importing chain's adapter ` +
+        'keeps as it is (https, on a host of its list), so it was not ' +
+        'written and the row keeps the photo it holds ' +
+        `(${refusals} refused since this process started).`
+    );
+  }
 }

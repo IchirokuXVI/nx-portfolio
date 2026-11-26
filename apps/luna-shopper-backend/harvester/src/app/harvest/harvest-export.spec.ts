@@ -195,6 +195,65 @@ describe('buildHarvestDocument', () => {
     expect(Object.keys(product)).not.toContain('ean');
   });
 
+  it('states how the row is sold, false included (plan 0181)', async () => {
+    const document = build([
+      entry({
+        id: 'e-1',
+        externalId: '3401',
+        soldByWeight: true,
+        unitSize: null,
+        sizeUnit: null,
+        sizeFormat: '1 kg',
+      }),
+      entry({ id: 'e-2', externalId: '4241', soldByWeight: false }),
+    ]);
+    const [byWeight, pack] = productsOf(document);
+
+    expect(byWeight['sold_by_weight']).toBe(true);
+    expect(pack['sold_by_weight']).toBe(false);
+    expect(validateHarvestDocument(document).valid).toBe(true);
+  });
+
+  it('states no way of selling for a row that holds none', async () => {
+    const [product] = productsOf(
+      build([entry({ soldByWeight: null as unknown as boolean })])
+    );
+
+    expect(Object.keys(product)).not.toContain('sold_by_weight');
+  });
+
+  it('states only the stored paths the import reads, through the same rule', async () => {
+    const SECOND = ['Desayuno', 'Leche'];
+    const document = build([
+      entry({
+        // A jsonb column holds what was written to it: an element that is
+        // not a list of names, an empty path and a name that is not a string
+        // are not paths, and a repeat says nothing new.
+        categoryPaths: [
+          ['Lácteos', 'Leche'],
+          'Lácteos',
+          [],
+          ['Desayuno', 7, 'Leche'],
+          ['Lácteos', 'Leche'],
+        ] as unknown as string[][],
+      }),
+    ]);
+    const [product] = productsOf(document);
+
+    expect(product['category_paths']).toEqual([['Lácteos', 'Leche'], SECOND]);
+    expect(validateHarvestDocument(document).valid).toBe(true);
+  });
+
+  it('states no paths when no stored element is one', async () => {
+    const [product] = productsOf(
+      build([
+        entry({ categoryPaths: [[], 'Lácteos'] as unknown as string[][] }),
+      ])
+    );
+
+    expect(Object.keys(product)).not.toContain('category_paths');
+  });
+
   it('takes every price this run wrote, each naming its own scope', async () => {
     // **The fix to plan 0103, section 1.1.** This asked for one scope before,
     // so a LIDL run, which is refused a single scope and writes 59 regions,

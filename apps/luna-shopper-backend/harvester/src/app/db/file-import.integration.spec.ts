@@ -828,6 +828,90 @@ describeIntegration('the one source product schema (real Postgres)', () => {
       expect(unlinked).toEqual([]);
     });
 
+    describe('a row sold by weight (plan 0181)', () => {
+      /** A cheese a walk sells by the kilo: no size, the label kept. */
+      const KILO: Partial<SourceCatalogEntry> = {
+        externalId: '3401',
+        name: 'Queso curado Hacendado',
+        sizeFormat: '1 kg',
+        unitSize: null,
+        sizeUnit: null,
+        soldByWeight: true,
+        ean: '8480000340108',
+      };
+
+      it('stays sold by weight through a round trip, on a known row and on a new one', async () => {
+        await walkedRow(SOURCE_RUN, KILO, {
+          amount: 12.5,
+          observedAt: '2026-11-01T09:00:00Z',
+        });
+        const document = await exportOf(SOURCE_RUN);
+        expect(document.products[0]).toMatchObject({ sold_by_weight: true });
+        await clean();
+
+        // A cluster that holds the row: the walk there sold it by weight too.
+        const held = await walkedRow(TARGET_RUN, KILO, {
+          amount: 12.9,
+          observedAt: '2026-11-20T09:00:00Z',
+        });
+        await importer().run(importContext(document), asWalk);
+
+        expect(await entries.findOneByOrFail({ id: held.id })).toMatchObject({
+          soldByWeight: true,
+          unitSize: null,
+          sizeFormat: '1 kg',
+        });
+
+        // A cluster that holds nothing: the row the import makes says what
+        // the walk said.
+        await clean();
+        await importer().run(importContext(document), asWalk);
+
+        const [created] = await entries.find({
+          where: { supermarketId: CHAIN },
+        });
+        expect(created).toMatchObject({
+          externalId: '3401',
+          soldByWeight: true,
+          unitSize: null,
+        });
+      });
+
+      it('keeps the flag for a plain file that does not say, and writes the one it states', async () => {
+        const held = await walkedRow(TARGET_RUN, KILO, {
+          amount: 12.9,
+          observedAt: '2026-11-20T09:00:00Z',
+        });
+        const plain = (over: Record<string, unknown>): HarvestDocument => ({
+          schema_version: 2,
+          sha256: DIGEST,
+          producer: { name: MARK, produced_at: '2026-11-21T08:00:00Z' },
+          products: [
+            {
+              external_id: '3401',
+              name: 'Queso curado Hacendado',
+              size: { label: '1 kg' },
+              prices: [],
+              ...over,
+            },
+          ],
+        });
+
+        await importer().run(importContext(plain({})), asWalk);
+        expect(
+          (await entries.findOneByOrFail({ id: held.id })).soldByWeight
+        ).toBe(true);
+
+        await importer().run(
+          importContext(plain({ sold_by_weight: false })),
+          asWalk
+        );
+        expect(
+          (await entries.findOneByOrFail({ id: held.id })).soldByWeight
+        ).toBe(false);
+      });
+    });
+
     it('replaces the newer price of the row with the older one the file states (today, an owner choice)', async () => {
       // Not a guard: what the ingest does today, pinned so a change to it is
       // a decision someone takes. `source_entry_prices` keeps one row per

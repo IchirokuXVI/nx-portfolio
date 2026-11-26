@@ -336,3 +336,38 @@ describe('an identity field the observation does not state', () => {
     });
   });
 });
+
+describe('how the product is sold, when the observation does not say (plan 0181)', () => {
+  const weighed = (): SourceCatalogEntry =>
+    ({
+      ...row(null),
+      unitSize: null,
+      sizeUnit: null,
+      soldByWeight: true,
+      sizeFormat: '1 kg',
+    }) as SourceCatalogEntry;
+  const unstated = (): SourceEntryFields => {
+    const each = fields({ unitSize: null, sizeUnit: null, sizeFormat: '1 kg' });
+    delete each.soldByWeight;
+    return each;
+  };
+
+  it('leaves the stored flag alone, and is no change', () => {
+    const stored = weighed();
+    expect(sourceGroupChanged(stored, unstated())).toBe(false);
+
+    applySourceGroup(stored, unstated());
+
+    expect(stored.soldByWeight).toBe(true);
+  });
+
+  it('still writes a stated false', () => {
+    const stored = weighed();
+    const stating = { ...unstated(), soldByWeight: false };
+    expect(sourceGroupChanged(stored, stating)).toBe(true);
+
+    applySourceGroup(stored, stating);
+
+    expect(stored.soldByWeight).toBe(false);
+  });
+});

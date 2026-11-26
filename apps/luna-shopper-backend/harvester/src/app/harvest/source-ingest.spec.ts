@@ -2514,6 +2514,36 @@ describe('SourceIngest, rows sold by weight bound to one product (plan 0181)', (
     expect(saved[0].soldByWeight).toBe(false);
     expect(counters.updated).toBe(1);
   });
+
+  it('leaves the flag alone for a document that does not say, and makes a new row a pack', async () => {
+    const { ingest, context, saved } = build({
+      rows: [{ externalId: 'k-2', name: 'Chuleta', soldByWeight: true }],
+    });
+
+    const { counters } = await ingest.ingest(context, {
+      ...session,
+      observations: [
+        // An uploaded document's product, which may leave the field out: a
+        // file is not the chain, and its silence says nothing.
+        {
+          ...observation({ externalId: 'k-2', name: 'Chuleta' }),
+          fromDocument: true,
+        },
+        {
+          ...observation({ externalId: 'k-3', name: 'Lomo' }),
+          fromDocument: true,
+        },
+      ],
+    });
+
+    expect(saved.find((row) => row.externalId === 'k-2')?.soldByWeight).toBe(
+      true
+    );
+    expect(saved.find((row) => row.externalId === 'k-3')?.soldByWeight).toBe(
+      false
+    );
+    expect(counters).toMatchObject({ unchanged: 1, created: 1 });
+  });
 });
 
 describe('SourceIngest, rung 4 compares the size (plan 0155)', () => {

@@ -187,6 +187,14 @@ export interface HarvestDocumentProduct {
    */
   approx_weight?: number | null;
   /**
+   * Whether the source sells the product by weight, version 2 (plan 0181):
+   * each price is then the price of a kilo, and the row holds no size. The
+   * harvester's export states the flag its row holds. Absent leaves the flag
+   * of a known row alone, and a new row is not sold by weight, unless the
+   * leaflet producer's `extra.basis` is `kg`.
+   */
+  sold_by_weight?: boolean;
+  /**
    * The till price for **one unit**, version 1 only.
    *
    * Version 2 states {@link HarvestDocumentProduct.prices} instead, and the
