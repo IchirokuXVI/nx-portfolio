@@ -233,34 +233,35 @@ carries `sentInLostRequest: true` until a later answer or read back settles it.
 When the run stops, it still writes the report and then exits with an error.
 The report holds every product written before the stop, the products of the
 request it stopped on as `not written` with the answer (or `already there`
-when a read back shows they landed), and every product after them as
+when a read back shows they landed, or `outcome unknown` when the request may
+still land), and every product after them as
 `not sent`. The header names the answer under `error`.
 
-A line with `checked: false` was sent in a request whose outcome is not known,
-and nothing since settled it: the target may hold it. Its `reason` says so.
-It can sit on any class (`not written`, `refused`, `conflict` and the others),
-and it always means "run the dry run again". Only three things settle a
-product: an answer that wrote it, a read back that saw its new values, and an
-expectation failure that names it. A product that is still waiting to be sent
-again is `not written`, never `not sent`, whatever stopped the run. This holds
-for the fourth lost answer, a 5xx and a 2xx whose body could not be read too.
+A line of class `outcome unknown` was sent in a request whose outcome is not
+known, and nothing since settled it: the target may hold it. It always carries
+`checked: false`, its `reason` says so, and `lastKnownClass` keeps the class
+it held before (`not written`, `refused` and so on). It always means "run the
+dry run again". Only three things settle a product: an answer that wrote it, a
+read back that saw its new values, and an expectation failure that names it. A
+product that is still waiting to be sent again is `outcome unknown`, never
+`not sent`, whatever stopped the run. This holds for the fourth lost answer, a
+5xx and a 2xx whose body could not be read too. A report written before this
+class existed shows such a line under its last known class with
+`checked: false`.
 
 **After any stop, and after any lost answer, run the dry run (step 3) again.**
-It reads the target and settles every line marked `checked: false`: what
-landed is `already there`, the rest is `apply`. Fix the cause of the stop
-first.
+It reads the target and settles every `outcome unknown` line: what landed is
+`already there`, the rest is `apply`. Fix the cause of the stop first.
 
 Ctrl+C (or a `kill`) stops the run at once and does not wait for the request in
 flight. The report is written first: the products of that request are
-`not written` with `checked: false` and the code `interrupted`, a product
-waiting to be sent again after a lost answer is `not written` with
-`checked: false` too, every other product after them is `not sent`, and the
-process exits with 130 (143 for a `kill`).
+`outcome unknown` with the code `interrupted`, a product waiting to be sent
+again after a lost answer is `outcome unknown` too, every other product after
+them is `not sent`, and the process exits with 130 (143 for a `kill`).
 
-stderr and the report's `counts` count the lines with `checked: false` apart,
-as `outcomeUnknown`. Those lines are also counted under their class. When the
-count is above zero, stderr says "N products were sent and their outcome is not
-known, run the dry run again".
+The report's `counts` carry `outcomeUnknown`, which is the count of the class
+`outcome unknown`, so the two never differ. When it is above zero, stderr says
+"N products were sent and their outcome is not known, run the dry run again".
 
 On Windows an editor or an antivirus scan that holds the report makes the
 rename fail with EPERM, EBUSY or EACCES. The run tries the rename again a few
@@ -286,8 +287,8 @@ So the products this run changed on the target are `written` plus
 `landedAfterLostAnswer`. They are the products the target's `catalog_audit`
 shows changed by the operator you signed in as, between the header's
 `startedAt` and `endedAt`, unless someone else made the same edit there in the
-meantime. Each of the `outcomeUnknown` products (the lines with
-`checked: false`) may be one more, and its audit row may come after
+meantime. Each of the `outcome unknown` products (counted as
+`outcomeUnknown`) may be one more, and its audit row may come after
 `endedAt`: run step 3 to see.
 
 ### 5. Dry run again
@@ -320,6 +321,14 @@ counts them. When such a product also has other edits (a name, a brand,
 `defaultUnit` when the edit changes it too. The other fields are sent under
 their guard, and the line carries a `washTask` that says the size was left to
 the task. stderr counts those as "the size of N more left to the wash task".
+
+When the edit also changed the unit (`defaultUnit`, for example from `UNIT` to
+`KILOGRAM`), that change is dropped with the size, and release task `0009`
+does not carry it either: the task only clears the size. The note under
+`washTask.note` then says so, for example "the unit change (defaultUnit from
+UNIT to KILOGRAM) was not carried, and release task 0009 will not carry it
+either, because it only clears the size: set the unit on the target by hand".
+Set the unit of each such product on the target by hand.
 
 After release task `0009` has run on the target, check each of these products
 there. The task holds some products back, for example one whose other chain
@@ -358,20 +367,21 @@ file, so it is not carried.
 
 ### The classes of the report
 
-| Class                 | What it means                                                                                                                                                                                       |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `not carried`         | a product created, deleted or merged locally, or one whose only edits are to `ean`, `sku`, `imageUrl` or `productGroupId`                                                                           |
-| `local gap`           | someone not exported changed the product between two exported edits                                                                                                                                 |
-| `no twin`             | the target has no product with that id                                                                                                                                                              |
-| `merged on target`    | the target merged the product; the report names the survivor                                                                                                                                        |
-| `excluded: wash task` | a wash count that release task `0009` corrects; found by its rule, with the row text that matched                                                                                                   |
-| `identity changed`    | the target's name or brand is not the one the edit was made on                                                                                                                                      |
-| `already there`       | the target holds every new value                                                                                                                                                                    |
-| `conflict`            | a field holds neither the old nor the new value                                                                                                                                                     |
-| `apply`               | at least one field holds the old value and none holds a third one                                                                                                                                   |
-| `refused`             | the target refused the write, with its code and message                                                                                                                                             |
-| `not written`         | sent in the request the run stopped on, and not on the target after it; the line names the answer. With `checked: false` its outcome is not known: the target may hold it, and a dry run settles it |
-| `not sent`            | never sent, because the run stopped before it                                                                                                                                                       |
+| Class                 | What it means                                                                                                                                                                         |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `not carried`         | a product created, deleted or merged locally, or one whose only edits are to `ean`, `sku`, `imageUrl` or `productGroupId`                                                             |
+| `local gap`           | someone not exported changed the product between two exported edits                                                                                                                   |
+| `no twin`             | the target has no product with that id                                                                                                                                                |
+| `merged on target`    | the target merged the product; the report names the survivor                                                                                                                          |
+| `excluded: wash task` | a wash count that release task `0009` corrects; found by its rule, with the row text that matched. A unit change dropped with the size is not carried by anyone, and the note says so |
+| `identity changed`    | the target's name or brand is not the one the edit was made on                                                                                                                        |
+| `already there`       | the target holds every new value                                                                                                                                                      |
+| `conflict`            | a field holds neither the old nor the new value                                                                                                                                       |
+| `apply`               | at least one field holds the old value and none holds a third one                                                                                                                     |
+| `refused`             | the target refused the write, with its code and message                                                                                                                               |
+| `not written`         | sent in the request the run stopped on, and not on the target after it; the line names the answer                                                                                     |
+| `outcome unknown`     | sent in a request whose outcome nothing later proved: the target may hold it. Always `checked: false`, with the class it held before as `lastKnownClass`; a dry run settles it        |
+| `not sent`            | never sent, because the run stopped before it                                                                                                                                         |
 
 A dry run cannot predict a refusal of the write itself, such as an
 unregistered brand, because the route has no dry run.

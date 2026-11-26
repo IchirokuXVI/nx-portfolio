@@ -82,11 +82,16 @@ export const CLASS = Object.freeze({
   CONFLICT: 'conflict',
   APPLY: 'apply',
   REFUSED: 'refused',
-  /**
-   * Sent in the request the run stopped on, and not on the target after it.
-   * With `checked: false` the outcome is not known: the target may hold it.
-   */
+  /** Sent in the request the run stopped on, and not on the target after it. */
   NOT_WRITTEN: 'not written',
+  /**
+   * Sent in a request whose outcome nothing later proved: the target may hold
+   * it. Only `markUnsettled` gives this class, always with `checked: false`,
+   * and the line keeps the class it held before under `lastKnownClass`. A
+   * report written before this class existed has such a line as `not written`
+   * (or another class) with `checked: false`.
+   */
+  OUTCOME_UNKNOWN: 'outcome unknown',
   /** Never sent, because the run stopped before it. */
   NOT_SENT: 'not sent',
 });
@@ -192,6 +197,23 @@ export const WASH_FIELDS = new Set(['unitSize', 'defaultUnit']);
 /** What a report line says about a size left to the wash task. */
 export const WASH_NOTE =
   'the size was left to release task 0009; check this product after it has run on the target';
+
+/**
+ * What the note adds when the dropped size took a unit change with it: the
+ * task only clears the size, so nobody carries the unit.
+ */
+export function washUnitNote(field) {
+  return `the unit change (defaultUnit from ${field.from ?? 'none'} to ${field.to ?? 'none'}) was not carried, and release task 0009 will not carry it either, because it only clears the size: set the unit on the target by hand`;
+}
+
+/**
+ * The note of a line whose size was left to the wash task: `WASH_NOTE`, and
+ * the unit sentence when the dropped fields hold a unit change.
+ */
+export function washNote(dropped) {
+  const unit = dropped.find((field) => field.field === 'defaultUnit');
+  return unit ? `${WASH_NOTE}. ${washUnitNote(unit)}` : WASH_NOTE;
+}
 
 // ---------------------------------------------------------------------------
 // The target, as a paced client
@@ -399,10 +421,11 @@ export function classify(
   const count = washCandidate(change, item);
   const excludedBy = count === null ? null : washRow(count, washRows);
   if (excludedBy) {
+    const dropped = line.fields.filter((field) => WASH_FIELDS.has(field.field));
     const washTask = {
       count,
       text: excludedBy.sizeFormat,
-      note: WASH_NOTE,
+      note: washNote(dropped),
     };
     const rest = line.fields.filter((field) => !WASH_FIELDS.has(field.field));
     if (rest.length === 0) {
@@ -410,9 +433,7 @@ export function classify(
     }
     // Only the size is the task's: the other fields go on to be judged and
     // sent under their guard, and the line keeps what was left out.
-    washTask.fields = line.fields.filter((field) =>
-      WASH_FIELDS.has(field.field)
-    );
+    washTask.fields = dropped;
     line.fields = rest;
     line.washTask = washTask;
   }
@@ -534,18 +555,22 @@ function settle(line) {
 /**
  * The end of a run, in every path (the end of the write, a stop, a signal, a
  * failed report write): every line that still carries the flag, of any class,
- * is not checked, so the counts and stderr tell the operator to run the dry
- * run again. A line still waiting to be sent is `not written`, never
- * `not sent`, since its first send may land.
+ * becomes `outcome unknown` and is not checked, so the counts and stderr tell
+ * the operator to run the dry run again. The class it held is kept as
+ * `lastKnownClass`; a line still waiting to be sent held `not written`, never
+ * `not sent`, since its first send may land. This is the one place that gives
+ * the class and `checked: false`, so the two always agree.
  */
 export function markUnsettled(lines) {
   for (const line of lines) {
-    if (!line.sentInLostRequest) {
+    if (!line.sentInLostRequest || line.class === CLASS.OUTCOME_UNKNOWN) {
       continue;
     }
-    if (line.class === CLASS.APPLY && !line.written) {
-      line.class = CLASS.NOT_WRITTEN;
-    }
+    line.lastKnownClass =
+      line.class === CLASS.APPLY && !line.written
+        ? CLASS.NOT_WRITTEN
+        : line.class;
+    line.class = CLASS.OUTCOME_UNKNOWN;
     line.checked = false;
     line.reason = UNKNOWN_OUTCOME_REASON;
   }
@@ -702,8 +727,9 @@ function markWritten(group) {
  * A product sent in a request whose outcome is not known (any lost answer, a
  * 2xx whose body could not be read among them, or a 5xx) carries
  * `sentInLostRequest: true` until direct evidence settles it (see `settle`).
- * When the write ends, in any way, a product that still carries it has
- * `checked: false` whatever its class (see `markUnsettled`).
+ * When the write ends, in any way, a product that still carries it is
+ * `outcome unknown` with `checked: false`, whatever its class was (see
+ * `markUnsettled`).
  *
  * `progress.current` holds the group in flight, so a signal handler can mark
  * it, and `onAnswer` is called after every answer is sorted.
@@ -1020,16 +1046,10 @@ export function countLines(lines) {
   let written = 0;
   let landedAfterLostAnswer = 0;
   let sizeLeftToWashTask = 0;
-  let outcomeUnknown = 0;
   for (const line of lines) {
     classes[line.class] = (classes[line.class] ?? 0) + 1;
     if (line.written) {
       written += 1;
-    }
-    // Counted inside `not written` too, and apart here, so a product the
-    // target may hold does not hide among those it does not.
-    if (line.checked === false) {
-      outcomeUnknown += 1;
     }
     // Landed through a request whose answer was lost, so the target holds an
     // audit row for it while `written` does not count it.
@@ -1046,7 +1066,8 @@ export function countLines(lines) {
     classes,
     written,
     landedAfterLostAnswer,
-    outcomeUnknown,
+    // The class itself, so the count and the class cannot disagree.
+    outcomeUnknown: classes[CLASS.OUTCOME_UNKNOWN],
     fieldsSent,
     sizeLeftToWashTask,
   };
