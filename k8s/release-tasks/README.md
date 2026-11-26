@@ -684,12 +684,26 @@ such products hold the count all the same.
   product loses its size through one `item.update` with the harvester's
   actor. Its pack count stays, because neither shape prints a pack. No size
   is set, no price changes, and nothing is deleted.
-- **Its selection and task 0007's are disjoint.** `40 lavados` and
-  `2x40 lavados` are task 0007's alone, and a sum or a short word is this
-  task's alone. The check phase runs for every due task before any task
-  writes, so each task counts only its own products, and neither count
-  depends on the other task having run. A product that both would select is
-  corrected by task 0007, and this task then finds it has no size.
+- **Its selection and task 0007's are disjoint by row, not by product.**
+  `40 lavados` and `2x40 lavados` are task 0007's alone, and a sum or a short
+  word is this task's alone, so no row qualifies under both, and neither
+  count depends on the other task having run. A product can still be bound
+  to a `40 lavados` row and a `40lav` row. The check phase runs for every due
+  task before any task writes, so such a product is counted by both check
+  phases. Whichever task writes first corrects it (task 0007, in the order of
+  release `0.20.0`), and the other then finds it has no size and leaves it
+  alone.
+- **It holds back a product that a chain confirms as units** (owner decision
+  156b of plan `0279`). A product it would correct stays as it is when
+  another ACTIVE row bound to it states the same number as a count of units:
+  El Jamón prints `10lav`, the product holds 10 `UNIT`, and DEZA states
+  `10 ud`. The other row's stored text is a count of pieces (`10 ud`,
+  `10 uds.`, `12 unidades`, or Mercadona's bare `ud`), with no other number,
+  its stored size is that number in `UNIT`, it states no pack, and it is not
+  priced per wash (`lv`). A wash text, a sum, a volume and `10 dosis` confirm
+  nothing. Such a product is counted as `confirmed-units`, which both scripts
+  print, is noted under that kind with the chain and the text that state the
+  count, and is never written. The ceiling counts only `products`.
 - **It is armed for staging and for production.** The staging window ends on
   2026-12-03 and the production one on 2026-12-10, and `PRODUCTION_RELEASE`
   is `0.20.0`, the release of tasks 0007 and 0008, which run before it.
@@ -710,8 +724,10 @@ such products hold the count all the same.
   columns and the rules of task 0007: `wash_size_format` holds the sum or the
   short word, the `outcome` is `planned` or `corrected`, a run never drops a
   line an earlier run saved, and a ConfigMap of another shape is refused
-  before any write. The notes hold `pack-of-units` and `mercadona-per-wash`
-  only, because a sum and a short word are corrections here. The deploy log
+  before any write. The notes hold `pack-of-units`, `mercadona-per-wash` and
+  `confirmed-units` only, because a sum and a short word are corrections
+  here. A `confirmed-units` line is the row that confirms the count: its
+  `chain` and its `row_size_format` say which chain states it and how. The deploy log
   shows counts only. Read the lists over SSH on the host, as the `deploy`
   user:
 

@@ -6,8 +6,13 @@
 # (backend plan 0279). It runs
 # `node wash-sizes.js --selection sum-and-short-word` inside the harvester pod,
 # the command of task 0007 with this task's selection, which is disjoint from
-# task 0007's: neither depends on the other having run. No pack count is
-# cleared, because neither shape prints a pack. The command selects the rows in the harvester's database, asks catalog for
+# task 0007's by row, not by product: neither depends on the other having run,
+# and a product bound to both a `40 lavados` row and a `40lav` row is
+# corrected by whichever task writes first. No pack count is cleared, because
+# neither shape prints a pack. A product that another ACTIVE row confirms as a
+# count of units (`10lav` on 10 UNIT beside a DEZA `10 ud`, owner decision
+# 156b) is held back, printed as `confirmed-units`, noted, and never written.
+# The command selects the rows in the harvester's database, asks catalog for
 # their products, and sends an ordinary item update for each one with the
 # harvester's actor: one catalog transaction per product, audited and refused
 # by the same rules as any edit. No price changes and nothing is deleted. The
@@ -20,7 +25,7 @@
 # The run writes the review list (plan 0271, section 5, with the columns of
 # task 0007) to a file inside the pod, and the notes beside it: the rows that
 # look like a wash count and that the task does not correct, one line per row
-# and kind (`pack-of-units` and `mercadona-per-wash` only). This file copies both
+# and kind (`pack-of-units`, `mercadona-per-wash` and `confirmed-units` only). This file copies both
 # into the ConfigMap `release-task-<NNNN>-review` of the namespace, keys
 # `review.tsv` and `notes.tsv`, through `kubectl apply --server-side`, so a second run replaces the object and never stacks a copy.
 # Server side, because a client side apply also copies the whole object into
@@ -338,6 +343,6 @@ fi
 # Counted again for the record.
 # shellcheck disable=SC2086
 if out="$($cmd --count $SELECTION 2> "$ERR")"; then
-  echo "  after the run: products=$(count_of products "$out") content=$(count_of content "$out")"
+  echo "  after the run: products=$(count_of products "$out") content=$(count_of content "$out") confirmed-units=$(count_of confirmed-units "$out")"
 fi
 exit "$failed"

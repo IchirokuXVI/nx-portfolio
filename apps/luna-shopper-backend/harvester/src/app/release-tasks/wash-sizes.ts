@@ -66,11 +66,23 @@ import {
  * Jamón's short word (`40lav`, `60lv`) hold the count too. Under
  * `--selection sum-and-short-word` those two shapes qualify a product by the
  * same rule ({@link selects}), and nothing else does: `40 lavados` is task
- * 0007's, so the two selections are disjoint and each task counts only its
- * own products, in any order. Neither shape prints a pack, so no pack count
- * is cleared. The notes then keep `pack-of-units` and `mercadona-per-wash`
- * only, because the other two kinds are now corrections. With no
- * `--selection`, the command answers exactly what it answered before.
+ * 0007's. The two selections are disjoint by row, not by product: no printed
+ * text qualifies under both, but a product bound to a `40 lavados` row and a
+ * `40lav` row is counted by both tasks until one of them corrects it, and the
+ * other then finds it has no size. Neither shape prints a pack, so no pack
+ * count is cleared. The notes then keep `pack-of-units` and
+ * `mercadona-per-wash` only, because the other two kinds are now
+ * corrections. With no `--selection`, the command answers exactly what it
+ * answered before.
+ *
+ * **The hold of the second selection (owner decision 156b, 2026-11-26).** A
+ * product the selection qualifies is not corrected when another ACTIVE row
+ * bound to it states the same number as a count of units
+ * ({@link statesUnitCount}): El Jamón prints `10lav`, the product holds 10
+ * `UNIT`, and DEZA states `10 ud`. A chain then confirms the 10 as a real
+ * count (a capsule product, one capsule per wash). Such a product is counted
+ * as `confirmed-units`, noted under that kind with the confirming row's chain
+ * and text, and never written. The default selection has no hold.
  */
 
 /** The chain whose per wash packs are noted and never corrected. */
@@ -116,14 +128,22 @@ export function readWashFormat(text: string | null): WashFormat | null {
   return { count: pack === null ? quantity : pack * quantity, pack };
 }
 
-/** What a note says about a row the task does not correct. */
+/**
+ * What a note says about a row the task does not correct. `confirmed-units`
+ * is the second selection's hold ({@link statesUnitCount}), which `--count`
+ * prints on its own line and only under that selection.
+ */
 export type NoteKind =
   | 'pack-of-units'
   | 'short-wash-word'
   | 'sum'
-  | 'mercadona-per-wash';
+  | 'mercadona-per-wash'
+  | 'confirmed-units';
 
-/** The kinds in the order `--count` prints them. */
+/** The kind of note the hold of the second selection makes. */
+export const CONFIRMED_UNITS = 'confirmed-units' as const;
+
+/** The kinds in the order `--count` prints them, under every selection. */
 export const NOTE_KINDS: readonly NoteKind[] = [
   'pack-of-units',
   'short-wash-word',
@@ -169,7 +189,7 @@ const WASH_SUM = /^(\d+)\s*\+\s*(\d+)(?:\s*lavados?| ?(?:lav|lv))\.?$/i;
 
 /** The kind of note a row's printed text has, and the size it would state. */
 export interface NoteFormat {
-  kind: Exclude<NoteKind, 'mercadona-per-wash'>;
+  kind: Exclude<NoteKind, 'mercadona-per-wash' | 'confirmed-units'>;
   /** The `UNIT` count a product made from the row would hold. */
   count: number;
 }
@@ -210,6 +230,12 @@ export const WASH_SELECTIONS: readonly WashSelection[] = [
   'sum-and-short-word',
 ];
 
+/** Whether a selection holds back a product a row confirms as units. */
+const HOLDS_CONFIRMED_UNITS: Record<WashSelection, boolean> = {
+  'printed-count': false,
+  'sum-and-short-word': true,
+};
+
 /** The note kinds a selection corrects, and so never notes. */
 const CORRECTED_KINDS: Record<WashSelection, ReadonlySet<NoteKind>> = {
   'printed-count': new Set<NoteKind>(),
@@ -233,6 +259,48 @@ export function readSelectedFormat(
   return note !== null && CORRECTED_KINDS[selection].has(note.kind)
     ? { count: note.count, pack: null }
     : null;
+}
+
+/**
+ * A count of pieces as a row stores its printed size: a whole number, at most
+ * spaces, then `u`, `ud`, `uds`, `unid`, `unids`, `unidad` or `unidades`, and
+ * at most a full stop (`10 ud`, `10 uds.`), or the bare word with no number,
+ * which is how Mercadona stores it (`ud`, the number in `unitSize`). No other
+ * word: `10 dosis`, `10 cápsulas` and `40 toallitas` are a count too, but a
+ * dose can be a wash, so they confirm nothing.
+ */
+const UNIT_COUNT_FORMAT =
+  /^(?:(\d+)\s*)?(?:u|ud|uds|unid|unids|unidad|unidades)\.?$/i;
+
+/**
+ * The hold of the second selection (owner decision 156b, plan 0279 section
+ * 1.5): whether `row`, another ACTIVE bound row of the product, states `count`
+ * as a count of units. Stored row fields only, never a name: all of
+ *
+ * - its trimmed `sizeFormat` is a count of pieces ({@link UNIT_COUNT_FORMAT}),
+ *   and the number it prints, if it prints one, is `count`. A wash text
+ *   (`10 lavados`, `10lav`), a sum and a volume (`1.6 L`) never match;
+ * - its stored size is `count` in `UNIT` (`unitSize`, `sizeUnit`), the unit of
+ *   counted pieces, as DEZA, El Jamón, DIA and Carrefour store `10 ud` and
+ *   Mercadona stores `ud` beside the number;
+ * - it states no pack (`packCount` null), so the count is the whole of it;
+ * - its latest price label is not `lv`: a chain that prices the row per wash
+ *   says its count is washes (`mercadona-per-wash`).
+ *
+ * A row outside ACTIVE, or bound to no product, is never read
+ * ({@link SELECT_STATED_ROWS_SQL}), so it confirms nothing.
+ */
+export function statesUnitCount(row: StatedRow, count: number): boolean {
+  const match = UNIT_COUNT_FORMAT.exec((row.sizeFormat ?? '').trim());
+  return (
+    match !== null &&
+    (match[1] === undefined || Number(match[1]) === count) &&
+    row.sizeUnit === UnitOfMeasure.UNIT &&
+    row.unitSize !== null &&
+    row.unitSize === count &&
+    row.packCount === null &&
+    row.label !== 'lv'
+  );
 }
 
 /**
@@ -378,6 +446,14 @@ export interface WashSizesPlan {
   unread: number;
   /** Products that a qualifying row names and catalog has not or has merged. */
   held: number;
+  /**
+   * Products the second selection qualifies and holds back, because another
+   * row states the count as units ({@link statesUnitCount}). Always 0 under
+   * `printed-count`, which has no hold.
+   */
+  confirmed: number;
+  /** The selection the plan was made under, which decides the count lines. */
+  selection: WashSelection;
   notes: Note[];
 }
 
@@ -514,6 +590,8 @@ export function planWashSizes(
     byChain: new Map(),
     unread: 0,
     held: 0,
+    confirmed: 0,
+    selection,
     notes: [],
   };
   const byItem = new Map<string, StatedRow[]>();
@@ -554,6 +632,19 @@ export function planWashSizes(
     );
     if (matching.length === 0) {
       continue;
+    }
+    if (HOLDS_CONFIRMED_UNITS[selection]) {
+      const confirming = onItem.filter((row) =>
+        statesUnitCount(row, Number(item.unitSize))
+      );
+      if (confirming.length > 0) {
+        plan.confirmed += 1;
+        const statedSizes = statedSizesOf(onItem);
+        for (const row of confirming) {
+          plan.notes.push({ kind: CONFIRMED_UNITS, item, row, statedSizes });
+        }
+        continue;
+      }
     }
     const washFormats = new Map<string, string[]>();
     for (const { row } of matching) {
@@ -654,7 +745,11 @@ export function statedSizeOf(row: StatedRow): string {
   return `${row.unitSize} ${text}`;
 }
 
-/** The count lines both shell files read (section 6). Numbers only. */
+/**
+ * The count lines both shell files read (section 6). Numbers only. A
+ * selection with a hold prints `confirmed-units` after `held`; the default
+ * prints exactly the lines it printed before.
+ */
 export function countLines(plan: WashSizesPlan): string[] {
   return [
     ...[...plan.byChain.entries()]
@@ -665,6 +760,9 @@ export function countLines(plan: WashSizesPlan): string[] {
     `content ${plan.corrections.filter((c) => c.content).length}`,
     `unread ${plan.unread}`,
     `held ${plan.held}`,
+    ...(HOLDS_CONFIRMED_UNITS[plan.selection]
+      ? [`${CONFIRMED_UNITS} ${plan.confirmed}`]
+      : []),
     ...NOTE_KINDS.map(
       (kind) => `${kind} ${plan.notes.filter((n) => n.kind === kind).length}`
     ),
@@ -732,7 +830,10 @@ export function reviewList(
 /**
  * The notes: one line per noted row, which the task does not correct,
  * grouped by kind, then as the review list. The size columns are the
- * product's as it stands.
+ * product's as it stands. A `confirmed-units` line is the row that confirms
+ * the count: its `chain` and its `row_size_format`, rendered as
+ * `stated_sizes` renders it ({@link statedSizeOf}: Mercadona's `ud` is
+ * `10 ud`), say which chain states the count and how.
  */
 export function notesList(notes: Note[]): string {
   const lines = notes.map(({ kind, item, row, statedSizes }) => ({
@@ -746,7 +847,9 @@ export function notesList(notes: Note[]): string {
       item.unitSize === null ? '' : String(item.unitSize),
       item.defaultUnit,
       item.packCount === null ? '' : String(item.packCount),
-      String(row.sizeFormat ?? '').trim(),
+      kind === CONFIRMED_UNITS
+        ? statedSizeOf(row)
+        : String(row.sizeFormat ?? '').trim(),
       statedSizes.join('; '),
       row.entryId,
     ],

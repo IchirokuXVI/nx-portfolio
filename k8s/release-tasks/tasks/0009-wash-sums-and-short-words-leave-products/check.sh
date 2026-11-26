@@ -8,9 +8,16 @@
 # harvester pod selects the rows, asks catalog for their products, and prints
 # counts, never a product.
 #
-# The selection is disjoint from task 0007's (`40 lavados`), so this count does
-# not depend on task 0007 having run on this cluster: the check phase runs for
-# every due task before any task writes.
+# The selection is disjoint from task 0007's (`40 lavados`) by row, not by
+# product, so this count does not depend on task 0007 having run on this
+# cluster: the check phase runs for every due task before any task writes. A
+# product bound to both a `40 lavados` row and a `40lav` row is counted by both
+# check phases, and whichever task writes first corrects it.
+#
+# A product that another ACTIVE row confirms as a count of units (`10lav` on
+# 10 UNIT beside a DEZA `10 ud`, owner decision 156b) is held back: it is
+# printed as `confirmed-units`, never counted against the ceiling and never
+# written.
 #
 # It exits 0 when the data is what the task was written for, and prints the
 # reason and exits 1 when it is not. It passes where there is nothing to
@@ -154,6 +161,7 @@ fi
 products="$(count_of products "$out")"
 unread="$(count_of unread "$out")"
 content="$(count_of content "$out")"
+confirmed="$(count_of confirmed-units "$out")"
 if [ -z "$products" ] || [ -z "$unread" ]; then
   echo "$NUMBER cannot count the products sized by a sum or a short wash word: the command printed '$out'"
   exit 1
@@ -168,4 +176,4 @@ if [ "$products" -gt "$max" ]; then
   exit 1
 fi
 
-echo "$NUMBER would take the wash count off $products products (ceiling $max): content=${content:-?}"
+echo "$NUMBER would take the wash count off $products products (ceiling $max): content=${content:-?} confirmed-units=${confirmed:-?}"
