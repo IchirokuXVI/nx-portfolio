@@ -767,6 +767,13 @@ export async function writeApply(
             line.afterLostAnswer = true;
           }
         } else {
+          // Suspected, not confirmed, and no test reproduces it: a request is
+          // lost, then someone changes the brand or the name on the target,
+          // and the resend is refused here naming that field. The settle above
+          // has cleared the flag, so the line may end `identity changed`
+          // without `checked: false`, although the lost request may have
+          // landed (its fields would then hold `to`). The owner decided on
+          // 2026-11-26 to leave this case unchecked (not investigated) for now.
           line.class =
             fields.includes('name') || fields.includes('brand')
               ? CLASS.IDENTITY
