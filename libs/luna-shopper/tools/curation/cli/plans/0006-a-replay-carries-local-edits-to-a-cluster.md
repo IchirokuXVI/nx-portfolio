@@ -1,3 +1,5 @@
+> **PR:** [#1113](https://github.com/IchirokuXVI/nx-portfolio/pull/1113)
+
 # 0006 A replay carries local edits to a cluster
 
 > Asked for by the owner on 2026-11-25. The owner works on a local copy of the production
