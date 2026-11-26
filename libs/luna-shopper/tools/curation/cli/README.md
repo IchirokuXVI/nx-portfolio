@@ -328,7 +328,9 @@ does not carry it either: the task only clears the size. The note under
 `washTask.note` then says so, for example "the unit change (defaultUnit from
 UNIT to KILOGRAM) was not carried, and release task 0009 will not carry it
 either, because it only clears the size: set the unit on the target by hand".
-Set the unit of each such product on the target by hand.
+Set the unit of each such product on the target by hand. A change to `UNIT`
+needs nothing: the replay leaves a size to the task only when the target
+product holds `UNIT`, so the note does not name that change.
 
 After release task `0009` has run on the target, check each of these products
 there. The task holds some products back, for example one whose other chain
@@ -367,21 +369,21 @@ file, so it is not carried.
 
 ### The classes of the report
 
-| Class                 | What it means                                                                                                                                                                         |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `not carried`         | a product created, deleted or merged locally, or one whose only edits are to `ean`, `sku`, `imageUrl` or `productGroupId`                                                             |
-| `local gap`           | someone not exported changed the product between two exported edits                                                                                                                   |
-| `no twin`             | the target has no product with that id                                                                                                                                                |
-| `merged on target`    | the target merged the product; the report names the survivor                                                                                                                          |
-| `excluded: wash task` | a wash count that release task `0009` corrects; found by its rule, with the row text that matched. A unit change dropped with the size is not carried by anyone, and the note says so |
-| `identity changed`    | the target's name or brand is not the one the edit was made on                                                                                                                        |
-| `already there`       | the target holds every new value                                                                                                                                                      |
-| `conflict`            | a field holds neither the old nor the new value                                                                                                                                       |
-| `apply`               | at least one field holds the old value and none holds a third one                                                                                                                     |
-| `refused`             | the target refused the write, with its code and message                                                                                                                               |
-| `not written`         | sent in the request the run stopped on, and not on the target after it; the line names the answer                                                                                     |
-| `outcome unknown`     | sent in a request whose outcome nothing later proved: the target may hold it. Always `checked: false`, with the class it held before as `lastKnownClass`; a dry run settles it        |
-| `not sent`            | never sent, because the run stopped before it                                                                                                                                         |
+| Class                 | What it means                                                                                                                                                                                                                                        |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `not carried`         | a product created, deleted or merged locally, or one whose only edits are to `ean`, `sku`, `imageUrl` or `productGroupId`                                                                                                                            |
+| `local gap`           | someone not exported changed the product between two exported edits                                                                                                                                                                                  |
+| `no twin`             | the target has no product with that id                                                                                                                                                                                                               |
+| `merged on target`    | the target merged the product; the report names the survivor                                                                                                                                                                                         |
+| `excluded: wash task` | a wash count that release task `0009` corrects; found by its rule, with the row text that matched. A unit change dropped with the size is not carried by anyone, and the note says so unless the change is to `UNIT`, which the target holds already |
+| `identity changed`    | the target's name or brand is not the one the edit was made on                                                                                                                                                                                       |
+| `already there`       | the target holds every new value                                                                                                                                                                                                                     |
+| `conflict`            | a field holds neither the old nor the new value                                                                                                                                                                                                      |
+| `apply`               | at least one field holds the old value and none holds a third one                                                                                                                                                                                    |
+| `refused`             | the target refused the write, with its code and message                                                                                                                                                                                              |
+| `not written`         | sent in the request the run stopped on, and not on the target after it; the line names the answer                                                                                                                                                    |
+| `outcome unknown`     | sent in a request whose outcome nothing later proved: the target may hold it. Always `checked: false`, with the class it held before as `lastKnownClass`; a dry run settles it                                                                       |
+| `not sent`            | never sent, because the run stopped before it                                                                                                                                                                                                        |
 
 A dry run cannot predict a refusal of the write itself, such as an
 unregistered brand, because the route has no dry run.

@@ -1284,6 +1284,37 @@ test('a unit change dropped with a wash size says that nobody carries it and a p
   assert.doesNotMatch(sizeOnly.washTask.note, /unit change/);
 });
 
+test('a unit change to UNIT dropped with a wash size keeps the plain note, since the target holds UNIT', () => {
+  const rows = [{ status: 'ACTIVE', sizeFormat: '40lav' }];
+
+  // Excluded whole: the size and the unit were the only fields.
+  const whole = classify(
+    change(20, [
+      { field: 'unitSize', from: 40, to: null },
+      { field: 'defaultUnit', from: 'GRAM', to: 'UNIT' },
+    ]),
+    product(20, { unitSize: 40, defaultUnit: 'UNIT' }),
+    { washRows: rows }
+  );
+  assert.equal(whole.class, CLASS.WASH);
+  assert.equal(whole.washTask.note, WASH_NOTE);
+  assert.doesNotMatch(whole.washTask.note, /unit change|by hand/);
+
+  // Another field is still sent, and the unit change is still not sent.
+  const partly = classify(
+    change(21, [
+      { field: 'unitSize', from: 40, to: null },
+      { field: 'defaultUnit', from: 'GRAM', to: 'UNIT' },
+      { field: 'packCount', from: null, to: 2 },
+    ]),
+    product(21, { unitSize: 40, defaultUnit: 'UNIT', packCount: null }),
+    { washRows: rows }
+  );
+  assert.equal(partly.class, CLASS.APPLY);
+  assert.equal(partly.washTask.note, WASH_NOTE);
+  assert.equal(batchEntry(partly).defaultUnit, undefined);
+});
+
 test('the two wash literals are the source of release task 0007 wash-sizes.ts', () => {
   const path = fileURLToPath(
     new URL(
