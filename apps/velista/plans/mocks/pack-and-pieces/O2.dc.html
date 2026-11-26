@@ -1,0 +1,155 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    .pk { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; padding: 24px; display: flex; width: max-content; gap: 32px; align-items: flex-start; background: #e9ebf3; }
+    .col { display: flex; flex-direction: column; gap: 12px; width: 390px; flex: none; }
+    .cap { font-size: 14px; color: #525a78; line-height: 1.45; }
+    .cap b { color: #11141f; }
+    .cap.fixed { min-height: 124px; }
+    .choice { display: flex; align-items: center; gap: 8px; min-height: 26px; }
+    .letter { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 999px; background: #11141f; color: #f7f8fc; font-size: 12px; font-weight: 700; }
+    .dec { font-size: 14px; font-weight: 650; color: #11141f; }
+    .rec { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; border: 1px solid #047857; color: #047857; font-size: 12px; font-weight: 600; }
+    .day { --g: #f7f8fc; --r: #ffffff; --s: #eef0f7; --t: #11141f; --t2: #525a78; --t3: #616a8a; --b: #dde1ed; --bs: #6f7899; --q: #8a5a12; --act: #ffb454; --sh: 0 -12px 32px rgba(17, 20, 31, 0.16), 0 6px 18px rgba(17, 20, 31, 0.10); --scrim: rgba(17, 20, 31, 0.42); }
+    .night { --g: #0a0c14; --r: #161a28; --s: #11141f; --t: #f7f8fc; --t2: #c2c8db; --t3: #98a0bb; --b: rgba(255, 255, 255, 0.08); --bs: rgba(255, 255, 255, 0.35); --q: #ffb454; --act: #ffb454; --sh: 0 -18px 40px rgba(10, 12, 20, 0.42), 0 8px 24px rgba(10, 12, 20, 0.55); --scrim: rgba(10, 12, 20, 0.74); }
+    .phone { position: relative; width: 390px; overflow: hidden; display: flex; flex-direction: column; border-radius: 22px; background: var(--g); color: var(--t); border: 1px solid #c9cedd; }
+    .phone.night { border-color: #2a2f40; }
+    .phone.full { height: 844px; }
+    .ic { display: inline-flex; width: 20px; height: 20px; flex: none; }
+    .ic svg { width: 100%; height: 100%; display: block; }
+    .hdr { display: flex; align-items: center; gap: 8px; height: 64px; padding: 0 16px; border-bottom: 1px solid var(--b); flex: none; }
+    .lead { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin-left: -12px; color: var(--t2); flex: none; }
+    .hicon { display: flex; margin-right: 8px; color: var(--t); flex: none; }
+    .hicon .ic { width: 24px; height: 24px; }
+    .title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 1.4; letter-spacing: 0.05em; }
+    .htext { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+    .htext .title { flex: none; }
+    .hsub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.4; color: var(--t3); }
+    .acts { display: flex; align-items: center; margin-right: -8px; flex: none; }
+    .act { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; color: var(--t2); }
+    .field { display: flex; align-items: center; height: 48px; margin: 12px 16px 4px; padding: 0 6px 0 14px; border: 1px solid var(--bs); border-radius: 12px; background: var(--r); font-size: 16px; color: var(--t3); }
+    .field > span:first-child { flex: 1; white-space: nowrap; }
+    .field .ic { width: 44px; height: 44px; padding: 12px; color: var(--t2); }
+    .tag { padding: 14px 16px 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--t3); }
+    .pad { padding: 0 16px; }
+
+    .pc { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto 44px; column-gap: 12px; align-items: start; padding: 12px 16px; border-bottom: 1px solid var(--b); }
+    .pc.last { border-bottom: 0; }
+    .thumb { width: 52px; height: 52px; border-radius: 10px; border: 1px solid var(--b); background: var(--r); display: flex; align-items: center; justify-content: center; overflow: hidden; color: var(--t3); }
+    .thumb.sm { width: 44px; height: 44px; }
+    .thumb img, .pic img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .thumb.none, .pic.none { background: var(--s); }
+    .pc-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; min-width: 0; }
+    .pc-body > span { min-width: 0; }
+    .pc-name { font-size: 16px; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .pc-detail { font-size: 14px; color: var(--t2); line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .pc-chains { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--t2); margin-top: 4px; }
+    .mark { flex: none; width: 18px; height: 18px; border-radius: 5px; border: 1px solid var(--b); background: var(--r); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--t); }
+    .pc-chains .lead { width: auto; height: auto; margin: 0 2px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; color: var(--t2); }
+    .pc-price { text-align: right; display: grid; gap: 1px; padding-top: 1px; }
+    .amount { font-size: 16px; font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .unit { font-size: 13px; color: var(--t3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .add { width: 44px; height: 44px; border-radius: 999px; border: 1.5px solid var(--bs); background: var(--r); color: var(--t); display: flex; align-items: center; justify-content: center; }
+    .per { font-size: 0.82em; font-weight: 400; color: var(--t3); margin-left: 0.22em; word-spacing: -0.18em; }
+
+    .drow { display: grid; grid-template-columns: 74px minmax(0, 1fr) auto; grid-template-rows: 22px 52px; grid-template-areas: 'pic l1 l1' 'pic facts st'; column-gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--b); }
+    .pic { grid-area: pic; width: 74px; height: 74px; border-radius: 12px; border: 1px solid var(--b); background: var(--r); overflow: hidden; display: flex; align-items: center; justify-content: center; color: var(--t3); }
+    .pic.none .ic { width: 30px; height: 30px; }
+    .l1 { grid-area: l1; display: flex; align-items: baseline; gap: 8px; min-width: 0; overflow: hidden; white-space: nowrap; line-height: 22px; }
+    .l1 .label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 16px; font-weight: 600; }
+    .l1 .brand { flex: 0 1 auto; max-width: 96px; overflow: hidden; text-overflow: ellipsis; font-size: 14px; color: var(--t2); }
+    .facts { grid-area: facts; display: grid; grid-template-rows: 16px 16px 20px; min-width: 0; }
+    .fact { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 16px; color: var(--t2); font-variant-numeric: tabular-nums; }
+    .fact.price { font-size: 16px; line-height: 20px; font-weight: 600; color: var(--t); }
+    .stepper { grid-area: st; align-self: center; display: inline-grid; grid-template-columns: 48px 59px 48px; height: 48px; border-radius: 999px; background: var(--r); box-shadow: inset 0 0 0 1px var(--bs); color: var(--t); }
+    .sb { display: flex; align-items: center; justify-content: center; }
+    .glyph { position: relative; width: 14px; height: 14px; }
+    .glyph::before { content: ''; position: absolute; left: 0; top: 6px; width: 14px; height: 2px; border-radius: 1px; background: currentColor; }
+    .glyph.plus::after { content: ''; position: absolute; left: 6px; top: 0; width: 2px; height: 14px; border-radius: 1px; background: currentColor; }
+    .cell { display: flex; align-items: baseline; justify-content: center; gap: 2px; padding: 0 4px; line-height: 48px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .cell b { font-size: 17px; font-weight: 700; }
+    .cell b.count { font-size: 18px; }
+    .cell i { font-style: normal; font-size: 12px; color: var(--t2); }
+
+    .crow { display: flex; align-items: center; gap: 12px; min-height: 68px; padding: 4px 0; border-bottom: 1px solid var(--b); }
+    .crow .pic, .brow .pic { width: 44px; height: 44px; border-radius: 10px; flex: none; }
+    .crow .pic.none .ic, .brow .pic.none .ic { width: 20px; height: 20px; }
+    .body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+    .line1, .line2 { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+    .content { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
+    .cprice { flex: none; margin-left: auto; font-size: 14px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .line2 { font-size: 12px; color: var(--t3); min-height: 16px; }
+    .line2 span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .crow .line2 span { color: var(--t2); }
+    .reel { flex: none; display: flex; align-items: center; justify-content: center; width: 52px; }
+    .pill { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 44px; border: 1px solid var(--b); border-radius: 12px; background: var(--r); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .pill b { font-size: 15px; line-height: 17px; font-weight: 700; }
+    .pill i { font-style: normal; font-size: 11px; line-height: 13px; font-weight: 500; color: var(--t2); }
+
+    .tools { display: flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 12px 0 16px; }
+    .progress { flex: 1; min-width: 0; font-size: 14px; color: var(--t3); }
+    .total { padding: 0 8px; font-size: 14px; font-weight: 600; color: var(--t2); white-space: nowrap; }
+    .tool { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; color: var(--t2); }
+    .brow { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 6px 16px; border-bottom: 1px solid var(--b); }
+    .brow .line2 { gap: 0; }
+    .brow .line2 > span { flex: none; }
+    .brow .line2 > span + span::before { content: '\00B7'; padding: 0 4px; }
+    .brow .line2 > span:last-child { flex: 0 1 auto; }
+    .circ { width: 28px; height: 28px; border-radius: 999px; border: 1.5px solid var(--bs); flex: none; }
+
+    .ltop { display: flex; align-items: center; gap: 12px; padding: 16px 16px 0; }
+    .ltop .where { flex: 1; min-width: 0; font-size: 14px; color: var(--t2); }
+    .lstep { display: flex; align-items: center; height: 44px; border-radius: 999px; background: var(--s); flex: none; }
+    .lstep .sb { width: 44px; height: 44px; }
+    .lstep b { min-width: 20px; text-align: center; font-weight: 600; }
+    .h2 { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 16px; margin: 24px 0 12px; font-size: 16px; font-weight: 650; }
+    .h2 span:last-child { font-size: 14px; font-weight: 600; color: var(--q); }
+    .rail { display: flex; gap: 12px; padding: 0 16px 20px; overflow: hidden; }
+    .rc { position: relative; display: flex; flex-direction: column; width: 156px; flex: none; padding: 12px; border: 1px solid var(--b); border-radius: 16px; background: var(--r); }
+    .rc .img { display: grid; place-items: center; height: 96px; border-radius: 12px; background: var(--s); color: var(--bs); overflow: hidden; }
+    .rc .img img { height: 100%; width: 100%; object-fit: contain; }
+    .rc .box { width: 36px; height: 36px; }
+    .star { position: absolute; top: 12px; right: 12px; display: grid; place-items: center; width: 44px; height: 44px; color: var(--t2); }
+    .star.on { color: var(--q); }
+    .rc .nm { margin-top: 12px; min-height: 36px; font-size: 14px; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .rc .dt { margin-top: 1px; font-size: 12px; line-height: 1.35; color: var(--t3); }
+    .rc .price { margin-top: 12px; font-size: 18px; font-weight: 650; line-height: 1.2; font-variant-numeric: tabular-nums; }
+    .rc .chain { margin-top: 1px; font-size: 11px; color: var(--t3); }
+    .rc .cost { margin-top: 4px; font-size: 12px; color: var(--t); font-variant-numeric: tabular-nums; }
+
+    .under { flex: 1; opacity: 0.55; }
+    .scrim { position: absolute; inset: 0; background: var(--scrim); }
+    .sheet { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 16px 20px; border-radius: 20px 20px 0 0; background: var(--r); box-shadow: var(--sh); }
+    .grab { width: 40px; height: 4px; margin: 0 auto 14px; border-radius: 999px; background: var(--bs); }
+    .stitle { font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 1.3; }
+    .slabel { margin: 18px 0 8px; font-size: 14px; font-weight: 600; color: var(--t2); }
+    .srow { display: flex; align-items: center; justify-content: space-between; }
+    .pk-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--b); }
+    .pk-body { display: grid; gap: 1px; flex: 1; min-width: 0; }
+    .pk-price { font-size: 16px; font-weight: 650; white-space: nowrap; }
+    .radio { width: 24px; height: 24px; flex: none; border-radius: 999px; border: 2px solid var(--bs); }
+    .radio.on { border: 7px solid var(--q); }
+    .shop { display: flex; align-items: center; min-height: 48px; padding: 0 14px; border: 1px solid var(--bs); border-radius: 12px; font-size: 16px; color: var(--t3); }
+    .btns { display: flex; gap: 8px; margin-top: 18px; }
+    .btn { flex: 1; display: flex; align-items: center; justify-content: center; height: 52px; border-radius: 14px; font-size: 16px; font-weight: 650; }
+    .btn.primary { background: var(--act); color: #0a0c14; }
+    .btn.quiet { border: 1px solid var(--bs); color: var(--t); }
+  </style>
+</helmet>
+<div class="pk">
+<div class="col"><div class="choice"><span class="letter">A</span><span class="dec">O2 A</span><span class="rec">Recommended</span></div><div class="cap fixed">"piezas" and "pieces". It cannot be read as a counted size: the eggs below still say "12 uds".</div><div class="phone day crop"><div class="pc"><span class="thumb none"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></span><div class="pc-body"><span class="pc-name">Caramelos de menta sin azúcar</span><span class="pc-detail">SMINT · 70 g (2 × 35 g), 100 piezas</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">3,49 €</span><span class="unit">49,86 €<span class="per">/ kg</span></span></div><span class="add"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></span></div><div class="pc"><span class="thumb none"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></span><div class="pc-body"><span class="pc-name">Caramelos de fresa sin azúcar</span><span class="pc-detail">SMINT · 35 g, 50 piezas</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">1,99 €</span><span class="unit">56,86 €<span class="per">/ kg</span></span></div><span class="add"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></span></div><div class="pc last"><span class="thumb"><img src="photos/eggs.jpg" alt=""></span><div class="pc-body"><span class="pc-name">Huevos camperos L</span><span class="pc-detail">Hacendado · 12 uds</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">2,35 €</span></div><span class="add"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></span></div></div><div class="phone night crop"><div class="pc"><span class="thumb none"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></span><div class="pc-body"><span class="pc-name">Sugar free mint candies</span><span class="pc-detail">SMINT · 70 g (2 × 35 g), 100 pieces</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">€3.49</span><span class="unit">€49.86<span class="per">/ kg</span></span></div><span class="add"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></span></div><div class="pc"><span class="thumb none"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></span><div class="pc-body"><span class="pc-name">Sugar free strawberry candies</span><span class="pc-detail">SMINT · 35 g, 50 pieces</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">€1.99</span><span class="unit">€56.86<span class="per">/ kg</span></span></div><span class="add"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></span></div><div class="pc last"><span class="thumb"><img src="photos/eggs.jpg" alt=""></span><div class="pc-body"><span class="pc-name">Free range eggs L</span><span class="pc-detail">Hacendado · 12 units</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">€2.35</span></div><span class="add"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></span></div></div></div>
+<div class="col"><div class="choice"><span class="letter">B</span><span class="dec">O2 B</span></div><div class="cap fixed">"uds" and "units". Shorter, but "100 uds" reads like the eggs' "12 uds", and in English it is the very word the counted size uses.</div><div class="phone day crop"><div class="pc"><span class="thumb none"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></span><div class="pc-body"><span class="pc-name">Caramelos de menta sin azúcar</span><span class="pc-detail">SMINT · 70 g (2 × 35 g), 100 uds</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">3,49 €</span><span class="unit">49,86 €<span class="per">/ kg</span></span></div><span class="add"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></span></div><div class="pc"><span class="thumb none"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></span><div class="pc-body"><span class="pc-name">Caramelos de fresa sin azúcar</span><span class="pc-detail">SMINT · 35 g, 50 uds</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">1,99 €</span><span class="unit">56,86 €<span class="per">/ kg</span></span></div><span class="add"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></span></div><div class="pc last"><span class="thumb"><img src="photos/eggs.jpg" alt=""></span><div class="pc-body"><span class="pc-name">Huevos camperos L</span><span class="pc-detail">Hacendado · 12 uds</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">2,35 €</span></div><span class="add"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></span></div></div><div class="phone night crop"><div class="pc"><span class="thumb none"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></span><div class="pc-body"><span class="pc-name">Sugar free mint candies</span><span class="pc-detail">SMINT · 70 g (2 × 35 g), 100 units</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">€3.49</span><span class="unit">€49.86<span class="per">/ kg</span></span></div><span class="add"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></span></div><div class="pc"><span class="thumb none"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></span><div class="pc-body"><span class="pc-name">Sugar free strawberry candies</span><span class="pc-detail">SMINT · 35 g, 50 units</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">€1.99</span><span class="unit">€56.86<span class="per">/ kg</span></span></div><span class="add"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></span></div><div class="pc last"><span class="thumb"><img src="photos/eggs.jpg" alt=""></span><div class="pc-body"><span class="pc-name">Free range eggs L</span><span class="pc-detail">Hacendado · 12 units</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">€2.35</span></div><span class="add"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></span></div></div></div>
+<div class="col"><div class="choice"><span class="letter">C</span><span class="dec">O2 C</span></div><div class="cap fixed">"pzs" and "pcs". Shortest, and an abbreviation people not at home with apps may not read.</div><div class="phone day crop"><div class="pc"><span class="thumb none"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></span><div class="pc-body"><span class="pc-name">Caramelos de menta sin azúcar</span><span class="pc-detail">SMINT · 70 g (2 × 35 g), 100 pzs</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">3,49 €</span><span class="unit">49,86 €<span class="per">/ kg</span></span></div><span class="add"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></span></div><div class="pc"><span class="thumb none"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></span><div class="pc-body"><span class="pc-name">Caramelos de fresa sin azúcar</span><span class="pc-detail">SMINT · 35 g, 50 pzs</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">1,99 €</span><span class="unit">56,86 €<span class="per">/ kg</span></span></div><span class="add"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></span></div><div class="pc last"><span class="thumb"><img src="photos/eggs.jpg" alt=""></span><div class="pc-body"><span class="pc-name">Huevos camperos L</span><span class="pc-detail">Hacendado · 12 uds</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">2,35 €</span></div><span class="add"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></span></div></div><div class="phone night crop"><div class="pc"><span class="thumb none"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></span><div class="pc-body"><span class="pc-name">Sugar free mint candies</span><span class="pc-detail">SMINT · 70 g (2 × 35 g), 100 pcs</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">€3.49</span><span class="unit">€49.86<span class="per">/ kg</span></span></div><span class="add"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></span></div><div class="pc"><span class="thumb none"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></span><div class="pc-body"><span class="pc-name">Sugar free strawberry candies</span><span class="pc-detail">SMINT · 35 g, 50 pcs</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">€1.99</span><span class="unit">€56.86<span class="per">/ kg</span></span></div><span class="add"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></span></div><div class="pc last"><span class="thumb"><img src="photos/eggs.jpg" alt=""></span><div class="pc-body"><span class="pc-name">Free range eggs L</span><span class="pc-detail">Hacendado · 12 units</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">€2.35</span></div><span class="add"><span class="ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></span></div></div></div>
+</div>
+</x-dc>
+</body>
+</html>
