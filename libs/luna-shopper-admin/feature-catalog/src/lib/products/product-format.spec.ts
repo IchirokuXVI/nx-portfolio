@@ -1,7 +1,11 @@
 import { readFileSync } from 'fs';
 import i18next from 'i18next';
 import { join } from 'path';
-import { formatSize, formatSizeDoubt } from './product-format';
+import {
+  formatProductSize,
+  formatSize,
+  formatSizeDoubt,
+} from './product-format';
 
 /**
  * The size of a product with no size (admin plan 0068, criterion 4): the
@@ -123,6 +127,131 @@ void translator.init({
 });
 const units = (count: number, figure: string): string =>
   translator.t('harvest.entries.sizeDoubt.units', { count, figure });
+const pieces = (count: number, figure: string): string =>
+  translator.t('catalog.items.sizePieces', { count, figure });
+
+/**
+ * The size the products list prints, with its counts (admin plan 0075, O1 A):
+ * the whole size first, then the pack, then the pieces.
+ */
+describe('formatProductSize', () => {
+  const size = (product: Parameters<typeof formatProductSize>[0]) =>
+    formatProductSize(product, 'en', pieces);
+
+  it('prints a pack of 4 burgers as the whole and one unit', () => {
+    expect(size({ unitSize: 360, defaultUnit: 'GRAM', packCount: 4 })).toBe(
+      '360 g (4 x 90 g)'
+    );
+  });
+
+  it('prints 2 bags with 100 candies between them with the pieces after', () => {
+    expect(
+      size({ unitSize: 70, defaultUnit: 'GRAM', packCount: 2, pieceCount: 100 })
+    ).toBe('70 g (2 x 35 g) · 100 pieces');
+  });
+
+  it('prints a bag of 50 pieces with no pack', () => {
+    expect(
+      size({
+        unitSize: 35,
+        defaultUnit: 'GRAM',
+        packCount: null,
+        pieceCount: 50,
+      })
+    ).toBe('35 g · 50 pieces');
+  });
+
+  it('marks a unit that is not a whole number of grams as approximate', () => {
+    expect(size({ unitSize: 185, defaultUnit: 'GRAM', packCount: 7 })).toBe(
+      '185 g (7 x ~26 g)'
+    );
+    expect(size({ unitSize: 1.98, defaultUnit: 'LITER', packCount: 6 })).toBe(
+      '1.98 L (6 x 0.33 L)'
+    );
+    expect(
+      size({ unitSize: 6000, defaultUnit: 'MILLILITER', packCount: 6 })
+    ).toBe('6,000 ml (6 x 1,000 ml)');
+  });
+
+  it('keeps a unit that rounds up to one gram as approximate', () => {
+    expect(size({ unitSize: 5, defaultUnit: 'GRAM', packCount: 10 })).toBe(
+      '5 g (10 x ~1 g)'
+    );
+  });
+
+  it('prints the size alone when one unit rounds to zero', () => {
+    expect(size({ unitSize: 1, defaultUnit: 'GRAM', packCount: 3 })).toBe(
+      '1 g'
+    );
+    expect(size({ unitSize: 0.001, defaultUnit: 'LITER', packCount: 3 })).toBe(
+      '0.001 L'
+    );
+  });
+
+  it('prints the size alone when the size is 0', () => {
+    expect(size({ unitSize: 0, defaultUnit: 'GRAM', packCount: 4 })).toBe(
+      '0 g'
+    );
+  });
+
+  it('keeps the pieces after a size printed alone', () => {
+    expect(
+      size({ unitSize: 1, defaultUnit: 'GRAM', packCount: 3, pieceCount: 6 })
+    ).toBe('1 g · 6 pieces');
+  });
+
+  it('prints nothing for a count of 1, null or absent', () => {
+    expect(
+      size({
+        unitSize: 250,
+        defaultUnit: 'GRAM',
+        packCount: 1,
+        pieceCount: 1,
+      })
+    ).toBe('250 g');
+    expect(
+      size({
+        unitSize: 250,
+        defaultUnit: 'GRAM',
+        packCount: null,
+        pieceCount: null,
+      })
+    ).toBe('250 g');
+    expect(size({ unitSize: 250, defaultUnit: 'GRAM' })).toBe('250 g');
+  });
+
+  it('prints a pack with no size as a product with no size', () => {
+    expect(size({ unitSize: null, defaultUnit: 'UNIT', packCount: 4 })).toBe(
+      ''
+    );
+    expect(
+      size({
+        unitSize: null,
+        defaultUnit: 'KILOGRAM',
+        packCount: 4,
+        approxWeight: 1560,
+      })
+    ).toBe('~1.56 kg');
+  });
+
+  it('leaves the size of a source entry with a pack count printed as before', () => {
+    // The harvest queue calls formatSize, which keeps the count and one unit.
+    expect(
+      formatSize({ unitSize: 360, defaultUnit: 'GRAM', packCount: 4 }, 'en')
+    ).toBe('4 x 90 g');
+    expect(
+      formatSize(
+        {
+          unitSize: 70,
+          defaultUnit: 'GRAM',
+          packCount: 2,
+          pieceCount: 100,
+        } as Parameters<typeof formatSize>[0],
+        'en'
+      )
+    ).toBe('2 x 35 g');
+  });
+});
 
 /** The two sizes of a doubted row, as its sentence reads them (admin plan 0072). */
 describe('formatSizeDoubt', () => {

@@ -1,3 +1,5 @@
+> **PR:** [#1118](https://github.com/IchirokuXVI/nx-portfolio/pull/1118)
+
 # 0075 The item editor sets the pack and the pieces
 
 > Asked for by the owner on 2026-11-26 (decision 153a): a product that is a pack has a pack
@@ -208,3 +210,9 @@ choice:
   "2 x 35 g · 100 pieces".
 - **C. The size alone, and two columns for the counts.** Examples: "360 g" with "4" and an empty
   cell; wider rows on a phone.
+
+## Decisions
+
+- **O1: A** (the owner, 2026-11-26). The products list prints the whole size first, as velista
+  does: "360 g (4 x 90 g)", "70 g (2 x 35 g) · 100 pieces". The sign is "x", the one the admin
+  already prints for a pack.
