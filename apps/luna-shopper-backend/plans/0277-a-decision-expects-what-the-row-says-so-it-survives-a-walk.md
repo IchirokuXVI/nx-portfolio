@@ -250,7 +250,7 @@ Each A is the smallest build, and the other options can be added later.
 allowed. Every field of `SourceEntryObservedDto` is read as sent (`asSent`, as plan 0193 did for
 body flags), so a value of the wrong JSON type is a 400 rather than a value the pipe converted.
 
-**154a (owner, 2026-11-26):** `packaging` joins `observed` as its tenth field, required and
+**154a (owner, 2026-11-26, built in [#1116](https://github.com/IchirokuXVI/nx-portfolio/pull/1116)):** `packaging` joins `observed` as its tenth field, required and
 nullable, a string as `SourceCatalogEntryView.packaging` prints it, compared exactly like the
 other text fields. The matcher tells a can from a bottle of one name and size by it
 (`matching.ts`, the sibling key), so a row accepted onto the can product while its packaging
