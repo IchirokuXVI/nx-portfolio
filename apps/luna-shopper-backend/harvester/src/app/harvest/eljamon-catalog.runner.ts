@@ -48,6 +48,21 @@ import type {
 export const DETAIL_TIMEOUTS_IN_A_ROW = 20;
 
 /**
+ * How many dropped sessions in a row, across every worker of the pool, stop
+ * the detail stage (plan 0169, notes of 2026-11-26, owner decision 151a).
+ *
+ * It guards against a chain that resets the connection or hangs up on every
+ * product page. Such a request is no answer and no silence, so
+ * {@link DETAIL_TIMEOUTS_IN_A_ROW} never counts it, and the stage would walk on,
+ * dropping a session per page and opening a fresh one (two requests) for the
+ * next: about 7,000 sessions on a full walk. A page counts in the order pages
+ * finish: one whose session was dropped adds one, also when a retry on it got
+ * an answer, and one that finished with its session kept starts the count
+ * again. The stop is the one of plan 0253, with its own reason on the report.
+ */
+export const DETAIL_DROPPED_SESSIONS_IN_A_ROW = 20;
+
+/**
  * The silent attempts in a row of one run, counted at the transport, below the
  * client's retries, so a page that timed out on every retry counts each one.
  */
@@ -143,6 +158,22 @@ export class SessionPool {
   private droppedRequests = 0;
   /** Sessions dropped after a request with no answer. On the report. */
   dropped = 0;
+  /**
+   * Pages whose session was dropped since the last page that kept its own,
+   * in the order pages finished (see {@link DETAIL_DROPPED_SESSIONS_IN_A_ROW}).
+   */
+  droppedInARow = 0;
+  /** The longest run of {@link droppedInARow} this pool met. On the report. */
+  longestDroppedRun = 0;
+
+  /**
+   * Whether enough sessions in a row were dropped to stop asking. It stays
+   * true once reached, so a clean page that finishes on another worker before
+   * the stop is read does not hide it.
+   */
+  get exhausted(): boolean {
+    return this.longestDroppedRun >= DETAIL_DROPPED_SESSIONS_IN_A_ROW;
+  }
 
   /**
    * `first` is the listing's client, whose session is idle once the listing is
@@ -171,8 +202,14 @@ export class SessionPool {
         this.droppedRequests += client.requests;
         this.live.delete(client);
         this.dropped += 1;
+        this.droppedInARow += 1;
+        this.longestDroppedRun = Math.max(
+          this.longestDroppedRun,
+          this.droppedInARow
+        );
       } else {
         this.idle.push(client);
+        this.droppedInARow = 0;
       }
     }
   }
@@ -258,7 +295,10 @@ export class SessionPool {
  * **The detail stage stops when the chain stops answering** (plan 0253,
  * section 3, D1 (b)): {@link DETAIL_TIMEOUTS_IN_A_ROW} silent attempts in a
  * row across the pool, retries included, about 100 seconds of six workers with
- * nothing answered, and no new page is asked. The run still records every
+ * nothing answered, and no new page is asked. It stops the same way after
+ * {@link DETAIL_DROPPED_SESSIONS_IN_A_ROW} dropped sessions in a row with no
+ * clean page between them (plan 0169, notes of 2026-11-26, decision 151a),
+ * and the report's `detail.stoppedBy` says which. The run still records every
  * listed row and ends `COMPLETED` with one `DETAIL_UNREAD` warning. On a `NEW`
  * walk a new product whose page was not read is written with
  * {@link DETAIL_FAILED_KEY}, so the next walk asks for it. An `ALL` walk was
@@ -435,7 +475,9 @@ export class ElJamonCatalogRunner implements CatalogRunner {
    * a signal of its own, which the run's abort reaches too, so this stage can
    * stop alone: {@link DETAIL_TIMEOUTS_IN_A_ROW} silent attempts in a row,
    * across every worker and every retry, and no new page is asked. `silence`
-   * counts them at the transport; the pool reads it as each page fails. A
+   * counts them at the transport; the pool reads it as each page fails. The
+   * same stop comes after {@link DETAIL_DROPPED_SESSIONS_IN_A_ROW} dropped
+   * sessions in a row, which `sessions` counts as each page finishes. A
    * page already in flight finishes or fails as it would have, its retries
    * included. What stopping costs is on the report, and in the
    * `DETAIL_UNREAD` warning the run writes.
@@ -465,7 +507,9 @@ export class ElJamonCatalogRunner implements CatalogRunner {
       otherProductPages: 0,
       sessions: 0,
       droppedSessions: 0,
+      droppedSessionsInARow: 0,
       stopped: false,
+      stoppedBy: null,
     };
     // A listing that ended in silence is not this stage's to count.
     silence.reset();
@@ -476,6 +520,35 @@ export class ElJamonCatalogRunner implements CatalogRunner {
     } else {
       context.signal.addEventListener('abort', stopPool, { once: true });
     }
+    /**
+     * The one stop of plan 0253, checked as each page finishes. Silence is
+     * read only when a page failed, where it always was, and before the
+     * dropped sessions, so a failed page that meets both limits at once stops
+     * the stage on silence, as it did before the second limit.
+     */
+    const stopWhenSpent = (pageFailed: boolean): void => {
+      if (stage.stopped) {
+        return;
+      }
+      if (pageFailed && silence.exhausted) {
+        stage.stoppedBy = 'SILENCE';
+        this.logger.warn(
+          `Run ${context.runId}: ${silence.inARow} attempts in a row got ` +
+            'no answer; no new page is asked, and the listing is recorded'
+        );
+      } else if (sessions.exhausted) {
+        stage.stoppedBy = 'DROPPED_SESSIONS';
+        this.logger.warn(
+          `Run ${context.runId}: ${sessions.longestDroppedRun} sessions in a row ` +
+            'were dropped with no clean page between them; no new page is ' +
+            'asked, and the listing is recorded'
+        );
+      } else {
+        return;
+      }
+      stage.stopped = true;
+      pool.abort();
+    };
     try {
       await runWorkerPool({
         items: fresh,
@@ -493,6 +566,10 @@ export class ElJamonCatalogRunner implements CatalogRunner {
             stage.rereads += 1;
             return productPage(client, listed.row);
           });
+          // A page read on a session that was then dropped, a retry having
+          // answered, counts toward the stop as a failed page does. The page
+          // itself is still recorded below.
+          stopWhenSpent(false);
           if (product.otherProductCode !== null) {
             // Its JSON-LD is another product's too, so nothing on it is this
             // product's: it fails as a page with no product does (plan 0169,
@@ -568,14 +645,7 @@ export class ElJamonCatalogRunner implements CatalogRunner {
           if (isTimeout(error)) {
             stage.timeouts += 1;
           }
-          if (silence.exhausted && !stage.stopped) {
-            stage.stopped = true;
-            this.logger.warn(
-              `Run ${context.runId}: ${silence.inARow} attempts in a row got ` +
-                'no answer; no new page is asked, and the listing is recorded'
-            );
-            pool.abort();
-          }
+          stopWhenSpent(true);
           await context.report({ failed: 1, processed: 1 });
         },
       });
@@ -585,6 +655,7 @@ export class ElJamonCatalogRunner implements CatalogRunner {
     stage.silentAttempts = silence.total;
     stage.sessions = sessions.size;
     stage.droppedSessions = sessions.dropped;
+    stage.droppedSessionsInARow = sessions.longestDroppedRun;
     return stage;
   }
 
@@ -809,7 +880,8 @@ function warnShortCategories(context: RunContext, walk: Walk): void {
 
 /**
  * The one warning of a detail stage that stopped on silence (plan 0253, D1
- * (b)). The run ends `COMPLETED`, so this is what says the products listed in
+ * (b)) or on dropped sessions (decision 151a), each named in its own words.
+ * The run ends `COMPLETED`, so this is what says the products listed in
  * it have no page yet. An aborted walk writes none: it does not end
  * `COMPLETED`, and its own reason says why.
  *
@@ -829,14 +901,19 @@ function warnDetailUnread(
     return;
   }
   const withoutPage = planned - walk.details.size;
+  const why =
+    detail.stoppedBy === 'DROPPED_SESSIONS'
+      ? `${DETAIL_DROPPED_SESSIONS_IN_A_ROW} sessions in a row were dropped ` +
+        'with no clean page between them'
+      : `${DETAIL_TIMEOUTS_IN_A_ROW} attempts in a row got no answer`;
   context.warn({
     code: HarvestWarningCode.DETAIL_UNREAD,
     offerId: null,
     page: null,
     name: null,
     message:
-      `Product pages stopped after ${DETAIL_TIMEOUTS_IN_A_ROW} attempts in a ` +
-      `row got no answer: ${detail.pages} of ${planned} page(s) asked, ` +
+      `Product pages stopped after ${why}: ` +
+      `${detail.pages} of ${planned} page(s) asked, ` +
       `${detail.failed} failed, ${detail.timeouts} timed out. ` +
       `${withoutPage} product(s) had no page; the next walk asks for them ` +
       'again.',
@@ -1089,9 +1166,22 @@ interface DetailStage {
    * notes of 2026-11-26).
    */
   droppedSessions: number;
-  /** Whether the silent attempts in a row stopped the stage. Not on the report. */
+  /**
+   * The longest run of dropped sessions with no clean page between them
+   * (owner decision 151a): what {@link DETAIL_DROPPED_SESSIONS_IN_A_ROW} counts.
+   */
+  droppedSessionsInARow: number;
+  /** Whether the stage stopped before it asked every page. Not on the report. */
   stopped: boolean;
+  /**
+   * Why it stopped, or null when it did not: `SILENCE` for the silent attempts
+   * of plan 0253, `DROPPED_SESSIONS` for the dropped sessions of decision 151a.
+   */
+  stoppedBy: DetailStop | null;
 }
+
+/** The two reasons the detail stage stops early (see {@link DetailStage}). */
+type DetailStop = 'SILENCE' | 'DROPPED_SESSIONS';
 
 /**
  * What one run accumulates. Shared by every detail worker, which is safe
@@ -1229,6 +1319,8 @@ class Walk {
         otherProductPages: detail.otherProductPages,
         sessions: detail.sessions,
         droppedSessions: detail.droppedSessions,
+        droppedSessionsInARow: detail.droppedSessionsInARow,
+        stoppedBy: detail.stoppedBy,
       },
       /**
        * Lines a person should read, as the El Jamón store discovery report

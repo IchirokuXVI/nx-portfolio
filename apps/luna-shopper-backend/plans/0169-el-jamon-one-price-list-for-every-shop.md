@@ -533,3 +533,18 @@ in [#1107](https://github.com/IchirokuXVI/nx-portfolio/pull/1107).
   form `warnings` the store discovery reports carry. It is not a run warning: no
   `HarvestWarningCode` names it, and a new code is a contract change. The admin run page draws
   no report `warnings` field today.
+
+**A cap on dropped sessions (decision 151a, 2026-11-26).** Only a timeout counts toward the 20
+silent attempts of plan 0253, so a chain that resets or hangs up on every product page never
+stopped the stage and opened one session per page, about 7,000 sessions and 14,000 extra requests
+on a full walk. The detail stage now also stops after `DETAIL_DROPPED_SESSIONS_IN_A_ROW` (20)
+dropped sessions in a row, counted across every worker in the order pages finish. A page that
+finishes with its session kept starts the count again, and a page whose session was dropped adds
+one, also when a retry on it then answered. The stop is the one of plan 0253: no new page is
+asked, every listed row is still recorded, a page never read is reported from the listing alone
+or marked for the next walk exactly as before, and the run ends `COMPLETED` with one
+`DETAIL_UNREAD` warning whose words name the dropped sessions. The report's `detail` gains
+`droppedSessionsInARow` (the longest run of the walk, 0 on a normal run) and `stoppedBy`
+(`SILENCE`, `DROPPED_SESSIONS` or null). A failed page that meets both limits at once stops on
+`SILENCE`, so the silence stop fires where it did before. Built in
+[#1108](https://github.com/IchirokuXVI/nx-portfolio/pull/1108).

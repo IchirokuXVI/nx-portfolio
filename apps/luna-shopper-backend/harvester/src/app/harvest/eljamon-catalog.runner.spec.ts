@@ -18,6 +18,7 @@ import {
 } from './catalog-runner';
 import { mergeCategoryPaths } from './category-paths';
 import {
+  DETAIL_DROPPED_SESSIONS_IN_A_ROW,
   DETAIL_TIMEOUTS_IN_A_ROW,
   ElJamonCatalogRunner,
   SessionPool,
@@ -592,6 +593,9 @@ describe('ElJamonCatalogRunner', () => {
       // answered with no product, which is an answer, so none is dropped.
       sessions: 2,
       droppedSessions: 0,
+      // A normal run: no session dropped, and the stage did not stop.
+      droppedSessionsInARow: 0,
+      stoppedBy: null,
     });
     expect(written['warnings']).toEqual([]);
     expect(written['untrustedBreadcrumbs']).toEqual([]);
@@ -1014,6 +1018,10 @@ describe('ElJamonCatalogRunner', () => {
         // 19 opened one. The answered session starts reset no count.
         sessions: 20,
         droppedSessions: 20,
+        // The 21st page met both limits at once; silence is read first, so
+        // the stop is where and what it was before decision 151a.
+        droppedSessionsInARow: 20,
+        stoppedBy: 'SILENCE',
       });
 
       // Every listed row reaches the ingest; every new product whose page was
@@ -1087,6 +1095,8 @@ describe('ElJamonCatalogRunner', () => {
         // One session per failed page, the retries of a page on its own.
         sessions: 5,
         droppedSessions: 5,
+        droppedSessionsInARow: 5,
+        stoppedBy: 'SILENCE',
       });
       expect(ctx.warn).toHaveBeenCalledWith(
         expect.objectContaining({ code: HarvestWarningCode.DETAIL_UNREAD })
@@ -1117,6 +1127,8 @@ describe('ElJamonCatalogRunner', () => {
         // A reset connection drops the session as a timeout does.
         sessions: 10,
         droppedSessions: 10,
+        droppedSessionsInARow: 10,
+        stoppedBy: 'SILENCE',
       });
       expect(ctx.warn).toHaveBeenCalledWith(
         expect.objectContaining({ code: HarvestWarningCode.DETAIL_UNREAD })
@@ -1147,6 +1159,10 @@ describe('ElJamonCatalogRunner', () => {
         // silent pages drops one. Page 1 is a timeout on the listing's.
         sessions: 40,
         droppedSessions: 40,
+        // 12, 19 and 9 in a row: a 404 keeps its session, so it starts the
+        // count of dropped sessions again too.
+        droppedSessionsInARow: 19,
+        stoppedBy: null,
       });
       expect(ctx.warn).not.toHaveBeenCalled();
     });
@@ -1195,6 +1211,168 @@ describe('ElJamonCatalogRunner', () => {
         expect(product).not.toHaveProperty('name');
         expect(product.prices).toHaveLength(1);
       }
+    });
+
+    describe('dropped sessions in a row (plan 0169, notes of 2026-11-26, decision 151a)', () => {
+      it('stops after 20 dropped sessions on a chain that resets every product page, and still records every listed row', async () => {
+        const ctx = context();
+        const report = new RecordingRunReport();
+        // A reset is no answer and no silence: the silent attempts never count it.
+        const runner = new TestRunner(siteAnswering(() => 'reset'));
+
+        await runner.run(ctx, report, input, oneWorker);
+
+        expect(detailAsked(runner)).toBe(DETAIL_DROPPED_SESSIONS_IN_A_ROW);
+        expect(written(ctx)['detail']).toEqual({
+          pages: 20,
+          failed: 20,
+          timeouts: 0,
+          silentAttempts: 0,
+          rereads: 0,
+          untrustedBreadcrumbs: 0,
+          otherProductPages: 0,
+          // The listing's session took the first page, and each of the other
+          // 19 opened one: no session is opened for a page never asked.
+          sessions: 20,
+          droppedSessions: 20,
+          droppedSessionsInARow: 20,
+          stoppedBy: 'DROPPED_SESSIONS',
+        });
+        // Every listed row reaches the ingest, marked for the next walk.
+        expect(report.products).toHaveLength(42);
+        expect(
+          report.products.every(
+            (product) => product.extra?.[DETAIL_FAILED_KEY] === true
+          )
+        ).toBe(true);
+        expect(processedOf(ctx)).toBe(42);
+        expect(ctx.warn).toHaveBeenCalledTimes(1);
+        expect(ctx.warn).toHaveBeenCalledWith({
+          code: HarvestWarningCode.DETAIL_UNREAD,
+          name: null,
+          offerId: null,
+          page: null,
+          message:
+            'Product pages stopped after 20 sessions in a row were dropped ' +
+            'with no clean page between them: 20 of 42 page(s) asked, ' +
+            '20 failed, 0 timed out. 42 product(s) had no page; the next ' +
+            'walk asks for them again.',
+        });
+        expect(report.wholeListings).toHaveLength(1);
+      });
+
+      it('opens no more than 20 sessions plus the worker count on a chain that resets every page', async () => {
+        const ctx = context();
+        const runner = new TestRunner(siteAnswering(() => 'reset'));
+        const four = { ...source, workers: 4 } as SupermarketSource;
+
+        await runner.run(ctx, new RecordingRunReport(), input, four);
+
+        const detail = written(ctx)['detail'] as Record<string, unknown>;
+        expect(detail['stoppedBy']).toBe('DROPPED_SESSIONS');
+        expect(detail['pages']).toBeLessThan(42);
+        expect(detail['sessions']).toBeLessThanOrEqual(
+          DETAIL_DROPPED_SESSIONS_IN_A_ROW + 4
+        );
+        // Each fresh session costs its two session starts, and no more.
+        const sessionStarts = runner.sent.filter(
+          (request) => new URL(request.url).pathname === '/'
+        ).length;
+        expect(sessionStarts).toBeLessThanOrEqual(
+          DETAIL_DROPPED_SESSIONS_IN_A_ROW + 4
+        );
+      });
+
+      it('counts a dropped session whose retry answered, and treats the unread pages as the silence stop does', async () => {
+        const ctx = context();
+        const report = new RecordingRunReport();
+        const attempts = new Map<string, number>();
+        // Each product page resets once and answers its retry: the page is
+        // read, and its session is still dropped.
+        const runner = new TestRunner(
+          siteAnswering((code) => {
+            const attempt = attempts.get(code) ?? 0;
+            attempts.set(code, attempt + 1);
+            return attempt === 0 ? 'reset' : undefined;
+          }),
+          1
+        );
+
+        // An `ALL` walk was handed no ids, so every row may be held.
+        await runner.run(
+          ctx,
+          report,
+          { ...input, details: HarvestDetailFetch.ALL },
+          oneWorker
+        );
+
+        const detail = written(ctx)['detail'] as Record<string, unknown>;
+        expect(detail).toMatchObject({
+          pages: 20,
+          droppedSessions: 20,
+          droppedSessionsInARow: 20,
+          stoppedBy: 'DROPPED_SESSIONS',
+        });
+        expect(ctx.signal.aborted).toBe(false);
+        expect(processedOf(ctx)).toBe(42);
+        // The 20 pages asked are reported whole: 19 read, and 102's, which
+        // carries no product and fails as before.
+        expect(report.products).toHaveLength(20);
+        const full = new Set(
+          report.products.map((product) => product.externalId)
+        );
+        // The 22 pages never asked are reported from the listing alone: no
+        // photo, no category path and no name, so nothing stored is cleared.
+        expect(report.partialProducts).toHaveLength(22);
+        for (const product of report.partialProducts) {
+          expect(full.has(product.externalId)).toBe(false);
+          expect(product).not.toHaveProperty('imageUrl');
+          expect(product).not.toHaveProperty('categoryPath');
+          expect(product).not.toHaveProperty('name');
+          expect(product.prices).toHaveLength(1);
+        }
+        expect(ctx.warn).toHaveBeenCalledWith(
+          expect.objectContaining({
+            code: HarvestWarningCode.DETAIL_UNREAD,
+            message: expect.stringContaining('sessions in a row were dropped'),
+          })
+        );
+      });
+
+      it('never stops when every 19th dropped session is followed by a clean page', async () => {
+        const ctx = context();
+        let page = 0;
+        // 19 resets, then a page that keeps its session, over and over.
+        const runner = new TestRunner(
+          siteAnswering(() => (page++ % 20 === 19 ? undefined : 'reset'))
+        );
+
+        await runner.run(ctx, new RecordingRunReport(), input, oneWorker);
+
+        expect(detailAsked(runner)).toBe(42);
+        expect(written(ctx)['detail']).toMatchObject({
+          pages: 42,
+          droppedSessions: 40,
+          droppedSessionsInARow: 19,
+          stoppedBy: null,
+        });
+        expect(ctx.warn).not.toHaveBeenCalled();
+      });
+
+      it('reports zero and does not stop on a run where every request was answered', async () => {
+        const ctx = context();
+        const runner = new TestRunner(site(() => false));
+
+        await runner.run(ctx, new RecordingRunReport(), input, oneWorker);
+
+        expect(detailAsked(runner)).toBe(42);
+        expect(written(ctx)['detail']).toMatchObject({
+          droppedSessions: 0,
+          droppedSessionsInARow: 0,
+          stoppedBy: null,
+        });
+        expect(ctx.warn).not.toHaveBeenCalled();
+      });
     });
   });
 
