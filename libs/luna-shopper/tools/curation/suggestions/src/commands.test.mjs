@@ -1511,6 +1511,37 @@ test('apply refuses a file decided against another gateway', async () => {
   );
 });
 
+/**
+ * Curation CLI plan 0006, section 6: the replay passes the target url, and
+ * only then is a file decided against another gateway sent, to that target.
+ */
+test('apply sends a file decided elsewhere to the target url the replay passes', async () => {
+  const dir = runDir();
+  const file = decisionsFile(
+    dir,
+    { runId: 'r1', mainUrl: 'http://elsewhere:3000' },
+    [CREATE_ROW]
+  );
+  const made = [];
+  const answer = await apply({
+    mainUrl: null,
+    targetUrl: 'http://target:3000',
+    file,
+    makeSession: (options) => {
+      made.push(options);
+      return {
+        async fetch() {
+          return { applied: true, results: [{ entryId: 'e1', applied: true }] };
+        },
+      };
+    },
+  });
+
+  assert.equal(made.length, 1);
+  assert.equal(made[0].baseUrl, 'http://target:3000');
+  assert.equal(answer.applied, true);
+});
+
 test('apply ignores a trailing slash on either url', async () => {
   const dir = runDir();
   const file = decisionsFile(dir, { runId: 'r1', mainUrl: MAIN_URL }, [
