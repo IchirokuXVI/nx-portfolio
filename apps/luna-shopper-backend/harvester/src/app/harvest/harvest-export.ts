@@ -1,4 +1,5 @@
 import {
+  HARVEST_CATEGORY_PATHS_BOUNDS,
   HARVEST_DOCUMENT_CURRENT_VERSION,
   PriceSourceKind,
   type HarvestDocument,
@@ -199,7 +200,7 @@ function toProduct(
 ): HarvestDocumentProduct {
   const size = sizeOf(entry);
   const paths = Array.isArray(entry.categoryPaths)
-    ? distinctCategoryPaths(entry.categoryPaths)
+    ? exportablePaths(distinctCategoryPaths(entry.categoryPaths))
     : [];
   const rows = (entry.prices ?? []).filter(
     (price) => price.price !== null || price.unitPrice !== null
@@ -249,6 +250,27 @@ function toProduct(
     // read survives the round trip.
     ...(entry.extra ? { extra: entry.extra } : {}),
   };
+}
+
+/**
+ * The paths the schema takes (`HARVEST_CATEGORY_PATHS_BOUNDS`), so one row
+ * never makes the whole file fail validation at upload.
+ *
+ * **A path past the bounds of a path is left out whole**, never cut: a path
+ * with its last names cut off, or a name cut short, files the product under
+ * a shelf the chain does not have. Of the rest the first ones are kept, up
+ * to the count the schema takes.
+ */
+function exportablePaths(paths: readonly string[][]): string[][] {
+  const { paths: most, names, nameLength } = HARVEST_CATEGORY_PATHS_BOUNDS;
+  return paths
+    .filter(
+      (path) =>
+        path.length <= names &&
+        // Counted in code points, as the schema's `maxLength` counts them.
+        path.every((name) => [...name].length <= nameLength)
+    )
+    .slice(0, most);
 }
 
 /** One `source_entry_prices` row, as a price of the file. */

@@ -910,6 +910,71 @@ describeIntegration('the one source product schema (real Postgres)', () => {
           (await entries.findOneByOrFail({ id: held.id })).soldByWeight
         ).toBe(false);
       });
+
+      it('never holds a size on a row sold by weight, and keeps the piece weight of a file that states no size', async () => {
+        const held = await walkedRow(
+          TARGET_RUN,
+          { ...KILO, approxWeight: 950 },
+          { amount: 12.9, observedAt: '2026-11-20T09:00:00Z' }
+        );
+        const plain = (
+          sha256: string,
+          over: Record<string, unknown>
+        ): HarvestDocument => ({
+          schema_version: 2,
+          sha256,
+          producer: { name: MARK, produced_at: '2026-11-21T08:00:00Z' },
+          products: [
+            {
+              external_id: '3401',
+              name: 'Queso curado Hacendado',
+              prices: [],
+              extra: { basis: 'unit' },
+              ...over,
+            },
+          ],
+        });
+        const stored = async () => {
+          const after = await entries.findOneByOrFail({ id: held.id });
+          return {
+            soldByWeight: after.soldByWeight,
+            unitSize: after.unitSize === null ? null : Number(after.unitSize),
+            sizeUnit: after.sizeUnit,
+            approxWeight:
+              after.approxWeight === null ? null : Number(after.approxWeight),
+          };
+        };
+
+        // No flag and no size quantity: it says nothing about how the cheese
+        // is sold, so the flag and the weight of a piece stay.
+        await importer().run(
+          importContext(plain(DIGEST, { size: { label: '1 kg' } })),
+          asWalk
+        );
+        expect(await stored()).toEqual({
+          soldByWeight: true,
+          unitSize: null,
+          sizeUnit: null,
+          approxWeight: 950,
+        });
+
+        // A size quantity and no flag says a fixed pack, as `origin/dev`
+        // wrote it: the flag goes false with the size, never true beside it.
+        await importer().run(
+          importContext(
+            plain('b'.repeat(64), {
+              size: { label: '500 g', quantity: 500, unit: 'g' },
+            })
+          ),
+          asWalk
+        );
+        expect(await stored()).toEqual({
+          soldByWeight: false,
+          unitSize: 500,
+          sizeUnit: 'GRAM',
+          approxWeight: null,
+        });
+      });
     });
 
     it('replaces the newer price of the row with the older one the file states (today, an owner choice)', async () => {

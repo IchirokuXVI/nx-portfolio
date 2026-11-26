@@ -1104,6 +1104,45 @@ describe('FileImportRunner (plan 0086)', () => {
         expect(saved[0].soldByWeight).toBe(false);
       });
 
+      it('reads a size quantity with no flag as a fixed pack, so no row sold by weight holds a size', async () => {
+        const piece = { ...weighed(), approxWeight: 950 };
+        for (const extra of [{ basis: 'unit' }, undefined]) {
+          const { runner, context, stored } = build({
+            rows: [{ ...piece }],
+            document: product({
+              size: { label: '500 g', quantity: 500, unit: 'g' },
+              ...(extra ? { extra } : {}),
+            }),
+          });
+
+          await runner.run(context, asWalk);
+
+          // What `origin/dev` wrote for this file.
+          expect(stored[0]).toMatchObject({
+            soldByWeight: false,
+            unitSize: 500,
+            sizeUnit: 'GRAM',
+            approxWeight: null,
+          });
+        }
+      });
+
+      it('keeps the flag, the size and the piece weight when the document states neither a flag nor a size quantity', async () => {
+        const { runner, context, stored } = build({
+          rows: [{ ...weighed(), approxWeight: 950 }],
+          document: product({ extra: { basis: 'unit' } }),
+        });
+
+        await runner.run(context, asWalk);
+
+        expect(stored[0]).toMatchObject({
+          soldByWeight: true,
+          unitSize: null,
+          sizeUnit: null,
+          approxWeight: 950,
+        });
+      });
+
       it('makes a new row the document does not say about a fixed pack', async () => {
         const { runner, context, saved } = build({ document: product() });
 

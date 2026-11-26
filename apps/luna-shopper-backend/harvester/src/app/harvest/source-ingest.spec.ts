@@ -2544,6 +2544,105 @@ describe('SourceIngest, rows sold by weight bound to one product (plan 0181)', (
     );
     expect(counters).toMatchObject({ unchanged: 1, created: 1 });
   });
+
+  describe('a document that does not state the flag', () => {
+    /** A row a walk sells by the kilo, with the weight of one piece. */
+    const piece = (): Partial<SourceCatalogEntry> => ({
+      externalId: 'k-4',
+      name: 'Queso curado',
+      soldByWeight: true,
+      unitSize: null,
+      sizeUnit: null,
+      approxWeight: 950,
+    });
+    const documentOf = (over: Partial<SourceObservation>) => {
+      const each: Partial<SourceObservation> & { fromDocument: true } = {
+        ...observation({ externalId: 'k-4', name: 'Queso curado', ...over }),
+        fromDocument: true,
+      };
+      delete each.soldByWeight;
+      return each as SourceObservation;
+    };
+
+    it('says a fixed pack beside a size quantity, so a row sold by weight holds no size', async () => {
+      const { ingest, context, saved } = build({ rows: [piece()] });
+
+      await ingest.ingest(context, {
+        ...session,
+        observations: [
+          documentOf({ unitSize: 500, sizeUnit: UnitOfMeasure.GRAM }),
+        ],
+      });
+
+      // What `origin/dev` wrote for the same file: a pack of 500 g.
+      expect(saved[0]).toMatchObject({
+        soldByWeight: false,
+        unitSize: 500,
+        sizeUnit: UnitOfMeasure.GRAM,
+        approxWeight: null,
+      });
+    });
+
+    it('says nothing with no size quantity, so the flag and the piece weight stay', async () => {
+      const { ingest, context, saved } = build({ rows: [piece()] });
+
+      const { counters } = await ingest.ingest(context, {
+        ...session,
+        observations: [documentOf({ unitSize: null, sizeUnit: null })],
+      });
+
+      expect(saved[0]).toMatchObject({
+        soldByWeight: true,
+        unitSize: null,
+        sizeUnit: null,
+        approxWeight: 950,
+      });
+      expect(counters.unchanged).toBe(1);
+    });
+
+    it('says nothing with no size quantity, so the size of a fixed pack stays', async () => {
+      const { ingest, context, saved } = build({
+        rows: [
+          {
+            externalId: 'k-4',
+            name: 'Queso curado',
+            soldByWeight: false,
+            unitSize: 250,
+            sizeUnit: UnitOfMeasure.GRAM,
+            approxWeight: null,
+          },
+        ],
+      });
+
+      await ingest.ingest(context, {
+        ...session,
+        observations: [documentOf({ unitSize: null, sizeUnit: null })],
+      });
+
+      expect(saved[0]).toMatchObject({
+        soldByWeight: false,
+        unitSize: 250,
+        sizeUnit: UnitOfMeasure.GRAM,
+      });
+    });
+
+    it('makes a new row with a size quantity a pack of that size', async () => {
+      const { ingest, context, saved } = build({});
+
+      await ingest.ingest(context, {
+        ...session,
+        observations: [
+          documentOf({ unitSize: 500, sizeUnit: UnitOfMeasure.GRAM }),
+        ],
+      });
+
+      expect(saved[0]).toMatchObject({
+        soldByWeight: false,
+        unitSize: 500,
+        sizeUnit: UnitOfMeasure.GRAM,
+      });
+    });
+  });
 });
 
 describe('SourceIngest, rung 4 compares the size (plan 0155)', () => {

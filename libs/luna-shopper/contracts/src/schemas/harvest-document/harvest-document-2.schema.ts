@@ -39,6 +39,17 @@ export const HARVEST_DOCUMENT_2_SCHEMA_ID =
 export const HARVEST_DOCUMENT_2_VERSION = 2;
 
 /**
+ * The bounds of `category_paths` (plan 0268): at most `paths` paths, `names`
+ * names in a path and `nameLength` characters in a name. Exported so that a
+ * producer, the harvester's export first, writes only what this schema takes.
+ */
+export const HARVEST_CATEGORY_PATHS_BOUNDS = {
+  paths: 50,
+  names: 12,
+  nameLength: 200,
+} as const;
+
+/**
  * A window of local days in Spain. **Both bounds are required inside it.** A
  * producer that read only an end date carries no `validity` and says so in
  * `warnings`, and the spawn's own override supplies the window, which is what
@@ -173,11 +184,14 @@ const product: JsonSchema = {
       type: ['array', 'null'],
       description:
         'Every path the chain files the product under, each root first (plan 0268). The import adds them to the paths the row holds and removes none.',
-      maxItems: 50,
+      maxItems: HARVEST_CATEGORY_PATHS_BOUNDS.paths,
       items: {
         type: 'array',
-        maxItems: 12,
-        items: { type: 'string', maxLength: 200 },
+        maxItems: HARVEST_CATEGORY_PATHS_BOUNDS.names,
+        items: {
+          type: 'string',
+          maxLength: HARVEST_CATEGORY_PATHS_BOUNDS.nameLength,
+        },
       },
     },
     url: { type: ['string', 'null'] },

@@ -356,9 +356,10 @@ type DocumentUnstated =
  * a field it leaves out says nothing about the product, and a harvester
  * export leaves out every field its row holds as null.
  *
- * {@link soldByWeight} follows the same rule, and here alone absent is not
- * false: a known row keeps how it is sold, and a new row is not sold by
- * weight.
+ * {@link soldByWeight} follows the same rule only when the document states
+ * no size quantity either: a known row keeps how it is sold, its size and its
+ * piece weight, and a new row is not sold by weight. Beside a size quantity
+ * an absent flag says a fixed pack (`fieldsOf`).
  */
 export interface DocumentObservation extends Omit<
   SourceObservation,
@@ -2546,12 +2547,20 @@ function fieldsOf(
   observation: FullObservation,
   sourceKind: PriceSourceKind
 ): SourceEntryFields {
-  // Absent is false for a walk, which always means it: an adapter with no
-  // field for it sells nothing by weight. A document that does not state it
-  // says nothing, so the stored flag stays (`applySourceGroup`) and a new
-  // row gets false (`create`).
+  const fromDocument = 'fromDocument' in observation;
+  // How the product is sold. Absent is false for a walk, which always means
+  // it: an adapter with no field for it sells nothing by weight.
+  //
+  // A document that does not state the flag answers by its size. **A size
+  // quantity says a fixed pack**, and the flag is written false with it, as
+  // before documents could state the flag: a row sold by weight never holds
+  // a size. **No size quantity says nothing** about how the product is sold,
+  // so the flag stays undefined: the stored one stays (`applySourceGroup`)
+  // and a new row gets false (`create`).
+  const unflagged = observation.soldByWeight === undefined;
+  const packBySize = typeof observation.unitSize === 'number';
   const soldByWeightStated =
-    'fromDocument' in observation && observation.soldByWeight === undefined
+    fromDocument && unflagged && !packBySize
       ? undefined
       : observation.soldByWeight === true;
   const soldByWeight = soldByWeightStated === true;
@@ -2562,8 +2571,15 @@ function fieldsOf(
   //
   // A size the observation does not state stays undefined (owner decision
   // 143a), so the stored size and its unit stay, unless a weight below says
-  // the row holds no size.
-  const stated = soldByWeight ? null : observation.unitSize;
+  // the row holds no size. A document that states neither a flag nor a size
+  // quantity states no size either: its null is not written, so the size of
+  // a fixed pack stays, and a row that stays sold by weight keeps its piece
+  // weight (`approxWeight` below follows the size).
+  const stated = soldByWeight
+    ? null
+    : soldByWeightStated === undefined
+      ? undefined
+      : observation.unitSize;
   const weighed =
     stated === undefined &&
     observation.approxWeight !== undefined &&

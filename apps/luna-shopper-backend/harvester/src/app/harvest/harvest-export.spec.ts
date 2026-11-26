@@ -244,6 +244,29 @@ describe('buildHarvestDocument', () => {
     expect(validateHarvestDocument(document).valid).toBe(true);
   });
 
+  it('states only the paths its schema takes, leaving out whole any path past the bounds', async () => {
+    const LONG = Array.from({ length: 13 }, (_, i) => `Nivel ${i + 1}`);
+    const WIDE = ['Lácteos', 'a'.repeat(201)];
+    // A name of 200 characters is at the bound, counted as the schema counts.
+    const AT_BOUND = ['Lácteos', 'é'.repeat(200)];
+    const VALID = Array.from({ length: 51 }, (_, i) => [
+      'Pasillo',
+      `Estante ${i + 1}`,
+    ]);
+    const document = build([
+      entry({ categoryPaths: [LONG, WIDE, AT_BOUND, ...VALID] }),
+    ]);
+    const [product] = productsOf(document);
+
+    // Never cut short, which would be a false path: left out, and the first
+    // fifty of the rest kept.
+    expect(product['category_paths']).toEqual([
+      AT_BOUND,
+      ...VALID.slice(0, 49),
+    ]);
+    expect(validateHarvestDocument(document).failures).toEqual([]);
+  });
+
   it('states no paths when no stored element is one', async () => {
     const [product] = productsOf(
       build([
