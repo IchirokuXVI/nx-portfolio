@@ -1,3 +1,5 @@
+> **PR:** [#1114](https://github.com/IchirokuXVI/nx-portfolio/pull/1114)
+
 # 0278 A product counts its pieces beside its pack
 
 > Asked for by the owner on 2026-11-26 (decision 153a). A product that is a pack of several units
@@ -69,7 +71,8 @@ the pack count. No run writes it.
   per litre, so it moves nothing there.
 - **The harvester** fills `packCount` only where it is null (`ITEM_PATTERNS.fillPackCounts`,
   `catalog.messages.ts` lines 2682 to 2710), from what an adapter reads in a structured field
-  (plan `0162` section 1). No adapter states a piece count apart from the pack count, the wash
+  (plan `0162` section 1). Since this plan it also fills it only where the product holds no
+  piece count or the new pack count is below it (see Decisions). No adapter states a piece count apart from the pack count, the wash
   count or the size (section 5).
 
 ### Target state
@@ -346,3 +349,17 @@ copies the name, brand, size, pack count, unit and weight onto a buy.
   on production and type 4 in "Units in the pack".
 - **C. One request file sent to each cluster's batch route with `expect`**, without the replay.
   Example: the same 22 edits, sent by `curl` to staging and then to production.
+
+## Decisions
+
+2026-11-26: the build took the recommended option of each open decision, pending the owner's
+answer. O1 A: no harvest run, fill or release task writes the piece count. O2 A: a purchase
+snapshot does not keep it, so `ItemSnapshot` is unchanged. O3 and O4 are about data, not code:
+the build sets no value, and the rows of section 7 wait for the owner.
+
+2026-11-26, fix round: `fillPackCounts` writes a pack count only where the product holds no
+piece count or the offered pack count is below it. Without that, `item_piece_count_on_sized`
+refuses one row of the fill's single `UPDATE`, the whole chunk fails, and the harvest run fails
+after its prices were written. A product the piece count keeps out is skipped, not counted in
+`written`, and logged by catalog with its id: `FillPackCountsResult` has no room for a skip count
+without a contract change. The fill still never writes `pieceCount`.

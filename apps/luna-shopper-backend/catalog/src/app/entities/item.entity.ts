@@ -115,6 +115,19 @@ export class Item extends BaseEntity {
   @Column({ type: 'smallint', nullable: true })
   packCount!: number | null;
 
+  /**
+   * How many pieces the whole product holds, counted across its pack, 2 to
+   * 10000, or null (plan 0278): 50 candies in a bag of 35 g, 100 in two such
+   * bags. Never a wash count, a serving count or the sheets of a roll.
+   *
+   * Only on a product with a fixed size in `GRAM` or `MILLILITER` and no
+   * weight, and above `packCount` when that is set. The checks
+   * `item_piece_count_bounds` and `item_piece_count_on_sized` restate the
+   * rules. Only a person writes it: no run, fill or release task does.
+   */
+  @Column({ type: 'smallint', nullable: true })
+  pieceCount!: number | null;
+
   @Column({ type: 'enum', enum: UnitOfMeasure, default: UnitOfMeasure.UNIT })
   defaultUnit!: UnitOfMeasure;
 

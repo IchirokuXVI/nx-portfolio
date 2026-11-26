@@ -1675,6 +1675,7 @@ describe('contract schemas', () => {
               eans: [],
               unitSize: null,
               packCount: null,
+              pieceCount: null,
               categories: [MILK_CATEGORY],
               defaultUnit: 'LITER',
               productGroupId: null,
@@ -1728,6 +1729,7 @@ describe('contract schemas', () => {
           eans: [],
           unitSize: null,
           packCount: null,
+          pieceCount: null,
           categories,
           defaultUnit: 'LITER',
           productGroupId: null,
@@ -2052,6 +2054,7 @@ describe('contract schemas', () => {
           eans: [],
           unitSize: null,
           packCount: null,
+          pieceCount: null,
           categories: [MILK_CATEGORY],
           defaultUnit: 'UNIT',
           productGroupId: null,
@@ -2157,6 +2160,7 @@ describe('contract schemas', () => {
           eans: [],
           unitSize: null,
           packCount: null,
+          pieceCount: null,
           categories: [MILK_CATEGORY],
           defaultUnit: 'KILOGRAM',
           productGroupId: null,
@@ -2210,6 +2214,95 @@ describe('contract schemas', () => {
           items: [{ itemId: 'i', quantityStep: 250 }],
         }).valid
       ).toBe(true);
+    });
+
+    it('a piece count is a whole number from 2 to 10000, or null, on the view and every write (plan 0278)', () => {
+      const product = {
+        id: 'i',
+        name: { en: 'Candies', es: 'Caramelos' },
+        brand: null,
+        imageUrl: null,
+        imageSource: null,
+        imageSupermarketId: null,
+        ownImageUrl: null,
+        images: [],
+        sku: null,
+        ean: null,
+        eans: [],
+        unitSize: 70,
+        packCount: 2,
+        categories: [MILK_CATEGORY],
+        defaultUnit: 'GRAM',
+        productGroupId: null,
+      };
+      const view = (pieceCount: unknown) =>
+        validateMessageResponse('item.get', { ...product, pieceCount }).valid;
+      // Required, as the pack count is: catalog fills it on every view.
+      expect(validateMessageResponse('item.get', product).valid).toBe(false);
+      for (const pieceCount of [null, 2, 100, 10000]) {
+        expect(view(pieceCount)).toBe(true);
+      }
+      for (const pieceCount of [1, 10001, 2.5, '100']) {
+        expect(view(pieceCount)).toBe(false);
+      }
+      // The basket's product spreads the view's fields, so it carries it too.
+      const basketProduct = createContractsAjv().getSchema(
+        'luna://basket/BasketProductView'
+      );
+      expect(
+        basketProduct?.({ ...product, pieceCount: 100, atShop: null })
+      ).toBe(true);
+      expect(basketProduct?.({ ...product, atShop: null })).toBe(false);
+
+      const writes = (pieceCount: unknown) => [
+        validateMessageRequest('item.create', {
+          userId: 'owner',
+          name: { es: 'Caramelos' },
+          categoryIds: ['c'],
+          defaultUnit: 'GRAM',
+          unitSize: 35,
+          pieceCount,
+        }).valid,
+        validateMessageRequest('item.createMany', {
+          userId: 'owner',
+          items: [
+            {
+              name: { es: 'Caramelos' },
+              categoryIds: ['c'],
+              defaultUnit: 'GRAM',
+              unitSize: 35,
+              pieceCount,
+            },
+          ],
+        }).valid,
+        validateMessageRequest('item.update', {
+          userId: 'owner',
+          itemId: 'i',
+          pieceCount,
+        }).valid,
+        validateMessageRequest('item.updateMany', {
+          userId: 'owner',
+          items: [{ itemId: 'i', pieceCount }],
+        }).valid,
+      ];
+      for (const pieceCount of [null, 2, 50, 10000]) {
+        expect(writes(pieceCount)).toEqual([true, true, true, true]);
+      }
+      for (const pieceCount of [1, 10001, 2.5]) {
+        expect(writes(pieceCount)).toEqual([false, false, false, false]);
+      }
+
+      // An expectation compares a value, so it states no bounds.
+      const expecting = (pieceCount: unknown) =>
+        validateMessageRequest('item.update', {
+          userId: 'owner',
+          itemId: 'i',
+          sku: 'X',
+          expect: { pieceCount },
+        }).valid;
+      expect(expecting(null)).toBe(true);
+      expect(expecting(100)).toBe(true);
+      expect(expecting(2.5)).toBe(false);
     });
 
     it('a create and an edit state a weight and who wrote it (plan 0244)', () => {
@@ -2311,6 +2404,7 @@ describe('contract schemas', () => {
               eans: [],
               unitSize: 1,
               packCount: 6,
+              pieceCount: null,
               categories: [MILK_CATEGORY],
               defaultUnit: 'LITER',
               productGroupId: 'g',

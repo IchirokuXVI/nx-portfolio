@@ -290,6 +290,8 @@ export function toItemView(
     // Plan 0261: a smallint, which Postgres answers as a number.
     quantityStep: toNumber(row.quantityStep ?? null),
     packCount: row.packCount ?? null,
+    // Plan 0278: a smallint too, filled on every view catalog builds.
+    pieceCount: toNumber(row.pieceCount ?? null),
     categories,
     defaultUnit: row.defaultUnit,
     productGroupId: row.productGroupId,

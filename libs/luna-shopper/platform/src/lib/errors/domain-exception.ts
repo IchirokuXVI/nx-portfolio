@@ -700,6 +700,24 @@ export class ItemQuantityStepNotAllowedException extends DomainException {
   override readonly exposesDetails = true;
 }
 
+/** The `details` keys of a refused piece count (plan 0278, section 2). */
+export const ITEM_PIECE_COUNT_DETAIL = 'pieceCount';
+export const ITEM_PACK_COUNT_DETAIL = 'packCount';
+
+/**
+ * A product write would store a piece count off its bounds, on a product
+ * without a fixed size in `GRAM` or `MILLILITER`, or not above the pack count
+ * (plan 0278, section 2). The details are public: the piece count under
+ * {@link ITEM_PIECE_COUNT_DETAIL}, the pack count under
+ * {@link ITEM_PACK_COUNT_DETAIL}, the size under {@link ITEM_UNIT_SIZE_DETAIL}
+ * and the unit under `defaultUnit`, with `itemId` or `index` as for
+ * {@link ItemUnitNotBaseException}.
+ */
+export class ItemPieceCountNotAllowedException extends DomainException {
+  readonly code = ERROR_CODES.ITEM_PIECE_COUNT_NOT_ALLOWED;
+  override readonly exposesDetails = true;
+}
+
 /**
  * The `details` keys of the merge refusals (plan 0239): the product the
  * refusal is about, and the product it was merged into.

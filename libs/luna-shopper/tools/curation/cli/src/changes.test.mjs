@@ -6,6 +6,7 @@ import {
   CHANGE_LIST_KIND,
   LOCAL_GAP,
   NOT_CARRIED,
+  carriedField,
   exportChanges,
   exportCommand,
   exportItemsSql,
@@ -14,6 +15,7 @@ import {
   parseActors,
   readChangeList,
   sameValue,
+  wireValue,
 } from './changes.mjs';
 
 // Made up ids: nothing here names a real product, entry or operator.
@@ -330,7 +332,22 @@ test('every carried field is one entry with a kind, so a new guarded field is on
       'quantityStep',
       'defaultUnit',
       'packCount',
+      'pieceCount',
       'categorySlugs',
     ]
   );
+});
+
+test('a piece count edit is carried and guarded, not reported unguarded', () => {
+  const change = foldProduct(ITEM, [
+    line({ before: { pieceCount: null }, after: { pieceCount: 50 } }),
+    line({ before: { pieceCount: 50 }, after: { pieceCount: '48' } }),
+  ]);
+  assert.equal(change.class, null);
+  assert.deepEqual(change.fields, [
+    { field: 'pieceCount', from: null, to: '48' },
+  ]);
+  assert.deepEqual(change.unguarded, []);
+  assert.equal(wireValue(carriedField('pieceCount'), '48'), 48);
+  assert.equal(carriedField('pieceCount').kind, carriedField('packCount').kind);
 });

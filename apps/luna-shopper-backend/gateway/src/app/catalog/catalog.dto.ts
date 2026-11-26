@@ -15,6 +15,8 @@ import {
   ITEM_PRICE_OBSERVED_AT_MAX_AGE_DAYS,
   PACK_COUNT_MAX,
   PACK_COUNT_MIN,
+  PIECE_COUNT_MAX,
+  PIECE_COUNT_MIN,
   PriceScopeKind,
   PriceSourceKind,
   QUANTITY_STEPS,
@@ -464,6 +466,29 @@ function QuantityStepProperty(description: string): PropertyDecorator {
   );
 }
 
+const PIECE_COUNT_DESCRIPTION =
+  'How many pieces the whole product holds, counted across its pack (plan 0278): a bag of 35 g holds 50 candies, two such bags 100. It sits beside `packCount`, which counts the units a shopper uses one at a time; this counts small pieces whose number matters more than their weight, and is never a wash count, a serving count or the sheets of a roll. A whole number from 2 to 10000, or null. Only a product with a fixed `unitSize` in `GRAM` or `MILLILITER` and no `approxWeight` holds one, and it is above `packCount` when that is set; anything else is refused with `item_piece_count_not_allowed`. An edit that clears the size, changes the unit or raises the pack count to it sends null here with it. No harvest run writes it.';
+
+/**
+ * The piece count of a product (plan 0278, section 3), stated once for the
+ * create and the edit with its bounds.
+ */
+function PieceCountProperty(description: string): PropertyDecorator {
+  return applyDecorators(
+    ApiPropertyOptional({
+      type: 'integer',
+      nullable: true,
+      minimum: PIECE_COUNT_MIN,
+      maximum: PIECE_COUNT_MAX,
+      description,
+    }),
+    IsOptional(),
+    IsInt(),
+    Min(PIECE_COUNT_MIN),
+    Max(PIECE_COUNT_MAX)
+  );
+}
+
 const BASE_UNIT_DESCRIPTION =
   'A base unit (plan 0237, section 3.3). `LITER` and `PACK` are refused with `item_unit_not_base`, which names the unit and size they become (`MILLILITER`, `UNIT`). A `KILOGRAM` with a size is refused with `item_kilogram_has_size`, which names the grams it would be: a product sold by the kilo has no size. A piece with an approximate weight sends `approxWeight` instead. An edit is checked as the product will be saved, and only when it names the unit or the size.';
 
@@ -537,6 +562,9 @@ export class CreateItemDto {
   @Min(PACK_COUNT_MIN)
   @Max(PACK_COUNT_MAX)
   packCount?: number | null;
+
+  @PieceCountProperty(PIECE_COUNT_DESCRIPTION)
+  pieceCount?: number | null;
 
   @ApiPropertyOptional({
     type: [String],
@@ -683,6 +711,16 @@ export class ItemExpectationDto {
   packCount?: number | null;
 
   @ApiPropertyOptional({
+    type: 'integer',
+    nullable: true,
+    description:
+      'The piece count the product holds, or null for none, compared as a number (plan 0278). No harvest run writes it.',
+  })
+  @IsOptional()
+  @IsInt()
+  pieceCount?: number | null;
+
+  @ApiPropertyOptional({
     type: [String],
     maxItems: ITEM_CATEGORY_MAX,
     description: 'The slugs of the product’s categories, compared in order.',
@@ -766,6 +804,9 @@ export class UpdateItemDto {
   @Min(PACK_COUNT_MIN)
   @Max(PACK_COUNT_MAX)
   packCount?: number | null;
+
+  @PieceCountProperty(PIECE_COUNT_DESCRIPTION)
+  pieceCount?: number | null;
 
   @ApiPropertyOptional({
     type: [String],

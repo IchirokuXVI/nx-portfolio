@@ -774,6 +774,9 @@ export class HarvestMemory implements HarvestServiceI {
       unitSize: input.unitSize ?? entry.unitSize,
       packCount:
         input.packCount === undefined ? entry.packCount : input.packCount,
+      // A product made from a source entry holds no piece count: no run
+      // writes one (backend plan 0278, section 5).
+      pieceCount: null,
       categories: entryCategories(input.categorySlugs),
       defaultUnit: input.defaultUnit ?? 'UNIT',
       productGroupId: null,

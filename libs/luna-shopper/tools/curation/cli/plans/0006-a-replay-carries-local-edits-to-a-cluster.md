@@ -581,8 +581,9 @@ read from `CURATION_TARGET_PASSWORD` set for the one command. A replay refuses
   text format of `COPY` doubles every backslash and so breaks a JSON string that holds a quote.
   The session is still set read only first.
 - The carried fields are one list, `CARRIED_FIELDS` in `changes.mjs`, one line per field. It
-  holds `quantityStep` too, because the `expect` guards it since plan 0261. Backend plan 0278
-  adds `pieceCount` to the `expect`; it joins the list as one line once that plan is merged.
+  holds `quantityStep` too, because the `expect` guards it since plan 0261, and `pieceCount`,
+  because backend plan 0278 (PR #1114) added it to the `expect` and joined it to the list as one
+  line.
 - A field the trail records that is neither carried nor derived (`linkedImages`, for example) is
   reported with the unguarded fields and never sent. The chain check of section 2.4 runs on every
   field that is not derived.

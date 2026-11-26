@@ -18655,7 +18655,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.\n\n`item_piece_count_not_allowed` — Only a product with a fixed size in grams or millilitres has a piece count, from 2 to 10000 and above its pack count. Correct the count, or clear it.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18900,7 +18900,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.\n\n`item_piece_count_not_allowed` — Only a product with a fixed size in grams or millilitres has a piece count, from 2 to 10000 and above its pack count. Correct the count, or clear it.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -19004,7 +19004,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.\n\n`item_piece_count_not_allowed` — Only a product with a fixed size in grams or millilitres has a piece count, from 2 to 10000 and above its pack count. Correct the count, or clear it.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -19298,7 +19298,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.\n\n`item_piece_count_not_allowed` — Only a product with a fixed size in grams or millilitres has a piece count, from 2 to 10000 and above its pack count. Correct the count, or clear it.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -29264,7 +29264,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.\n\n`item_piece_count_not_allowed` — Only a product with a fixed size in grams or millilitres has a piece count, from 2 to 10000 and above its pack count. Correct the count, or clear it.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -33081,6 +33081,13 @@
             "maximum": 1000,
             "description": "How many units the pack holds (plan 0162). Null, or absent, for a product that is not a pack."
           },
+          "pieceCount": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 2,
+            "maximum": 10000,
+            "description": "How many pieces the whole product holds, counted across its pack (plan 0278): a bag of 35 g holds 50 candies, two such bags 100. It sits beside `packCount`, which counts the units a shopper uses one at a time; this counts small pieces whose number matters more than their weight, and is never a wash count, a serving count or the sheets of a roll. A whole number from 2 to 10000, or null. Only a product with a fixed `unitSize` in `GRAM` or `MILLILITER` and no `approxWeight` holds one, and it is above `packCount` when that is set; anything else is refused with `item_piece_count_not_allowed`. An edit that clears the size, changes the unit or raises the pack count to it sends null here with it. No harvest run writes it."
+          },
           "categoryIds": {
             "minItems": 1,
             "maxItems": 10,
@@ -33203,6 +33210,11 @@
             "type": "integer",
             "nullable": true
           },
+          "pieceCount": {
+            "type": "integer",
+            "nullable": true,
+            "description": "The piece count the product holds, or null for none, compared as a number (plan 0278). No harvest run writes it."
+          },
           "categorySlugs": {
             "maxItems": 10,
             "description": "The slugs of the product’s categories, compared in order.",
@@ -33272,6 +33284,13 @@
             "minimum": 2,
             "maximum": 1000,
             "description": "Set or correct the pack count, or clear it with null (plan 0162). The only write that changes a count that is set: a harvest run fills a null count and never overwrites one."
+          },
+          "pieceCount": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 2,
+            "maximum": 10000,
+            "description": "How many pieces the whole product holds, counted across its pack (plan 0278): a bag of 35 g holds 50 candies, two such bags 100. It sits beside `packCount`, which counts the units a shopper uses one at a time; this counts small pieces whose number matters more than their weight, and is never a wash count, a serving count or the sheets of a roll. A whole number from 2 to 10000, or null. Only a product with a fixed `unitSize` in `GRAM` or `MILLILITER` and no `approxWeight` holds one, and it is above `packCount` when that is set; anything else is refused with `item_piece_count_not_allowed`. An edit that clears the size, changes the unit or raises the pack count to it sends null here with it. No harvest run writes it."
           },
           "categoryIds": {
             "minItems": 1,
@@ -33423,6 +33442,13 @@
             "minimum": 2,
             "maximum": 1000,
             "description": "Set or correct the pack count, or clear it with null (plan 0162). The only write that changes a count that is set: a harvest run fills a null count and never overwrites one."
+          },
+          "pieceCount": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 2,
+            "maximum": 10000,
+            "description": "How many pieces the whole product holds, counted across its pack (plan 0278): a bag of 35 g holds 50 candies, two such bags 100. It sits beside `packCount`, which counts the units a shopper uses one at a time; this counts small pieces whose number matters more than their weight, and is never a wash count, a serving count or the sheets of a roll. A whole number from 2 to 10000, or null. Only a product with a fixed `unitSize` in `GRAM` or `MILLILITER` and no `approxWeight` holds one, and it is above `packCount` when that is set; anything else is refused with `item_piece_count_not_allowed`. An edit that clears the size, changes the unit or raises the pack count to it sends null here with it. No harvest run writes it."
           },
           "categoryIds": {
             "minItems": 1,
@@ -38505,6 +38531,15 @@
             "minimum": 2,
             "maximum": 1000
           },
+          "pieceCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 2,
+            "maximum": 10000,
+            "description": "How many pieces the whole product holds, counted across its pack, beside the pack count (plan 0278): a bag of 35 g holds 50 candies. Null when nobody counted them. A person sets it, and no harvest run writes it."
+          },
           "categories": {
             "type": "array",
             "items": {
@@ -38573,6 +38608,7 @@
           "eans",
           "unitSize",
           "packCount",
+          "pieceCount",
           "categories",
           "defaultUnit",
           "productGroupId",
@@ -41034,6 +41070,15 @@
             "minimum": 2,
             "maximum": 1000
           },
+          "pieceCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 2,
+            "maximum": 10000,
+            "description": "How many pieces the whole product holds, counted across its pack, beside the pack count (plan 0278): a bag of 35 g holds 50 candies. Null when nobody counted them. A person sets it, and no harvest run writes it."
+          },
           "categories": {
             "type": "array",
             "items": {
@@ -41085,6 +41130,7 @@
           "eans",
           "unitSize",
           "packCount",
+          "pieceCount",
           "categories",
           "defaultUnit",
           "productGroupId"
@@ -50096,6 +50142,7 @@
               "item_kilogram_has_size",
               "item_approx_weight_beside_size",
               "item_quantity_step_not_allowed",
+              "item_piece_count_not_allowed",
               "item_merged",
               "item_merge_two_articles_one_chain",
               "item_merge_format_differs",
