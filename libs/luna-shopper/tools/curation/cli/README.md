@@ -180,8 +180,15 @@ operator, `dev-admin` by default.
 
 ```sh
 npx nx run luna-shopper/curation-cli:curate -- --replay .curation-runs/<name>/changes.jsonl \
-  --target-url <gateway url> --write
+  --target-url <gateway url> --write --confirm-host <host name of that url>
 ```
+
+A write needs `--confirm-host`. Type the host name of `--target-url` a second
+time, with no scheme, port or path: for `https://staging.example.com:8443/`
+that is `staging.example.com`. Case does not matter. When the flag is missing
+or names another host, the run stops before it signs in and sends nothing. This
+holds for every write: this step, step 6 and `--decisions`. A dry run needs no
+confirmation.
 
 The products of class `apply` go through `PATCH /v1/admin/catalog/items/batch`,
 100 a request by default (`--batch-size`, at most 1,000). Each edit carries an
@@ -224,11 +231,29 @@ the products that you want to send in a file, one id a line, then:
 
 ```sh
 npx nx run luna-shopper/curation-cli:curate -- --replay-identity .curation-runs/<name>/<report>.json \
-  --target-url <the same url> --only .curation-runs/<name>/ids.txt [--write]
+  --target-url <the same url> --only .curation-runs/<name>/ids.txt
 ```
 
-The `expect` then carries the target's name and brand as the report recorded
-them. A report written for another url is refused.
+That is the dry run. To write, add `--write --confirm-host <host name of that
+url>`. A write of this pass needs `--only`: without it the run stops before it
+signs in. The `expect` then carries the target's name and brand as the report
+recorded them. A report written for another url is refused.
+
+### Products left to the wash task
+
+The wash count products of release task `0009` are not carried. Each one has
+its own report line of class `excluded: wash task`, with the product id and,
+under `washTask.text`, the source row text that excluded it. The summary
+counts them. When such a product also has other edits (a name, a brand,
+`packCount`, and so on), only its size is left out: `unitSize`, and
+`defaultUnit` when the edit changes it too. The other fields are sent under
+their guard, and the line carries a `washTask` that says the size was left to
+the task. stderr counts those as "the size of N more left to the wash task".
+
+After release task `0009` has run on the target, check each of these products
+there. The task holds some products back, for example one whose other chain
+states the same number as units. Such a product stays uncorrected, and a person
+must decide its size.
 
 ### Queue decisions
 
@@ -248,7 +273,7 @@ carried.
 | `local gap`           | someone not exported changed the product between two exported edits                                                       |
 | `no twin`             | the target has no product with that id                                                                                    |
 | `merged on target`    | the target merged the product; the report names the survivor                                                              |
-| `excluded: wash task` | a wash count that release task `0007` corrects; found by its rule                                                         |
+| `excluded: wash task` | a wash count that release task `0009` corrects; found by its rule, with the row text that matched                         |
 | `identity changed`    | the target's name or brand is not the one the edit was made on                                                            |
 | `already there`       | the target holds every new value                                                                                          |
 | `conflict`            | a field holds neither the old nor the new value                                                                           |

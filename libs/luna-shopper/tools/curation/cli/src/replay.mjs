@@ -94,7 +94,7 @@ export const DRY_RUN_LIMITS =
 // ---------------------------------------------------------------------------
 
 /**
- * The two patterns of release task 0007's rule, as literals, because the CLI
+ * The two patterns of the wash rule (release task 0009 selects by them), as literals, because the CLI
  * cannot import TypeScript. `replay.test.mjs` reads `wash-sizes.ts` as text
  * and asserts each of these equals its source, so the rule keeps one meaning
  * (owner decision O2).
@@ -136,12 +136,33 @@ export function washCandidate(change, item) {
   return count;
 }
 
-/** Whether an `ACTIVE` source row states that count by the task's rule. */
-export function washExcluded(count, rows) {
-  return rows.some(
-    (row) => row.status === 'ACTIVE' && washCount(row.sizeFormat) === count
+/**
+ * The `ACTIVE` source row that states that count by the task's rule, or null.
+ * Its text is what the report shows, so an operator can check the product.
+ */
+export function washRow(count, rows) {
+  return (
+    (rows ?? []).find(
+      (row) => row.status === 'ACTIVE' && washCount(row.sizeFormat) === count
+    ) ?? null
   );
 }
+
+/** Whether an `ACTIVE` source row states that count by the task's rule. */
+export function washExcluded(count, rows) {
+  return washRow(count, rows) !== null;
+}
+
+/**
+ * The fields the wash task owns (owner decision 157a): the size, and the
+ * default unit when the change moves it too. Every other field of the same
+ * product is still carried.
+ */
+export const WASH_FIELDS = new Set(['unitSize', 'defaultUnit']);
+
+/** What a report line says about a size left to the wash task. */
+export const WASH_NOTE =
+  'the size was left to release task 0009; check this product after it has run on the target';
 
 // ---------------------------------------------------------------------------
 // The target, as a paced client
@@ -338,8 +359,24 @@ export function classify(
     return { ...line, class: CLASS.MERGED, survivor: item.mergedInto };
   }
   const count = washCandidate(change, item);
-  if (count !== null && washRows && washExcluded(count, washRows)) {
-    return { ...line, class: CLASS.WASH, washCount: count };
+  const excludedBy = count === null ? null : washRow(count, washRows);
+  if (excludedBy) {
+    const washTask = {
+      count,
+      text: excludedBy.sizeFormat,
+      note: WASH_NOTE,
+    };
+    const rest = line.fields.filter((field) => !WASH_FIELDS.has(field.field));
+    if (rest.length === 0) {
+      return { ...line, class: CLASS.WASH, washCount: count, washTask };
+    }
+    // Only the size is the task's: the other fields go on to be judged and
+    // sent under their guard, and the line keeps what was left out.
+    washTask.fields = line.fields.filter((field) =>
+      WASH_FIELDS.has(field.field)
+    );
+    line.fields = rest;
+    line.washTask = washTask;
   }
   if (!sameIdentity(change.identity, item, esOnly)) {
     return { ...line, class: CLASS.IDENTITY };
@@ -823,14 +860,24 @@ export function countLines(lines) {
   }
   let fieldsSent = 0;
   let written = 0;
+  let sizeLeftToWashTask = 0;
   for (const line of lines) {
     classes[line.class] = (classes[line.class] ?? 0) + 1;
     if (line.written) {
       written += 1;
     }
+    if (line.class !== CLASS.WASH && line.washTask) {
+      sizeLeftToWashTask += 1;
+    }
     fieldsSent += line.fields.filter((field) => field.sent).length;
   }
-  return { products: lines.length, classes, written, fieldsSent };
+  return {
+    products: lines.length,
+    classes,
+    written,
+    fieldsSent,
+    sizeLeftToWashTask,
+  };
 }
 
 /** What the change list holds that no replay carries (section 5). */
@@ -878,6 +925,45 @@ export function normalizeTargetUrl(value) {
   return url.toString().replace(/\/+$/, '');
 }
 
+/**
+ * The host name of a url or of a bare host, lower case, with no scheme, port
+ * or path, or null when it is not one.
+ */
+export function hostNameOf(value) {
+  if (typeof value !== 'string' || value.trim() === '') {
+    return null;
+  }
+  const text = value.trim();
+  try {
+    const url = new URL(
+      /^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `http://${text}`
+    );
+    return url.hostname.toLowerCase() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Refuses a write whose `--confirm-host` is missing or names another host
+ * than `--target-url` (owner decision 158a). A dry run needs none.
+ */
+export function assertConfirmedHost(targetUrl, confirmHost) {
+  const target = hostNameOf(targetUrl);
+  const given = typeof confirmHost === 'string' ? confirmHost.trim() : '';
+  if (given === '') {
+    throw new Error(
+      `--write needs --confirm-host ${target}: type the host name of the target a second time. The target is ${target}, and no --confirm-host was given. Nothing was sent.`
+    );
+  }
+  const confirmed = hostNameOf(given);
+  if (confirmed !== target) {
+    throw new Error(
+      `--confirm-host names ${confirmed ?? given}, and --target-url names ${target}. They must be the same host. Nothing was sent.`
+    );
+  }
+}
+
 /** A batch size between 1 and the route's cap. */
 export function parseBatchSize(value) {
   if (value === undefined) {
@@ -897,7 +983,10 @@ export function countsLine(counts) {
   const parts = Object.entries(counts.classes)
     .filter(([, count]) => count > 0)
     .map(([name, count]) => `${name} ${count}`);
-  return `${counts.products} products: ${parts.join(', ') || 'none'}; ${counts.written} written, ${counts.fieldsSent} fields sent`;
+  const wash = counts.sizeLeftToWashTask
+    ? `; the size of ${counts.sizeLeftToWashTask} more left to the wash task`
+    : '';
+  return `${counts.products} products: ${parts.join(', ') || 'none'}${wash}; ${counts.written} written, ${counts.fieldsSent} fields sent`;
 }
 
 /** Writes the report, never to stdout. */
