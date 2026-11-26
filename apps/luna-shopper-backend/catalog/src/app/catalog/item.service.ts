@@ -1224,13 +1224,15 @@ export class ItemService {
         params
       )) as [{ id: string; packCount: number }[], number];
       // The answer has no room for a skip without a contract change, so the
-      // products the piece count kept out are logged for the curator.
+      // products the piece count kept out are logged for the curator. A merged
+      // product is left out of the log: its survivor is the one curated.
       const kept = (await tx.manager.query(
         `SELECT i."id"
            FROM "items" AS i
            JOIN unnest($1::uuid[], $2::smallint[]) AS v("id", "packCount")
              ON i."id" = v."id"
-          WHERE i."packCount" IS NULL
+          WHERE ${itemStateSql('i')}
+            AND i."packCount" IS NULL
             AND i."pieceCount" IS NOT NULL
             AND v."packCount" >= i."pieceCount"`,
         params
