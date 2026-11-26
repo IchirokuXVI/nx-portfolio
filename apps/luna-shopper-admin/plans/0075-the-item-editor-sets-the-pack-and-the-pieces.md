@@ -1,3 +1,5 @@
+> **PR:** [#1118](https://github.com/IchirokuXVI/nx-portfolio/pull/1118)
+
 # 0075 The item editor sets the pack and the pieces
 
 > Asked for by the owner on 2026-11-26 (decision 153a): a product that is a pack has a pack
