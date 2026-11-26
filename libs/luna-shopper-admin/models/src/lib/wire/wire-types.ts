@@ -1197,6 +1197,7 @@ export type SourceEntryObservedDto = {
   packCount: number | null;
   soldByWeight: boolean;
   approxWeight: number | null;
+  packaging: string | null;
 };
 
 /**

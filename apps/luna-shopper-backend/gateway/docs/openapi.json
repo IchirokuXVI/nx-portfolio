@@ -35154,6 +35154,10 @@
           "approxWeight": {
             "type": "number",
             "nullable": true
+          },
+          "packaging": {
+            "type": "string",
+            "nullable": true
           }
         },
         "required": [
@@ -35165,7 +35169,8 @@
           "sizeUnit",
           "packCount",
           "soldByWeight",
-          "approxWeight"
+          "approxWeight",
+          "packaging"
         ]
       },
       "SourceEntryExpectationDto": {

@@ -250,6 +250,8 @@ describe('parseDecisionsFile', () => {
       packCount: null,
       soldByWeight: false,
       approxWeight: null,
+      // The tenth field since decision 154a, passed through like the others.
+      packaging: 'Brik',
     };
     const read = parseDecisionsFile(
       jsonl(
