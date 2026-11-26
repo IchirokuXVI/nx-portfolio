@@ -285,12 +285,21 @@ describe('suggestionCardView, an item', () => {
     });
   });
 
-  describe('the pack (backend 0162)', () => {
-    it('puts "Pack 6" on the detail line, and names it to the add button', () => {
+  describe('the pack (backend 0162, velista 0209)', () => {
+    it('prints the pack inside the size on the detail line and the add button', () => {
       const card = itemCard({ packCount: 6, size: 6 });
 
+      expect(card.row.detail).toContain('list.add.size.packOf');
+      expect(card.row.detail).not.toContain('list.add.card.pack');
+      expect(card.pickLabel).toContain('list.add.size.packOf');
+      expect(card.pickLabel).not.toContain('list.add.card.pack');
+    });
+
+    it('puts "Pack 6" on the detail line only with no size', () => {
+      const card = itemCard({ packCount: 6, size: null });
+
       expect(card.row.detail).toBe(
-        'Hacendado · list.add.size.LITER {"size":"6"} · list.add.card.pack {"count":6}'
+        'Hacendado · list.add.card.pack {"count":6}'
       );
       expect(card.pickLabel).toContain('list.add.card.pack {\\"count\\":6}');
     });

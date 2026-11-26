@@ -238,6 +238,10 @@ interface Fixture {
   readonly comparable: Partial<Record<ChainKey, number>>;
   readonly comparableBasis: ComparableBasis;
   readonly stale?: boolean;
+  /** How many units the pack holds (velista `0209`). Absent is not a pack. */
+  readonly packCount?: number;
+  /** How many pieces the product holds (velista `0209`). Absent is none said. */
+  readonly pieceCount?: number;
 }
 
 const PRODUCTS: readonly Fixture[] = [
@@ -268,18 +272,22 @@ const PRODUCTS: readonly Fixture[] = [
       { 'chain-mercadona': 1.35, 'chain-deza': 1.29, 'chain-carrefour': 1.39 },
     ]
   ),
-  fixture(
-    'item-tuna',
-    'Atún claro en aceite, 3 x 80 g',
-    'Light tuna in oil, 3 x 80 g',
-    'Calvo',
-    0.24,
-    'KILOGRAM',
-    'tuna-and-bonito',
-    'KILOGRAM',
-    { 'chain-mercadona': 2.79, 'chain-carrefour': 2.65 },
-    ['KILOGRAM', { 'chain-mercadona': 11.63, 'chain-carrefour': 11.04 }]
-  ),
+  {
+    // A pack of three cans, so the card prints its units (velista `0209`).
+    ...fixture(
+      'item-tuna',
+      'Atún claro en aceite, 3 x 80 g',
+      'Light tuna in oil, 3 x 80 g',
+      'Calvo',
+      0.24,
+      'KILOGRAM',
+      'tuna-and-bonito',
+      'KILOGRAM',
+      { 'chain-mercadona': 2.79, 'chain-carrefour': 2.65 },
+      ['KILOGRAM', { 'chain-mercadona': 11.63, 'chain-carrefour': 11.04 }]
+    ),
+    packCount: 3,
+  },
   fixture(
     'item-sugar',
     'Azúcar blanco',
@@ -567,5 +575,7 @@ function toProduct(
     offer: best,
     unitBasis: best === null ? null : row.basis,
     approxWeight: null,
+    packCount: row.packCount ?? null,
+    pieceCount: row.pieceCount ?? null,
   };
 }

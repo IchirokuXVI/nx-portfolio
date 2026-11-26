@@ -80,6 +80,7 @@ function item(
 ): CatalogItem {
   return {
     id,
+    pieceCount: null,
     quantityStep: null,
     name: { es: en, en },
     brand,

@@ -842,7 +842,11 @@
         "KILOGRAM": "{{size}} kg",
         "MILLILITER": "{{size}} ml",
         "LITER": "{{size}} L",
-        "PACK": "{{size}} packs"
+        "PACK": "{{size}} packs",
+        "packOf": "{{total}} ({{count}} × {{each}})",
+        "pieces": "{{size}}, {{count}} piezas",
+        "about": "~{{size}}",
+        "andPack": "{{size}} · {{pack}}"
       },
       "weight": {
         "KILOGRAM": "~{{size}} kg",

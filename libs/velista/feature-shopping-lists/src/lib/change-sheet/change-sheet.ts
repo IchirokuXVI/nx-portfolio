@@ -624,6 +624,8 @@ export class ChangeSheet {
       ? null
       : {
           id: itemId,
+          packCount: null,
+          pieceCount: null,
           name: product.name,
           brand: product.brand,
           imageUrl: product.imageUrl,

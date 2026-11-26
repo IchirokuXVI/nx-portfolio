@@ -29,6 +29,7 @@ function line(id: string, content: string, itemIds: string[] = []): Line {
 function product(id: string, en: string, ...slugs: string[]): CatalogItem {
   return {
     id,
+    pieceCount: null,
     quantityStep: null,
     name: { es: en, en },
     brand: null,

@@ -1,3 +1,5 @@
+> **PR:** [#1117](https://github.com/IchirokuXVI/nx-portfolio/pull/1117)
+
 # 0209: a size names its units and its pieces
 
 > Asked for by the owner on 2026-11-26 (decision 153a). A product that is a pack has the
@@ -215,8 +217,9 @@ O3 decides. Under its recommendation:
   row lists sheet and the shopping list labels.
 - **The total only** in the compact row's first fact (velista `0191`) and in the amount caption
   (`line-amount-words.ts`), which already multiplies a count by the size ("2 × 360 g").
-- The separate "Pack N" of `productRowView` and the suggestion card is printed only in rule 2's
-  case, where the size cannot carry it.
+- The separate "Pack N" of `productRowView` and the suggestion card is printed only where the
+  size cannot carry it: with no size (rule 2), beside a weight (rule 1), and for a counted size
+  the pack does not divide or divides into ones (rule 6), "4 uds · Pack de 4".
 
 ## 4. Specs
 
@@ -274,3 +277,24 @@ O3 decides. Under its recommendation:
   90 g)".
 - **C. Only on the product card and the product page.** Example: the shopping list row says
   "Hacendado · 360 g" with no count.
+
+## Decisions
+
+The owner answered the mock on 2026-11-26 and chose option A each time.
+
+- **O1 A.** A unit weight that is not whole prints rounded with a tilde: "185 g (7 × ~26 g)".
+- **O2 A.** The word for pieces is "pieces" in English and "piezas" in Spanish.
+- **O3 A.** The long form prints everywhere a size names a product, except the default list
+  view's first fact (the row with the stepper, the compact row of `0191` in this plan's words)
+  and the cost caption, which keep the total alone.
+- **Sign A.** The sign is "×", as velista already uses.
+- **Pack with no size, new places.** As the approved mock shows, the "Pack N" words for a pack
+  with no size now print on screens that did not show them before: the zone list row's second
+  line, the line page, the line sheet, the rename sheet, the shopping list row and the sheet it
+  titles, the row lists sheet and the catalog tab card.
+
+What the mock found, kept by stage 2: English groups thousands ("6,000 ml (6 × 1,000 ml)") and
+Spanish does not below 10,000 ("6000 ml (6 × 1000 ml)"), as `Intl` gives them. Inside the
+bracket and around the sign the spaces are no break spaces, so a line wraps before "(" or
+after the comma, never inside "4 × 90 g". The shopping list row keeps its one line layout, cut
+at its end.

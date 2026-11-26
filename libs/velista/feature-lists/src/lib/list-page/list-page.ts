@@ -132,6 +132,7 @@ import {
   type LineRowAction,
   ListHeader,
   ListNotice,
+  NO_COUNTS,
   PageHeader,
   PageHeaderAction,
   productBrandSizeText,
@@ -642,13 +643,17 @@ export class ListPage {
       pricesOf: this._itemNames.pricesOf,
       locale,
       brandSizeOf: (item) => productBrandSizeText(item, locale, translate),
+      // The default view's first fact prints the total alone (velista `0209`,
+      // O3 A): it is about a hundred pixels wide, and the second line beside
+      // it carries the counts.
       sizeOf: (item) =>
         productSizeText(
           item.size,
           item.unit,
           locale,
           translate,
-          item.approxWeight
+          item.approxWeight,
+          NO_COUNTS
         ),
       formatMoney: (amount, currency) => formatMoney(amount, currency, locale),
       translate,

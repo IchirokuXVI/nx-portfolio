@@ -60,6 +60,7 @@ const REPORTS = expect.objectContaining({ reportExtra: true });
 
 const OIL: CatalogItem = {
   id: 'item-oil',
+  pieceCount: null,
   quantityStep: null,
   name: { es: 'Aceite de oliva virgen extra', en: 'Extra virgin olive oil' },
   brand: 'Hacendado',

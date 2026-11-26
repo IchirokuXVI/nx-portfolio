@@ -202,6 +202,7 @@ describe('LineComposer, one slot and the empty field decides', () => {
       kind: 'item',
       item: {
         id: 'item-oat',
+        pieceCount: null,
         quantityStep: null,
         name: { es: 'Bebida de avena', en: 'Oat drink' },
         brand: 'Oatly',
@@ -398,6 +399,7 @@ describe('LineComposer, one slot and the empty field decides', () => {
       kind: 'item',
       item: {
         id: 'item-oat',
+        pieceCount: null,
         quantityStep: null,
         name: { es: 'Bebida de avena', en: 'Oat drink' },
         brand: 'Oatly',

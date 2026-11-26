@@ -16,6 +16,7 @@ function product(id: string, groupId: string): CatalogItem {
     categories: [
       {
         id: 'cat-milk',
+        pieceCount: null,
         parentId: 'cat-eggs-milk-and-butter',
         slug: 'milk',
         name: { en: 'Milk', es: 'Leche' },
