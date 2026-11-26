@@ -564,6 +564,19 @@ test('a CREATE writes into the rehearsal catalog and never into the main one', a
   assert.deepEqual(row.expect, {
     status: 'CANDIDATE',
     lastSeenAt: '2026-09-08T10:00:00.000Z',
+    // What the row said when it was decided (backend plan 0277).
+    observed: {
+      name: 'Leche entera 1 L',
+      brand: null,
+      ean: null,
+      sizeFormat: null,
+      unitSize: null,
+      sizeUnit: null,
+      packCount: null,
+      soldByWeight: false,
+      approxWeight: null,
+      packaging: null,
+    },
   });
 
   // The catalog create route takes ids, so the slugs became the rehearsal
@@ -633,6 +646,55 @@ test('a CREATE carries a pack count through the rehearsal and into the bulk oper
   // Absent on the first, so the bulk route takes the row's own 16.
   assert.equal('packCount' in operations[0].item, false);
   assert.equal(operations[1].item.packCount, 6);
+});
+
+test('a decided row carries what the entry said, and buildOperations copies it (backend plan 0277)', async () => {
+  const dir = runDir();
+  const w = world({
+    entries: [
+      entry('e1', 'Queso curado cuña', {
+        brand: 'Marca',
+        ean: '8410000000017',
+        sizeFormat: '250 g',
+        unitSize: 250,
+        sizeUnit: 'GRAM',
+        packCount: 2,
+        soldByWeight: true,
+        approxWeight: 250,
+        packaging: 'Bandeja',
+        // Never part of the check: a price moves every week.
+        prices: [{ priceScopeId: 's', price: 3.2 }],
+      }),
+    ],
+  });
+  await startIn(dir, w);
+
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: CREATE_MILK,
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+  });
+  assert.equal(answer.accepted, true);
+
+  const [, row] = readJsonl(join(dir, 'decisions.jsonl'));
+  assert.deepEqual(row.expect.observed, {
+    name: 'Queso curado cuña',
+    brand: 'Marca',
+    ean: '8410000000017',
+    sizeFormat: '250 g',
+    unitSize: 250,
+    sizeUnit: 'GRAM',
+    packCount: 2,
+    soldByWeight: true,
+    approxWeight: 250,
+    packaging: 'Bandeja',
+  });
+  assert.equal(row.expect.lastSeenAt, '2026-09-08T10:00:00.000Z');
+
+  const [operation] = buildOperations([row]);
+  assert.deepEqual(operation.expect, row.expect);
 });
 
 test('a slug the rehearsal slot does not hold is a REVIEW, and writes nothing', async () => {
@@ -1450,6 +1512,37 @@ test('apply refuses a file decided against another gateway', async () => {
       }),
     /Refusing/
   );
+});
+
+/**
+ * Curation CLI plan 0006, section 6: the replay passes the target url, and
+ * only then is a file decided against another gateway sent, to that target.
+ */
+test('apply sends a file decided elsewhere to the target url the replay passes', async () => {
+  const dir = runDir();
+  const file = decisionsFile(
+    dir,
+    { runId: 'r1', mainUrl: 'http://elsewhere:3000' },
+    [CREATE_ROW]
+  );
+  const made = [];
+  const answer = await apply({
+    mainUrl: null,
+    targetUrl: 'http://target:3000',
+    file,
+    makeSession: (options) => {
+      made.push(options);
+      return {
+        async fetch() {
+          return { applied: true, results: [{ entryId: 'e1', applied: true }] };
+        },
+      };
+    },
+  });
+
+  assert.equal(made.length, 1);
+  assert.equal(made[0].baseUrl, 'http://target:3000');
+  assert.equal(answer.applied, true);
 });
 
 test('apply ignores a trailing slash on either url', async () => {

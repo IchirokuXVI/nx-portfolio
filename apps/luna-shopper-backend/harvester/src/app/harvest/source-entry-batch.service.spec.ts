@@ -7,6 +7,7 @@ import {
   type ApplySourceEntryDecisionsRequest,
   type ItemView,
   type SourceEntryDecisionOperation,
+  type SourceEntryObserved,
   type SourceEntryPriceWithheld,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -1219,6 +1220,269 @@ describe('SourceEntryBatchService', () => {
     expect(result.results[1].error?.code).toBe(
       BulkOperationErrorCode.EXPECT_MISMATCH
     );
+  });
+
+  describe('an expect may carry what the row says (plan 0277)', () => {
+    /** The default row's content, as the queue view prints it. */
+    const observed: SourceEntryObserved = {
+      name: 'Leche semidesnatada Hacendado',
+      brand: 'Hacendado',
+      ean: null,
+      sizeFormat: '1 L',
+      unitSize: 1,
+      sizeUnit: null,
+      packCount: null,
+      soldByWeight: false,
+      approxWeight: null,
+      packaging: null,
+    };
+    const LATER = new Date('2026-09-17T09:00:00.000Z');
+
+    function accept(
+      expectation: SourceEntryDecisionOperation['expect'],
+      entryId = 'e-1'
+    ): SourceEntryDecisionOperation {
+      return { op: 'accept', entryId, itemId: 'i-1', expect: expectation };
+    }
+
+    it('applies a decision on a row a later walk saw again, when it says the same', async () => {
+      const rows = [entry({ lastSeenAt: LATER, lastRunId: 'run-tuesday' })];
+      const { service, saved } = build({ rows });
+
+      const result = await service.applyDecisions(
+        request([accept({ status: SourceEntryStatus.UNRESOLVED, observed })])
+      );
+
+      expect(result.applied).toBe(true);
+      expect(saved.map((row) => row.id)).toEqual(['e-1']);
+    });
+
+    it('refuses a row whose size text moved, naming the field and both values', async () => {
+      const rows = [entry({ sizeFormat: '900 ml' })];
+      const { service, saved, createItems } = build({ rows });
+
+      const result = await service.applyDecisions(
+        request([accept({ status: SourceEntryStatus.UNRESOLVED, observed })])
+      );
+
+      expect(result.applied).toBe(false);
+      expect(result.failedStep).toBe('VALIDATE');
+      expect(result.results[0].error).toEqual({
+        code: BulkOperationErrorCode.EXPECT_MISMATCH,
+        detail:
+          'Source entry e-1 says something else now: sizeFormat was "1 L", ' +
+          'is "900 ml".',
+      });
+      expect(saved).toEqual([]);
+      expect(createItems).not.toHaveBeenCalled();
+    });
+
+    it('names every field that moved in one detail', async () => {
+      const rows = [
+        entry({ ean: '8410000000000', name: 'Leche entera Hacendado' }),
+      ];
+      const { service, saved } = build({ rows });
+
+      const result = await service.applyDecisions(
+        request([accept({ status: SourceEntryStatus.UNRESOLVED, observed })])
+      );
+
+      expect(result.failedStep).toBe('VALIDATE');
+      expect(result.results[0].error?.code).toBe(
+        BulkOperationErrorCode.EXPECT_MISMATCH
+      );
+      expect(result.results[0].error?.detail).toBe(
+        'Source entry e-1 says something else now: ' +
+          'name was "Leche semidesnatada Hacendado", is "Leche entera Hacendado"; ' +
+          'ean was null, is "8410000000000".'
+      );
+      expect(saved).toEqual([]);
+    });
+
+    it('compares a numeric column as a number, so "53.0000" equals 53', async () => {
+      const rows = [
+        entry({ unitSize: '53.0000' as unknown as number, sizeFormat: '53 g' }),
+      ];
+      const { service } = build({ rows });
+
+      const result = await service.applyDecisions(
+        request([
+          accept({
+            status: SourceEntryStatus.UNRESOLVED,
+            observed: { ...observed, unitSize: 53, sizeFormat: '53 g' },
+          }),
+        ])
+      );
+
+      expect(result.applied).toBe(true);
+    });
+
+    it('compares approxWeight as a number, so "250.5000" equals 250.5', async () => {
+      // A piece sold by the kilo with a weight about it: the column is
+      // numeric(12,4), so Postgres hands it back as a string with four places.
+      const rows = [
+        entry({
+          unitSize: null,
+          sizeFormat: null,
+          soldByWeight: true,
+          approxWeight: '250.5000' as unknown as number,
+        }),
+      ];
+      const { service, saved } = build({ rows });
+
+      const result = await service.applyDecisions(
+        request([
+          accept({
+            status: SourceEntryStatus.UNRESOLVED,
+            observed: {
+              ...observed,
+              unitSize: null,
+              sizeFormat: null,
+              soldByWeight: true,
+              approxWeight: 250.5,
+            },
+          }),
+        ])
+      );
+
+      expect(result.applied).toBe(true);
+      expect(saved.map((row) => row.id)).toEqual(['e-1']);
+    });
+
+    it('refuses an operation with no expect at all, before it reads a row', async () => {
+      const { service, manager } = build();
+
+      const result = await service.applyDecisions(
+        request([
+          accept(
+            undefined as unknown as SourceEntryDecisionOperation['expect']
+          ),
+        ])
+      );
+
+      expect(result.applied).toBe(false);
+      expect(result.failedStep).toBe('VALIDATE');
+      expect(result.results[0].error?.code).toBe(
+        BulkOperationErrorCode.MALFORMED_OPERATION
+      );
+      expect(manager.transaction).not.toHaveBeenCalled();
+    });
+
+    it('refuses a row whose packaging alone changed, naming packaging (decision 154a)', async () => {
+      // The matcher tells a can from a bottle of one name and size by the
+      // container, so a decision made on "lata" does not hold for "botella".
+      const rows = [entry({ packaging: 'botella' })];
+      const { service, saved } = build({ rows });
+
+      const result = await service.applyDecisions(
+        request([
+          accept({
+            status: SourceEntryStatus.UNRESOLVED,
+            observed: { ...observed, packaging: 'lata' },
+          }),
+        ])
+      );
+
+      expect(result.applied).toBe(false);
+      expect(result.failedStep).toBe('VALIDATE');
+      expect(result.results[0].error).toEqual({
+        code: BulkOperationErrorCode.EXPECT_MISMATCH,
+        detail:
+          'Source entry e-1 says something else now: packaging was "lata", ' +
+          'is "botella".',
+      });
+      expect(saved).toEqual([]);
+    });
+
+    it('refuses a row that gained a packaging the decision saw as null', async () => {
+      const rows = [entry({ packaging: 'Brik' })];
+      const { service, saved } = build({ rows });
+
+      const result = await service.applyDecisions(
+        request([accept({ status: SourceEntryStatus.UNRESOLVED, observed })])
+      );
+
+      expect(result.results[0].error?.detail).toBe(
+        'Source entry e-1 says something else now: packaging was null, ' +
+          'is "Brik".'
+      );
+      expect(saved).toEqual([]);
+    });
+
+    it('holds both when both are present', async () => {
+      // A moved lastSeenAt refuses, however the content agrees.
+      const seenAgain = build({ rows: [entry({ lastSeenAt: LATER })] });
+      const both = await seenAgain.service.applyDecisions(
+        request([accept({ ...expectFresh, observed })])
+      );
+      expect(both.failedStep).toBe('VALIDATE');
+      expect(both.results[0].error?.code).toBe(
+        BulkOperationErrorCode.EXPECT_MISMATCH
+      );
+
+      // An equal lastSeenAt does not excuse a field that moved.
+      const moved = build({ rows: [entry({ brand: 'Pascual' })] });
+      const result = await moved.service.applyDecisions(
+        request([accept({ ...expectFresh, observed })])
+      );
+      expect(result.failedStep).toBe('VALIDATE');
+      expect(result.results[0].error?.detail).toContain(
+        'brand was "Hacendado", is "Pascual"'
+      );
+    });
+
+    it('refuses an operation that expects neither, before it reads a row', async () => {
+      const { service, manager } = build();
+
+      const result = await service.applyDecisions(
+        request([accept({ status: SourceEntryStatus.UNRESOLVED })])
+      );
+
+      expect(result.failedStep).toBe('VALIDATE');
+      expect(result.results[0].error?.code).toBe(
+        BulkOperationErrorCode.MALFORMED_OPERATION
+      );
+      expect(manager.transaction).not.toHaveBeenCalled();
+    });
+
+    it('refuses at BIND a row that changed while the products were created, and deletes them', async () => {
+      const row = entry();
+      // Step two is where a walk can rewrite the row: step one's lock is gone
+      // and step three's is not taken yet.
+      const createItems = jest.fn(async (inputs: unknown[]) => {
+        row.sizeFormat = '900 ml';
+        return {
+          items: inputs.map((_input, index) => item(`item-new-${index + 1}`)),
+        };
+      });
+      const { service, saved, deleteItem, write } = build({
+        rows: [row],
+        createItems,
+      });
+
+      const result = await service.applyDecisions(
+        request([
+          {
+            op: 'createItem',
+            entryId: 'e-1',
+            ref: 'milk',
+            item: { name: BOTH },
+            expect: { status: SourceEntryStatus.UNRESOLVED, observed },
+          },
+        ])
+      );
+
+      expect(result.applied).toBe(false);
+      expect(result.failedStep).toBe('BIND');
+      expect(result.results[0].error?.code).toBe(
+        BulkOperationErrorCode.EXPECT_MISMATCH
+      );
+      expect(deleteItem.mock.calls.map((call) => call[0])).toEqual([
+        'item-new-1',
+      ]);
+      expect(saved).toEqual([]);
+      expect(write).not.toHaveBeenCalled();
+    });
   });
 
   it('refuses a row somebody else has already decided', async () => {

@@ -54,7 +54,7 @@
 
 import { spawn as spawnProcess } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
@@ -65,14 +65,41 @@ import {
   engineEntry,
   stripFence,
 } from '../../../../../shared/model-engines/src/index.mjs';
-import { applyDecisions } from './apply.mjs';
+import {
+  DEFAULT_ADMIN_USERNAME,
+  createAdminSession,
+} from '../../auth/src/session.mjs';
+import { applyDecisions, splitDecisions } from './apply.mjs';
+import {
+  exportChanges,
+  foldChanges,
+  parseActors,
+  parseSlot,
+  parseTime,
+  readChangeList,
+} from './changes.mjs';
 import { IMPLEMENTATION_NAMES, deciderPath, makeDecider } from './decider.mjs';
 import { runCuration } from './orchestrator.mjs';
 import {
+  assertConfirmedHost,
+  assertReportTarget,
+  capturingFetch,
+  defaultReportPath,
+  makeTargetClient,
+  normalizeTargetUrl,
+  parseBatchSize,
+  prepareDecisions,
+  runReplay,
+  runReplayIdentity,
+} from './replay.mjs';
+import {
   RUN_FILE,
+  readDecisions,
   readRunFile,
   recordRowFailure,
   replayCreations,
+  runFileBeside,
+  sniffImplementation,
   writeRunFile,
 } from './run-files.mjs';
 import { REHEARSAL_SERVICES, makeSlots, waitForGateway } from './slots.mjs';
@@ -90,6 +117,12 @@ const DEFAULT_MAIN_URL = 'http://localhost:3000';
 
 /** Where a help line's description starts. */
 const HELP_COLUMN = 41;
+
+/**
+ * Where a replay reads its password when stdin is not a terminal (owner
+ * decision O7): set for the one command, never typed as a flag.
+ */
+export const REPLAY_PASSWORD_ENV = 'CURATION_TARGET_PASSWORD';
 
 /**
  * The help text, with the engine half read off the registry.
@@ -149,6 +182,34 @@ ${indent}gateway: no slot, no model. Reads the
 ${indent}decider from the run directory and the
 ${indent}main url from the file, and splits a
 ${indent}file over the route's cap by itself
+
+  Carry local edits to a cluster (plan 0006):
+
+${line('--export-changes <file>', "write one operator's product edits,")}
+${indent}read from a local slot's catalog_audit
+${line('  --slot <n>', 'the local slot that holds the edits')}
+${line('  --actor <admin id>', 'whose edits; repeat it for several')}
+${line('  --since <ISO time>', 'required; --until defaults to now')}
+${line('--replay <changes.jsonl>', 'sort each change by what the target')}
+${indent}holds; a dry run unless --write
+${line('  --target-url <url>', 'required, no default, never from a file')}
+${line('  --write', 'send the apply class through the items')}
+${indent}batch, each edit under an expect
+${line('  --confirm-host <host>', 'required with --write: the host name of')}
+${indent}--target-url, typed a second time
+${line('  --batch-size <n>', 'default 100, at most 1000')}
+${line('  --report <file>', 'default beside the change list')}
+${line('  --decisions <file>', 'also replay a suggestions decisions file')}
+${line('--replay-identity <report>', "send a report's identity changed class,")}
+${indent}guarded by the target's name and brand;
+${indent}takes --target-url, --write, --confirm-host,
+${indent}--report
+${line('  --only <file>', 'one product id a line: only those;')}
+${indent}required with --write
+
+  A replay signs in as --main-user (default ${DEFAULT_ADMIN_USERNAME}). The password is
+  asked at the terminal, or read from ${REPLAY_PASSWORD_ENV} when stdin is
+  not one. It is never a flag.
 
   The ollama engine reads five environment variables: OLLAMA_HOST,
   OLLAMA_NUM_CTX, OLLAMA_NUM_PREDICT, OLLAMA_BATCH (how many requests are held
@@ -466,6 +527,50 @@ export function installInterrupt({
 }
 
 /**
+ * The signal handler of a replay (plan 0006).
+ *
+ * A replay has no slot to take down and nothing to finish, so the first
+ * signal does all of it at once: `stop(signal)` writes the report over what
+ * is known (the request in flight as not written and not checked, the rest
+ * not sent), and the process ends with the signal's exit code. The request in
+ * flight is not waited for, because a target that hangs is the usual reason
+ * to press Ctrl+C.
+ *
+ * Everything it touches is injected, so a test calls the handler directly.
+ */
+export function installReplayInterrupt({
+  stop,
+  stderr,
+  on = (event, handler) => process.on(event, handler),
+  off = (event, handler) => process.off(event, handler),
+  exit = (code) => process.exit(code),
+}) {
+  let asked = false;
+  const handler = (signal = 'SIGINT') => {
+    if (!asked) {
+      asked = true;
+      stderr.write(
+        `\n${signal}: stopping. The request in flight is reported as not written and not checked, and the report is written.\n`
+      );
+      try {
+        stop(signal);
+      } catch (error) {
+        stderr.write(`${error?.message ?? error}\n`);
+      }
+    }
+    exit(SIGNAL_EXIT[signal] ?? 130);
+  };
+  for (const signal of STOP_SIGNALS) {
+    on(signal, handler);
+  }
+  return () => {
+    for (const signal of STOP_SIGNALS) {
+      off(signal, handler);
+    }
+  };
+}
+
+/**
  * What a resumed run starts from (plan 0005).
  *
  * `curation-run.json` is written when a run opens, so a directory without one
@@ -495,6 +600,343 @@ function stringFlag(flags, name) {
   return typeof flags[name] === 'string' ? flags[name] : null;
 }
 
+/**
+ * Every value a repeated flag was given, in order.
+ *
+ * `parseArgs` keeps the last one, which is right for every other flag. A flag
+ * a person is told to repeat (`--actor`) reads all of them here instead.
+ */
+export function collectFlag(argv, name) {
+  const values = [];
+  argv.forEach((token, index) => {
+    const value = argv[index + 1];
+    if (
+      token === `--${name}` &&
+      value !== undefined &&
+      !value.startsWith('--')
+    ) {
+      values.push(value);
+    }
+  });
+  return values;
+}
+
+/**
+ * One line from the terminal, with what is typed not echoed.
+ *
+ * The question goes to stderr, so a replay's stdout stays empty.
+ */
+function askSecretLine(question) {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stderr,
+    terminal: true,
+  });
+  let asked = false;
+  rl._writeToOutput = (text) => {
+    if (!asked) {
+      process.stderr.write(text);
+    }
+  };
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      process.stderr.write('\n');
+      resolve(answer);
+    });
+    asked = true;
+  });
+}
+
+/**
+ * The replay's password (owner decision O7): asked at a terminal, else read
+ * from {@link REPLAY_PASSWORD_ENV}. Never a flag, and never printed.
+ */
+export async function resolveReplayPassword({
+  isTty,
+  env,
+  askSecret,
+  username,
+  targetUrl,
+}) {
+  if (isTty) {
+    const answer = String(
+      await askSecret(`password for ${username} on ${targetUrl}: `)
+    );
+    if (answer === '') {
+      throw new Error('No password was typed. Nothing was sent.');
+    }
+    return answer;
+  }
+  const fromEnv = env[REPLAY_PASSWORD_ENV];
+  if (typeof fromEnv !== 'string' || fromEnv === '') {
+    throw new Error(
+      `stdin is not a terminal, so the password is read from ${REPLAY_PASSWORD_ENV}, and it is not set. Set it for this one command.`
+    );
+  }
+  return fromEnv;
+}
+
+/** The product ids of an `--only` file, one a line. */
+export function readOnlyIds(file, read = (path) => readFileSync(path, 'utf8')) {
+  return read(file)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && !line.startsWith('#'));
+}
+
+/** The commit this CLI runs at, or null when git does not answer. */
+async function commitOf(spawn, repoRoot) {
+  try {
+    const answer = await spawn('git', ['rev-parse', 'HEAD'], { cwd: repoRoot });
+    return answer.code === 0 ? answer.stdout.trim() || null : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `--export-changes` (plan 0006, section 2). Reads a local slot and writes a
+ * file; no gateway and no login.
+ */
+async function exportMode({ flags, argv, spawn, repoRoot, stderr }) {
+  const file = flags['export-changes'];
+  if (typeof file !== 'string') {
+    throw new Error('--export-changes takes the change list file to write.');
+  }
+  const actors = parseActors(collectFlag(argv, 'actor'));
+  const slot = parseSlot(flags.slot);
+  const since =
+    flags.since === undefined ? undefined : parseTime(flags.since, '--since');
+  const until =
+    flags.until === undefined ? undefined : parseTime(flags.until, '--until');
+  mkdirSync(dirname(file), { recursive: true });
+  await exportChanges({
+    file,
+    slot,
+    actors,
+    since,
+    until,
+    run: spawn,
+    cwd: repoRoot,
+    stderr,
+  });
+  return 0;
+}
+
+/**
+ * `--replay` and `--replay-identity` (plan 0006, sections 3 to 6).
+ *
+ * Every flag is read and every file checked before the password is asked or a
+ * request is sent, so a mistake costs nothing.
+ */
+async function replayMode({
+  flags,
+  env,
+  stderr,
+  isTty,
+  askSecret,
+  fetchImpl,
+  spawn,
+  repoRoot,
+  sleep,
+  replayInterrupt,
+}) {
+  if (flags['main-password'] !== undefined) {
+    throw new Error(
+      `A replay takes no password on the command line. It asks at the terminal, or reads ${REPLAY_PASSWORD_ENV} set for the one command.`
+    );
+  }
+  const identityPass = flags['replay-identity'] !== undefined;
+  const source = identityPass ? flags['replay-identity'] : flags.replay;
+  if (typeof source !== 'string') {
+    throw new Error(
+      identityPass
+        ? '--replay-identity takes the report of an earlier replay.'
+        : '--replay takes the change list to replay.'
+    );
+  }
+  if (!existsSync(source)) {
+    throw new Error(`${source} does not exist.`);
+  }
+  const targetUrl = normalizeTargetUrl(stringFlag(flags, 'target-url'));
+  const write = flags.write === true;
+  // Owner decision 158a: a write names its host twice, and an identity write
+  // names the products a person looked at. Both are refused here, before the
+  // password is asked and before any request.
+  if (write) {
+    assertConfirmedHost(targetUrl, stringFlag(flags, 'confirm-host'));
+    if (identityPass && stringFlag(flags, 'only') === null) {
+      throw new Error(
+        '--replay-identity --write needs --only <file>, the ids of the products you looked at, one a line. Nothing was sent.'
+      );
+    }
+  }
+  const batchSize = parseBatchSize(flags['batch-size']);
+  const reportPath =
+    stringFlag(flags, 'report') ??
+    defaultReportPath(
+      source,
+      targetUrl,
+      new Date(),
+      identityPass ? 'replay-identity' : 'replay'
+    );
+
+  let plan;
+  if (identityPass) {
+    const previous = JSON.parse(readFileSync(source, 'utf8'));
+    assertReportTarget(source, previous, targetUrl);
+    const onlyFile = stringFlag(flags, 'only');
+    plan = { previous, only: onlyFile ? readOnlyIds(onlyFile) : null };
+  } else {
+    const changeList = readChangeList(source);
+    const folded = foldChanges(changeList);
+    let decisions = null;
+    const decisionsFile = stringFlag(flags, 'decisions');
+    if (flags.decisions !== undefined && decisionsFile === null) {
+      throw new Error('--decisions takes the decisions file to replay.');
+    }
+    if (decisionsFile !== null) {
+      if (!existsSync(decisionsFile)) {
+        throw new Error(`${decisionsFile} does not exist.`);
+      }
+      const { header, records } = readDecisions(decisionsFile);
+      const implementation =
+        runFileBeside(decisionsFile)?.implementation ??
+        sniffImplementation(records);
+      decisions = {
+        file: decisionsFile,
+        prepared: prepareDecisions({
+          file: decisionsFile,
+          header,
+          records,
+          implementation,
+        }),
+      };
+    }
+    plan = { changeList, folded, decisions };
+  }
+
+  const username = stringFlag(flags, 'main-user') ?? DEFAULT_ADMIN_USERNAME;
+  const password = await resolveReplayPassword({
+    isTty,
+    env,
+    askSecret,
+    username,
+    targetUrl,
+  });
+  const capture = capturingFetch(fetchImpl);
+  const session = createAdminSession({
+    baseUrl: targetUrl,
+    username,
+    password,
+    fetchImpl: capture.fetchImpl,
+    label: 'target',
+  });
+  await session.verify();
+  const client = makeTargetClient({
+    session,
+    capture,
+    stderr,
+    ...(sleep ? { sleep } : {}),
+  });
+  const commit = await commitOf(spawn, repoRoot);
+  mkdirSync(dirname(reportPath), { recursive: true });
+  stderr.write(
+    `${write ? 'write run' : 'dry run'} against ${targetUrl} as ${username}\n`
+  );
+
+  // From here on the report is the record: a signal writes it before the
+  // process ends.
+  const controls = {};
+  const removeInterrupt = replayInterrupt({
+    stop: (signal) => controls.interrupt?.(signal),
+    stderr,
+  });
+  try {
+    if (identityPass) {
+      await runReplayIdentity({
+        reportFile: source,
+        previous: plan.previous,
+        targetUrl,
+        only: plan.only,
+        write,
+        batchSize,
+        reportPath,
+        client,
+        stderr,
+        commit,
+        controls,
+      });
+      return 0;
+    }
+    await replayChangeList({
+      plan,
+      source,
+      targetUrl,
+      write,
+      batchSize,
+      reportPath,
+      client,
+      stderr,
+      commit,
+      controls,
+    });
+    return 0;
+  } finally {
+    removeInterrupt();
+  }
+}
+
+/** The change list and its decisions file, from {@link replayMode}. */
+async function replayChangeList({
+  plan,
+  source,
+  targetUrl,
+  write,
+  batchSize,
+  reportPath,
+  client,
+  stderr,
+  commit,
+  controls,
+}) {
+  let decisions = null;
+  if (plan.decisions) {
+    const suggestions = await import('../../suggestions/src/commands.mjs');
+    decisions = {
+      ...plan.decisions,
+      splitParts: (records) =>
+        splitDecisions({
+          records,
+          buildOperations: suggestions.buildOperations,
+          max: suggestions.MAX_OPERATIONS,
+        }),
+      applyFile: (path) =>
+        suggestions.apply({
+          mainUrl: null,
+          targetUrl,
+          file: path,
+          session: { fetch: (route, init) => client.request(route, init) },
+        }),
+    };
+  }
+  await runReplay({
+    changeFile: source,
+    changeList: plan.changeList,
+    folded: plan.folded,
+    targetUrl,
+    write,
+    batchSize,
+    reportPath,
+    client,
+    decisions,
+    stderr,
+    commit,
+    controls,
+  });
+}
+
 export async function main(
   argv,
   {
@@ -508,12 +950,35 @@ export async function main(
     repoRoot = REPO_ROOT,
     platform = process.platform,
     interrupt = installInterrupt,
+    askSecret = askSecretLine,
+    fetchImpl = globalThis.fetch,
+    sleep = null,
+    replayInterrupt = installReplayInterrupt,
   } = {}
 ) {
   const flags = parseArgs(argv);
   if (flags.help) {
     stdout.write(usageText());
     return 0;
+  }
+
+  // Plan 0006. Neither mode takes a slot of its own, a model or a decider.
+  if (flags['export-changes'] !== undefined) {
+    return exportMode({ flags, argv, spawn, repoRoot, stderr });
+  }
+  if (flags.replay !== undefined || flags['replay-identity'] !== undefined) {
+    return replayMode({
+      flags,
+      env,
+      stderr,
+      isTty,
+      askSecret,
+      fetchImpl,
+      spawn,
+      repoRoot,
+      sleep,
+      replayInterrupt,
+    });
   }
 
   const mainUser = stringFlag(flags, 'main-user');

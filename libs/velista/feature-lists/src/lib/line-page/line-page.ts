@@ -1,9 +1,14 @@
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
+  DOCUMENT,
   effect,
+  ElementRef,
   inject,
+  Injector,
   signal,
   untracked,
 } from '@angular/core';
@@ -25,6 +30,7 @@ import {
   ZoneStore,
 } from '@portfolio/velista/data-access';
 import {
+  type AbsorbedExtra,
   type AlsoOnPlaceVm,
   type AlsoOnVm,
   APP_BASE_PATH,
@@ -49,6 +55,8 @@ import {
 import {
   ChevronRightIcon,
   EllipsisIcon,
+  ExtraAskHost,
+  ExtraAskPopover,
   InfoIcon,
   LineProductRail,
   LineUnitChip,
@@ -65,6 +73,19 @@ import {
 import { linePageStatus, loadLineContext } from './line-context';
 import { LineProductPrices } from './line-product-prices';
 import { selectLinePage } from './select-line-page';
+
+/**
+ * A flag set as the context it is called in starts going away. Hooks run in the
+ * order they were registered, so a caller registers it before any hook that must
+ * read it.
+ */
+function destroyingFlag(): { readonly destroying: boolean } {
+  const flag = { destroying: false };
+  inject(DestroyRef).onDestroy(() => {
+    flag.destroying = true;
+  });
+  return flag;
+}
 
 /** How many cards past the last one on screen are read ahead (velista `0135`, 3). */
 const CARDS_READ_AHEAD = 2;
@@ -103,10 +124,12 @@ const CARDS_READ_AHEAD = 2;
     QuantityStepper,
     LineProductRail,
     LineUnitChip,
+    ExtraAskPopover,
   ],
   // One for the visit, and for the sheets over this page, which are drawn in its
-  // outlet and so resolve it from here.
-  providers: [LineProductPrices],
+  // outlet and so resolve it from here. The question about the extra already
+  // bought is this page's too (velista `0208`, target state 12), gone with it.
+  providers: [LineProductPrices, ExtraAskHost],
   templateUrl: './line-page.html',
   styleUrl: './line-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -132,6 +155,15 @@ export class LinePage {
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _pick = inject(ProductPickStore);
   private readonly _history = inject(AppHistory);
+  private readonly _extraHost = inject(ExtraAskHost);
+  private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly _document = inject(DOCUMENT);
+  private readonly _injector = inject(Injector);
+  /**
+   * Set as the page starts going away. Registered before `quantityRuns`, whose own
+   * hook writes the open runs, so the teardown's write reads it (velista `0208`).
+   */
+  private readonly _teardown = destroyingFlag();
 
   readonly zoneId = zoneIdOf(this._route);
   readonly listId = listIdOf(this._route);
@@ -266,6 +298,10 @@ export class LinePage {
 
   constructor() {
     loadLineContext(this.zoneId, this.listId);
+    this._extraHost.connect({
+      readerId: () => this._session.userId(),
+      nameOf: (zoneId, userId) => this._names.nameOf(zoneId, userId),
+    });
 
     // The product names, keyed on the set, so a product added while the page is
     // open resolves without anything else being read again.
@@ -401,8 +437,28 @@ export class LinePage {
    * second. The stepper draws the open run, and a page that goes away writes it.
    */
   readonly quantityRuns = quantityRuns<string>((lineId, run) => {
-    const write = this._lines
-      .addQuantity(lineId, run.to - run.from)
+    const delta = run.to - run.from;
+    const sent = ++this._sentCount;
+    this._sentRuns.set(lineId, sent);
+    this._extraHost.dropWaiting(lineId);
+    // A raise reports what it took into the ask, and its answer may ask on the
+    // stepper (velista `0208`, target state 12). A lowering never. The teardown's
+    // write never reports: nobody is left to ask, and the server takes the extra
+    // in anyway.
+    const writing =
+      delta > 0 && !this._teardown.destroying
+        ? this._lines.raiseReportingExtra(lineId, delta).then((answer) => {
+            if (
+              answer.state === 'succeeded' &&
+              answer.extra !== null &&
+              answer.quantity !== null
+            ) {
+              this._askAboutExtra(lineId, sent, answer.extra, answer.quantity);
+            }
+            return answer.state;
+          })
+        : this._lines.addQuantity(lineId, delta);
+    const write = writing
       .then((outcome) => {
         if (outcome === 'succeeded') {
           this._unitError.set(null);
@@ -426,6 +482,79 @@ export class LinePage {
   /** One step of the stepper, a press or a repeat of a hold. */
   step(step: QuantityStep): void {
     this.quantityRuns.step(this.lineId(), step);
+    // A press on the control the question points at is no answer (target state 4).
+    if (this._extraHost.asked()?.lineId === this.lineId()) {
+      this._extraHost.close('outside');
+    }
+  }
+
+  /** The newest write of each line, numbered, so an older answer asks nothing. */
+  private readonly _sentRuns = new Map<string, number>();
+  private _sentCount = 0;
+
+  /**
+   * A raise of the stepper answered with something to count (velista `0208`,
+   * target state 12): asked on the stepper, below it, since the header leaves no
+   * room above (the board's frame 2), while the page is in front and no newer run
+   * of the line is open or was sent.
+   */
+  private _askAboutExtra(
+    lineId: string,
+    sent: number,
+    extra: AbsorbedExtra,
+    shown: number
+  ): void {
+    // An answer that lands after the page went away asks nothing.
+    if (this._teardown.destroying) {
+      return;
+    }
+    const line = this._line();
+    if (line === undefined || line.id !== lineId) {
+      return;
+    }
+    const unit = line.unit;
+    afterNextRender(
+      () =>
+        this._extraHost.ask({
+          lineId,
+          zoneId: this.zoneId(),
+          unit,
+          extra,
+          shown,
+          origin: () =>
+            this._host.nativeElement.querySelector<HTMLElement>(
+              '.amount lib-quantity-stepper'
+            ),
+          keepInSight: () =>
+            this._host.nativeElement.querySelector<HTMLElement>('.amount'),
+          side: 'below',
+          count: () => this._countExtra(lineId, extra.countable, shown),
+          inFront: () =>
+            this.lineId() === lineId &&
+            !this._route.firstChild &&
+            this._document.visibilityState !== 'hidden' &&
+            this._document.querySelector('dialog[open]') === null,
+          current: () =>
+            this._sentRuns.get(lineId) === sent &&
+            !this.quantityRuns.pending().has(lineId),
+        }),
+      { injector: this._injector }
+    );
+  }
+
+  /** "Count the extra" on the stepper: the store shows Z at once (target state 4). */
+  private async _countExtra(
+    lineId: string,
+    amount: number,
+    expect: number
+  ): Promise<'done' | 'stale' | 'failed'> {
+    const outcome = await this._lines.countExtra(lineId, amount, expect);
+    return outcome === 'counted' ? 'done' : outcome;
+  }
+
+  /** A sheet opened over the page: its question goes with no answer (target state 10). */
+  onSheetOpened(): void {
+    this._extraHost.drop();
   }
 
   /**

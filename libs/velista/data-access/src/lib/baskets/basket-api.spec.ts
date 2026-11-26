@@ -256,6 +256,50 @@ describe('BasketApi, the writes on a row', () => {
   const rowUrl = `${GATEWAY}/v1/baskets/${BASKET}/rows/zl-1`;
   const skipUrl = `${rowUrl}/skip`;
 
+  it('buys for another list on its route, with no line, no price scope and no product when it has none (velista 0201)', async () => {
+    const done = api.buyForList(BASKET, 'zl-1', {
+      targetListId: 'list-pantry',
+      lineId: null,
+      quantity: 2,
+      unit: 'UNIT',
+    });
+    const req = httpMock.expectOne(`${rowUrl}/buy-for-list`);
+
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({
+      targetListId: 'list-pantry',
+      quantity: 2,
+      unit: 'UNIT',
+    });
+    req.flush({
+      entries: [{ ...ANSWER.entries[0], left: 0, bought: 2, asked: 0 }],
+    });
+
+    // Through the basket mappers (rule D4): the ask of the wire, 0.
+    expect((await done).entries[0]).toMatchObject({ asked: 0, bought: 2 });
+  });
+
+  it('names the line and the shop when it has them', async () => {
+    const done = api.buyForList(BASKET, 'zl-1', {
+      targetListId: 'list-pantry',
+      lineId: 'zl-9',
+      quantity: 1,
+      unit: 'GRAM',
+      supermarketLocationId: 'shop-1',
+    });
+    const req = httpMock.expectOne(`${rowUrl}/buy-for-list`);
+
+    expect(req.request.body).toEqual({
+      targetListId: 'list-pantry',
+      lineId: 'zl-9',
+      quantity: 1,
+      unit: 'GRAM',
+      supermarketLocationId: 'shop-1',
+    });
+    req.flush(ANSWER);
+    await done;
+  });
+
   it('patches the row route with its lines, and leaves confirmMerge off the first request', async () => {
     const done = api.renameRow(BASKET, TARGET, { content: 'Leche entera' });
     const req = httpMock.expectOne(rowUrl);
@@ -339,6 +383,88 @@ describe('BasketApi, the writes on a row', () => {
       .flush({ entries: [], progress: ANSWER.progress });
 
     expect((await done).entries).toEqual([]);
+  });
+
+  describe('the extra already bought (velista 0208, target state 17)', () => {
+    const EXTRA = { above: 2, countable: 2, buyers: [{ userId: 'u-1' }] };
+
+    it('asks a rising demand for its report, and reads it', async () => {
+      const done = api.setDemand(BASKET, {
+        lineId: 'zl-1',
+        quantity: 5,
+        from: 0,
+        unit: 'UNIT',
+        reportExtra: true,
+      });
+      const req = httpMock.expectOne(
+        `${GATEWAY}/v1/baskets/${BASKET}/rows/zl-1/demand`
+      );
+
+      expect(req.request.body).toEqual({
+        lineId: 'zl-1',
+        quantity: 5,
+        from: 0,
+        unit: 'UNIT',
+        reportExtra: true,
+      });
+      req.flush({ ...ANSWER, extra: EXTRA });
+
+      expect((await done).extra).toEqual(EXTRA);
+    });
+
+    it('sends no flag unless asked, and drops a report it cannot read', async () => {
+      const done = api.setDemand(BASKET, {
+        lineId: 'zl-1',
+        quantity: 2,
+        from: 1,
+        unit: 'UNIT',
+      });
+      const req = httpMock.expectOne(
+        `${GATEWAY}/v1/baskets/${BASKET}/rows/zl-1/demand`
+      );
+
+      expect(req.request.body).not.toHaveProperty('reportExtra');
+      req.flush({ ...ANSWER, extra: { above: 1, countable: 2, buyers: [] } });
+
+      expect(await done).not.toHaveProperty('extra');
+    });
+
+    it('asks an add for its report', async () => {
+      const done = api.addLine(BASKET, {
+        targetListId: 'l-1',
+        content: 'Leche',
+        reportExtra: true,
+      });
+      const req = httpMock.expectOne(`${GATEWAY}/v1/baskets/${BASKET}/lines`);
+
+      expect(req.request.body).toMatchObject({ reportExtra: true });
+      req.flush({ ...ANSWER, addOutcome: 'RAISED', extra: EXTRA });
+
+      expect(await done).toMatchObject({ addOutcome: 'raised', extra: EXTRA });
+    });
+
+    it('posts the count under its line, and reads what it counted', async () => {
+      const done = api.countExtra(BASKET, {
+        lineId: 'zl-1',
+        unit: 'UNIT',
+        amount: 2,
+        expect: 2,
+      });
+      const req = httpMock.expectOne(
+        `${GATEWAY}/v1/baskets/${BASKET}/rows/zl-1/extra`
+      );
+
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual({
+        lineId: 'zl-1',
+        unit: 'UNIT',
+        amount: 2,
+        expect: 2,
+      });
+      req.flush({ ...ANSWER, counted: 2 });
+
+      expect((await done).counted).toBe(2);
+    });
   });
 
   it('posts a change of product with lineIds, itemId and keep (velista 0140)', async () => {

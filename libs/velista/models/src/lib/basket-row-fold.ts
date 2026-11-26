@@ -253,6 +253,10 @@ function toRuleEntry(entry: BasketRowEntry): BasketRuleEntry {
   return {
     left: entry.left,
     bought: entry.bought,
+    // The units of this basket's buys that met the ask (backend `0274`), so a
+    // buy above the ask does not raise the row's `asked` (velista `0201`). Read
+    // off the entry's numbers, which are the server's.
+    applied: Math.max(0, entry.asked - entry.left),
     boughtElsewhere: entry.boughtElsewhere,
     skipped: entry.skipped,
     closed: entry.closed,

@@ -1120,6 +1120,7 @@ describe('toCatalogItem: the size the catalog was always sending', () => {
       chainPrices: [],
       imageUrl: null,
       packCount: null,
+      pieceCount: null,
       unitBasis: null,
     });
   });
@@ -1265,6 +1266,7 @@ describe('toCatalogItem: the price it used to drop', () => {
       currency: 'EUR',
       unitPrice: 1.05,
       unitPriceLabel: 'EUR/L',
+      unitBasis: null,
       comparablePrice: null,
       comparableBasis: null,
       piecePrice: null,
@@ -1674,6 +1676,39 @@ describe("toCatalogItem: the product's step (velista 0186, backend 0261)", () =>
   });
 });
 
+describe('toCatalogItem: the pack and the pieces (velista 0209, backend 0278)', () => {
+  it('reads both counts', () => {
+    const product = toCatalogItem({
+      id: 'item-smint',
+      name: { es: 'SMINT', en: 'SMINT' },
+      unitSize: 70,
+      defaultUnit: 'GRAM',
+      packCount: 2,
+      pieceCount: 100,
+    });
+    expect(product?.packCount).toBe(2);
+    expect(product?.pieceCount).toBe(100);
+  });
+
+  it.each([
+    ['an absent field', undefined],
+    ['a string', '4'],
+    ['one', 1],
+    ['a fraction', 2.5],
+  ])('reads %s as no count', (_, value) => {
+    const product = toCatalogItem({
+      id: 'item-smint',
+      name: { es: 'SMINT', en: 'SMINT' },
+      unitSize: 70,
+      defaultUnit: 'GRAM',
+      packCount: value,
+      pieceCount: value,
+    });
+    expect(product?.packCount).toBeNull();
+    expect(product?.pieceCount).toBeNull();
+  });
+});
+
 describe('toProductOffer: the comparable pair (backend 0245)', () => {
   const wire = {
     price: 0.99,
@@ -1716,6 +1751,37 @@ describe('toProductOffer: the comparable pair (backend 0245)', () => {
     const offer = toProductOffer({ ...wire, ...patch });
     expect(offer?.comparablePrice).toBeNull();
     expect(offer?.comparableBasis).toBeNull();
+  });
+});
+
+describe('toProductOffer: the unit basis', () => {
+  const wire = {
+    price: 1.79,
+    currency: 'EUR',
+    unitPrice: 1.19,
+    unitPriceLabel: 'EUR/L',
+    unitBasis: 'LITER',
+    observedAt: '2026-11-01T08:00:00.000Z',
+    sourceKind: 'OFFICIAL_WEB',
+    priceScopeId: 'scope-mercadona',
+  };
+
+  it.each(['KILOGRAM', 'LITER', 'UNIT', 'DOZEN'])(
+    'reads the basis %s off the offer',
+    (basis) => {
+      expect(toProductOffer({ ...wire, unitBasis: basis })?.unitBasis).toBe(
+        basis
+      );
+    }
+  );
+
+  it.each([
+    ['an unknown basis', { unitBasis: 'POUND' }],
+    ['a basis that is not a string', { unitBasis: 3 }],
+    ['an absent basis', { unitBasis: undefined }],
+    ['a basis with no unit price', { unitPrice: null }],
+  ])('reads %s as null', (_, patch) => {
+    expect(toProductOffer({ ...wire, ...patch })?.unitBasis).toBeNull();
   });
 });
 

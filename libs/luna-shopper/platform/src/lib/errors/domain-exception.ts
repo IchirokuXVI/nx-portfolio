@@ -157,6 +157,42 @@ export class BasketShopLockedException extends DomainException {
 }
 
 /**
+ * A buy for a list that does not ask named a line the row already holds (plan
+ * 0273).
+ *
+ * Renders as 409. The client buys on that line with the plain settle instead.
+ */
+export class BasketLineAlreadyInRowException extends DomainException {
+  readonly code = ERROR_CODES.BASKET_LINE_ALREADY_IN_ROW;
+}
+
+/**
+ * A buy for a list that does not ask was made on a row with no product (plan
+ * 0273). Renders as 409.
+ */
+export class BasketRowHasNoProductException extends DomainException {
+  readonly code = ERROR_CODES.BASKET_ROW_HAS_NO_PRODUCT;
+}
+
+/**
+ * A buy for a list that does not ask had to make a line for a product with
+ * no name in any language (plan 0273). Renders as 409, and nothing is
+ * written.
+ */
+export class BasketProductHasNoNameException extends DomainException {
+  readonly code = ERROR_CODES.BASKET_PRODUCT_HAS_NO_NAME;
+}
+
+/**
+ * A write needed an answer of catalog, and catalog did not give one in time
+ * or failed (plan 0273, amended on 2026-11-22). Renders as 503, nothing is
+ * written, and the client sends the same request again.
+ */
+export class CatalogUnavailableException extends DomainException {
+  readonly code = ERROR_CODES.CATALOG_UNAVAILABLE;
+}
+
+/**
  * The number being moved is not where the caller believed it started (plan 0057,
  * section 5).
  *
@@ -661,6 +697,24 @@ export const ITEM_QUANTITY_STEPS_ALLOWED_DETAIL = 'allowed';
  */
 export class ItemQuantityStepNotAllowedException extends DomainException {
   readonly code = ERROR_CODES.ITEM_QUANTITY_STEP_NOT_ALLOWED;
+  override readonly exposesDetails = true;
+}
+
+/** The `details` keys of a refused piece count (plan 0278, section 2). */
+export const ITEM_PIECE_COUNT_DETAIL = 'pieceCount';
+export const ITEM_PACK_COUNT_DETAIL = 'packCount';
+
+/**
+ * A product write would store a piece count off its bounds, on a product
+ * without a fixed size in `GRAM` or `MILLILITER`, or not above the pack count
+ * (plan 0278, section 2). The details are public: the piece count under
+ * {@link ITEM_PIECE_COUNT_DETAIL}, the pack count under
+ * {@link ITEM_PACK_COUNT_DETAIL}, the size under {@link ITEM_UNIT_SIZE_DETAIL}
+ * and the unit under `defaultUnit`, with `itemId` or `index` as for
+ * {@link ItemUnitNotBaseException}.
+ */
+export class ItemPieceCountNotAllowedException extends DomainException {
+  readonly code = ERROR_CODES.ITEM_PIECE_COUNT_NOT_ALLOWED;
   override readonly exposesDetails = true;
 }
 

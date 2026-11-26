@@ -125,6 +125,262 @@ apply the part. To find out, wait a few minutes and send the same part again.
 A part that landed is refused at `VALIDATE`, because its rows are no longer
 queued. That refusal writes nothing. A part that did not land is applied.
 
+## Carry local edits to a cluster
+
+This is plan 0006. You fix products on a local copy of the catalog through the
+back office or the admin API. The replay then carries those fixes to staging or
+production. It writes a change only when the target product still holds what
+the change expected. Every run writes a report, and a dry run is the default.
+
+It carries the fields that an `expect` can guard: `name`, `brand`, `unitSize`,
+`approxWeight`, `quantityStep`, `defaultUnit`, `packCount`, `pieceCount` and
+the categories (sent as `categorySlugs`).
+
+### Before the first write
+
+- Take a backup of the target's catalog database.
+- Replay to staging before production.
+- Sign in as a named operator, so that `catalog_audit` on the target names who
+  wrote.
+- Run the replay after the release that runs release tasks `0007` and `0008`
+  on the target. Before it, an edit made on top of what `0007` wrote meets the
+  old value there and is reported as a `conflict`.
+
+### 1. Export the changes from the local slot
+
+```sh
+npx nx run luna-shopper/curation-cli:curate -- --export-changes .curation-runs/<name>/changes.jsonl \
+  --slot <n> --actor <admin id> --since <ISO time> [--until <ISO time>]
+```
+
+The export reads the slot's `catalog_audit` with `psql` in the slot's own
+catalog container, in a read only session. It writes the product edits of the
+named operator only. Repeat `--actor` for several operators. `--since` is
+required, so that a whole trail is never exported by accident.
+
+### 2. Read the change list
+
+The first line is a header. Then there is one line per audit row. To hold a
+change back, delete its lines.
+
+### 3. Dry run against the target
+
+```sh
+npx nx run luna-shopper/curation-cli:curate -- --replay .curation-runs/<name>/changes.jsonl \
+  --target-url <gateway url>
+```
+
+`--target-url` has no default. Type it each time. The run signs in one time,
+reads the products, and reads the source rows of the few products that the wash
+rule asks about. It sends no write. stderr prints the counts per class and the
+path of the report. The report is a JSON file beside the change list. To name
+it yourself, pass `--report`.
+
+The password is never a flag. At a terminal the run asks for it. In a script,
+set `CURATION_TARGET_PASSWORD` for the one command. `--main-user` names the
+operator, `dev-admin` by default.
+
+### 4. Write
+
+```sh
+npx nx run luna-shopper/curation-cli:curate -- --replay .curation-runs/<name>/changes.jsonl \
+  --target-url <gateway url> --write --confirm-host <host name of that url>
+```
+
+A write needs `--confirm-host`. Type the host name of `--target-url` a second
+time, with no scheme, port or path: for `https://staging.example.com:8443/`
+that is `staging.example.com`. Case does not matter. When the flag is missing
+or names another host, the run stops before it signs in and sends nothing. This
+holds for every write: this step, step 6 and `--decisions`. A dry run needs no
+confirmation.
+
+The products of class `apply` go through `PATCH /v1/admin/catalog/items/batch`,
+100 a request by default (`--batch-size`, at most 1,000). Each edit carries an
+`expect` of the values it changes and of the product's name and brand. A product
+that moved on the target after the lookup is refused by the server and is
+reported, and the rest of the batch is sent again. A product refused only
+because it already holds every new value is `already there`.
+
+What each answer does:
+
+- A 400, 409 or 422 with a problem code (an unregistered brand, a barcode
+  rule, a category that does not resolve) is a refusal of the content. The
+  batch is split in halves until the refused product is alone. It is
+  `refused`, and the other products are written.
+- A 502, 503, 504, no answer, no answer within 30 seconds, or a 2xx answer
+  whose body is not JSON can hide a write that landed. The run reads the batch
+  back, counts what landed as `already there`, and sends the rest again, at
+  most three times.
+- A 413 halves the batch it refused, once. No later batch is larger than that
+  half.
+- Anything else stops the run: a 429 after three waits of the time the answer
+  names, a 401 or 403 after one new login, a second 413, any other 5xx, or a
+  fourth lost answer.
+
+The report file is written again after every answer, so it always holds what
+is known so far. While the run goes on, its header carries `inProgress` and no
+`endedAt`; a line still of class `apply` without `written` was then in flight
+or not yet sent. Each write goes to a temp file beside the report and is then
+renamed over it, so a stop never leaves half a file.
+
+A read back that sees the new values is conclusive: those products are
+`already there`. A read back that sees the old values proves nothing yet after
+a timeout, no answer, a 502, 503 or 504, or any other 5xx, because the server
+may still commit after the read. The cluster's proxy gives up after 15
+seconds while the backend carries on. So every product sent in such a request
+carries `sentInLostRequest: true` until a later answer or read back settles it.
+
+When the run stops, it still writes the report and then exits with an error.
+The report holds every product written before the stop, the products of the
+request it stopped on as `not written` with the answer (or `already there`
+when a read back shows they landed), and every product after them as
+`not sent`. The header names the answer under `error`.
+
+A line with `checked: false` was sent in a request whose outcome is not known,
+and nothing since settled it: the target may hold it. Its `reason` says so.
+It can sit on any class (`not written`, `refused`, `conflict` and the others),
+and it always means "run the dry run again". Only three things settle a
+product: an answer that wrote it, a read back that saw its new values, and an
+expectation failure that names it. A product that is still waiting to be sent
+again is `not written`, never `not sent`, whatever stopped the run. This holds
+for the fourth lost answer, a 5xx and a 2xx whose body could not be read too.
+
+**After any stop, and after any lost answer, run the dry run (step 3) again.**
+It reads the target and settles every line marked `checked: false`: what
+landed is `already there`, the rest is `apply`. Fix the cause of the stop
+first.
+
+Ctrl+C (or a `kill`) stops the run at once and does not wait for the request in
+flight. The report is written first: the products of that request are
+`not written` with `checked: false` and the code `interrupted`, a product
+waiting to be sent again after a lost answer is `not written` with
+`checked: false` too, every other product after them is `not sent`, and the
+process exits with 130 (143 for a `kill`).
+
+stderr and the report's `counts` count the lines with `checked: false` apart,
+as `outcomeUnknown`. Those lines are also counted under their class. When the
+count is above zero, stderr says "N products were sent and their outcome is not
+known, run the dry run again".
+
+On Windows an editor or an antivirus scan that holds the report makes the
+rename fail with EPERM, EBUSY or EACCES. The run tries the rename again a few
+times with a short wait. If it still fails, the temp file beside the report
+holds the newest report and is kept, and the error names its full path: open
+that file. The next write that succeeds renames it away.
+
+If the report itself cannot be written (a full disk, a locked file), the run
+stops before the next batch. stderr then prints the counts, the reason the run
+stopped, and last the write failure, and the process exits with an error. The
+counts on stderr are then the only record: keep them.
+
+### Reconcile the report with the target
+
+The count `written` holds only the products whose batch the target answered
+as written. A product whose answer was lost, and that a read back then found
+landed, or that a resend found `already there`, keeps its class
+`already there` and carries `afterLostAnswer: true`. The summary counts those
+apart, as `landedAfterLostAnswer`, and stderr prints "N more landed after a
+lost answer".
+
+So the products this run changed on the target are `written` plus
+`landedAfterLostAnswer`. They are the products the target's `catalog_audit`
+shows changed by the operator you signed in as, between the header's
+`startedAt` and `endedAt`, unless someone else made the same edit there in the
+meantime. Each of the `outcomeUnknown` products (the lines with
+`checked: false`) may be one more, and its audit row may come after
+`endedAt`: run step 3 to see.
+
+### 5. Dry run again
+
+Run step 3 again. Every product that was sent is now `already there`.
+
+### 6. Products whose identity changed
+
+A product that was renamed or given another brand on the target is not written
+by step 4. Look at the `identity changed` lines of the report. Put the ids of
+the products that you want to send in a file, one id a line, then:
+
+```sh
+npx nx run luna-shopper/curation-cli:curate -- --replay-identity .curation-runs/<name>/<report>.json \
+  --target-url <the same url> --only .curation-runs/<name>/ids.txt
+```
+
+That is the dry run. To write, add `--write --confirm-host <host name of that
+url>`. A write of this pass needs `--only`: without it the run stops before it
+signs in. The `expect` then carries the target's name and brand as the report
+recorded them. A report written for another url is refused.
+
+### Products left to the wash task
+
+The wash count products of release task `0009` are not carried. Each one has
+its own report line of class `excluded: wash task`, with the product id and,
+under `washTask.text`, the source row text that excluded it. The summary
+counts them. When such a product also has other edits (a name, a brand,
+`packCount`, and so on), only its size is left out: `unitSize`, and
+`defaultUnit` when the edit changes it too. The other fields are sent under
+their guard, and the line carries a `washTask` that says the size was left to
+the task. stderr counts those as "the size of N more left to the wash task".
+
+After release task `0009` has run on the target, check each of these products
+there. The task holds some products back, for example one whose other chain
+states the same number as units. Such a product stays uncorrected, and a person
+must decide its size.
+
+### Queue decisions
+
+Add `--decisions <decisions.jsonl>` to steps 3 and 4 to replay a suggestions
+decisions file after the product changes. Every decided row must carry
+`expect.observed` (backend plan 0277), or the file is refused whole. A decision
+whose product the target does not hold is reported `no twin`. A part refused at
+`VALIDATE` loses the refused rows, and the rest is sent again. A part refused
+twice in a row without losing a row (the refusal names none of its rows) stops
+the run: its rows are `refused` with the code `no_progress`, and the parts
+after it are `not sent`. A part refused at any other step stops the run the
+same way: its rows are `refused` with the step as the code, the parts after it
+are `not sent`, the header names the step under `error`, and the process exits
+with an error.
+
+When the answer to a part is lost, the run reads its rows back on the target.
+A row that is no longer pending there is `decided on target`, with the status
+it holds under `targetStatus`. A row still pending is `not written` with
+`checked: false` after a timeout, no answer or a 5xx, because the part may
+still land after the read; only after a 2xx whose body could not be read is it
+plainly `not written`. A row that cannot be read back (a `createItem`, an
+`accept` onto a product the same part creates, a row its product does not
+list, or a failed read) is `not written` with `checked: false`: the target may
+hold it. stderr counts the rows with `checked: false` apart, and the report
+counts them as `decisions.counts.outcomeUnknown`. Run the dry run again to
+settle them. The products the route created and could not delete again are
+listed under `decisions.orphanedItemIds` of the report, and stderr counts them.
+
+A queue row that you decided by hand in the back office leaves no decisions
+file, so it is not carried.
+
+### The classes of the report
+
+| Class                 | What it means                                                                                                                                                                                       |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `not carried`         | a product created, deleted or merged locally, or one whose only edits are to `ean`, `sku`, `imageUrl` or `productGroupId`                                                                           |
+| `local gap`           | someone not exported changed the product between two exported edits                                                                                                                                 |
+| `no twin`             | the target has no product with that id                                                                                                                                                              |
+| `merged on target`    | the target merged the product; the report names the survivor                                                                                                                                        |
+| `excluded: wash task` | a wash count that release task `0009` corrects; found by its rule, with the row text that matched                                                                                                   |
+| `identity changed`    | the target's name or brand is not the one the edit was made on                                                                                                                                      |
+| `already there`       | the target holds every new value                                                                                                                                                                    |
+| `conflict`            | a field holds neither the old nor the new value                                                                                                                                                     |
+| `apply`               | at least one field holds the old value and none holds a third one                                                                                                                                   |
+| `refused`             | the target refused the write, with its code and message                                                                                                                                             |
+| `not written`         | sent in the request the run stopped on, and not on the target after it; the line names the answer. With `checked: false` its outcome is not known: the target may hold it, and a dry run settles it |
+| `not sent`            | never sent, because the run stopped before it                                                                                                                                                       |
+
+A dry run cannot predict a refusal of the write itself, such as an
+unregistered brand, because the route has no dry run.
+
+The replay never carries a merge, a deletion, a reject, prices, or a brand,
+category or product group created locally. Edits to `ean`, `sku`, `imageUrl`
+and `productGroupId` are listed in the report and never sent, because no
+`expect` guards them.
+
 ## What a run directory holds
 
 - `decisions.jsonl`: a header line, then one line per decided row. This is the

@@ -31,13 +31,23 @@ export interface SourceEntryFields {
   /** The brand's key, derived and written beside it (plan 0115, section 6). */
   brandKey: string | null;
   ean: string | null;
-  unitSize: number | null;
+  /**
+   * The size of the pack, in {@link sizeUnit}.
+   *
+   * **Absent means the source did not state the size this time** (owner
+   * decision 143a), as for {@link approxWeight}: it leaves the stored size
+   * alone. Null is a statement, and is written. Only LIDL sends it absent,
+   * for a week whose page prints no format, because LIDL prints the format
+   * only inside a price block.
+   */
+  unitSize?: number | null;
   /**
    * The catalog unit `unitSize` is in (plan 0177), and null whenever
    * `unitSize` is. Written with the size on every observation, so the two
-   * cannot describe different reads of the source.
+   * cannot describe different reads of the source: absent exactly when
+   * `unitSize` is.
    */
-  sizeUnit: SourceSizeUnit | null;
+  sizeUnit?: SourceSizeUnit | null;
   /**
    * Whether the product is sold by weight (plan 0181). When it is, `unitSize`
    * and `sizeUnit` are both null: the weight is not the same on every pack,
@@ -53,7 +63,12 @@ export interface SourceEntryFields {
    * statement, and is written.
    */
   approxWeight?: number | null;
-  sizeFormat: string | null;
+  /**
+   * The printed format, verbatim. **Absent means the source did not state it
+   * this time** (owner decision 143a), and leaves the stored text alone. Null
+   * is a statement, and is written.
+   */
+  sizeFormat?: string | null;
   /**
    * The container the source prints, verbatim, or null (plan 0248).
    *
@@ -70,7 +85,13 @@ export interface SourceEntryFields {
    * walk of the same chain read. Null is a statement, and is written.
    */
   packCount?: number | null;
-  categoryPath: string[];
+  /**
+   * The chain's category path, root first. **Absent means the source did not
+   * state one this time**, and leaves the stored path alone: El Jamón, for a
+   * page whose breadcrumb named another product (plan 0169, notes of
+   * 2026-11-25).
+   */
+  categoryPath?: string[];
   url: string | null;
   /**
    * The photo address the source prints for the product, or null (plan 0198).
@@ -97,16 +118,21 @@ export function sourceGroupChanged(
     existing.name !== fields.name ||
     existing.brand !== fields.brand ||
     existing.ean !== fields.ean ||
-    existing.sizeFormat !== fields.sizeFormat ||
+    // A size field the observation does not state is no change (owner
+    // decision 143a): the stored one stays, so it cannot differ.
+    (fields.sizeFormat !== undefined &&
+      existing.sizeFormat !== fields.sizeFormat) ||
     (fields.packaging !== undefined &&
       (existing.packaging ?? null) !== fields.packaging) ||
     (fields.packCount !== undefined &&
       (existing.packCount ?? null) !== fields.packCount) ||
-    numeric(existing.unitSize) !== numeric(fields.unitSize) ||
+    (fields.unitSize !== undefined &&
+      numeric(existing.unitSize) !== numeric(fields.unitSize)) ||
     // A row written before plan 0177 holds no unit, so the first run to see it
     // again reports it `updated`, which is true: the row now says something it
     // did not say before.
-    (existing.sizeUnit ?? null) !== fields.sizeUnit ||
+    (fields.sizeUnit !== undefined &&
+      (existing.sizeUnit ?? null) !== fields.sizeUnit) ||
     (existing.soldByWeight ?? false) !== fields.soldByWeight ||
     (fields.approxWeight !== undefined &&
       numeric(existing.approxWeight) !== numeric(fields.approxWeight)) ||
@@ -137,20 +163,32 @@ export function applySourceGroup(
   // {@link sourceGroupChanged} above says nothing about it.
   row.brandKey = fields.brandKey;
   row.ean = fields.ean;
-  row.unitSize = fields.unitSize;
-  row.sizeUnit = fields.sizeUnit;
+  // Each size field the observation does not state is left as stored (owner
+  // decision 143a), as the weight, the container and the count are.
+  if (fields.unitSize !== undefined) {
+    row.unitSize = fields.unitSize;
+  }
+  if (fields.sizeUnit !== undefined) {
+    row.sizeUnit = fields.sizeUnit;
+  }
   row.soldByWeight = fields.soldByWeight;
   if (fields.approxWeight !== undefined) {
     row.approxWeight = fields.approxWeight;
   }
-  row.sizeFormat = fields.sizeFormat;
+  if (fields.sizeFormat !== undefined) {
+    row.sizeFormat = fields.sizeFormat;
+  }
   if (fields.packaging !== undefined) {
     row.packaging = fields.packaging;
   }
   if (fields.packCount !== undefined) {
     row.packCount = fields.packCount;
   }
-  row.categoryPath = fields.categoryPath;
+  // A path the observation does not state is left as stored, so a breadcrumb
+  // drawn for another product never replaces a right one.
+  if (fields.categoryPath !== undefined) {
+    row.categoryPath = fields.categoryPath;
+  }
   row.url = fields.url;
   row.imageUrl = fields.imageUrl;
   row.extra = fields.extra;

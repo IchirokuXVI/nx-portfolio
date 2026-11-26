@@ -13,6 +13,7 @@ import {
   GatewayError,
   ItemNames,
   LINE_SERVICE,
+  ListRowsStore,
   provideFakeCategoryStore,
   provideFakeShopSectionsStore,
   SessionStore,
@@ -32,7 +33,11 @@ import type {
   Page,
   ParticipantKind,
 } from '@portfolio/velista/models';
-import { QUANTITY_STEP_QUIET_MS } from '@portfolio/velista/models';
+import {
+  QUANTITY_REEL_IDLE_MS,
+  QUANTITY_REEL_PX_PER_UNIT,
+  QUANTITY_STEP_QUIET_MS,
+} from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
@@ -214,6 +219,8 @@ interface World {
    * the numbers in it rather than about which sentence was chosen.
    */
   readonly echoValues?: boolean;
+  /** The compact view of velista `0202`, in which the buys are reels (velista `0204`). */
+  readonly compact?: boolean;
 }
 
 /** Every settlement read the sheet made, so a test can assert it asked both origins. */
@@ -306,6 +313,7 @@ function storeDouble(world: World) {
     unskip: jest.fn().mockResolvedValue(null),
     setDemand: jest.fn().mockResolvedValue(null),
     addLine: jest.fn().mockResolvedValue(null),
+    buyForList: jest.fn().mockResolvedValue(null),
     adding: signal(false),
     handedOver: signal(null),
     handOver: jest.fn(),
@@ -413,8 +421,20 @@ async function render(world: World = {}) {
       // at, and the honest answer for a spec that has not chosen one is its own.
       BasketViewStore,
       provideFakeBrowserFacade(
-        new Map(world.asks ? [] : [[StorageKeys.shopAskOff, 'true']])
+        new Map([
+          ...(world.asks ? [] : [[StorageKeys.shopAskOff, 'true'] as const]),
+          ...(world.compact
+            ? [
+                [
+                  StorageKeys.listRows,
+                  JSON.stringify({ version: 2, layout: 'compact' }),
+                ] as const,
+              ]
+            : []),
+        ])
       ),
+      // The view the entries draw by (velista `0204`), read off the fake above.
+      ListRowsStore,
       // The buy the shop question holds, which the basket page provides.
       HeldBuy,
       provideFakeCategoryStore(),
@@ -557,8 +577,8 @@ async function commitAmount(
 /** Send every run the sheet holds open, as its quiet beat would. */
 function sendWaiting(fixture: ComponentFixture<SettleSheet>): void {
   for (const runs of [
-    fixture.componentInstance['demandRuns'],
-    fixture.componentInstance['raiseRuns'],
+    fixture.componentInstance['buyRuns'],
+    fixture.componentInstance['otherRuns'],
   ]) {
     for (const key of [...runs.pending().keys()]) {
       runs.flush(key);
@@ -1143,10 +1163,22 @@ describe('SettleSheet: a settlement that was taken back', () => {
  * because somebody adjusting a number wants to see where it landed. The buttons
  * that close the line ("They had none") still close the sheet.
  */
-describe('SettleSheet: the buttons and the quantity of each list', () => {
+describe('SettleSheet: the buttons, and what each list bought (velista 0201)', () => {
   function landed(): BasketRowResult {
     return { entries: line().entries, skippedCount: 0 };
   }
+
+  /** The steppers of the lists that ask, as components, in order. */
+  const steppers = (fixture: ComponentFixture<SettleSheet>) =>
+    fixture.debugElement
+      .queryAll(By.css('lib-quantity-stepper.ask-amount'))
+      .filter((held) => held.nativeElement.closest('.others') === null)
+      .map((held) => held.componentInstance as QuantityStepper);
+
+  const asks = (fixture: ComponentFixture<SettleSheet>) =>
+    [
+      ...(fixture.nativeElement as HTMLElement).querySelectorAll('.row-ask'),
+    ].map((node) => node.textContent?.trim());
 
   it('offers "Got all" first, and no "Got some"', async () => {
     const { fixture } = await render();
@@ -1168,53 +1200,205 @@ describe('SettleSheet: the buttons and the quantity of each list', () => {
     expect(dismissedTo()).toHaveLength(1);
   });
 
-  it('changes what a list asks for when its quantity settles, with no button', async () => {
-    const { fixture, store } = await render();
-    store.setDemand.mockResolvedValue(landed());
-
-    await commitAmount(fixture, '', { from: 3, to: 5 });
-
-    expect(store.setDemand).toHaveBeenCalledWith({
-      lineId: 'zl1',
-      quantity: 5,
-      from: 3,
+  it('heads the lists "What you bought", each stepper at what was bought (target state 8)', async () => {
+    const { fixture } = await render({
+      lines: [
+        line({
+          entries: [
+            entry('l1', 'zl1', 1, { bought: 2, asked: 3 }),
+            entry('l2', 'zl2', 1),
+          ],
+        }),
+      ],
     });
+
+    expect(text(fixture)).toContain('basket.entries.heading');
+    expect(steppers(fixture).map((held) => held.value())).toEqual([2, 0]);
+    expect(asks(fixture)).toEqual(['· 3', '· 1']);
+  });
+
+  it('settles a run up on that line alone: its difference, from its left, no allocations (spec 1)', async () => {
+    const { fixture, store } = await render();
+    store.settle.mockResolvedValue(landed());
+
+    await commitAmount(fixture, '', { from: 0, to: 2 });
+
+    expect(store.settle).toHaveBeenCalledTimes(1);
+    const [rowKey, body, lineId] = store.settle.mock.calls[0];
+    expect(rowKey).toBe(LINE_ID);
+    expect(lineId).toBe('zl1');
+    expect(body).toMatchObject({ outcome: 'BOUGHT', quantity: 2, from: 3 });
+    expect(body).not.toHaveProperty('allocations');
+    expect(store.setDemand).not.toHaveBeenCalled();
     expect(dismissedTo()).toEqual([]);
   });
 
-  it('stays open when a list asks for none and another still asks', async () => {
-    const { fixture, store } = await render();
-    store.setDemand.mockResolvedValue({ entries: [], skippedCount: 0 });
+  it('reverts a run down on that line alone, from its bought (spec 1)', async () => {
+    const { fixture, store } = await render({
+      lines: [
+        line({
+          entries: [
+            entry('l1', 'zl1', 1, { bought: 2, asked: 3 }),
+            entry('l2', 'zl2', 1),
+          ],
+        }),
+      ],
+    });
+    store.revert.mockResolvedValue(landed());
 
-    await commitAmount(fixture, '', { from: 3, to: 0 });
+    await commitAmount(fixture, '', { from: 2, to: 1 });
 
-    expect(store.handOver).not.toHaveBeenCalled();
-    expect(dismissedTo()).toEqual([]);
+    expect(store.revert).toHaveBeenCalledWith(
+      LINE_ID,
+      { target: 'UNITS', units: 1, from: 2 },
+      'zl1'
+    );
+    expect(store.settle).not.toHaveBeenCalled();
+    expect(store.setDemand).not.toHaveBeenCalled();
   });
 
-  it('closes, and hands the page a sentence, when the row left the basket', async () => {
+  it('steps a list that was not served too, because a buy is the basket’s act (target state 4)', async () => {
+    const { fixture, store } = await render({ served: [ref('l1', 'Weekly')] });
+    store.settle.mockResolvedValue(landed());
+
+    expect(steppers(fixture)).toHaveLength(2);
+    await commitAmount(fixture, '', { from: 0, to: 1 }, 1);
+
+    expect(store.settle.mock.calls[0][2]).toBe('zl2');
+  });
+
+  it('keeps the ask of the answer: "· 3" and amber at 4, "· 3" and green back at 3 (specs 7 and 10)', async () => {
     const { fixture, store } = await render();
-    store.setDemand.mockImplementation(async () => {
-      store.rows.set([]);
-      return { entries: [], skippedCount: 0 };
+    store.settle.mockImplementation(async () => {
+      const entries = [
+        entry('l1', 'zl1', 0, { bought: 4, asked: 3 }),
+        entry('l2', 'zl2', 1),
+      ];
+      store.rows.set([line({ left: 1, bought: 4, asked: 4, entries })]);
+      return { entries, skippedCount: 0 };
+    });
+    store.revert.mockImplementation(async () => {
+      const entries = [
+        entry('l1', 'zl1', 0, { bought: 3, asked: 3 }),
+        entry('l2', 'zl2', 1),
+      ];
+      store.rows.set([line({ left: 1, bought: 3, asked: 4, entries })]);
+      return { entries, skippedCount: 0 };
     });
 
-    await commitAmount(fixture, '', { from: 3, to: 0 });
+    await commitAmount(fixture, '', { from: 0, to: 4 });
+    expect(asks(fixture)[0]).toBe('· 3');
+    expect(steppers(fixture)[0].value()).toBe(4);
+    expect(steppers(fixture)[0].reach()).toBe('over');
 
-    expect(store.handOver).toHaveBeenCalledWith('basket.demand.nothingLeft');
-    expect(dismissedTo()).toHaveLength(1);
+    await commitAmount(fixture, '', { from: 4, to: 3 });
+    expect(store.revert).toHaveBeenCalledWith(
+      LINE_ID,
+      { target: 'UNITS', units: 1, from: 4 },
+      'zl1'
+    );
+    expect(asks(fixture)[0]).toBe('· 3');
+    expect(steppers(fixture)[0].reach()).toBe('reached');
+    // The list's ask never moved: no write of an ask was made.
+    expect(store.setDemand).not.toHaveBeenCalled();
+  });
+
+  it('passes the ask as a snap point beside 1000 (spec 8)', async () => {
+    const { fixture } = await render();
+
+    expect(steppers(fixture).map((held) => held.snaps())).toEqual([
+      [1000, 3],
+      [1000, 1],
+    ]);
+  });
+
+  /** A one list row asking 3, with `bought` of it, as an answer says. */
+  function oneList(bought: number): BasketRow {
+    const left = Math.max(0, 3 - bought);
+    const state = left === 0 ? 'DONE' : bought > 0 ? 'PARTLY' : 'WANTED';
+    return line({
+      left,
+      bought,
+      asked: 3,
+      state,
+      entries: [entry('l1', 'zl1', left, { bought, asked: 3, state })],
+    });
+  }
+
+  it('keeps the steppers on a row with nothing left, without its row actions (target state 4, amended)', async () => {
+    const { fixture, store } = await render({ lines: [oneList(3)] });
+    const answer = (bought: number) => async () => {
+      const row = oneList(bought);
+      store.rows.set([row]);
+      return { entries: row.entries, skippedCount: 0 };
+    };
+    store.settle.mockImplementation(answer(4));
+    store.revert.mockImplementation(answer(2));
+
+    // At the ask: still a stepper, green, and no "Got all".
+    expect(steppers(fixture)).toHaveLength(1);
+    expect(steppers(fixture)[0].value()).toBe(3);
+    expect(steppers(fixture)[0].reach()).toBe('reached');
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.actions .primary')
+    ).toBeNull();
+
+    // Above it: amber, the label still the ask.
+    await commitAmount(fixture, '', { from: 3, to: 4 });
+    expect(store.settle).toHaveBeenCalledWith(
+      LINE_ID,
+      expect.objectContaining({ outcome: 'BOUGHT', quantity: 1, from: 0 }),
+      'zl1'
+    );
+    expect(steppers(fixture)[0].value()).toBe(4);
+    expect(steppers(fixture)[0].reach()).toBe('over');
+    expect(asks(fixture)).toEqual(['· 3']);
+
+    // Back to 2: a revert of that line, and the stepper is still there.
+    await commitAmount(fixture, '', { from: 4, to: 2 });
+    expect(store.revert).toHaveBeenCalledWith(
+      LINE_ID,
+      { target: 'UNITS', units: 2, from: 4 },
+      'zl1'
+    );
+    expect(steppers(fixture)).toHaveLength(1);
+    expect(steppers(fixture)[0].value()).toBe(2);
+    expect(steppers(fixture)[0].reach()).toBeNull();
+  });
+
+  it('draws the numbers and no stepper on a finished basket (target state 4)', async () => {
+    const { fixture } = await render({
+      basketFinished: true,
+      lines: [
+        line({
+          left: 0,
+          bought: 4,
+          state: 'DONE',
+          entries: [
+            entry('l1', 'zl1', 0, { bought: 3, asked: 3, state: 'DONE' }),
+            entry('l2', 'zl2', 0, { bought: 1, asked: 1, state: 'DONE' }),
+          ],
+        }),
+      ],
+    });
+
+    expect(steppers(fixture)).toHaveLength(0);
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('.row-number')
+    ).toHaveLength(2);
   });
 });
 
 /**
- * The save waits for the presses to stop (velista `0190`, section 4).
+ * The write waits for the presses to stop (velista `0190`, section 4; velista
+ * `0201`).
  *
  * The stepper emits every press; the sheet gathers the presses of one line into
- * one run and sends it `QUANTITY_STEP_QUIET_MS` after the last, with where the run
- * began and where it ended. A typed amount is sent at once, one write per line is
- * out at a time, and a settle button sends what waits before it settles.
+ * one run and sends it `QUANTITY_STEP_QUIET_MS` after the last, as a settle or a
+ * revert of that line. A typed amount is sent at once, one write per line is out
+ * at a time, and a settle button sends what waits before it settles.
  */
-describe('SettleSheet: an amount is saved after the presses stop', () => {
+describe('SettleSheet: what was bought is written after the presses stop', () => {
   afterEach(() => jest.useRealTimers());
 
   function landed(): BasketRowResult {
@@ -1271,37 +1455,48 @@ describe('SettleSheet: an amount is saved after the presses stop', () => {
     }
   }
 
-  it('sends three presses as one demand, from the first to the last', async () => {
+  /** The settles of one line, as `[quantity, from]`. */
+  const lineSettles = (store: Awaited<ReturnType<typeof render>>['store']) =>
+    store.settle.mock.calls
+      .filter((call) => call[2] !== undefined)
+      .map((call) => [call[1].quantity, call[1].from]);
+
+  /** A row whose first line asks 3 and has `bought` of it, as an answer says. */
+  function boughtRow(bought: number): BasketRow {
+    return line({
+      left: Math.max(0, 3 - bought) + 1,
+      bought,
+      entries: [
+        entry('l1', 'zl1', Math.max(0, 3 - bought), { bought, asked: 3 }),
+        entry('l2', 'zl2', 1),
+      ],
+    });
+  }
+
+  it('sends three presses as one settle, from the first to the last', async () => {
     const { fixture, store } = await render();
-    store.setDemand.mockResolvedValue(landed());
+    store.settle.mockResolvedValue(landed());
     jest.useFakeTimers();
 
-    press(fixture, 3, 4);
-    press(fixture, 4, 5);
-    press(fixture, 5, 6);
-    // The stepper draws where the presses got to, before anything is saved.
-    expect(stepper(fixture).value()).toBe(6);
+    press(fixture, 0, 1);
+    press(fixture, 1, 2);
+    press(fixture, 2, 3);
+    // The stepper draws where the presses got to, before anything is written.
+    expect(stepper(fixture).value()).toBe(3);
     jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS - 1);
-    expect(store.setDemand).not.toHaveBeenCalled();
+    expect(store.settle).not.toHaveBeenCalled();
 
     jest.advanceTimersByTime(1);
     await settleWrites();
 
-    expect(store.setDemand).toHaveBeenCalledTimes(1);
-    expect(store.setDemand).toHaveBeenCalledWith({
-      lineId: 'zl1',
-      quantity: 6,
-      from: 3,
-    });
+    expect(lineSettles(store)).toEqual([[3, 3]]);
   });
 
   it('reads two presses in one task as one run, not as a typed amount', async () => {
     const { fixture, store } = await render();
-    store.setDemand.mockResolvedValue(landed());
+    store.settle.mockResolvedValue(landed());
     jest.useFakeTimers();
 
-    // The real buttons, with no redraw between them: the second press builds on
-    // the first (velista `0188`), so it emits 4 to 5 and is one step, a press.
     const plusButton = fixture.debugElement
       .query(By.css('lib-quantity-stepper.ask-amount'))
       .nativeElement.querySelector('button.step.plus') as HTMLButtonElement;
@@ -1309,66 +1504,54 @@ describe('SettleSheet: an amount is saved after the presses stop', () => {
     plusButton.click();
     fixture.detectChanges();
     await settleWrites();
-    expect(store.setDemand).not.toHaveBeenCalled();
+    expect(store.settle).not.toHaveBeenCalled();
 
     jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
     await settleWrites();
 
-    expect(store.setDemand).toHaveBeenCalledTimes(1);
-    expect(store.setDemand).toHaveBeenCalledWith({
-      lineId: 'zl1',
-      quantity: 5,
-      from: 3,
-    });
+    expect(lineSettles(store)).toEqual([[2, 3]]);
   });
 
-  it('sends nothing for a run that came back to where it began', async () => {
+  it('sends nothing for a run that came back to where it began (spec 2)', async () => {
     const { fixture, store } = await render();
     jest.useFakeTimers();
 
-    press(fixture, 3, 4);
-    press(fixture, 4, 3);
+    press(fixture, 0, 1);
+    press(fixture, 1, 0);
     jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
     await settleWrites();
 
-    expect(store.setDemand).not.toHaveBeenCalled();
+    expect(store.settle).not.toHaveBeenCalled();
+    expect(store.revert).not.toHaveBeenCalled();
   });
 
   it('sends a typed amount at once', async () => {
     const { fixture, store } = await render();
-    store.setDemand.mockResolvedValue(landed());
+    store.settle.mockResolvedValue(landed());
     jest.useFakeTimers();
 
-    key(typeInto(fixture, '7'), 'Enter');
+    key(typeInto(fixture, '2'), 'Enter');
     fixture.detectChanges();
     await settleWrites();
 
-    expect(store.setDemand).toHaveBeenCalledWith({
-      lineId: 'zl1',
-      quantity: 7,
-      from: 3,
-    });
+    expect(lineSettles(store)).toEqual([[2, 3]]);
   });
 
   it('sends a typed amount one step away at once too, because it was typed', async () => {
     const { fixture, store } = await render();
-    store.setDemand.mockResolvedValue(landed());
+    store.settle.mockResolvedValue(landed());
     jest.useFakeTimers();
 
-    key(typeInto(fixture, '4'), 'Enter');
+    key(typeInto(fixture, '1'), 'Enter');
     fixture.detectChanges();
     await settleWrites();
 
-    expect(store.setDemand).toHaveBeenCalledWith({
-      lineId: 'zl1',
-      quantity: 4,
-      from: 3,
-    });
+    expect(lineSettles(store)).toEqual([[1, 3]]);
   });
 
   it('lets Home wait like a press, because nothing was typed', async () => {
-    const { fixture, store } = await render();
-    store.setDemand.mockResolvedValue(landed());
+    const { fixture, store } = await render({ lines: [boughtRow(2)] });
+    store.revert.mockResolvedValue(landed());
     jest.useFakeTimers();
 
     const field = fixture.debugElement
@@ -1377,49 +1560,49 @@ describe('SettleSheet: an amount is saved after the presses stop', () => {
     key(field, 'Home');
     fixture.detectChanges();
     await settleWrites();
-    expect(store.setDemand).not.toHaveBeenCalled();
+    expect(store.revert).not.toHaveBeenCalled();
 
     jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
     await settleWrites();
-    expect(store.setDemand).toHaveBeenCalledTimes(1);
+    expect(store.revert).toHaveBeenCalledWith(
+      LINE_ID,
+      { target: 'UNITS', units: 2, from: 2 },
+      'zl1'
+    );
   });
 
   it('keeps one write per line, and sends a later run from the answer', async () => {
     const { fixture, store } = await render();
     let answer: (result: BasketRowResult | null) => void = () => undefined;
-    store.setDemand.mockImplementationOnce(
+    store.settle.mockImplementationOnce(
       () =>
         new Promise<BasketRowResult | null>((done) => {
           answer = done;
         })
     );
-    store.setDemand.mockResolvedValue(landed());
+    store.settle.mockResolvedValue(landed());
     jest.useFakeTimers();
 
-    commit(fixture, 3, 7);
+    commit(fixture, 0, 3);
     await settleWrites();
-    expect(store.setDemand).toHaveBeenCalledTimes(1);
+    expect(store.settle).toHaveBeenCalledTimes(1);
 
-    // The line keeps its stepper while its save is out.
+    // The line keeps its stepper while its write is out.
     expect(stepper(fixture).disabled()).toBe(false);
-    press(fixture, 7, 8);
+    press(fixture, 3, 4);
     jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
     await settleWrites();
-    expect(store.setDemand).toHaveBeenCalledTimes(1);
+    expect(store.settle).toHaveBeenCalledTimes(1);
 
-    // The first answer lands, and says the line asks for 7.
-    store.rows.set([
-      line({ entries: [entry('l1', 'zl1', 7), entry('l2', 'zl2', 1)] }),
-    ]);
+    // The first answer lands: 3 bought, nothing left.
+    store.rows.set([boughtRow(3)]);
     answer(landed());
     await settleWrites();
 
-    expect(store.setDemand).toHaveBeenCalledTimes(2);
-    expect(store.setDemand).toHaveBeenLastCalledWith({
-      lineId: 'zl1',
-      quantity: 8,
-      from: 7,
-    });
+    expect(lineSettles(store)).toEqual([
+      [3, 3],
+      [1, 0],
+    ]);
   });
 
   /** One press of plus from what the stepper draws, as the real stepper emits it. */
@@ -1428,10 +1611,10 @@ describe('SettleSheet: an amount is saved after the presses stop', () => {
     press(fixture, from, from + 1);
   }
 
-  /** A `setDemand` that answers when the spec says so. */
-  function heldDemand(store: Awaited<ReturnType<typeof render>>['store']) {
+  /** A settle that answers when the spec says so. */
+  function heldSettle(store: Awaited<ReturnType<typeof render>>['store']) {
     const answers: ((result: BasketRowResult | null) => void)[] = [];
-    store.setDemand.mockImplementation(
+    store.settle.mockImplementation(
       () =>
         new Promise<BasketRowResult | null>((done) => {
           answers.push(done);
@@ -1442,7 +1625,7 @@ describe('SettleSheet: an amount is saved after the presses stop', () => {
 
   it('draws the amount it sent while the write is out, not the old one', async () => {
     const { fixture, store } = await render();
-    const answers = heldDemand(store);
+    const answers = heldSettle(store);
     jest.useFakeTimers();
 
     plus(fixture);
@@ -1451,25 +1634,22 @@ describe('SettleSheet: an amount is saved after the presses stop', () => {
     await settleWrites();
     fixture.detectChanges();
 
-    expect(store.setDemand).toHaveBeenCalledTimes(1);
-    expect(stepper(fixture).value()).toBe(5);
+    expect(store.settle).toHaveBeenCalledTimes(1);
+    expect(stepper(fixture).value()).toBe(2);
 
-    store.rows.set([
-      line({ entries: [entry('l1', 'zl1', 5), entry('l2', 'zl2', 1)] }),
-    ]);
+    store.rows.set([boughtRow(2)]);
     answers[0](landed());
     await settleWrites();
     fixture.detectChanges();
 
-    expect(stepper(fixture).value()).toBe(5);
+    expect(stepper(fixture).value()).toBe(2);
   });
 
-  it('ends two quick runs on an asking line at the sum of what was stepped', async () => {
+  it('ends two quick runs on a line at the sum of what was stepped', async () => {
     const { fixture, store } = await render();
-    const answers = heldDemand(store);
+    const answers = heldSettle(store);
     jest.useFakeTimers();
 
-    // 3 to 5, sent; then one more press while that save is out.
     plus(fixture);
     plus(fixture);
     jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
@@ -1479,111 +1659,79 @@ describe('SettleSheet: an amount is saved after the presses stop', () => {
     jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
     await settleWrites();
 
-    store.rows.set([
-      line({ entries: [entry('l1', 'zl1', 5), entry('l2', 'zl2', 1)] }),
-    ]);
+    store.rows.set([boughtRow(2)]);
     answers[0](landed());
     await settleWrites();
 
-    expect(store.setDemand).toHaveBeenCalledTimes(2);
-    expect(store.setDemand).toHaveBeenLastCalledWith({
-      lineId: 'zl1',
-      quantity: 6,
-      from: 5,
-    });
+    expect(lineSettles(store)).toEqual([
+      [2, 3],
+      [1, 1],
+    ]);
   });
 
-  it('puts the stored amount back when the write is refused', async () => {
+  it('puts the stored amount back when the write is refused, and says why', async () => {
     const { fixture, store } = await render();
-    const answers = heldDemand(store);
+    const answers = heldSettle(store);
     jest.useFakeTimers();
 
     plus(fixture);
     jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
     await settleWrites();
     fixture.detectChanges();
-    expect(stepper(fixture).value()).toBe(4);
+    expect(stepper(fixture).value()).toBe(1);
 
     answers[0](null);
     await settleWrites();
     fixture.detectChanges();
 
-    expect(stepper(fixture).value()).toBe(3);
+    expect(stepper(fixture).value()).toBe(0);
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.failed')
+    ).not.toBeNull();
   });
 
-  it('does not navigate again when the row leaves after a back destroyed the sheet', async () => {
-    const { fixture, store } = await render({
-      lines: [line({ left: 1, asked: 1, entries: [entry('l1', 'zl1', 1)] })],
-    });
-    store.setDemand.mockImplementation(async () => {
-      store.rows.set([]);
-      return { entries: [], skippedCount: 0 };
-    });
-    jest.useFakeTimers();
-
-    press(fixture, 1, 0);
-    // A route change destroys the sheet; nothing called `close()`.
-    fixture.destroy();
-    await settleWrites();
-
-    expect(store.setDemand).toHaveBeenCalledWith({
-      lineId: 'zl1',
-      quantity: 0,
-      from: 1,
-    });
-    expect(store.handOver).toHaveBeenCalledWith('basket.demand.nothingLeft');
-    expect(dismissedTo()).toEqual([]);
-  });
-
-  it('sends a waiting demand first when "Got all" is pressed, and settles after it', async () => {
+  it('sends a waiting buy first when "Got all" is pressed, and settles after it', async () => {
     const { fixture, store } = await render();
     const order: string[] = [];
-    store.setDemand.mockImplementation(async () => {
-      order.push('demand');
-      store.rows.set([
-        line({
-          left: 5,
-          asked: 5,
-          entries: [entry('l1', 'zl1', 4), entry('l2', 'zl2', 1)],
-        }),
-      ]);
-      return landed();
-    });
-    store.settle.mockImplementation(async () => {
-      order.push('settle');
-      return landed();
-    });
+    store.settle.mockImplementation(
+      async (_rowKey: string, _body: unknown, lineId?: string) => {
+        order.push(lineId === undefined ? 'settle' : 'buy');
+        if (lineId !== undefined) {
+          store.rows.set([boughtRow(1)]);
+        }
+        return landed();
+      }
+    );
     jest.useFakeTimers();
 
-    press(fixture, 3, 4);
+    press(fixture, 0, 1);
     (fixture.nativeElement as HTMLElement)
       .querySelector<HTMLButtonElement>('.actions .primary')
       ?.click();
     await settleWrites();
 
-    expect(order).toEqual(['demand', 'settle']);
-    // It bought what the sheet showed once the demand landed.
-    expect(store.settle.mock.calls[0][1]).toMatchObject({
+    expect(order).toEqual(['buy', 'settle']);
+    // It bought what was left once the buy landed.
+    expect(store.settle.mock.calls[1][1]).toMatchObject({
       outcome: 'BOUGHT',
-      quantity: 5,
-      from: 5,
+      quantity: 3,
+      from: 3,
     });
   });
 
-  it('stops the settle when the waiting demand is refused, and says why', async () => {
+  it('stops the settle when the waiting buy is refused, and says why', async () => {
     const { fixture, store } = await render();
-    store.setDemand.mockResolvedValue(null);
+    store.settle.mockResolvedValue(null);
     jest.useFakeTimers();
 
-    press(fixture, 3, 4);
+    press(fixture, 0, 1);
     (fixture.nativeElement as HTMLElement)
       .querySelector<HTMLButtonElement>('.actions .primary')
       ?.click();
     await settleWrites();
     fixture.detectChanges();
 
-    expect(store.setDemand).toHaveBeenCalledTimes(1);
-    expect(store.settle).not.toHaveBeenCalled();
+    expect(store.settle).toHaveBeenCalledTimes(1);
     expect(
       (fixture.nativeElement as HTMLElement).querySelector('.failed')
     ).not.toBeNull();
@@ -1591,18 +1739,14 @@ describe('SettleSheet: an amount is saved after the presses stop', () => {
 
   it('still sends what waits when the sheet is closed', async () => {
     const { fixture, store } = await render();
-    store.setDemand.mockResolvedValue(landed());
+    store.settle.mockResolvedValue(landed());
     jest.useFakeTimers();
 
-    press(fixture, 3, 4);
+    press(fixture, 0, 1);
     fixture.componentInstance['close']();
     await settleWrites();
 
-    expect(store.setDemand).toHaveBeenCalledWith({
-      lineId: 'zl1',
-      quantity: 4,
-      from: 3,
-    });
+    expect(lineSettles(store)).toEqual([[1, 3]]);
     expect(dismissedTo()).toHaveLength(1);
   });
 });
@@ -2188,6 +2332,8 @@ describe('SettleSheet: putting a row off for now', () => {
 describe('SettleSheet: a product row (velista 0139, section 3)', () => {
   const MILK: BasketProduct = {
     id: 'i-whole',
+    packCount: null,
+    pieceCount: null,
     quantityStep: null,
     name: { en: 'Whole milk', es: 'Leche entera' },
     brand: 'Hacendado',
@@ -2279,6 +2425,7 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
     };
     const OTHER_RICE: CatalogItem = {
       id: 'i-rice-2',
+      pieceCount: null,
       quantityStep: 100,
       name: { en: 'Brown rice', es: 'Arroz integral' },
       brand: null,
@@ -2298,9 +2445,16 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
         productId: RICE.id,
         unit: 'GRAM',
         left: 1000,
-        asked: 1000,
+        bought: 1000,
+        asked: 2000,
+        // 1000 bought of an ask of 2000, so the stepper starts at 1000.
         entries: [
-          entry('l1', 'zl1', 1000, { unit: 'GRAM', itemIds: [...itemIds] }),
+          entry('l1', 'zl1', 1000, {
+            unit: 'GRAM',
+            itemIds: [...itemIds],
+            bought: 1000,
+            asked: 2000,
+          }),
         ],
       });
     const plusOnce = async (fixture: ComponentFixture<SettleSheet>) => {
@@ -2345,13 +2499,13 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
         records,
       });
 
-      expect(await plusOnce(fixture)).toEqual([1025]);
+      expect(await plusOnce(fixture)).toEqual([1050]);
 
       records.set(new Map([[OTHER_RICE.id, OTHER_RICE]]));
       fixture.detectChanges();
 
-      // From the open run's 1025, now by the line's 100.
-      expect(await plusOnce(fixture)).toEqual([1125]);
+      // From the open run's 1050, now by the line's 100.
+      expect(await plusOnce(fixture)).toEqual([1150]);
     });
 
     it("reads a press on the line's step as a press, not a typed amount", async () => {
@@ -2367,7 +2521,7 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
           await Promise.resolve();
         }
         // A press waits for the quiet time; a typed amount would be sent now.
-        expect(store.setDemand).not.toHaveBeenCalled();
+        expect(store.settle).not.toHaveBeenCalled();
       } finally {
         jest.useRealTimers();
       }
@@ -2613,105 +2767,169 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
       expect(disclosure(fixture)).toBeNull();
     });
 
-    it('raises a list that holds the product at zero through its line', async () => {
+    it('is headed "Bought for another list"', async () => {
+      const { fixture } = await render({
+        lines: [milkRow()],
+        products,
+        productLists: [PANTRY],
+      });
+
+      expect(disclosure(fixture)?.textContent).toContain(
+        'basket.entries.otherHeading'
+      );
+    });
+
+    it('buys for a list that holds the product at zero through its line, and it joins at "· 0" in amber (specs 5 and 7)', async () => {
       const { fixture, store } = await render({
         lines: [milkRow()],
         products,
         productLists: [PANTRY, BREAKFAST],
+        served: [
+          ref('l1', 'Weekly shop'),
+          ref('l2', 'Flat'),
+          ref('l-pantry', 'Pantry'),
+        ],
       });
-      store.setDemand.mockResolvedValue({
-        entries: [entry('l-pantry', 'zl9', 2)],
-        skippedCount: 0,
+      store.buyForList.mockImplementation(async () => {
+        const made = entry('l-pantry', 'zl9', 0, { bought: 2, asked: 0 });
+        store.rows.set([milkRow({ entries: [...milkRow().entries, made] })]);
+        return { entries: [made], skippedCount: 0 };
       });
       await openOthers(fixture);
 
       await raise(fixture, 2);
+      fixture.detectChanges();
 
-      expect(store.setDemand).toHaveBeenCalledWith({
+      expect(store.buyForList).toHaveBeenCalledWith(LINE_ID, {
+        targetListId: 'l-pantry',
         lineId: 'zl9',
         quantity: 2,
-        from: 0,
       });
-      // It asks now, so it leaves the lists that could.
+      expect(store.setDemand).not.toHaveBeenCalled();
+      expect(store.addLine).not.toHaveBeenCalled();
+      // It is a list of the row now, so it leaves the lists that could.
       expect(
         [...el(fixture).querySelectorAll('.others .row-name')].map((node) =>
           node.textContent?.trim()
         )
       ).toEqual(['Breakfast']);
+      const asks = [...el(fixture).querySelectorAll('.row-ask')].map((node) =>
+        node.textContent?.trim()
+      );
+      expect(asks[2]).toBe('· 0');
+      const steppers = fixture.debugElement
+        .queryAll(By.css('lib-quantity-stepper.ask-amount'))
+        .filter((held) => held.nativeElement.closest('.others') === null)
+        .map((held) => held.componentInstance as QuantityStepper);
+      expect(steppers[2].value()).toBe(2);
+      expect(steppers[2].reach()).toBe('over');
     });
 
-    it('draws a line that asks for the product in another row at its own quantity', async () => {
-      // The read uses no picks, so a line that holds the product but counts as
-      // another one comes back asking for 3. A stepper drawn at 0 would send 3 to
-      // 1 and take two units off that line.
-      const { fixture, store } = await render({
-        lines: [milkRow()],
-        products,
-        productLists: [{ ...PANTRY, quantity: 3 }],
-      });
-      store.setDemand.mockResolvedValue({
-        entries: [entry('l-pantry', 'zl9', 4)],
-        skippedCount: 0,
-      });
-      await openOthers(fixture);
-
-      const stepper = fixture.debugElement.query(
-        By.css('.others lib-quantity-stepper')
-      ).componentInstance as QuantityStepper;
-      expect(stepper.value()).toBe(3);
-
-      stepper.stepped.emit({ from: 3, to: 4, repeat: false });
-      sendWaiting(fixture);
-      await fixture.whenStable();
-
-      expect(store.setDemand).toHaveBeenCalledWith({
-        lineId: 'zl9',
-        quantity: 4,
-        from: 3,
-      });
-    });
-
-    it('adds a line named by the product to a list that does not hold it', async () => {
+    it('buys with no line for a list that has none, and the list leaves the section (spec 5)', async () => {
       const { fixture, store } = await render({
         lines: [milkRow()],
         products,
         productLists: [BREAKFAST],
       });
-      store.addLine.mockResolvedValue({
-        entries: [entry('l-breakfast', 'zl10', 1)],
+      store.buyForList.mockResolvedValue({
+        entries: [entry('l-breakfast', 'zl10', 0, { bought: 1, asked: 0 })],
         skippedCount: 0,
       });
       await openOthers(fixture);
 
       await raise(fixture, 1);
 
-      expect(store.addLine).toHaveBeenCalledWith({
+      expect(store.buyForList).toHaveBeenCalledWith(LINE_ID, {
         targetListId: 'l-breakfast',
-        content: 'Whole milk',
+        lineId: null,
         quantity: 1,
-        itemIds: [MILK.id],
-        named: false,
       });
       expect(disclosure(fixture)).toBeNull();
     });
 
-    it('ends two quick runs on a list that does not ask yet at what was stepped', async () => {
+    it('reads the lists again when a list made by a buy gives its last buy back, so it is back at 0', async () => {
+      const { fixture, store } = await render({
+        lines: [milkRow()],
+        products,
+        productLists: [BREAKFAST],
+        served: [
+          ref('l1', 'Weekly shop'),
+          ref('l2', 'Flat'),
+          ref('l-breakfast', 'Breakfast'),
+        ],
+      });
+      const made = entry('l-breakfast', 'zl10', 0, { bought: 1, asked: 0 });
+      store.buyForList.mockImplementation(async () => {
+        store.rows.set([milkRow({ entries: [...milkRow().entries, made] })]);
+        return { entries: [made], skippedCount: 0 };
+      });
+      store.revert.mockImplementation(async () => {
+        // Its line asks 0 and has no buy in this trip now, so it leaves the row.
+        store.rows.set([milkRow()]);
+        return { entries: milkRow().entries, skippedCount: 0 };
+      });
+      await openOthers(fixture);
+      await raise(fixture, 1);
+      expect(disclosure(fixture)).toBeNull();
+      expect(store.productLists).toHaveBeenCalledTimes(1);
+
+      // The server now holds the list's line at an ask of 0.
+      store.productLists.mockResolvedValue([{ ...BREAKFAST, lineId: 'zl10' }]);
+      await commitAmount(fixture, '', { from: 1, to: 0 }, 2);
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(store.revert).toHaveBeenCalledWith(
+        LINE_ID,
+        { target: 'UNITS', units: 1, from: 1 },
+        'zl10'
+      );
+      expect(store.productLists).toHaveBeenCalledTimes(2);
+      if (disclosure(fixture)?.getAttribute('aria-expanded') !== 'true') {
+        await openOthers(fixture);
+      }
+      expect(
+        [...el(fixture).querySelectorAll('.others .row-name')].map((node) =>
+          node.textContent?.trim()
+        )
+      ).toEqual(['Breakfast']);
+      const stepper = fixture.debugElement.query(
+        By.css('.others lib-quantity-stepper')
+      ).componentInstance as QuantityStepper;
+      expect(stepper.value()).toBe(0);
+    });
+
+    it('starts each stepper at 0, even for a list whose line asks in another row', async () => {
+      const { fixture } = await render({
+        lines: [milkRow()],
+        products,
+        productLists: [{ ...PANTRY, quantity: 3 }],
+      });
+      await openOthers(fixture);
+
+      const stepper = fixture.debugElement.query(
+        By.css('.others lib-quantity-stepper')
+      ).componentInstance as QuantityStepper;
+      expect(stepper.value()).toBe(0);
+      // Measured against 0, what this list asks on this row, never against the
+      // ask of its line in another row (velista 0204 review).
+      expect(stepper.target()).toBe(0);
+    });
+
+    it('moves a later run from the entry the first buy made', async () => {
       const { fixture, store } = await render({
         lines: [milkRow()],
         products,
         productLists: [BREAKFAST],
       });
       let answer: (result: BasketRowResult | null) => void = () => undefined;
-      store.addLine.mockImplementationOnce(
+      store.buyForList.mockImplementationOnce(
         () =>
           new Promise<BasketRowResult | null>((done) => {
             answer = done;
           })
       );
-      store.setDemand.mockResolvedValue({
-        entries: [entry('l-breakfast', 'zl10', 3)],
-        skippedCount: 0,
-      });
+      store.settle.mockResolvedValue({ entries: [], skippedCount: 0 });
       await openOthers(fixture);
       const others = () =>
         fixture.debugElement.query(By.css('.others lib-quantity-stepper'))
@@ -2727,28 +2945,26 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
       sendWaiting(fixture);
       await Promise.resolve();
       fixture.detectChanges();
-      // The add is out, and the stepper draws what it sent.
-      expect(store.addLine).toHaveBeenCalledWith(
+      // The buy is out, and the stepper draws what it sent.
+      expect(store.buyForList).toHaveBeenCalledWith(
+        LINE_ID,
         expect.objectContaining({ quantity: 2 })
       );
       expect(others().value()).toBe(2);
 
       plus();
       sendWaiting(fixture);
-      store.rows.set([
-        milkRow({
-          entries: [...milkRow().entries, entry('l-breakfast', 'zl10', 2)],
-        }),
-      ]);
-      answer({ entries: [entry('l-breakfast', 'zl10', 2)], skippedCount: 0 });
+      const made = entry('l-breakfast', 'zl10', 0, { bought: 2, asked: 0 });
+      store.rows.set([milkRow({ entries: [...milkRow().entries, made] })]);
+      answer({ entries: [made], skippedCount: 0 });
       await fixture.whenStable();
 
-      expect(store.addLine).toHaveBeenCalledTimes(1);
-      expect(store.setDemand).toHaveBeenCalledWith({
-        lineId: 'zl10',
-        quantity: 3,
-        from: 2,
-      });
+      expect(store.buyForList).toHaveBeenCalledTimes(1);
+      expect(store.settle).toHaveBeenCalledWith(
+        LINE_ID,
+        expect.objectContaining({ outcome: 'BOUGHT', quantity: 1, from: 0 }),
+        'zl10'
+      );
     });
 
     it('says so, and drops nothing in silence, when a later run finds no line to move', async () => {
@@ -2757,39 +2973,49 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
         products,
         productLists: [BREAKFAST],
       });
-      store.addLine.mockResolvedValue({
-        entries: [entry('l-breakfast', 'zl10', 1)],
+      store.buyForList.mockResolvedValue({
+        entries: [entry('l-breakfast', 'zl10', 0, { bought: 1, asked: 0 })],
         skippedCount: 0,
       });
       await openOthers(fixture);
       await raise(fixture, 1);
       expect(el(fixture).querySelector('.failed')).toBeNull();
 
-      // The add landed, but the row this sheet reads holds no line of that list.
-      const runs = fixture.componentInstance['raiseRuns'];
+      // The buy landed, but the row this sheet reads holds no line of that list.
+      const runs = fixture.componentInstance['otherRuns'];
       runs.step('l-breakfast', { from: 1, to: 2, repeat: false });
       runs.flush('l-breakfast');
       await fixture.whenStable();
       fixture.detectChanges();
 
-      expect(store.addLine).toHaveBeenCalledTimes(1);
-      expect(store.setDemand).not.toHaveBeenCalled();
+      expect(store.buyForList).toHaveBeenCalledTimes(1);
+      expect(store.settle).not.toHaveBeenCalled();
       expect(el(fixture).querySelector('.failed')).not.toBeNull();
     });
 
-    it('keeps the list and says so when the add is refused', async () => {
+    it('keeps the list and says why when the buy is refused', async () => {
       const { fixture, store } = await render({
         lines: [milkRow()],
         products,
         productLists: [BREAKFAST],
       });
+      store.error.set(
+        new GatewayError({
+          code: 'catalog_unavailable',
+          status: 503,
+          correlationId: 'c-1',
+          detail: 'The catalog did not answer',
+        })
+      );
       await openOthers(fixture);
 
       await raise(fixture, 1);
 
-      expect(el(fixture).querySelector('.failed')).not.toBeNull();
+      expect(el(fixture).querySelector('.failed')?.textContent).toContain(
+        'basket.entries.buyCatalogDown'
+      );
       expect(text(fixture)).toContain('Breakfast');
-      expect(store.addLine).toHaveBeenCalledTimes(1);
+      expect(store.buyForList).toHaveBeenCalledTimes(1);
     });
 
     it('is never offered to a guest, who is not read for', async () => {
@@ -3072,28 +3298,18 @@ describe('SettleSheet: a row bought outside this shopping list (velista 0142)', 
     expect(store.revert).not.toHaveBeenCalled();
   });
 
-  it('raises the quantity where demandEditable is true', async () => {
-    const { fixture, store } = await render({ lines: [elsewhere(true)] });
+  // Nothing is left of it, so the sheet cannot settle and each list draws what
+  // this basket bought, 0. Asking the list for it again is the detailed view's
+  // (velista 0200), which "Lists and amounts" opens.
+  it.each([true, false])(
+    'draws the number and no stepper, demandEditable %s (velista 0201)',
+    async (demandEditable) => {
+      const { fixture } = await render({ lines: [elsewhere(demandEditable)] });
 
-    expect(steppers(fixture, 'ask-amount')).toHaveLength(1);
-    expect(
-      steppers(fixture, 'ask-amount')[0].nativeElement.classList
-    ).toContain('variant-sheet-narrow');
-
-    await commitAmount(fixture, '', { from: 0, to: 1 });
-
-    expect(store.setDemand).toHaveBeenCalledWith({
-      lineId: 'zl1',
-      quantity: 1,
-      from: 0,
-    });
-  });
-
-  it('draws no quantity control where demandEditable is false', async () => {
-    const { fixture } = await render({ lines: [elsewhere(false)] });
-
-    expect(steppers(fixture, 'ask-amount')).toHaveLength(0);
-  });
+      expect(steppers(fixture, 'ask-amount')).toHaveLength(0);
+      expect(element(fixture).querySelectorAll('.row-number')).toHaveLength(1);
+    }
+  );
 
   it('keeps every control on a row that outside buys only lowered', async () => {
     const { fixture } = await render({
@@ -3205,10 +3421,10 @@ describe('SettleSheet: the first buy asks where you are', () => {
  * The loser reads the number the line says now, and the quiet read that the
  * other person's change brings does not turn it into "That did not save".
  */
-describe('SettleSheet: a demand somebody else changed first (velista 0151)', () => {
-  it('names the number the line says now, and keeps it through a quiet read', async () => {
+describe('SettleSheet: a buy somebody else moved first (velista 0151, 0201)', () => {
+  it('names what the line says was bought now, and keeps it through a quiet read', async () => {
     const { fixture, store } = await render();
-    store.setDemand.mockImplementation(async () => {
+    store.settle.mockImplementation(async () => {
       store.error.set(
         new GatewayError({
           code: 'stale_quantity',
@@ -3218,20 +3434,23 @@ describe('SettleSheet: a demand somebody else changed first (velista 0151)', () 
       );
       store.rows.set([
         line({
-          entries: [entry('l1', 'zl1', 6, { asked: 6 }), entry('l2', 'zl2', 1)],
+          entries: [
+            entry('l1', 'zl1', 1, { bought: 2, asked: 3 }),
+            entry('l2', 'zl2', 1),
+          ],
         }),
       ]);
       return null;
     });
 
-    await commitAmount(fixture, '', { from: 3, to: 5 });
+    await commitAmount(fixture, '', { from: 0, to: 1 });
     fixture.detectChanges();
 
     const failed = () =>
       (fixture.nativeElement as HTMLElement).querySelector('.failed')
         ?.textContent ?? '';
     expect(failed()).toContain('basket.error.staleLine');
-    expect(fixture.componentInstance['errorArgs']()).toEqual({ count: 6 });
+    expect(fixture.componentInstance['errorArgs']()).toEqual({ count: 2 });
 
     // The quiet read the other person's change causes clears the store's error.
     store.error.set(null);
@@ -3239,6 +3458,392 @@ describe('SettleSheet: a demand somebody else changed first (velista 0151)', () 
 
     expect(failed()).toContain('basket.error.staleLine');
     expect(failed()).not.toContain('basket.error.failed');
-    expect(fixture.componentInstance['errorArgs']()).toEqual({ count: 6 });
+    expect(fixture.componentInstance['errorArgs']()).toEqual({ count: 2 });
+  });
+});
+
+/**
+ * Velista `0204`: in the compact view each list's buy is a reel, which reports once,
+ * when it closes. That step goes through the same run as a press of velista `0201`
+ * and is written at once, and a press anywhere else closes the reel first, so the
+ * press that follows a drag never reads the amount from before it.
+ *
+ * jsdom has no `PointerEvent`, so the events are `MouseEvent`s carrying the fields
+ * the reel reads, as the reel's own spec makes them.
+ */
+describe('SettleSheet: the reels of the compact view (velista 0204)', () => {
+  afterEach(() => jest.useRealTimers());
+
+  function pointer(type: string, clientX: number): Event {
+    const event = new MouseEvent(type, { bubbles: true, clientX });
+    Object.defineProperty(event, 'pointerId', { value: 1 });
+    Object.defineProperty(event, 'isPrimary', { value: true });
+    Object.defineProperty(event, 'buttons', {
+      value: type === 'pointerup' ? 0 : 1,
+    });
+    return event;
+  }
+
+  const reels = (fixture: ComponentFixture<SettleSheet>) => [
+    ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+      'lib-quantity-reel.ask-amount'
+    ),
+  ];
+
+  /** A drag of `units` steps up on a reel, let go, and not yet closed. */
+  function drag(
+    fixture: ComponentFixture<SettleSheet>,
+    reel: HTMLElement,
+    units: number
+  ): void {
+    const x = -units * QUANTITY_REEL_PX_PER_UNIT;
+    reel.dispatchEvent(pointer('pointerdown', 0));
+    reel.dispatchEvent(pointer('pointermove', x));
+    reel.dispatchEvent(pointer('pointerup', x));
+    fixture.detectChanges();
+  }
+
+  /** A press that lands on `target`, as the browser starts it. */
+  function pressOn(target: Element): void {
+    target.dispatchEvent(pointer('pointerdown', 0));
+  }
+
+  async function settleWrites(): Promise<void> {
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+    }
+  }
+
+  /** The buys of one line, as `[lineId, quantity]`. */
+  const buys = (store: Awaited<ReturnType<typeof render>>['store']) =>
+    store.settle.mock.calls
+      .filter((call) => call[2] !== undefined)
+      .map((call) => [call[2], call[1].quantity]);
+
+  function landed(): BasketRowResult {
+    return { entries: line().entries, skippedCount: 0 };
+  }
+
+  it('draws reels and no buy steppers in the compact view, and steppers in the default one (spec 1)', async () => {
+    const compact = await render({ compact: true });
+    expect(reels(compact.fixture)).toHaveLength(2);
+    expect(
+      compact.fixture.debugElement.queryAll(
+        By.css('lib-quantity-stepper.ask-amount')
+      )
+    ).toHaveLength(0);
+
+    const normal = await render();
+    expect(reels(normal.fixture)).toHaveLength(0);
+    expect(
+      normal.fixture.debugElement.queryAll(
+        By.css('lib-quantity-stepper.ask-amount')
+      )
+    ).toHaveLength(2);
+  });
+
+  it('sends one settle of 4 for that line when a reel closes from 0 at 4 (spec 3)', async () => {
+    const { fixture, store } = await render({ compact: true });
+    store.settle.mockResolvedValue(landed());
+    jest.useFakeTimers();
+
+    drag(fixture, reels(fixture)[0], 4);
+    expect(store.settle).not.toHaveBeenCalled();
+
+    jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+    await settleWrites();
+    // At once on the close, not after the quiet beat of a press.
+    expect(buys(store)).toEqual([['zl1', 4]]);
+
+    jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS * 2);
+    await settleWrites();
+    expect(buys(store)).toEqual([['zl1', 4]]);
+  });
+
+  /**
+   * A store whose buy of one line lands as the server's would: the line and the row
+   * both gain what was bought and lose it from what is left. So "Got the other N"
+   * reads its N off the row the buy left, and a spec can tell a settle computed
+   * after the buy from one computed before it.
+   */
+  function applyBuys(store: Awaited<ReturnType<typeof render>>['store']): {
+    order: string[];
+  } {
+    const order: string[] = [];
+    store.settle.mockImplementation(
+      async (
+        rowKey: string,
+        body: { quantity: number },
+        lineId?: string
+      ): Promise<BasketRowResult> => {
+        order.push(lineId === undefined ? 'settle' : `buy:${lineId}`);
+        const held = store.rowFor(rowKey) ?? line();
+        if (lineId === undefined) {
+          return { entries: [], skippedCount: 0 };
+        }
+        const entries = held.entries.map((one) =>
+          one.lineId === lineId
+            ? {
+                ...one,
+                bought: one.bought + body.quantity,
+                left: Math.max(0, one.left - body.quantity),
+              }
+            : one
+        );
+        const bought = held.bought + body.quantity;
+        const left = Math.max(0, held.left - body.quantity);
+        store.rows.set(
+          store.rows().map((row) =>
+            row.rowKey === held.rowKey
+              ? {
+                  ...row,
+                  entries,
+                  bought,
+                  left,
+                  state: left === 0 ? 'BOUGHT' : 'PARTLY',
+                }
+              : row
+          )
+        );
+        return { entries, skippedCount: 0 };
+      }
+    );
+    return { order };
+  }
+
+  /** A row asking 5 in all: 3 for the first list, 2 for the second. */
+  const askingFive = () =>
+    line({
+      left: 5,
+      asked: 5,
+      entries: [entry('l1', 'zl1', 3), entry('l2', 'zl2', 2)],
+    });
+
+  /** Every settle of the whole row, as `[quantity, from]`. */
+  const rowSettles = (store: Awaited<ReturnType<typeof render>>['store']) =>
+    store.settle.mock.calls
+      .filter((call) => call[2] === undefined)
+      .map((call) => [call[1].quantity, call[1].from]);
+
+  const primaryOf = (fixture: ComponentFixture<SettleSheet>) =>
+    (fixture.nativeElement as HTMLElement).querySelector(
+      '.actions .primary'
+    ) as HTMLButtonElement;
+
+  it('writes the drag first when "Got the other N" is pressed right after it, and N is what the buy left', async () => {
+    const { fixture, store } = await render({
+      compact: true,
+      lines: [askingFive()],
+    });
+    const { order } = applyBuys(store);
+    jest.useFakeTimers();
+
+    drag(fixture, reels(fixture)[0], 3);
+    const primary = primaryOf(fixture);
+    pressOn(primary);
+    primary.click();
+    await settleWrites();
+
+    expect(order).toEqual(['buy:zl1', 'settle']);
+    expect(buys(store)).toEqual([['zl1', 3]]);
+    // The other 2, not 5: N was read after the buy landed, and the 3 just bought
+    // are not bought a second time.
+    expect(rowSettles(store)).toEqual([[2, 2]]);
+
+    // The reel's own idle timer has nothing left to send.
+    jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS + QUANTITY_STEP_QUIET_MS);
+    await settleWrites();
+    expect(buys(store)).toEqual([['zl1', 3]]);
+    expect(rowSettles(store)).toHaveLength(1);
+  });
+
+  it('sends a drag still under the thumb when a settle starts, once, before the settle', async () => {
+    const { fixture, store } = await render({
+      compact: true,
+      lines: [askingFive()],
+    });
+    const { order } = applyBuys(store);
+    jest.useFakeTimers();
+
+    const [reel] = reels(fixture);
+    const x = -2 * QUANTITY_REEL_PX_PER_UNIT;
+    reel.dispatchEvent(pointer('pointerdown', 0));
+    reel.dispatchEvent(pointer('pointermove', x));
+    fixture.detectChanges();
+
+    const primary = primaryOf(fixture);
+    pressOn(primary);
+    primary.click();
+    await settleWrites();
+
+    expect(order).toEqual(['buy:zl1', 'settle']);
+    expect(buys(store)).toEqual([['zl1', 2]]);
+    expect(rowSettles(store)).toEqual([[3, 3]]);
+
+    // The thumb lifting afterwards, and the beat after it, send nothing more.
+    reel.dispatchEvent(pointer('pointerup', x));
+    jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS + QUANTITY_STEP_QUIET_MS);
+    await settleWrites();
+    expect(buys(store)).toEqual([['zl1', 2]]);
+    expect(rowSettles(store)).toHaveLength(1);
+  });
+
+  it('swaps the reels for steppers, and back, when the view changes with the sheet open', async () => {
+    const { fixture } = await render({ compact: true });
+    const steppers = () =>
+      fixture.debugElement.queryAll(By.css('lib-quantity-stepper.ask-amount'));
+    expect(reels(fixture)).toHaveLength(2);
+    expect(steppers()).toHaveLength(0);
+
+    const rows = TestBed.inject(ListRowsStore);
+    rows.setLayout('default');
+    fixture.detectChanges();
+    expect(reels(fixture)).toHaveLength(0);
+    expect(steppers()).toHaveLength(2);
+
+    rows.setLayout('compact');
+    fixture.detectChanges();
+    expect(reels(fixture)).toHaveLength(2);
+    expect(steppers()).toHaveLength(0);
+  });
+
+  describe('Bought for another list', () => {
+    const MILK: BasketProduct = {
+      id: 'i-whole',
+      packCount: null,
+      pieceCount: null,
+      quantityStep: null,
+      name: { en: 'Whole milk', es: 'Leche entera' },
+      brand: 'Hacendado',
+      size: null,
+      unit: null,
+      imageUrl: null,
+      offer: null,
+      offers: [],
+      atShop: null,
+      productGroupId: null,
+      categories: [],
+      sectionIds: null,
+      approxWeight: null,
+    };
+    const PANTRY: BasketProductList = {
+      listId: 'l-pantry',
+      listName: 'Pantry',
+      zoneId: 'z1',
+      zoneName: 'Home',
+      lineId: 'zl9',
+      lineName: 'Leche',
+      quantity: 0,
+    };
+
+    it('calls buyForList once with the dragged amount when its reel closes', async () => {
+      const milk = () => line({ productId: MILK.id });
+      const { fixture, store } = await render({
+        compact: true,
+        lines: [milk()],
+        products: new Map([[MILK.id, MILK]]),
+        productLists: [PANTRY],
+        served: [
+          ref('l1', 'Weekly shop'),
+          ref('l2', 'Flat'),
+          ref('l-pantry', 'Pantry'),
+        ],
+      });
+      store.buyForList.mockImplementation(async () => {
+        const made = entry('l-pantry', 'zl9', 0, { bought: 3, asked: 0 });
+        const held = milk();
+        store.rows.set([{ ...held, entries: [...held.entries, made] }]);
+        return { entries: [made], skippedCount: 0 };
+      });
+      (
+        (fixture.nativeElement as HTMLElement).querySelector(
+          '.disclosure'
+        ) as HTMLButtonElement
+      ).click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      jest.useFakeTimers();
+
+      const other = (fixture.nativeElement as HTMLElement).querySelector(
+        '.others lib-quantity-reel'
+      ) as HTMLElement;
+      drag(fixture, other, 3);
+      expect(store.buyForList).not.toHaveBeenCalled();
+
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      await settleWrites();
+      expect(store.buyForList).toHaveBeenCalledTimes(1);
+      expect(store.buyForList).toHaveBeenCalledWith(
+        LINE_ID,
+        expect.objectContaining({
+          targetListId: 'l-pantry',
+          lineId: 'zl9',
+          quantity: 3,
+        })
+      );
+
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS + QUANTITY_STEP_QUIET_MS);
+      await settleWrites();
+      expect(store.buyForList).toHaveBeenCalledTimes(1);
+      expect(buys(store)).toEqual([]);
+    });
+  });
+
+  it('writes the drag once when the sheet is closed right after it, by its scrim', async () => {
+    const { fixture, store } = await render({ compact: true });
+    store.settle.mockResolvedValue(landed());
+    jest.useFakeTimers();
+
+    drag(fixture, reels(fixture)[0], 3);
+    pressOn(
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.scrim'
+      ) as HTMLElement
+    );
+    await settleWrites();
+    expect(buys(store)).toEqual([['zl1', 3]]);
+
+    fixture.destroy();
+    jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS + QUANTITY_STEP_QUIET_MS);
+    await settleWrites();
+    expect(buys(store)).toEqual([['zl1', 3]]);
+  });
+
+  it('writes the drag once when the sheet goes away with the tape still open', async () => {
+    const { fixture, store } = await render({ compact: true });
+    store.settle.mockResolvedValue(landed());
+    jest.useFakeTimers();
+
+    drag(fixture, reels(fixture)[0], 3);
+    fixture.destroy();
+    await settleWrites();
+    jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS + QUANTITY_STEP_QUIET_MS);
+    await settleWrites();
+
+    expect(buys(store)).toEqual([['zl1', 3]]);
+  });
+
+  it('writes each of two lists once when their reels are dragged one after the other', async () => {
+    const { fixture, store } = await render({ compact: true });
+    store.settle.mockResolvedValue(landed());
+    jest.useFakeTimers();
+
+    const [first, second] = reels(fixture);
+    drag(fixture, first, 2);
+    // The press on the second reel closes the first before its own drag starts.
+    drag(fixture, second, 1);
+    await settleWrites();
+    expect(buys(store)).toEqual([['zl1', 2]]);
+
+    jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+    await settleWrites();
+    expect(buys(store)).toEqual([
+      ['zl1', 2],
+      ['zl2', 1],
+    ]);
+
+    jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS + QUANTITY_STEP_QUIET_MS);
+    await settleWrites();
+    expect(buys(store)).toHaveLength(2);
   });
 });

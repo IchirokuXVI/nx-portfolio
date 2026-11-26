@@ -1,5 +1,11 @@
 import { UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
-import { approxWeightIn, packCountIn, parseSize } from './size';
+import {
+  approxWeightIn,
+  isPrintedWeightRange,
+  packCountIn,
+  parseSize,
+  weightRangeOf,
+} from './size';
 
 /**
  * Every string here was printed by the live assortment on 2026-09-06 (plan
@@ -182,5 +188,78 @@ describe('approxWeightIn (plan 0244)', () => {
 
   it('answers no weight for an approximate volume, which is not a weight', () => {
     expect(approxWeightIn('Aprox. 24 l')).toBeNull();
+  });
+});
+
+/**
+ * Every range here was printed by lidl.es (owner decisions 141a and 144). The
+ * first five are the `ca.` ranges the walk of 2026-11-20 stored. `Aprox.
+ * 360-460g` and `aprox 700-900g` were stored by the same walk, and
+ * `aprox..600-800 g` and `aprox.. 900-1000 g`, with two dots, were printed on
+ * 2026-11-25. `Aprox. 0,8-1,2kg` is the shape the parser's own doc names.
+ * These are made up: `400-600 g`, to pin that a range with no prefix is no
+ * price per kilo; `Ca. 200-300 g`, `ca..220-360g` and `aprox..300 g`, to pin
+ * that case and repeated dots do not change the prefix; and `1-2 l` and
+ * `ca. 2-3 uds`, to pin that a range of a unit that is not a weight is no
+ * weight range at all.
+ */
+describe('weightRangeOf (owner decisions 141a and 144)', () => {
+  it.each([
+    'ca.220-360g',
+    'ca. 190-360g',
+    'ca. 200-300 g',
+    'ca. 250-400 g',
+    'ca. 0,8-1Kg',
+    'Ca. 200-300 g',
+    'ca..220-360g',
+  ])('reads %s as a price per kilo', (printed) => {
+    expect(weightRangeOf(printed)).toBe('PER_KILO');
+    expect(isPrintedWeightRange(printed)).toBe(true);
+  });
+
+  it.each([
+    'Aprox. 360-460g',
+    'aprox 700-900g',
+    'aprox..600-800 g',
+    'aprox.. 900-1000 g',
+    'Aprox. 0,8-1,2kg',
+    '400-600 g',
+  ])('reads %s as a range whose figure a person decides', (printed) => {
+    expect(weightRangeOf(printed)).toBe('TO_REVIEW');
+    expect(isPrintedWeightRange(printed)).toBe(true);
+  });
+
+  it.each([
+    'Aprox.300 g',
+    'Aprox. 950g',
+    'aprox..300 g',
+    '500 g',
+    '6x200ml',
+    'Paquete',
+    '1-2 l',
+    'ca. 2-3 uds',
+    '',
+    null,
+    undefined,
+  ])('does not read %s as a weight range', (printed) => {
+    expect(weightRangeOf(printed)).toBeNull();
+    expect(isPrintedWeightRange(printed)).toBe(false);
+  });
+
+  it('parses no size and no weight out of a range with any prefix', () => {
+    for (const printed of [
+      'ca.220-360g',
+      'Aprox. 360-460g',
+      'aprox..600-800 g',
+      'aprox.. 900-1000 g',
+      '400-600 g',
+    ]) {
+      expect(parseSize(printed)).toBeNull();
+      expect(approxWeightIn(printed)).toBeNull();
+    }
+  });
+
+  it('reads the weight after a prefix with two dots', () => {
+    expect(approxWeightIn('aprox..300 g')).toBe(300);
   });
 });

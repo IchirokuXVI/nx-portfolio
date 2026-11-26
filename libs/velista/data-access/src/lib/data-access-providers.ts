@@ -16,6 +16,7 @@ import { BasketListMemory } from './baskets/basket-list-memory';
 import { BasketListStore } from './baskets/basket-list-store';
 import { BasketSessionStore } from './baskets/basket-session-store';
 import { BasketStore } from './baskets/basket-store';
+import { ChangeLandingStore } from './baskets/change-landing-store';
 import { HeldProductChoices } from './baskets/held-product-choices';
 import { LiveBasketStore } from './baskets/live-basket-store';
 import { SharedListStore } from './baskets/shared-list-store';
@@ -268,6 +269,8 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   GroupMembers,
   CatalogAddStore,
   ProductPickStore,
+  // Velista `0200`: where a change made from "Lists and amounts" lands.
+  ChangeLandingStore,
   HeldProductChoices,
   GroupNames,
   ItemNames,

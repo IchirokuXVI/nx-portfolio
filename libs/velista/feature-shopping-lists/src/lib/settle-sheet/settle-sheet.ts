@@ -33,7 +33,6 @@ import {
   amountOfOne,
   APP_BASE_PATH,
   basketRowProduct,
-  catalogName,
   isMeasured,
   LINE_CONTENT_MAX_LENGTH,
   lineAmount,
@@ -75,12 +74,10 @@ import {
 } from '../basket-labels';
 import { basketLineStep } from '../basket-line-step';
 import { basketPath, settleSheetPath, shopAskPath } from '../basket-paths';
-import {
-  changeableLineIds,
-  changeSheetPath,
-} from '../change-sheet/change-targets';
+import { changeableLineIds } from '../change-sheet/change-targets';
 import { HeldBuy } from '../held-buy';
 import { RowEntries, type OtherListsState } from '../row-entries/row-entries';
+import { rowListsPath } from '../row-lists-sheet/row-lists-path';
 
 /**
  * Which pane of the sheet is showing.
@@ -129,21 +126,19 @@ interface FrozenFailure {
  * One line of the basket: its product, what each household asked for and got, and
  * the ways to close it without buying (plan 0044, section 4.2).
  *
- * ## No "Got some"
+ * ## Each list records what was bought for it (velista `0201`)
  *
  * Buying the whole row is the row's own control on the basket page, or "Got all"
- * here. Buying part of a row has no control for now (velista `0190`, the owner's
- * answer to its question 1): a household lowers what its list asks for instead.
- *
- * ## Each list's amount is saved after the presses stop (velista `0190`)
- *
- * Every list that holds the row draws the typed stepper of velista `0188`, which
- * emits every step and saves nothing. This sheet is the logic layer for those
- * amounts: {@link demandRuns} and {@link raiseRuns} gather the steps of one line
- * or one list into a run and send it `QUANTITY_STEP_QUIET_MS` after the last
- * press, and a typed amount at once. One write per line is out at a time, and a
- * settle button sends the waiting runs before it settles (decision J). The sheet
- * stays open, because somebody moving a number wants to see where it landed.
+ * here. Buying part of it is each list's stepper: it counts what this basket
+ * bought for that list's line in this trip, and never changes what the list asks
+ * for, which is the detailed view's (velista `0200`). The stepper of velista
+ * `0188` emits every step and saves nothing. This sheet is the logic layer:
+ * {@link buyRuns} and {@link otherRuns} gather the steps of one line or one list
+ * into a run and send it `QUANTITY_STEP_QUIET_MS` after the last press, and a
+ * typed amount at once, as a settle or a revert of that one line, or a buy for a
+ * list that did not ask. One write per line is out at a time, and a settle button
+ * sends the waiting runs before it settles (decision J). The sheet stays open,
+ * because somebody moving a number wants to see where it landed.
  *
  * ## What every list asked for and got, under the product (velista `0073`)
  *
@@ -294,18 +289,20 @@ export class SettleSheet {
   protected readonly busy = computed(() => this._settling() || this.saving());
 
   /**
-   * The waiting saves of each list's ask, by line id (velista `0190`, section 4).
-   * The stepper of a line stays live while its save is out.
+   * The waiting buys of each list's line, by line id (velista `0201`, target
+   * state 3). The stepper of a line stays live while its write is out.
    */
-  protected readonly demandRuns = quantityRuns<string>((lineId, run) => {
+  protected readonly buyRuns = quantityRuns<string>((lineId, run) => {
     void this._write(`line:${lineId}`, run.to, (waited) =>
-      this.demand(lineId, waited ? this._fromNow(lineId, run) : run)
+      this.buy(lineId, waited ? this._fromNow(lineId, run) : run)
     );
   });
 
-  /** The waiting saves of the lists that do not ask yet, by list id (decision H). */
-  protected readonly raiseRuns = quantityRuns<string>((listId, run) => {
-    void this._write(`list:${listId}`, run.to, () => this.raise(listId, run));
+  /** The waiting buys for the lists that do not ask yet, by list id (target state 7). */
+  protected readonly otherRuns = quantityRuns<string>((listId, run) => {
+    void this._write(`list:${listId}`, run.to, () =>
+      this.buyOther(listId, run)
+    );
   });
 
   /**
@@ -328,13 +325,13 @@ export class SettleSheet {
   private readonly _sent = signal<ReadonlyMap<string, number>>(new Map());
 
   /** What each list's stepper draws, by line id: its run, else its write in flight. */
-  protected readonly shownAsks = computed(() =>
-    this._shownOf('line:', this.demandRuns.pending())
+  protected readonly shownBuys = computed(() =>
+    this._shownOf('line:', this.buyRuns.pending())
   );
 
   /** What each list that does not ask yet draws, by list id. */
-  protected readonly shownRaises = computed(() =>
-    this._shownOf('list:', this.raiseRuns.pending())
+  protected readonly shownOthers = computed(() =>
+    this._shownOf('list:', this.otherRuns.pending())
   );
 
   /**
@@ -347,8 +344,8 @@ export class SettleSheet {
   /** Whether a step waits for its save, or a save of an amount is out. */
   protected readonly amountSaving = computed(
     () =>
-      this.demandRuns.pending().size > 0 ||
-      this.raiseRuns.pending().size > 0 ||
+      this.buyRuns.pending().size > 0 ||
+      this.otherRuns.pending().size > 0 ||
       this._writesOut() > 0
   );
   protected readonly result = this._result.asReadonly();
@@ -488,11 +485,14 @@ export class SettleSheet {
    *
    * A finished row is still tappable, deliberately: `0043` section 3.2 keeps it in
    * place so somebody can look at what they bought. So this sheet opens on one, and
-   * every settle target on it would be a control that could not work: the server
-   * refuses a settle on a row with nothing outstanding.
+   * its row actions have nothing to act on: "Got all N" would buy nothing, and "They
+   * had none" and "Not today" would close what is already closed. A `BOUGHT` settle
+   * of one line is a different act: the server records it above the ask too, and
+   * takes it back by a revert, so the lists' steppers stay live on such a row
+   * ({@link canBuy}).
    *
    * **A control you may not use is not drawn** (`0030`), so this is what the settle
-   * pane branches its targets on rather than a disabled state.
+   * pane branches its row actions on rather than a disabled state.
    */
   protected readonly finished = computed(
     () => this.row() !== null && this.outstanding() === 0
@@ -519,6 +519,18 @@ export class SettleSheet {
    */
   protected readonly canSettle = computed(
     () => !this.finished() && !this.basketFinished()
+  );
+
+  /**
+   * Whether each list's stepper records buys (velista `0201`, target state 4, as
+   * amended after its review): while the trip is open, whatever the row has left.
+   * A row stepped to its ask keeps its stepper, so a shopper can buy above the ask
+   * (amber) or take back a mistap. A finished trip draws the numbers only, and so
+   * does a row bought outside this shopping list, whose buys are not this
+   * basket's to take back.
+   */
+  protected readonly canBuy = computed(
+    () => !this.basketFinished() && !this.boughtElsewhere()
   );
 
   /**
@@ -846,8 +858,52 @@ export class SettleSheet {
     });
   });
 
-  private async _loadOthers(itemId: string): Promise<void> {
-    this._others.set({ itemId, state: { state: 'loading' } });
+  /** The lists the row's entries named when {@link _rereadOthers} last ran. */
+  private _entryLists: ReadonlySet<string> | null = null;
+
+  /**
+   * A list that leaves the row is read again into "Bought for another list"
+   * (velista `0201`, after its review). A list made by a buy for it asks 0, so
+   * once its buys go back to 0 its line is no longer in this trip and the entry
+   * goes; {@link buyOther} took it out of the read, which ran once for the
+   * product, so without a new read the list would be in neither section. Read
+   * again rather than put back, because the line it holds now is a fact only the
+   * server knows. A list that joins the row needs nothing: {@link others} leaves
+   * out every list the row draws.
+   */
+  private readonly _rereadOthers = effect(() => {
+    const row = this.row();
+    if (row === null) {
+      return;
+    }
+    const now = new Set(
+      row.entries.flatMap((held) => (held.listId === null ? [] : [held.listId]))
+    );
+    const before = this._entryLists;
+    this._entryLists = now;
+    const itemId = row.productId;
+    if (
+      before === null ||
+      itemId === null ||
+      ![...before].some((listId) => !now.has(listId))
+    ) {
+      return;
+    }
+    untracked(() => {
+      if (this._others() !== null && this.others() !== null) {
+        void this._loadOthers(itemId, true);
+      }
+    });
+  });
+
+  /**
+   * Read the lists of the product. A quiet read keeps what is drawn until the
+   * answer, so an open section does not flash its loading row.
+   */
+  private async _loadOthers(itemId: string, quiet = false): Promise<void> {
+    if (!quiet || this._others()?.itemId !== itemId) {
+      this._others.set({ itemId, state: { state: 'loading' } });
+    }
     const lists = await this._store.productLists(itemId);
     if (this._others()?.itemId !== itemId) {
       return;
@@ -859,9 +915,11 @@ export class SettleSheet {
   }
 
   /**
-   * The lines Change is drawn on (velista `0140`, section 1): those the reader
-   * may edit, on lists they were served, of a row with a product that is not
-   * crossed out. None for a guest or once the trip is over.
+   * The lines whose product the reader may change (velista `0140`, section 1):
+   * those the reader may edit, on lists they were served, of a row with a
+   * product that is not crossed out. None for a guest or once the trip is over.
+   * The detailed view changes them; here they decide whether "Lists and amounts"
+   * is drawn (velista `0200`).
    */
   protected readonly changeable = computed<ReadonlySet<string>>(() => {
     const row = this.row();
@@ -876,29 +934,17 @@ export class SettleSheet {
     );
   });
 
-  /** Change on one list: the change sheet, pushed over this one. */
-  protected changeLine(lineId: string): void {
-    this._openChange(lineId);
-  }
-
-  /** "Change for all lists". */
-  protected changeAll(): void {
-    this._openChange(null);
-  }
-
-  private _openChange(lineId: string | null): void {
+  /**
+   * "Lists and amounts": the detailed view of the row's lists, pushed over this
+   * sheet, so its back pops onto this one (velista `0200`, target state 1).
+   */
+  protected openLists(): void {
     const row = this.row();
     if (row === null) {
       return;
     }
     void this._router.navigateByUrl(
-      changeSheetPath(
-        this._locale(),
-        this._basePath,
-        this._address(),
-        row.rowKey,
-        lineId
-      )
+      rowListsPath(this._locale(), this._basePath, this._address(), row.rowKey)
     );
   }
 
@@ -911,18 +957,92 @@ export class SettleSheet {
   }
 
   /**
-   * A list that did not ask was given a quantity (velista `0139`, section 3).
+   * A run of one list's stepper, sent (velista `0201`, target state 3).
    *
-   * A list that holds the product at zero raises its line through the demand
-   * route (backend `0201`, "What the build decided", point 2). A list that does
-   * not hold it gets a line named by the product, with that one product. Either
-   * way the list then joins the lists that ask, and it leaves this read.
+   * The stepper counts what this basket bought for that list's line in this trip.
+   * A run up is a settle of that line alone: `quantity` is the difference, `from`
+   * the line's `left`, no allocations, so the server records it above the ask
+   * too, with the product, the price scope and the shop a settle names. A run
+   * down is a revert of that line alone: `units` is the difference, `from` the
+   * line's `bought`. A run back to its start sends nothing. Neither changes what
+   * the list asks for.
+   *
+   * It does not mark the sheet busy, so the line's stepper stays live while its
+   * write is out. A refusal says why, with the number the store's re-read brought.
    */
-  protected async raise(listId: string, run: QuantityRun): Promise<boolean> {
-    const product = this._product();
+  protected async buy(lineId: string, run: QuantityRun): Promise<boolean> {
+    if (run.to === run.from) {
+      return true;
+    }
+    const entry = this.row()?.entries.find((held) => held.lineId === lineId);
+    if (entry === undefined) {
+      // The line left the row while the presses were out: said, not dropped.
+      this._failedOp.set('basket.originSettled');
+      return false;
+    }
+
+    this._failedOp.set(null);
+    const result =
+      run.to > run.from
+        ? await this._store.settle(
+            this._rowKey,
+            {
+              outcome: 'BOUGHT',
+              quantity: run.to - run.from,
+              from: entry.left,
+              ...this._got()(),
+            },
+            lineId
+          )
+        : await this._store.revert(
+            this._rowKey,
+            { target: 'UNITS', units: run.from - run.to, from: entry.bought },
+            lineId
+          );
+
+    if (result === null) {
+      // Taken now, with the number the store's re-read brought (velista `0151`):
+      // the next quiet read clears the store's error.
+      const error = this._store.error();
+      const line = this._store
+        .rowFor(this._rowKey)
+        ?.entries.find((held) => held.lineId === lineId);
+      this._failedOp.set({
+        key: basketErrorKey(error, 'basket.originSettled'),
+        count: line?.bought ?? entry.bought,
+        correlationId: correlationIdOf(error),
+      });
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * A buy for a list that did not ask (velista `0201`, target state 7; backend
+   * `0273`).
+   *
+   * A run up buys the difference for that list, with its line from
+   * `productLists` or none, and the server finds or makes the line at an ask of
+   * 0. Once the answer is in, the list is an entry of the row and leaves this
+   * read. A run that ends at or below where it started sends nothing: a buy for
+   * another list is taken back on its entry, once it is one.
+   */
+  protected async buyOther(listId: string, run: QuantityRun): Promise<boolean> {
     const row = this.row();
-    // A run that ends at 0 sends nothing: the list still does not ask.
-    if (product === null || row === null || run.to === 0) {
+    if (row === null) {
+      return true;
+    }
+    const entry = row.entries.find((held) => held.listId === listId);
+    if (entry !== undefined) {
+      // An earlier buy for this list landed, so the list is an entry of the row
+      // now, and this run moves what was bought for it from there by its own
+      // difference.
+      return this.buy(entry.lineId, {
+        from: entry.bought,
+        to: Math.max(0, entry.bought + run.to - run.from),
+      });
+    }
+    if (run.to <= run.from) {
       return true;
     }
     const read = this._others();
@@ -931,43 +1051,27 @@ export class SettleSheet {
         ? read.state.lists.find((held) => held.listId === listId)
         : undefined;
     if (list === undefined) {
-      // An earlier raise of this list landed, so the list now asks through a
-      // line of the row, and this run moves it. Whether this run waited for that
-      // write or was sent after it does not matter.
-      const entry = row.entries.find((held) => held.listId === listId);
-      if (entry === undefined) {
-        // Nothing to send it to: said, not dropped in silence.
-        this._failedOp.set('basket.demand');
-        return false;
-      }
-      return this.demand(entry.lineId, { from: entry.left, to: run.to });
+      // Nothing to send it to: said, not dropped in silence.
+      this._failedOp.set('basket.buyForList');
+      return false;
     }
-    const to = run.to;
 
     this._failedOp.set(null);
-    const result =
-      list.lineId === null
-        ? await this._store.addLine({
-            targetListId: list.listId,
-            content: catalogName(product.name, this._locale()),
-            quantity: to,
-            // The row's unit, which the amount was chosen in (velista `0182`).
-            unit: row.unit,
-            itemIds: [product.id],
-            // Made from the product, so not named (velista `0144`).
-            named: false,
-          })
-        : await this._store.setDemand({
-            lineId: list.lineId,
-            quantity: to,
-            from: list.quantity ?? 0,
-            unit: row.unit,
-          });
+    const shop = this._view.settleShop(this._product()).supermarketLocationId;
+    const result = await this._store.buyForList(this._rowKey, {
+      targetListId: list.listId,
+      lineId: list.lineId,
+      quantity: run.to - run.from,
+      ...(shop === undefined ? {} : { supermarketLocationId: shop }),
+    });
 
     if (result === null) {
-      this._failedOp.set(
-        list.lineId === null ? 'basket.addLine' : 'basket.demand'
-      );
+      const error = this._store.error();
+      this._failedOp.set({
+        key: basketErrorKey(error, 'basket.buyForList'),
+        count: 0,
+        correlationId: correlationIdOf(error),
+      });
       return false;
     }
 
@@ -984,32 +1088,36 @@ export class SettleSheet {
     return true;
   }
 
-  /** One step of one list's ask (velista `0190`, section 4). */
-  protected stepDemand(change: {
+  /** One step of what was bought for one list (velista `0201`). */
+  protected stepBuy(change: {
     readonly lineId: string;
     readonly step: QuantityStep;
+    readonly closed?: true;
   }): void {
-    this.demandRuns.step(change.lineId, change.step);
-    if (change.step.typed === true) {
-      this.demandRuns.flush(change.lineId);
+    this.buyRuns.step(change.lineId, change.step);
+    // A typed amount, or the one step of a reel that closed (velista 0204), is sent
+    // at once: the press that closed the reel may be a settle that reads it.
+    if (change.step.typed === true || change.closed === true) {
+      this.buyRuns.flush(change.lineId);
     }
   }
 
-  /** One step of a list that does not ask yet (decision H). */
-  protected stepRaise(change: {
+  /** One step of a buy for a list that does not ask yet (target state 7). */
+  protected stepOther(change: {
     readonly list: BasketProductList;
     readonly step: QuantityStep;
+    readonly closed?: true;
   }): void {
-    this.raiseRuns.step(change.list.listId, change.step);
-    if (change.step.typed === true) {
-      this.raiseRuns.flush(change.list.listId);
+    this.otherRuns.step(change.list.listId, change.step);
+    if (change.step.typed === true || change.closed === true) {
+      this.otherRuns.flush(change.list.listId);
     }
   }
 
   /** A run that waited for a write of its line starts from the line's answer. */
   private _fromNow(lineId: string, run: QuantityRun): QuantityRun {
     const entry = this.row()?.entries.find((held) => held.lineId === lineId);
-    return { from: entry?.left ?? run.from, to: run.to };
+    return { from: entry?.bought ?? run.from, to: run.to };
   }
 
   /**
@@ -1066,11 +1174,11 @@ export class SettleSheet {
    * of them landed.
    */
   private _flushAll(): Promise<boolean> {
-    for (const lineId of [...this.demandRuns.pending().keys()]) {
-      this.demandRuns.flush(lineId);
+    for (const lineId of [...this.buyRuns.pending().keys()]) {
+      this.buyRuns.flush(lineId);
     }
-    for (const listId of [...this.raiseRuns.pending().keys()]) {
-      this.raiseRuns.flush(listId);
+    for (const listId of [...this.otherRuns.pending().keys()]) {
+      this.otherRuns.flush(listId);
     }
     return Promise.all([...this._writes.values()]).then((landed) =>
       landed.every(Boolean)
@@ -1536,91 +1644,6 @@ export class SettleSheet {
         ...(shop === null ? {} : { supermarketLocationId: shop }),
       };
     });
-  }
-
-  /**
-   * What one list asks for was changed (velista `0092`, section 6).
-   *
-   * Not `_send`'s path, and the difference is the whole of section 6: every other
-   * write on this sheet records what a trip did, and this one rewrites a
-   * household's list for everybody. So it has its own failures, its own sentence
-   * and its own ending.
-   *
-   * It is the send of {@link demandRuns}: one run of steps, after the presses
-   * stopped. It does not mark the sheet busy, so the line's stepper stays live
-   * while its save is out (velista `0190`, section 4).
-   *
-   * Three endings:
-   *
-   * - the row came back, and the sheet **stays open** on it: the person who
-   *   stepped the amount wants to see where it landed;
-   * - the row is **gone**, which is a demand taken to zero on a row nothing was
-   *   bought of. The list now asks for nothing, which is what was asked for, so
-   *   the page is handed a sentence and the sheet closes over a row that is no
-   *   longer there;
-   * - it was refused, and the store has already read the basket again. The
-   *   sentence is then about the row as it now stands.
-   */
-  protected async demand(lineId: string, run: QuantityRun): Promise<boolean> {
-    if (run.to === run.from) {
-      return true;
-    }
-    const change = { lineId, from: run.from, to: run.to };
-    // The name the sheet is titled with, taken before the row can leave.
-    const name = this.title();
-
-    this._failedOp.set(null);
-    const result = await this._store.setDemand({
-      lineId: change.lineId,
-      quantity: change.to,
-      from: change.from,
-    });
-
-    if (result === null) {
-      // `stale_quantity` and `forbidden` each get their own sentence, keyed on
-      // the operation as well as the code: a refused demand is the owner's
-      // standing having moved between the read and the tap, which is a different
-      // fact from a refused settle.
-      //
-      // Taken now, with the number the store's re-read brought (velista
-      // `0151`): the next quiet read clears the store's error, and a live key
-      // would then fall back to "That did not save".
-      const error = this._store.error();
-      const row = this._store.rowFor(this._rowKey);
-      const line = row?.entries.find((entry) => entry.lineId === change.lineId);
-      this._failedOp.set({
-        key: basketErrorKey(error, 'basket.demand'),
-        count: line?.asked ?? row?.asked ?? change.to,
-        correlationId: correlationIdOf(error),
-      });
-      return false;
-    }
-
-    if (
-      this._store.lineLeft(result, change.lineId) &&
-      this._store.rowFor(this._rowKey) === null
-    ) {
-      // The sentence is the **page's** to say, because this sheet is about to
-      // stop existing: its row left the basket, and one live region per screen
-      // is the rule (velista `0054`, section 7).
-      this._store.handOver(
-        this._translator.t(
-          'basket.demand.nothingLeft',
-          undefined,
-          this._locale(),
-          {
-            name,
-          }
-        )
-      );
-      // Not on a sheet already gone: a route change (back) destroys it without
-      // `close()`, its waiting run is sent on destroy, and a second dismissal
-      // would navigate past the basket or pull the person back.
-      if (!this._left && !this._destroyed) {
-        this.close();
-      }
-    }
-    return true;
   }
 
   protected openPane(pane: Pane): void {

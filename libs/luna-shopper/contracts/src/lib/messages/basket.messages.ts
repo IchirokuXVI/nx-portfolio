@@ -22,6 +22,7 @@ import type {
   PriceScopeChainView,
 } from './catalog.messages';
 import type {
+  AbsorbedExtra,
   AddLineOutcome,
   SettlePick,
   SettlementPaid,
@@ -146,6 +147,8 @@ export interface BasketRowEntryView {
   canWrite: boolean;
   left: number;
   bought: number;
+  /** As {@link BasketEntryPatch.asked}. */
+  asked: number;
   /**
    * Units of this line bought lately through **another** basket, or through no
    * basket (plan 0188). Zero when there are none.
@@ -239,6 +242,15 @@ export interface BasketEntryPatch {
   unit: LineUnit;
   left: number;
   bought: number;
+  /**
+   * What the line asks of this basket: `left` plus the units of this basket's
+   * buys that met the ask, computed, never stored (plan 0274).
+   *
+   * Not `bought + left`: a buy above the ask lowers the line only by what it
+   * asked, so the units bought above the ask are `bought - asked + left`. The
+   * row's `asked` is the sum of its entries' own.
+   */
+  asked: number;
   boughtElsewhere: number;
   state: BasketRowState;
   approvalStatus: LineApprovalStatus;
@@ -284,7 +296,11 @@ export interface BasketRowView {
   unit: LineUnit;
   left: number;
   bought: number;
-  /** `bought + left`, computed, never stored. */
+  /**
+   * `left` plus the units of this basket's buys that met the ask, computed,
+   * never stored (plan 0274). The units bought above the ask are
+   * `bought - asked + left`.
+   */
   asked: number;
   /**
    * The sum of the entries' `boughtElsewhere` (plan 0188): units somebody bought
@@ -923,7 +939,17 @@ export interface SetBasketRowDemandRequest {
    * asks for it again.
    */
   lineId: string;
-  /** What that list asks for from now on. */
+  /**
+   * What that list asks for from now on: its **whole** ask, the entry's
+   * {@link BasketEntryPatch.asked}, which is what the line still holds plus
+   * what this basket's buys met of it (plan 0274). Never what is left after
+   * those buys.
+   *
+   * An ask below what the buys met leaves the line at 0 and makes the
+   * difference units bought above the ask. No ceiling of its own: the line
+   * after the write is held to `LINE_QUANTITY_MAX`, so the largest ask
+   * is that plus what this basket bought of the line.
+   */
   quantity: number;
   /**
    * The unit {@link quantity} and {@link from} are in (plan 0246, section
@@ -931,8 +957,39 @@ export interface SetBasketRowDemandRequest {
    * line's, as a delta's is.
    */
   unit: LineUnit;
-  /** That entry's `left` as the client drew it. */
+  /**
+   * That entry's `left` as the client drew it: what the line itself held, not
+   * the ask. A settle, a revert or another write that moved the line since is
+   * refused with `stale_quantity`.
+   */
   from: number;
+  /**
+   * Ask for {@link BasketRowResult.extra} (plan 0276): when this demand raised
+   * the line, what the raise took into the ask in every open basket, this
+   * one's own buys included. The raise takes it in with or without the flag.
+   */
+  reportExtra?: boolean;
+}
+
+/**
+ * "Count the extra" from the basket (plan 0276, section 9): lower the line by
+ * {@link amount}, the `countable` a raise of this row answered.
+ *
+ * Plan 0131's demand rule asked of the basket's **owner**, as the demand asks
+ * it, and written as the owner with the basket as `via`. {@link expect} is the
+ * line's quantity as the raise answered it, the entry's `left`; a line that
+ * moved since is refused with `stale_quantity` and nothing is written.
+ */
+export interface CountBasketRowExtraRequest {
+  basketId: string;
+  participantId: string;
+  /** The same id as {@link lineId}. */
+  rowKey: string;
+  lineId: string;
+  unit: LineUnit;
+  /** What to take off, a positive whole number, at most {@link expect}. */
+  amount: number;
+  expect: number;
 }
 
 /**
@@ -968,6 +1025,80 @@ export interface AddBasketLineRequest {
   intoLineId?: string;
   /** The same field the list's own add carries (plan 0228). */
   newLine?: boolean;
+  /**
+   * Ask for {@link BasketRowResult.extra} on a `RAISED` add (plan 0276), as
+   * the list's own add takes it.
+   */
+  reportExtra?: boolean;
+}
+
+/**
+ * Record a buy of the row's product for a covered list that does not ask for
+ * it, making that list's line at zero when it has none (plan 0273).
+ *
+ * One transaction: the line, when one is made, and one `BOUGHT` settlement of
+ * {@link quantity} on it, written as a settle writes one. The line's quantity
+ * stays at zero. Any failure writes nothing. Afterwards the line is an entry of
+ * the row, and a plus or a minus on it is the plain settle and revert with
+ * `lineIds: [lineId]`.
+ *
+ * Account participants only, who hold `WRITE` on {@link targetListId}
+ * themselves; a list the basket does not cover answers 404.
+ */
+export interface BuyForListBasketRequest {
+  basketId: string;
+  participantId: string;
+  /** The actor's own account. A guest reaches the route and is refused. */
+  userId: string;
+  /** A line of the row as the client drew it, which the answer is read for. */
+  rowKey: string;
+  /** The covered list the buy is for. */
+  targetListId: string;
+  /**
+   * That list's line of the product, from `basket.productLists`, when it has
+   * one. It must be on {@link targetListId}, hold the row's product, and not
+   * be an entry of the row, which answers 409 `basket_line_already_in_row`.
+   * Absent, the list's line of the product is found as the list's add finds
+   * it, and made at zero when there is none.
+   */
+  lineId?: string;
+  /**
+   * The row's product as the gateway read it, the one {@link paid},
+   * {@link itemSnapshot} and {@link content} describe; null when the gateway
+   * read none. Written by the gateway, never by a client. Core reads the row's
+   * product again and refuses with 409 `conflict`, writing nothing, when it is
+   * another, so a price and a name are never recorded for the wrong product.
+   */
+  expectedItemId: string | null;
+  /** Units bought, a whole number from 1 to `LINE_QUANTITY_MAX`. */
+  quantity: number;
+  /** What {@link quantity} counts, the row's. */
+  unit: LineUnit;
+  /**
+   * The product's name in the actor's language, else in any language catalog
+   * holds, which a line made here carries with `named: false`. Written by the
+   * gateway from catalog, never by a client. Absent when catalog named it in
+   * no language or did not answer: a line that has to be made then answers
+   * 409 `basket_product_has_no_name`, or 503 `catalog_unavailable` when
+   * {@link catalogUnanswered} says catalog did not answer.
+   *
+   * There is no product field (plan 0273, amended on 2026-11-22): the product
+   * is the row's, which core reads from {@link rowKey}, and a row with no
+   * product answers 409 `basket_row_has_no_product`.
+   */
+  content?: string;
+  /**
+   * True when catalog did not answer for the product's name, by its budget
+   * or by a failure (plan 0273, amended on 2026-11-22). Written by the
+   * gateway. A line that has to be made then answers 503
+   * `catalog_unavailable` and nothing is written; a line the list already
+   * holds is bought on as before, since it needs no name.
+   */
+  catalogUnanswered?: boolean;
+  /** As {@link SettleBasketRowRequest.paid}: written by the gateway. */
+  paid?: SettlementPaid;
+  /** As {@link SettleBasketRowRequest.itemSnapshot}: written by the gateway. */
+  itemSnapshot?: ItemSnapshot | null;
 }
 
 /**
@@ -1121,6 +1252,15 @@ export interface BasketRowResult {
    * a row has no entry.
    */
   addOutcome?: AddLineOutcome;
+  /**
+   * What a raise took into the ask (plan 0276), on the line add's `RAISED`
+   * answer and on a demand that raised the line, only when the request
+   * carried `reportExtra: true`. The entries carry every basket's new `asked`
+   * of the line through this reader's read.
+   */
+  extra?: AbsorbedExtra;
+  /** The units "Count the extra" took off the line, set by that write alone. */
+  counted?: number;
 }
 
 /**
@@ -1141,8 +1281,12 @@ export const BASKET_PATTERNS = {
   /** The covered lists that can still take a product (plan 0201, section 5). */
   productLists: 'basket.productLists',
   rowSettle: 'basket.row.settle',
+  /** A buy for a list that does not ask, in one write with its line (plan 0273). */
+  rowBuyForList: 'basket.row.buyForList',
   rowRevert: 'basket.row.revert',
   rowDemand: 'basket.row.demand',
+  /** "Count the extra" on a row, after a raise reported it (plan 0276). */
+  rowCountExtra: 'basket.row.countExtra',
   rowRename: 'basket.row.rename',
   /** Put a row off for now, and take that back (plan 0137). */
   rowSkip: 'basket.row.skip',

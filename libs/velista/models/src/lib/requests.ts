@@ -144,6 +144,12 @@ export interface AddLineRequest {
   readonly askIfAmbiguous?: boolean;
   readonly intoLineId?: string;
   readonly newLine?: boolean;
+  /**
+   * Ask an add that raises a line to say what the raise took into the ask (backend
+   * `0276`, velista `0208`). Only ever `true` on the wire: an add that made a line,
+   * or met one it left alone, answers no report.
+   */
+  readonly reportExtra?: boolean;
 }
 
 export interface UpdateLineRequest {
@@ -188,6 +194,12 @@ export interface UpdateLineRequest {
   readonly favoriteItemId?: string | null;
   /** The supermarket of the line, a chain, or null for any (backend `0199`). */
   readonly preferredSupermarketId?: string | null;
+  /**
+   * Ask a save that raises the quantity to say what the raise took into the ask
+   * (backend `0276`, velista `0208`). Only ever `true` on the wire, and only with a
+   * raised `quantity`: a merge or a unit change takes nothing in.
+   */
+  readonly reportExtra?: boolean;
 }
 
 /**
@@ -209,6 +221,50 @@ export interface AddLineQuantityRequest {
    * Required: a delta in another unit is refused with `line_unit_mismatch`.
    */
   readonly unit: LineUnit;
+  /**
+   * Ask the answer to say what this raise took into the ask (backend `0276`, velista
+   * `0208`): every raise moves the units bought above the ask in open shopping lists
+   * into the ask anyway, and the flag adds who bought them and what "Count the
+   * extra" would take off the line. Every control that raises a line sends it with
+   * a positive delta, so its question can be asked on the control.
+   */
+  readonly reportExtra?: boolean;
+}
+
+/** One buyer of the extra a raise took in (backend `0276`). */
+export interface ExtraBuyer {
+  /**
+   * A null id is somebody this reader cannot be told about (a person outside the
+   * list's group, or an account that is gone); every such buyer is one null entry,
+   * so the count of unknown people is never known.
+   */
+  readonly userId: string | null;
+}
+
+/**
+ * What a raise with `reportExtra` took into the ask (backend `0276`, velista
+ * `0208`), in the line's unit. `above` is the extra the raise moved into the ask,
+ * `countable` what "Count the extra" would take off the line (never more than
+ * `above`, nor than the raise), and `buyers` who bought the extra, one entry per
+ * buyer in the order of their oldest buy.
+ */
+export interface AbsorbedExtra {
+  readonly above: number;
+  readonly countable: number;
+  readonly buyers: readonly ExtraBuyer[];
+}
+
+/**
+ * "Count the extra" (`POST /v1/lines/:id/extra`, backend `0276`): take `amount` off
+ * the line. The line must still hold `expect`, or the server refuses with
+ * `stale_quantity` and writes nothing.
+ */
+export interface CountLineExtraRequest {
+  readonly unit: LineUnit;
+  /** The `countable` the raise answered. */
+  readonly amount: number;
+  /** The quantity the raise answered, which the line must still hold. */
+  readonly expect: number;
 }
 
 /**

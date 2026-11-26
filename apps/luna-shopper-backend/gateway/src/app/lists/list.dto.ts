@@ -34,6 +34,7 @@ import {
   MinLength,
   NotEquals,
   registerDecorator,
+  ValidateIf,
   ValidateNested,
   type ValidationArguments,
 } from 'class-validator';
@@ -50,6 +51,27 @@ export const LINE_UNIT_DOCS = {
   required:
     'The unit the number was made in, which must be the line’s (plan 0246). Required: a unit that is not the line’s answers 409 `line_unit_mismatch` and changes nothing, and the client reads the line again.',
 } as const;
+
+/**
+ * The flag of plan 0276 on the five requests that can raise a line. A JSON
+ * `true` or `false` only, and absent is false: `@IsOptional` would let a null
+ * through to core, whose schema refuses it with an error that is not this
+ * route's 400, and the pipe's implicit conversion reads the string "false" as
+ * true, so the body is read as it was spelled.
+ */
+export function ReportExtra(): PropertyDecorator {
+  return (target, key) => {
+    ApiPropertyOptional({
+      description:
+        'Report the units bought above the ask that this raise moved into the ask, and what an answer of Count the extra would take off the line.',
+    })(target, key);
+    ValidateIf((_, value) => value !== undefined)(target, key);
+    Transform(
+      ({ obj }: { obj: Record<string, unknown> }) => obj?.[key as string]
+    )(target, key);
+    IsBoolean()(target, key);
+  };
+}
 
 /** An optional line unit, as the add and the update take it. */
 function OptionalLineUnit(description: string): PropertyDecorator {
@@ -340,6 +362,10 @@ export class AddLineDto extends AddLinesItemDto {
   @IsBoolean()
   @OnTypedNameOnly()
   newLine?: boolean;
+
+  // On a single add alone: a batch reports nothing (plan 0276).
+  @ReportExtra()
+  reportExtra?: boolean;
 }
 
 /**
@@ -389,6 +415,85 @@ export class AddLineQuantityDto {
 
   @RequiredLineUnit()
   unit!: LineUnit;
+
+  @ReportExtra()
+  reportExtra?: boolean;
+}
+
+/**
+ * "Count the extra" (plan 0276, section 8): lower the line by what a raise's
+ * report offered, once the person said the extra covers the raise.
+ *
+ * `amount` above `expect` is a 400 here and in core: the count can never take
+ * the line below zero.
+ */
+export class CountLineExtraDto {
+  @RequiredLineUnit()
+  unit!: LineUnit;
+
+  @ApiProperty({
+    minimum: 1,
+    maximum: LINE_QUANTITY_MAX,
+    description:
+      'What to take off the line: the `extra.countable` the raise answered. A positive whole number, at most `expect`.',
+  })
+  @AsSpelledNumber()
+  @IsInt()
+  @Min(1)
+  @Max(LINE_QUANTITY_MAX)
+  @AtMostExpect()
+  amount!: number;
+
+  @ApiProperty({
+    minimum: 0,
+    description:
+      'The line quantity the raise answered. The line must still hold it when the count is written, or the count answers 409 `stale_quantity` with the current amount and writes nothing. It has no ceiling, because it is what the line holds and not what the count writes.',
+  })
+  @AsSpelledNumber()
+  @IsInt()
+  @Min(0)
+  expect!: number;
+}
+
+/**
+ * A number of the count's body as it was spelled (plan 0276, section 10): the
+ * pipe converts implicitly, and that would read the string "2" as 2, where
+ * the count refuses a number spelled as a string with a 400.
+ */
+export function AsSpelledNumber(): PropertyDecorator {
+  return (target, key) => {
+    Transform(
+      ({ obj }: { obj: Record<string, unknown> }) => obj?.[key as string]
+    )(target, key);
+  };
+}
+
+/**
+ * `amount` at most `expect` (plan 0276, section 7). Registered beside the
+ * field's own bounds, and silent when `expect` is not a number, which its own
+ * validators refuse.
+ */
+export function AtMostExpect(): PropertyDecorator {
+  return (target, propertyName) => {
+    registerDecorator({
+      name: 'atMostExpect',
+      target: target.constructor,
+      propertyName: propertyName as string,
+      validator: {
+        validate(value: unknown, args: ValidationArguments): boolean {
+          const expect = (args.object as { expect?: unknown }).expect;
+          return (
+            typeof value !== 'number' ||
+            typeof expect !== 'number' ||
+            value <= expect
+          );
+        },
+        defaultMessage(args: ValidationArguments): string {
+          return `${args.property} must be at most expect`;
+        },
+      },
+    });
+  };
 }
 
 export class UpdateLineDto {
@@ -492,6 +597,9 @@ export class UpdateLineDto {
   @IsOptional()
   @IsBoolean()
   confirmMerge?: boolean;
+
+  @ReportExtra()
+  reportExtra?: boolean;
 }
 
 export class SetApprovalDto {

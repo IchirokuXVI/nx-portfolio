@@ -19,12 +19,15 @@ import {
   BasketListStore,
   BasketStore,
   BasketViewStore,
+  ChangeLandingStore,
   fakeCategoryStore,
   fakeGroupMembers,
   fakeItemNames,
   fakeShopDetailStore,
   fakeShopSectionsStore,
   GatewayError,
+  ListRowsStore,
+  MemberNames,
   MEMORY_CATEGORIES,
   MEMORY_SHOP_MAPS,
   provideFakeCategoryStore,
@@ -41,6 +44,7 @@ import {
   type ShopDetailRead,
 } from '@portfolio/velista/data-access';
 import type {
+  AbsorbedExtra,
   BasketAccessEnded,
   BasketListRef,
   BasketParticipant,
@@ -65,9 +69,17 @@ import {
   PageReturn,
   provideFakeBrowserFacade,
   provideVelistaTesting,
+  sheetSegments,
   StorageKeys,
 } from '@portfolio/velista/platform';
-import { LineComposer, ListPicker, NoPricesNote } from '@portfolio/velista/ui';
+import {
+  ExtraAskHost,
+  LineComposer,
+  ListPicker,
+  NoPricesNote,
+  type SuggestionHolding,
+  type SuggestionHoldingChange,
+} from '@portfolio/velista/ui';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BehaviorSubject } from 'rxjs';
@@ -75,6 +87,7 @@ import { basketDoors } from '../basket-menu';
 import { BasketRow as BasketRowComponent } from '../basket-row/basket-row';
 import { HeldBuy } from '../held-buy';
 import { BasketPage } from './basket-page';
+import { ExtraAskHandoff } from './extra-ask-handoff';
 
 /**
  * The basket's header, once the basket is live (plan 0048, sections 4 and 5).
@@ -171,6 +184,8 @@ interface FakeStore {
   readonly adding: WritableSignal<boolean>;
   /** Every line added from the dock, and what it answered. */
   readonly addLine: jest.Mock;
+  /** "Count the extra" (velista `0208`), and what it answered. */
+  readonly countExtra: jest.Mock;
 }
 
 /**
@@ -196,6 +211,8 @@ const PAGE_TREE: readonly CategoryNode[] = [
 ];
 
 interface Options {
+  /** The names of the members of a group, by user id (velista `0208`). */
+  readonly memberNames?: Readonly<Record<string, string>>;
   /** `?search=1`, the open search (velista `0109`). */
   readonly search?: boolean;
   /** What `PageReturn` hands back, which makes this arrival a return to the basket. */
@@ -450,6 +467,16 @@ function queryOnRoute(initial: Params) {
   };
 }
 
+/** The names of the header's actions, in the order they are drawn. */
+function headerActions(fixture: ComponentFixture<BasketPage>): string[] {
+  return Array.from(
+    (fixture.nativeElement as HTMLElement).querySelectorAll(
+      'lib-page-header button[libPageHeaderAction]'
+    ),
+    (button) => button.getAttribute('aria-label') ?? ''
+  );
+}
+
 async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<BasketPage>;
   store: FakeStore;
@@ -517,6 +544,7 @@ async function render(options: Options = {}): Promise<{
       (body: { content: string }): Promise<BasketRowResult | null> =>
         Promise.resolve(rowResult(line(body.content)))
     ),
+    countExtra: jest.fn().mockResolvedValue('counted'),
   };
 
   const paramMap = convertToParamMap({ basketId: 'basket-saturday' });
@@ -540,6 +568,7 @@ async function render(options: Options = {}): Promise<{
     providers: [
       provideVelistaTesting({ basePath: '' }),
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
+      ChangeLandingStore,
       // The bottom bar's owner, as a double (velista `0117`): the router here is a
       // fake with no state to read, and what matters is what the page tells it.
       { provide: PageReturn, useValue: returns },
@@ -664,6 +693,7 @@ async function render(options: Options = {}): Promise<{
           // What the composer needs: whether an add is out, and the add itself.
           adding: store.adding,
           addLine: store.addLine,
+          countExtra: store.countExtra,
           itemIdFor: () => undefined,
           skip: jest.fn().mockResolvedValue(null),
           unskip: jest.fn().mockResolvedValue(null),
@@ -759,6 +789,14 @@ async function render(options: Options = {}): Promise<{
         options.storage ?? new Map([[StorageKeys.shopAskOff, 'true']])
       ),
       provideFakeGroupMembers(options.groupMembers ?? fakeGroupMembers()),
+      {
+        provide: MemberNames,
+        useValue: {
+          nameOf: (_zoneId: string, userId: string) =>
+            options.memberNames?.[userId] ?? null,
+          ensure: jest.fn().mockResolvedValue(undefined),
+        },
+      },
       provideFakeItemNames(options.itemNames ?? fakeItemNames()),
       provideFakeShopSectionsStore(
         options.shopSections ?? fakeShopSectionsStore()
@@ -767,6 +805,8 @@ async function render(options: Options = {}): Promise<{
         options.categories ?? fakeCategoryStore(PAGE_TREE)
       ),
       provideFakeShopDetailStore(options.shopDetails ?? fakeShopDetailStore()),
+      // The device's choice of view (velista 0202), real, over the storage above.
+      ListRowsStore,
     ],
   }).compileComponents();
 
@@ -1126,13 +1166,31 @@ describe('the basket header, live', () => {
       expect(query(fixture, MENU)).not.toBeNull();
     });
 
-    it('draws no menu for a guest it would hold nothing for', async () => {
+    it('draws the menu for a guest too, for its View row (velista 0202)', async () => {
       // No history and no new list, because both need an account; no finish,
-      // because that is the owner's; and nobody on the basket to read about. A
-      // button that opens onto nothing is not drawn.
+      // because that is the owner's; and nobody on the basket to read about. The
+      // view is a choice about this device, so the menu always holds a row.
       const { fixture } = await render({ me: participant(guest('p-9', 1)) });
 
-      expect(query(fixture, MENU)).toBeNull();
+      expect(query(fixture, MENU)).not.toBeNull();
+    });
+
+    it('keeps three actions in the header, and the view button in the tools row (velista 0202)', async () => {
+      const me = participant(owner());
+      const { fixture } = await render({
+        lines: [line('zl-1')],
+        me,
+        participants: [me],
+      });
+
+      // Share and the menu; the map is the third, on a shop with one (the aisles
+      // spec below). A header that gains or loses an action fails here.
+      expect(headerActions(fixture)).toEqual([
+        'basket.share.open',
+        'basket.more.open',
+      ]);
+      expect(query(fixture, 'lib-page-header lib-view-picker')).toBeNull();
+      expect(query(fixture, 'lib-page-header lib-view-icon')).toBeNull();
     });
 
     it('draws it for a guest once there is somebody to read about', async () => {
@@ -1643,6 +1701,8 @@ describe('searching the basket', () => {
   ): BasketProduct {
     return {
       id,
+      packCount: null,
+      pieceCount: null,
       quantityStep: null,
       name: { en, es },
       brand,
@@ -1709,7 +1769,34 @@ describe('searching the basket', () => {
       const row = query(fixture, '.tools');
       expect(row).not.toBeNull();
       expect(row?.querySelector('.progress')).not.toBeNull();
-      expect(row?.querySelectorAll('.tool')).toHaveLength(1);
+      // The view button, then the filter (velista 0202), the same pair as on the
+      // zone list's header.
+      const tools = Array.from(row?.querySelectorAll('.tool') ?? []);
+      expect(tools).toHaveLength(2);
+      expect(tools[0].getAttribute('aria-label')).toBe('view.title');
+      expect(tools[0].querySelector('lib-view-icon')).not.toBeNull();
+      expect(tools[1].querySelector('lib-filter-icon')).not.toBeNull();
+    });
+
+    it('sets the view from the tools row, and the menu names it (velista 0202)', async () => {
+      const { fixture } = await render({ lines: threeLines });
+      document.body.append(fixture.nativeElement as HTMLElement);
+      const picker = query(fixture, '.tools .tool.trigger') as HTMLElement;
+
+      picker.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      document
+        .querySelector<HTMLElement>(
+          '[role="menuitemradio"][data-view="compact"]'
+        )
+        ?.click();
+      fixture.detectChanges();
+
+      expect(TestBed.inject(ListRowsStore).layout()).toBe('compact');
+      expect(document.querySelector('[role="menu"]')).toBeNull();
+      (fixture.nativeElement as HTMLElement).remove();
     });
 
     it('keeps the row and the chips in one bar', async () => {
@@ -2130,7 +2217,7 @@ describe('searching the basket', () => {
       return (
         Array.from(
           (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
-            '.tools .tool'
+            '.tools .tool:not(.trigger)'
           )
         )[0] ?? null
       );
@@ -3406,6 +3493,8 @@ describe('the composer and the list it adds to', () => {
         // Typed words state no amount and no unit (velista 0185), and say the
         // page can ask which line (velista 0170).
         askIfAmbiguous: true,
+        // Every add asks what a raise took into the ask (velista `0208`).
+        reportExtra: true,
       });
       expect(field(fixture).value).toBe('');
       expect(document.activeElement).toBe(field(fixture));
@@ -3433,6 +3522,8 @@ describe('the composer and the list it adds to', () => {
         quantity: 1,
         itemIds: ['i-1', 'i-2'],
         askIfAmbiguous: true,
+        // Every add asks what a raise took into the ask (velista `0208`).
+        reportExtra: true,
       });
       card.remove();
     });
@@ -3543,6 +3634,7 @@ describe('the composer and the list it adds to', () => {
           items: [
             {
               id: 'item-a',
+              pieceCount: null,
               quantityStep: null,
               name: { es: 'Leche entera', en: 'Whole milk' },
               brand: 'Hacendado',
@@ -3614,6 +3706,8 @@ describe('the composer and the list it adds to', () => {
           targetListId: 'l-weekly',
           content: 'Leche entera',
           intoLineId: 'zl-b',
+          // Every add asks what a raise took into the ask (velista `0208`).
+          reportExtra: true,
         });
         expect(document.querySelector('.pop')).toBeNull();
         expect(field(fixture).value).toBe('');
@@ -3629,6 +3723,8 @@ describe('the composer and the list it adds to', () => {
           targetListId: 'l-weekly',
           content: 'Leche entera',
           newLine: true,
+          // Every add asks what a raise took into the ask (velista `0208`).
+          reportExtra: true,
         });
       });
 
@@ -3690,6 +3786,8 @@ describe('the composer and the list it adds to', () => {
           quantity: 1,
           itemIds: ['item-a'],
           intoLineId: 'zl-a',
+          // Every add asks what a raise took into the ask (velista `0208`).
+          reportExtra: true,
         });
         card.remove();
       });
@@ -3818,6 +3916,8 @@ describe('the composer and the list it adds to', () => {
       it('says the raised row as it draws it, its name and its number', async () => {
         const WHOLE_MILK: BasketProduct = {
           id: 'i-milk',
+          packCount: null,
+          pieceCount: null,
           quantityStep: null,
           name: { en: 'Whole milk', es: 'Whole milk' },
           brand: null,
@@ -3866,6 +3966,8 @@ describe('the composer and the list it adds to', () => {
       describe('an add that meets a line already on the list (velista 0185)', () => {
         const WHOLE_MILK: BasketProduct = {
           id: 'i-milk',
+          packCount: null,
+          pieceCount: null,
           name: { en: 'Whole milk', es: 'Whole milk' },
           brand: null,
           imageUrl: null,
@@ -4319,6 +4421,7 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
     kind: 'item',
     item: {
       id: 'item-milk',
+      pieceCount: null,
       quantityStep: null,
       name: { es: 'Leche entera', en: 'Whole milk' },
       brand: 'Hacendado',
@@ -4455,6 +4558,50 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
     });
   });
 
+  it('shows the whole ask and sends the new whole ask, never what is left (velista 0200)', async () => {
+    const { fixture } = await render({
+      lines: [
+        line('Milk', {
+          productId: 'item-milk',
+          entries: [entry('l-groceries', 'zl-1', 1, { bought: 2, asked: 3 })],
+        }),
+      ],
+      served: SERVED,
+    });
+    const page = fixture.componentInstance as unknown as CardSurface;
+    const store = TestBed.inject(BasketStore) as unknown as {
+      setDemand: jest.Mock;
+    };
+
+    // Asks 3 with 2 bought, so 1 is left: the card shows 3.
+    expect(
+      page
+        .holdingsOf()(MILK)
+        .map((held) => held.quantity)
+    ).toEqual([3]);
+
+    jest.useFakeTimers();
+    try {
+      page.changeHolding({
+        holding: { lineId: 'zl-1' },
+        from: 3,
+        to: 4,
+        repeat: false,
+      });
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+    } finally {
+      jest.useRealTimers();
+    }
+
+    // One plus sends the whole ask 4, never 2, with the left the run started from.
+    expect(store.setDemand).toHaveBeenCalledTimes(1);
+    expect(store.setDemand).toHaveBeenCalledWith({
+      lineId: 'zl-1',
+      quantity: 4,
+      from: 1,
+    });
+  });
+
   it('keeps drawing the run’s amount until its demand write answers', async () => {
     const { fixture } = await render({ lines: [milk()], served: SERVED });
     const page = fixture.componentInstance as unknown as CardSurface;
@@ -4562,6 +4709,8 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
     const RICE: CatalogSuggestion = { kind: 'item', item: RICE_ITEM };
     const RICE_PRODUCT: BasketProduct = {
       id: RICE_ITEM.id,
+      packCount: null,
+      pieceCount: null,
       quantityStep: 250,
       name: RICE_ITEM.name,
       brand: null,
@@ -4798,6 +4947,8 @@ describe('similar products on the basket', () => {
 
   const GROUPED: BasketProduct = {
     id: 'i-milk',
+    packCount: null,
+    pieceCount: null,
     quantityStep: null,
     name: { en: 'Milk', es: 'Leche' },
     brand: null,
@@ -4821,6 +4972,7 @@ describe('similar products on the basket', () => {
 
   const member = (id: string, unitPrice: number): CatalogItem => ({
     id,
+    pieceCount: null,
     quantityStep: null,
     name: { en: id, es: id },
     brand: null,
@@ -5093,6 +5245,8 @@ describe('BasketPage: the aisles of the shop you are in', () => {
   ): BasketProduct {
     return {
       id,
+      packCount: null,
+      pieceCount: null,
       quantityStep: null,
       name: { en: name, es: name },
       brand: null,
@@ -5287,6 +5441,8 @@ describe('BasketPage: the map of the shop you are in', () => {
 
   const MILK: BasketProduct = {
     id: 'i-milk',
+    packCount: null,
+    pieceCount: null,
     quantityStep: null,
     name: { en: 'Milk', es: 'Leche' },
     brand: null,
@@ -5370,6 +5526,16 @@ describe('BasketPage: the map of the shop you are in', () => {
     const { shopDetails } = await atElJamon({ hasMap: false });
 
     expect(shopDetails.ensured()).toContain('loc-jamon');
+  });
+
+  it('holds exactly share, the map and the menu in the header (velista 0202)', async () => {
+    const { fixture } = await atElJamon({ hasMap: true });
+
+    expect(headerActions(fixture)).toEqual([
+      'basket.share.open',
+      'basket.map.openLabel',
+      'basket.more.open',
+    ]);
   });
 
   it('offers the map in the header when that shop has one', async () => {
@@ -5552,6 +5718,8 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
   function yogurt(atShop: number | null = null): BasketProduct {
     return {
       id: 'item-yogurt',
+      packCount: null,
+      pieceCount: null,
       quantityStep: null,
       name: { en: 'Yogurt', es: 'Yogur' },
       brand: null,
@@ -5630,8 +5798,11 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
     TestBed.inject(BasketViewStore).setOrder('alpha');
     fixture.detectChanges();
 
+    // Then the view button and the filter (velista 0202).
     const number = query(fixture, NUMBER);
-    expect(number?.nextElementSibling?.classList).toContain('tool');
+    const next = number?.nextElementSibling;
+    expect(next?.tagName.toLowerCase()).toBe('lib-view-picker');
+    expect(next?.nextElementSibling?.classList).toContain('tool');
   });
 
   it('keeps the tools row, the chips and the small row off the edges of the screen', () => {
@@ -6097,5 +6268,428 @@ describe("the row's tap and somebody else's buy", () => {
     expect(query(fixture, '.said')?.textContent).toContain(
       'basket.error.basketFinished'
     );
+  });
+});
+
+/**
+ * Velista `0208`, stage 4 (target states 18 and 19; specs 17 and 18): a catalog
+ * card's rising ask asks about the extra on its stepper, and an add of "Add or
+ * find" that raised a line over extra hands its question to the row's "Lists and
+ * amounts".
+ */
+describe('BasketPage: the basket asks about the extra (velista 0208)', () => {
+  const MILK_CARD: CatalogSuggestion = {
+    kind: 'item',
+    item: {
+      id: 'item-milk',
+      pieceCount: null,
+      quantityStep: null,
+      name: { es: 'Leche entera', en: 'Whole milk' },
+      brand: 'Hacendado',
+      size: 1,
+      unit: 'LITER',
+      productGroupId: null,
+      categories: [],
+      offer: null,
+      chainPrices: [],
+      imageUrl: null,
+      packCount: null,
+      unitBasis: null,
+      approxWeight: null,
+    },
+  };
+  /** The owner's example: the list asks 3, this shopping list bought 5. */
+  const OWN: AbsorbedExtra = {
+    above: 2,
+    countable: 2,
+    buyers: [{ userId: 'u-1' }],
+  };
+  const SEEN = { left: 0, bought: 5, asked: 3 };
+  const ANSWERED = { left: 2, bought: 5, asked: 7 };
+
+  const milkRow = (numbers: Partial<BasketRowEntry>) =>
+    line('Milk', {
+      rowKey: 'row-milk',
+      productId: 'item-milk',
+      entries: [entry('l-groceries', 'zl-1', 0, numbers)],
+    });
+
+  interface Surface {
+    holdingsOf(): (
+      suggestion: CatalogSuggestion
+    ) => readonly (SuggestionHolding & { quantity: number })[];
+    suggestions: WritableSignal<readonly CatalogSuggestion[]>;
+    changeHolding(change: SuggestionHoldingChange): void;
+  }
+
+  const hostOf = (fixture: ComponentFixture<BasketPage>) =>
+    fixture.debugElement.injector.get(ExtraAskHost);
+
+  const turns = async () => {
+    for (let turn = 0; turn < 12; turn++) {
+      await Promise.resolve();
+    }
+  };
+
+  afterEach(() => {
+    jest.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  describe("a catalog card's stepper (0208 spec 17)", () => {
+    async function withCard() {
+      const rendered = await render({
+        lines: [milkRow(SEEN)],
+        served: SERVED,
+        echoValues: true,
+      });
+      const { fixture, store } = rendered;
+      const page = fixture.componentInstance as unknown as Surface;
+      typeInto(fixture, 'Leche');
+      page.suggestions.set([MILK_CARD]);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      const card = query(fixture, '.catalog [data-card]') as HTMLElement;
+      const stepper = card.querySelector<HTMLElement>(
+        'li[data-line="zl-1"] > lib-quantity-stepper'
+      ) as HTMLElement;
+      let release: () => void = () => undefined;
+      const setDemand = (
+        TestBed.inject(BasketStore) as unknown as { setDemand: jest.Mock }
+      ).setDemand;
+      setDemand.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            release = () => {
+              const answered = milkRow(ANSWERED);
+              store.rows.set([answered]);
+              resolve({ ...rowResult(answered), extra: OWN });
+            };
+          })
+      );
+      return {
+        ...rendered,
+        page,
+        card,
+        stepper,
+        setDemand,
+        release: () => release(),
+      };
+    }
+
+    /** Two presses of the card's plus, written after the quiet beat. */
+    function plusTwice(page: Surface, card: HTMLElement) {
+      const [holding] = page.holdingsOf()(MILK_CARD);
+      jest.useFakeTimers();
+      try {
+        for (const [from, to] of [
+          [3, 4],
+          [4, 5],
+        ]) {
+          page.changeHolding({
+            holding: holding as SuggestionHolding,
+            from,
+            to,
+            repeat: false,
+            cardKey: card.dataset['card'] as string,
+          });
+        }
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      } finally {
+        jest.useRealTimers();
+      }
+    }
+
+    const shown = (page: Surface) =>
+      page
+        .holdingsOf()(MILK_CARD)
+        .find((held) => held.lineId === 'zl-1')?.quantity;
+
+    it('reports a rising ask, draws the run until the answer, then asks with 7 and 5 on its stepper', async () => {
+      const { fixture, page, card, stepper, setDemand, release } =
+        await withCard();
+      plusTwice(page, card);
+
+      expect(setDemand).toHaveBeenCalledWith({
+        lineId: 'zl-1',
+        quantity: 5,
+        from: 0,
+        reportExtra: true,
+      });
+      expect(shown(page)).toBe(5);
+      expect(hostOf(fixture).asked()).toBeNull();
+
+      release();
+      await turns();
+
+      const host = hostOf(fixture);
+      expect(host.asked()?.shown).toBe(true);
+      expect(shown(page)).toBe(7);
+      expect(host.asked()?.quantity).toBe(7);
+      expect(host.asked()?.anchor).toBe(stepper);
+      expect(host.asked()?.keepInSight).toBe(card);
+      expect(host.asked()?.side).toBe('below');
+      expect(host.words()?.question).toContain('list.extra.boughtByYou');
+      expect(host.words()?.question).toContain(
+        'list.extra.ask:{"asked":"7","left":"5"}'
+      );
+    });
+
+    it('"Count the extra" sends the basket count with the answered left', async () => {
+      const { fixture, page, card, store, release } = await withCard();
+      plusTwice(page, card);
+      release();
+      await turns();
+
+      hostOf(fixture).answerCount();
+      await turns();
+
+      expect(store.countExtra).toHaveBeenCalledWith('row-milk', 'zl-1', 2, 2);
+    });
+
+    it('never reports a lowering', async () => {
+      const { page, card, setDemand } = await withCard();
+      const [holding] = page.holdingsOf()(MILK_CARD);
+      jest.useFakeTimers();
+      try {
+        page.changeHolding({
+          holding: holding as SuggestionHolding,
+          from: 3,
+          to: 2,
+          repeat: false,
+          cardKey: card.dataset['card'] as string,
+        });
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      } finally {
+        jest.useRealTimers();
+      }
+
+      expect(setDemand).toHaveBeenCalledWith({
+        lineId: 'zl-1',
+        quantity: 2,
+        from: 0,
+      });
+    });
+
+    it('asks nothing when the results no longer draw the card, and the ask set stands', async () => {
+      const { fixture, page, card, store, release } = await withCard();
+      plusTwice(page, card);
+      page.suggestions.set([]);
+      fixture.detectChanges();
+      release();
+      await turns();
+
+      expect(hostOf(fixture).asked()).toBeNull();
+      expect(store.countExtra).not.toHaveBeenCalled();
+    });
+
+    it('asks nothing when a sheet is over the page', async () => {
+      const { fixture, page, card, release } = await withCard();
+      plusTwice(page, card);
+      (
+        TestBed.inject(ActivatedRoute) as unknown as { firstChild: unknown }
+      ).firstChild = { snapshot: {} };
+      release();
+      await turns();
+
+      expect(hostOf(fixture).asked()).toBeNull();
+    });
+
+    it('drops its question when a sheet opens over the page, and the ask set stands', async () => {
+      const { fixture, page, card, store, release } = await withCard();
+      plusTwice(page, card);
+      release();
+      await turns();
+      expect(hostOf(fixture).asked()).not.toBeNull();
+
+      // What the page's outlet calls as a sheet's route activates.
+      fixture.componentInstance.onSheetOpened();
+      await turns();
+
+      expect(hostOf(fixture).asked()).toBeNull();
+      expect(store.countExtra).not.toHaveBeenCalled();
+    });
+
+    it('reports nothing for a rising run the teardown flushes', async () => {
+      const { fixture, page, card, setDemand } = await withCard();
+      const [holding] = page.holdingsOf()(MILK_CARD);
+      jest.useFakeTimers();
+      try {
+        page.changeHolding({
+          holding: holding as SuggestionHolding,
+          from: 3,
+          to: 4,
+          repeat: false,
+          cardKey: card.dataset['card'] as string,
+        });
+        fixture.destroy();
+      } finally {
+        jest.useRealTimers();
+      }
+
+      expect(setDemand).toHaveBeenCalledTimes(1);
+      expect(setDemand).toHaveBeenCalledWith({
+        lineId: 'zl-1',
+        quantity: 4,
+        from: 0,
+      });
+    });
+
+    it('asks nothing when the page went before the answer, and never throws', async () => {
+      const { fixture, page, release } = await withCard();
+      const ask = jest.spyOn(hostOf(fixture), 'ask');
+      const [holding] = page.holdingsOf()(MILK_CARD);
+      // The write itself, awaited: a question on a page that went would reject it.
+      const sending = (
+        fixture.componentInstance as unknown as {
+          _sendHolding: (
+            holding: SuggestionHolding,
+            run: { from: number; to: number },
+            card: string
+          ) => Promise<void>;
+        }
+      )._sendHolding(holding as SuggestionHolding, { from: 3, to: 5 }, 'card');
+
+      fixture.destroy();
+      release();
+
+      await expect(sending).resolves.toBeUndefined();
+      expect(ask).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('an add of "Add or find" that raised a line (0208 spec 18)', () => {
+    const options = () => [
+      ...document.querySelectorAll<HTMLButtonElement>('.pop .option'),
+    ];
+    const plus = (fixture: ComponentFixture<BasketPage>) =>
+      query(fixture, 'lib-line-composer .send') as HTMLButtonElement;
+
+    async function added(
+      extra: AbsorbedExtra | null,
+      newLine = false,
+      /** Words typed into the field the add left focused, before its answer. */
+      next?: string
+    ) {
+      const rendered = await render({
+        // A line at 0 this basket did not draw is new to the client: only the read
+        // the add asks for names its row.
+        lines: newLine ? [] : [milkRow({ left: 0, bought: 5, asked: 5 })],
+        served: SERVED,
+      });
+      const { fixture, store } = rendered;
+      const handoff = fixture.debugElement.injector.get(ExtraAskHandoff);
+      const raised = milkRow({ left: 2, bought: 5, asked: 7 });
+      store.refresh.mockImplementation(async () => {
+        store.rows.set([raised]);
+      });
+      store.addLine.mockImplementationOnce(async () => {
+        if (!newLine) {
+          store.rows.set([raised]);
+        }
+        return {
+          ...rowResult(raised),
+          addOutcome: 'raised',
+          ...(extra === null ? {} : { extra }),
+        };
+      });
+      let held: unknown = 'not navigated';
+      store.navigate.mockImplementation(
+        async (commands: readonly unknown[]) => {
+          if (commands.length > 0) {
+            held = handoff.take('row-milk');
+          }
+          return true;
+        }
+      );
+      typeInto(fixture, 'Leche');
+      plus(fixture).click();
+      fixture.detectChanges();
+      options()[0]?.click();
+      if (next !== undefined) {
+        typeInto(fixture, next);
+      }
+      await fixture.whenStable();
+      await turns();
+      fixture.detectChanges();
+      return { ...rendered, handoff, held: () => held };
+    }
+
+    it('records its own depth for a change of product from the sheet it opens, and keeps it past its destroy', async () => {
+      const { fixture } = await added(OWN);
+      const landings = TestBed.inject(ChangeLandingStore);
+      const basket = { basketId: 'basket-saturday' };
+      const asking = milkRow({ left: 2, bought: 5, asked: 7 });
+
+      // Unwatched, `AppHistory` stands on -1: the sheet pushed over it is 0.
+      expect(landings.pageBelow(basket, asking, 0)).toBe(-1);
+      // Not for another basket at the same depths.
+      expect(landings.pageBelow({ basketId: 'b-other' }, asking, 0)).toBeNull();
+
+      // The catalog that chooses destroys the page; the page drawn again under
+      // the sheet, back from it, still stands on -1.
+      fixture.destroy();
+      expect(landings.pageBelow(basket, asking, 0)).toBe(-1);
+    });
+
+    it('opens nothing while the person types the next item, and the ask set stands', async () => {
+      const { store, handoff } = await added(OWN, false, 'Pan');
+
+      expect(store.navigate).not.toHaveBeenCalledWith(
+        sheetSegments('rows', 'row-milk', 'lists'),
+        expect.anything()
+      );
+      expect(handoff.take('row-milk')).toBeNull();
+      expect(store.countExtra).not.toHaveBeenCalled();
+    });
+
+    it('sends the flag, hands the question over and opens the row\'s "Lists and amounts"', async () => {
+      const { store, held, handoff } = await added(OWN);
+
+      expect(store.addLine).toHaveBeenCalledWith(
+        expect.objectContaining({ reportExtra: true })
+      );
+      expect(store.navigate).toHaveBeenCalledWith(
+        sheetSegments('rows', 'row-milk', 'lists'),
+        expect.anything()
+      );
+      expect(held()).toEqual({
+        rowKey: 'row-milk',
+        lineId: 'zl-1',
+        extra: OWN,
+      });
+      // Nothing is left for a sheet opened later.
+      expect(handoff.take('row-milk')).toBeNull();
+    });
+
+    it('waits for the read that names a line new to this basket, then opens its view', async () => {
+      const { store, held } = await added(OWN, true);
+
+      expect(store.refresh).toHaveBeenCalled();
+      expect(held()).toEqual({
+        rowKey: 'row-milk',
+        lineId: 'zl-1',
+        extra: OWN,
+      });
+    });
+
+    it('opens nothing for a raise that offers nothing to count', async () => {
+      const { store } = await added({ above: 1, countable: 0, buyers: [] });
+
+      expect(store.navigate).not.toHaveBeenCalledWith(
+        sheetSegments('rows', 'row-milk', 'lists'),
+        expect.anything()
+      );
+    });
+
+    it('opens nothing for a raise with no report', async () => {
+      const { store } = await added(null);
+
+      expect(store.navigate).not.toHaveBeenCalledWith(
+        sheetSegments('rows', 'row-milk', 'lists'),
+        expect.anything()
+      );
+    });
   });
 });

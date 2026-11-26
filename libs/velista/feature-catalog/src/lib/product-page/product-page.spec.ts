@@ -20,24 +20,28 @@ import {
   fakeCategoryStore,
   GroupMembers,
   ItemNames,
+  ListRowsStore,
   MEMORY_CATEGORIES,
   provideFakeCategoryStore,
   toItemLists,
   type FakeCategoryStore,
 } from '@portfolio/velista/data-access';
 import {
+  QUANTITY_REEL_IDLE_MS,
+  QUANTITY_REEL_PX_PER_UNIT,
   QUANTITY_STEP_QUIET_MS,
   type CatalogItem,
   type CatalogPriceState,
   type CatalogScopeOffer,
   type ItemLists,
+  type ListRowLayout,
 } from '@portfolio/velista/models';
 import {
   PageNavigation,
   provideVelistaTesting,
   StorageKeys,
 } from '@portfolio/velista/platform';
-import { PriceHistory } from '@portfolio/velista/ui';
+import { ExtraAskHost, PriceHistory } from '@portfolio/velista/ui';
 import { BehaviorSubject } from 'rxjs';
 import {
   fakeAdds,
@@ -51,8 +55,12 @@ import { ProductPage } from './product-page';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** Every raise from the page asks for the report of the extra (velista `0208`). */
+const REPORTS = expect.objectContaining({ reportExtra: true });
+
 const OIL: CatalogItem = {
   id: 'item-oil',
+  pieceCount: null,
   quantityStep: null,
   name: { es: 'Aceite de oliva virgen extra', en: 'Extra virgin olive oil' },
   brand: 'Hacendado',
@@ -136,6 +144,8 @@ const FRYING_LINE: FakeLine = {
 };
 
 interface Options extends FakeAddsOptions {
+  /** How the device draws the rows of a zone list (velista `0202`). */
+  readonly layout?: ListRowLayout;
   readonly state?: CatalogPriceState;
   /** Replaces the double's source rows. */
   readonly rows?: readonly CatalogScopeOffer[] | null;
@@ -163,6 +173,8 @@ interface Harness {
   readonly params: BehaviorSubject<ParamMap>;
   /** The line service double the store reads and writes through. */
   readonly lines: FakeAdds['lines'];
+  /** Every double of the store, to stage a report of the extra (velista `0208`). */
+  readonly adds: FakeAdds;
   /** The read of the price history, on the double that answers it. */
   readonly history: jest.SpyInstance;
   readonly store: CatalogAddStore;
@@ -236,6 +248,10 @@ async function render(options: Options = {}): Promise<Harness> {
       },
       { provide: PageNavigation, useValue: pages },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
+      {
+        provide: ListRowsStore,
+        useValue: { layout: signal(options.layout ?? 'default') },
+      },
     ],
   }).compileComponents();
 
@@ -251,6 +267,7 @@ async function render(options: Options = {}): Promise<Harness> {
     itemsByIds,
     params,
     lines: adds.lines,
+    adds,
     history,
     store: TestBed.inject(CatalogAddStore),
   };
@@ -1008,6 +1025,57 @@ describe('ProductPage', () => {
       expect(otherLine(fixture, 'line-oil').row).toBeNull();
     });
 
+    it('adds the amount a reel closed on, in the compact view (velista 0203)', async () => {
+      const { fixture, lines, store } = await render({
+        lists: [WEEKLY, PARTY],
+        layout: 'compact',
+      });
+      const add = jest.spyOn(store, 'add');
+      const reel = listRow(fixture, 'list-party').row?.querySelector(
+        'lib-quantity-reel'
+      ) as HTMLElement;
+      expect(
+        host(fixture).querySelectorAll('lib-lists-table lib-quantity-stepper')
+      ).toHaveLength(0);
+
+      const pointer = (type: string, clientX: number) => {
+        const event = new MouseEvent(type, { bubbles: true, clientX });
+        Object.defineProperty(event, 'pointerId', { value: 1 });
+        Object.defineProperty(event, 'isPrimary', { value: true });
+        // The button is down from the press until the lift, as on a real pointer.
+        Object.defineProperty(event, 'buttons', {
+          value: type === 'pointerup' || type === 'pointercancel' ? 0 : 1,
+        });
+        return event;
+      };
+      reel.dispatchEvent(pointer('pointerdown', 0));
+      reel.dispatchEvent(
+        pointer('pointermove', -3 * QUANTITY_REEL_PX_PER_UNIT)
+      );
+      reel.dispatchEvent(pointer('pointerup', -3 * QUANTITY_REEL_PX_PER_UNIT));
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      await settle(fixture);
+
+      expect(add).toHaveBeenCalledTimes(1);
+      expect(add).toHaveBeenCalledWith(
+        expect.objectContaining({ itemId: 'item-oil', quantity: 3 }),
+        'list-party',
+        REPORTS
+      );
+      expect(lines.addLineResult).toHaveBeenCalledWith(
+        'list-party',
+        'Extra virgin olive oil',
+        3,
+        ['item-oil'],
+        false,
+        { reportExtra: true },
+        'UNIT'
+      );
+      expect(store.visit()).toMatchObject([
+        { listId: 'list-party', quantity: 3, created: true },
+      ]);
+    });
+
     it('adds one to the list whose plus was pressed, and that joins the record of the visit', async () => {
       const { fixture, lines, store } = await render({
         lists: [WEEKLY, PARTY],
@@ -1027,7 +1095,8 @@ describe('ProductPage', () => {
           unit: 'UNIT',
           step: null,
         },
-        'list-party'
+        'list-party',
+        REPORTS
       );
       // To that list, not to the one the plus of the catalog adds to.
       expect(lines.addLineResult).toHaveBeenCalledTimes(1);
@@ -1037,7 +1106,7 @@ describe('ProductPage', () => {
         1,
         ['item-oil'],
         false,
-        undefined,
+        { reportExtra: true },
         'UNIT'
       );
       expect(listRow(fixture, 'list-party').main?.quantity).toBe('1');
@@ -1071,7 +1140,8 @@ describe('ProductPage', () => {
       expect(step).toHaveBeenCalledWith(
         expect.objectContaining({ listId: 'list-weekly', itemId: 'item-oil' }),
         'line-oil',
-        { from: 2, to: 3, repeat: false }
+        { from: 2, to: 3, repeat: false },
+        REPORTS
       );
       expect(lines.addLineResult).not.toHaveBeenCalled();
       // One write, once the presses stop.
@@ -1097,7 +1167,8 @@ describe('ProductPage', () => {
       expect(step).toHaveBeenCalledWith(
         expect.objectContaining({ listId: 'list-party', itemId: 'item-oil' }),
         'line-list-party-item-oil',
-        { from: 1, to: 0, repeat: false }
+        { from: 1, to: 0, repeat: false },
+        REPORTS
       );
       expect(lines.deleteLine).toHaveBeenCalledWith('line-list-party-item-oil');
       expect(lines.addQuantity).not.toHaveBeenCalled();
@@ -1121,7 +1192,7 @@ describe('ProductPage', () => {
         25,
         ['item-oil'],
         false,
-        undefined,
+        { reportExtra: true },
         'MILLILITER'
       );
       const made = listRow(fixture, 'list-party').main;
@@ -1154,7 +1225,7 @@ describe('ProductPage', () => {
         250,
         ['item-oil'],
         false,
-        undefined,
+        { reportExtra: true },
         'MILLILITER'
       );
       expect(listRow(fixture, 'list-party').main?.quantity).toBe('250');
@@ -1288,7 +1359,8 @@ describe('ProductPage', () => {
           imageUrl: null,
         },
         'line-frying',
-        { from: 1, to: 2, repeat: false }
+        { from: 1, to: 2, repeat: false },
+        REPORTS
       );
       expect(lines.addQuantity).toHaveBeenCalledTimes(1);
       expect(lines.addQuantity).toHaveBeenCalledWith('line-frying', 1, 'UNIT');
@@ -1424,6 +1496,8 @@ describe('ProductPage', () => {
           itemId: 'item-oil-other',
           name: 'Carbonell olive oil',
         }),
+        undefined,
+        REPORTS,
       ]);
       expect(lines.addLineResult).toHaveBeenCalledWith(
         'list-weekly',
@@ -1431,7 +1505,7 @@ describe('ProductPage', () => {
         1,
         ['item-oil-other'],
         false,
-        undefined,
+        { reportExtra: true },
         'UNIT'
       );
       // What this page adds joins the record of the visit.
@@ -1479,7 +1553,8 @@ describe('ProductPage', () => {
           itemId: 'item-oil-other',
         }),
         'line-carbonell',
-        { from: 2, to: 3, repeat: false }
+        { from: 2, to: 3, repeat: false },
+        REPORTS
       );
       expect(lines.addQuantity).toHaveBeenCalledWith(
         'line-carbonell',
@@ -1624,5 +1699,74 @@ describe('ProductPage', () => {
     expect(itemsByIds).toHaveBeenCalledTimes(1);
     expect(history).toHaveBeenCalledTimes(1);
     expect(lines.linesHoldingItem).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ProductPage: a row of the table that raises a line asks about the extra already bought (velista 0208, target state 14)', () => {
+  const EXTRA = { above: 1, countable: 1, buyers: [{ userId: null }] };
+
+  const extraHost = (fixture: ComponentFixture<ProductPage>) =>
+    fixture.debugElement.injector.get(ExtraAskHost);
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it("reports the raise of a list's stepper and asks on it, above the row", async () => {
+    const { fixture, lines, adds } = await render({ lines: [OIL_LINE] });
+    adds.reportNext(EXTRA);
+
+    listRow(fixture, 'list-weekly').main?.plus?.click();
+    await quiet(fixture);
+    await settle(fixture);
+
+    expect(lines.raiseReportingExtra).toHaveBeenCalledWith(
+      'line-oil',
+      1,
+      'UNIT'
+    );
+    const asked = extraHost(fixture).asked();
+    expect(asked?.shown).toBe(true);
+    expect(asked?.quantity).toBe(3);
+    expect(asked?.side).toBe('above');
+    const row = listRow(fixture, 'list-weekly').row;
+    expect(asked?.anchor).toBe(
+      row?.querySelector(':scope > .row > lib-quantity-stepper')
+    );
+    expect(asked?.keepInSight).toBe(row?.querySelector(':scope > .row'));
+
+    extraHost(fixture).answerCount();
+    await settle(fixture);
+    expect(lines.countExtra.mock.calls[0].slice(0, 3)).toEqual([
+      'line-oil',
+      1,
+      3,
+    ]);
+    expect(listRow(fixture, 'list-weekly').main?.quantity).toBe('2');
+  });
+
+  it('asks nothing for a raise whose report offers nothing to count', async () => {
+    const { fixture, adds } = await render({ lines: [OIL_LINE] });
+    adds.reportNext({ above: 2, countable: 0, buyers: [] });
+
+    listRow(fixture, 'list-weekly').main?.plus?.click();
+    await quiet(fixture);
+    await settle(fixture);
+
+    expect(extraHost(fixture).asked()).toBeNull();
+  });
+
+  it('a lowering from the table never reports', async () => {
+    const { fixture, lines } = await render({ lines: [OIL_LINE] });
+
+    listRow(fixture, 'list-weekly').main?.minus?.click();
+    await quiet(fixture);
+
+    expect(lines.raiseReportingExtra).not.toHaveBeenCalled();
+    expect(lines.addQuantity).toHaveBeenCalledWith('line-oil', -1, 'UNIT');
   });
 });

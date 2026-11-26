@@ -1,0 +1,101 @@
+{
+  "title": "Velista: a size names its units and its pieces",
+  "lede": "Plan <code>0209</code>, stage 1, with backend <code>0278</code> behind it. A pack now prints the weight of one unit beside its total, \"360 g (4 × 90 g)\", and a product of many pieces prints how many, \"70 g (2 × 35 g), 100 piezas\". The size text is one function, so every place that names a product changes at once: the product card, the zone list rows, the shopping list row, the line page and the line sheet. The first five boards draw the recommended options (O1 A, O2 A, O3 A and the sign ×), Day in Spanish and Night in English, at 390 px. The other four put each open decision side by side, lettered, with the recommended one marked. No new element, no new colour: the counts are words in the line that already holds the size. Products and prices are sample data. Photos are the Open Food Facts copies from <code>../typeahead/photos</code>, CC BY-SA 3.0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. Waiting for the owner's answer before any code.",
+  "artboards": [
+    {
+      "file": "Card.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 862,
+      "h": 1089,
+      "title": "The product card: seven products, recommended options"
+    },
+    {
+      "file": "ListRows.dc.html",
+      "x": 922,
+      "y": 0,
+      "w": 862,
+      "h": 1161,
+      "title": "The zone list: the default view and the compact view"
+    },
+    {
+      "file": "Basket.dc.html",
+      "x": 0,
+      "y": 1271,
+      "w": 862,
+      "h": 747,
+      "title": "The shopping list rows"
+    },
+    {
+      "file": "LinePage.dc.html",
+      "x": 922,
+      "y": 1271,
+      "w": 862,
+      "h": 1151,
+      "title": "The line page: the rail of products and the cost of the line"
+    },
+    {
+      "file": "LineSheet.dc.html",
+      "x": 0,
+      "y": 2532,
+      "w": 862,
+      "h": 1030,
+      "title": "The line sheet: which one did you get"
+    },
+    {
+      "file": "Sign.dc.html",
+      "x": 922,
+      "y": 2532,
+      "w": 862,
+      "h": 1315,
+      "title": "Sign A or B: the multiplication sign or the letter x"
+    },
+    {
+      "file": "O1.dc.html",
+      "x": 0,
+      "y": 3957,
+      "w": 1284,
+      "h": 1220,
+      "title": "O1 A, B or C: one unit that is not a whole number"
+    },
+    {
+      "file": "O2.dc.html",
+      "x": 0,
+      "y": 5287,
+      "w": 1284,
+      "h": 865,
+      "title": "O2 A, B or C: the word that counts the pieces"
+    },
+    {
+      "file": "O3.dc.html",
+      "x": 0,
+      "y": 6262,
+      "w": 1284,
+      "h": 1878,
+      "title": "O3 A, B or C: where the long form prints"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "rules",
+      "x": 0,
+      "y": -420,
+      "w": 420,
+      "text": "THE RULES (plan 0209, section 2).\nA weight still answers first: \"~1,56 kg\", no counts.\nNo size: the pack as today, \"Pack de 4\".\nThe total first, as the server holds it: \"360 g\".\nThen the units of the pack, when there is a pack: \"(4 × 90 g)\". One unit is the total divided by the pack, in the same unit word, never stored.\nThen the pieces, when there are pieces: \", 100 piezas\".\nA product sold by the kilo prints nothing, as today."
+    },
+    {
+      "id": "ask",
+      "x": 460,
+      "y": -420,
+      "w": 420,
+      "text": "WHAT THE OWNER CHOOSES.\nO1: \"185 g (7 × ~26 g)\" (A), \"185 g (7 × 26,4 g)\" (B) or \"185 g, pack de 7\" (C).\nO2: \"piezas / pieces\" (A), \"uds / units\" (B) or \"pzs / pcs\" (C).\nO3: long everywhere but the default view's first fact and the cost caption (A), long everywhere (B), or long on the card and the product page only (C).\nSign: \"×\" as the cost caption uses today (A), or \"x\" as decision 153a wrote (B).\nThe plan recommends A for each."
+    },
+    {
+      "id": "seen",
+      "x": 920,
+      "y": -420,
+      "w": 420,
+      "text": "WHAT DRAWING IT SHOWED.\nEnglish groups thousands: the milk prints \"6,000 ml (6 × 1,000 ml)\", not the \"6000 ml\" of the plan's table. Spanish prints \"6000 ml\".\nThe shopping list row is one line cut at its end, and at 390 px the cut falls inside the name or the brand, so the counts are seen on almost no row there.\nThe \"compact row\" of the plan is the row of 0191, which plan 0202 made the default view. Its first fact is about 105 px wide.\nBuilder choice: no break spaces inside the bracket, so a line wraps before \"(\" or after the comma, never inside \"4 × 90 g\"."
+    }
+  ]
+}

@@ -2,17 +2,23 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
+  DOCUMENT,
+  ElementRef,
   inject,
   input,
   output,
   signal,
+  viewChildren,
 } from '@angular/core';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
+import { ListRowsStore } from '@portfolio/velista/data-access';
 import {
+  QUANTITY_SNAP_POINTS,
   type BasketListRef,
   type BasketProductList,
   type BasketRow,
@@ -23,8 +29,8 @@ import { exactAmount } from '@portfolio/velista/platform';
 import {
   AmountFigure,
   ChevronDownIcon,
+  QuantityReel,
   QuantityStepper,
-  SwapIcon,
 } from '@portfolio/velista/ui';
 
 /** One list that asks for the row, as it is drawn. */
@@ -33,28 +39,37 @@ interface DrawnEntry {
   /** The list, or "Another list" for a list the reader was not served. */
   readonly list: string;
   /**
+   * What the list asks for after its name, " · 3" or " · 1,5 kg" (velista
+   * `0201`, target state 5): the exact form with its unit, never cut.
+   */
+  readonly ask: string;
+  /**
    * "zone · line name", or null for a list the reader was not served. An entry
    * somebody bought outside this shopping list starts with "Already bought".
    */
   readonly where: string | null;
-  /** What the list asks for, which is the entry's `left`. */
-  readonly asks: number;
-  /** {@link asks} in words with its unit, for a number with no control. */
-  readonly asksSpoken: string;
-  /** What the stepper draws: the sheet's open run on this line, else {@link asks}. */
+  /** What the list asks for, the entry's `asked`, which the stepper measures against. */
+  readonly asked: number;
+  /** What this basket bought for the line in this trip, the entry's `bought`. */
+  readonly bought: number;
+  /** {@link bought} in words with its unit, for a number with no control. */
+  readonly boughtSpoken: string;
+  /** What the stepper draws: the sheet's open run on this line, else {@link bought}. */
   readonly shown: number;
-  /** Whether the quantity is a control, by the server's `demandEditable`. */
-  readonly editable: boolean;
+  /** Whether the stepper is drawn: the sheet can still settle (target state 4). */
+  readonly steppable: boolean;
   /** The step its stepper presses by: its line's, or null for the unit's default. */
   readonly step: number | null;
-  /** The field's accessible name as given: "Compra semanal, pide" (velista `0190`). */
+  /** The points a press lands on: 1000 and the list's ask (target state 2). */
+  readonly snaps: readonly number[];
+  /** The field's accessible name as given: "Compra semanal, bought". */
   readonly label: string;
   /** What the buttons and the settled amount name: the list, "Compra semanal". */
   readonly name: string;
-  /** Change is drawn on this entry (velista `0140`, section 1). */
+  /** The sheet may change this entry's product (velista `0140`, section 1). */
   readonly changeable: boolean;
-  /** Change's accessible name, which names the list. */
-  readonly changeLabel: string;
+  /** The server allows this list's ask to change, in the detailed view. */
+  readonly askEditable: boolean;
 }
 
 /** One list that does not ask yet, as it is drawn under the disclosure. */
@@ -62,11 +77,11 @@ interface DrawnOther {
   readonly list: BasketProductList;
   /** "zone · line name" for a list that holds the product at zero, else the zone. */
   readonly where: string;
-  /** The field's accessible name as given: "Compra semanal, pide" (velista `0190`). */
+  /** The field's accessible name as given: "Compra semanal, bought". */
   readonly label: string;
   /** What the buttons and the settled amount name: the list. */
   readonly name: string;
-  /** What the stepper draws: the sheet's open run on this list, else what it holds. */
+  /** What the stepper draws: the sheet's open run on this list, else 0. */
   readonly shown: number;
 }
 
@@ -80,48 +95,66 @@ export type OtherListsState =
   | { readonly state: 'ready'; readonly lists: readonly BasketProductList[] };
 
 /**
- * The lists that ask for a row, and the lists that could (velista `0139`,
- * section 3; artboards `RowSheet` and `RowLists`).
+ * What this basket bought for each list of a row, and for the lists that did not
+ * ask (velista `0201`; artboards `RowSheet`, `OtherList`, `LongName`, `Guest`).
  *
- * ## Lists lead
+ * ## Lists lead, and each name carries its ask
  *
- * An entry is the name of its list, then "zone · line" under it, which is the
- * owner's choice: a row is one product, and the question on this sheet is which
- * households asked for it and how many. A list this reader was not served reads
- * "Another list", with its quantity and no control.
+ * An entry is the name of its list and what it asks for, "Compra semanal · 3",
+ * then "zone · line" under it. The name gives way first and the ask is never cut.
+ * A list this reader was not served reads "Another list".
  *
- * ## The amount is the typed stepper of velista `0188`
+ * ## The stepper records buys
  *
- * One per list that holds the row, at `sheet-narrow` (velista `0190`). It is
- * drawn only where the server's `demandEditable` allows it, and for a list the
- * reader may not name only when it is the whole row (velista `0092`'s rule for a
- * guest). Elsewhere it is the number in the exact form. Every step is emitted;
- * the sheet gathers them and saves once the presses stop, and hands back what
- * each stepper draws while a run is open.
+ * One typed stepper per list (velista `0188`, `sheet-narrow`), which counts what
+ * this basket bought for that list's line in this trip, from 0 the first time. It
+ * never changes an ask: that is the detailed view's (velista `0200`). Its number is
+ * green at the list's ask and amber above it (colours A, the `target` input), and
+ * the ask is a snap point beside 1000, so a press lands on it even when the step
+ * would skip it. Every step is emitted; the sheet gathers them into one settle or
+ * one revert of that line once the presses stop. On a finished trip the number is
+ * drawn without a control; a row with nothing left keeps its steppers.
  *
- * ## Change
+ * ## In the compact view it is the reel (velista `0204`)
  *
- * Before the amount, on each entry the sheet names as changeable (velista
- * `0140`, section 1): the swap icon, with no word, named after the list. "Change
- * for all lists" closes the heading's row once two entries or more have it. Both
- * only say so: the sheet opens the change.
+ * The view comes from `ListRowsStore`. In the compact view each buy control, here
+ * and in "Bought for another list", is the reel of velista `0203` with the same
+ * value, unit, step and snap points, and no typing. With the list's ask as its
+ * target it colours every number by where it stands, on the pill and on the tape.
+ * A reel reports once, when it closes, and that step is marked `closed` so the
+ * sheet writes it at once rather than after the quiet beat.
  *
- * ## Add it to another list
+ * **A press outside an open reel closes it first**, in the capture phase on the
+ * document, as the due row and the zone list row do on their own rows. The reel
+ * sends its amount only when it closes, and a touch drag never focuses it, so
+ * without this a press on "Got the other N" right after a drag would settle on the
+ * amount from before it, and a press on another list's reel or on the scrim would
+ * leave the step to the idle timer or to the teardown. Closed here, the step is in
+ * the sheet's run and sent before the press does anything else.
+ *
+ * ## Lists and amounts
+ *
+ * At the right of the heading, opening the detailed view of the row's lists. It
+ * is drawn when one entry or more is changeable or has an ask the reader may
+ * change, so a guest who can change nothing does not see it.
+ *
+ * ## Bought for another list
  *
  * Last, closed, and drawn only when the sheet hands it a read: never for a guest,
  * never for a row with no product, and not once the read answered no list. Open,
  * it draws the read's loading row, its failed row with a retry, or one row per
- * list at a quantity of 0, each with the same stepper (decision H). Stepping one
- * above zero is the sheet's to send.
+ * list at 0, each with a stepper that has no ask and no snap point but the default
+ * one. Stepping one above zero is a buy the sheet sends; after its answer the list
+ * is one of the row's lists, at an ask of 0.
  */
 @Component({
   selector: 'lib-row-entries',
   imports: [
     AmountFigure,
     ChevronDownIcon,
+    QuantityReel,
     QuantityStepper,
     RokuTranslatorPipe,
-    SwapIcon,
   ],
   templateUrl: './row-entries.html',
   styleUrl: './row-entries.scss',
@@ -130,6 +163,10 @@ export type OtherListsState =
 export class RowEntries {
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
+  private readonly _layout = inject(ListRowsStore).layout;
+
+  /** Whether the buy controls are reels: the compact view (velista `0202`, `0204`). */
+  protected readonly compact = computed(() => this._layout() === 'compact');
 
   readonly row = input.required<BasketRow>();
 
@@ -137,9 +174,9 @@ export class RowEntries {
   protected readonly unit = computed(() => this.row().unit);
 
   /**
-   * The step of each list's line, by line id (velista `0186`, decision A, which
-   * the owner ruled on 2026-11-12 wins over decision C), so a line steps here as
-   * it steps on its list. A line not in here presses by the unit's default.
+   * The step of each list's line, by line id (velista `0186`, decision A), so a
+   * line steps here as it steps on its list. A line not in here presses by the
+   * unit's default.
    */
   readonly steps = input<ReadonlyMap<string, number | null>>(new Map());
 
@@ -151,19 +188,25 @@ export class RowEntries {
   readonly step = input<number | null>(null);
 
   /**
-   * The amount of each line with an open run in the sheet, by line id, so a
-   * stepper draws where the presses got to before the save (velista `0190`).
+   * What each line's stepper draws while a run is open in the sheet, by line id:
+   * the bought amount the presses got to before the write.
    */
   readonly pending = input<ReadonlyMap<string, number>>(new Map());
 
   /** The same for the lists that do not ask yet, by list id. */
-  readonly pendingRaises = input<ReadonlyMap<string, number>>(new Map());
+  readonly pendingOthers = input<ReadonlyMap<string, number>>(new Map());
 
   /** The covered lists this reader was served, by id, for the names. */
   readonly lists = input<ReadonlyMap<string, BasketListRef>>(new Map());
 
   /** The whole trip is over, which takes every control away (velista `0057`). */
   readonly finished = input(false);
+
+  /**
+   * The sheet can still record buys (velista `0201`, target state 4): the trip is
+   * open, whatever the row has left. Without it each list draws its number only.
+   */
+  readonly buying = input(true);
 
   /** A settle or a rename from the sheet is out. The steppers are off meanwhile. */
   readonly busy = input(false);
@@ -175,33 +218,37 @@ export class RowEntries {
   readonly others = input<OtherListsState | null>(null);
 
   /**
-   * The lines whose product the reader may change from here (velista `0140`,
-   * section 1). The sheet decides, because it knows the reader and the row.
+   * The lines whose product the reader may change (velista `0140`, section 1),
+   * in the detailed view. Here it only decides whether "Lists and amounts" is
+   * drawn.
    */
   readonly changeable = input<ReadonlySet<string>>(new Set());
 
-  /** Change on one entry, by its line. */
-  readonly changed = output<string>();
+  /** "Lists and amounts" (velista `0200`). */
+  readonly listsOpened = output<void>();
 
-  /** "Change for all lists". */
-  readonly changedAll = output<void>();
-
-  /** One step of one list's ask, on every press, key and typed commit. */
-  readonly demanded = output<{
+  /**
+   * One step of what was bought for one list's line, on every press, key and typed
+   * commit. `closed` marks the one step of a reel that closed (velista `0204`),
+   * which the sheet sends at once, as it sends a typed amount.
+   */
+  readonly bought = output<{
     readonly lineId: string;
     readonly step: QuantityStep;
+    readonly closed?: true;
   }>();
 
-  /** One step of a list that does not ask yet, on every press, key and typed commit. */
-  readonly raised = output<{
+  /** One step of a buy for a list that does not ask yet, marked as {@link bought} is. */
+  readonly boughtOther = output<{
     readonly list: BasketProductList;
     readonly step: QuantityStep;
+    readonly closed?: true;
   }>();
 
   /** The read failed and the reader asked again. */
   readonly retry = output<void>();
 
-  /** Whether "Add it to another list" is open. Closed on every sheet. */
+  /** Whether "Bought for another list" is open. Closed on every sheet. */
   protected readonly open = signal(false);
 
   protected readonly entries = computed<readonly DrawnEntry[]>(() =>
@@ -209,21 +256,11 @@ export class RowEntries {
   );
 
   /**
-   * "Asked for on 3 lists": the heading, counted over the entries, which are the
-   * lines that ask. Two lines of one list are two entries, and the heading counts
-   * what it draws.
+   * "Lists and amounts" is drawn when one entry or more is changeable or has an
+   * ask the reader may change (velista `0200`, target state 2).
    */
-  protected readonly heading = computed(() =>
-    this._translator.t('basket.sheet.askedOn', undefined, this._locale(), {
-      count: this.row().entries.length,
-    })
-  );
-
-  /** "Change for all lists" is drawn when Change is drawn on two entries or more. */
-  protected readonly changesAll = computed(
-    () =>
-      this.row().entries.filter((entry) => this.changeable().has(entry.lineId))
-        .length >= 2
+  protected readonly opensLists = computed(() =>
+    this.entries().some((entry) => entry.askEditable || entry.changeable)
   );
 
   /** Whether the disclosure is drawn: there is a read, and it did not answer none. */
@@ -242,17 +279,23 @@ export class RowEntries {
       return [];
     }
     const locale = this._locale();
-    const pending = this.pendingRaises();
+    const pending = this.pendingOthers();
     return others.lists.map((list) => ({
       list,
-      shown: pending.get(list.listId) ?? list.quantity ?? 0,
+      // From 0: the list asks nothing yet, and nothing was bought for it here.
+      shown: pending.get(list.listId) ?? 0,
       where:
         list.lineId === null || list.lineName === null || list.lineName === ''
           ? list.zoneName
           : `${list.zoneName} · ${list.lineName}`,
-      label: this._translator.t('basket.demand.askLabel', undefined, locale, {
-        name: list.listName,
-      }),
+      label: this._translator.t(
+        'basket.entries.boughtLabel',
+        undefined,
+        locale,
+        {
+          name: list.listName,
+        }
+      ),
       name: list.listName,
     }));
   });
@@ -265,17 +308,56 @@ export class RowEntries {
     this.open.update((open) => !open);
   }
 
-  protected onAsked(lineId: string, step: QuantityStep): void {
-    this.demanded.emit({ lineId, step });
+  protected onBought(lineId: string, step: QuantityStep): void {
+    this.bought.emit({ lineId, step });
   }
 
-  protected onRaised(list: BasketProductList, step: QuantityStep): void {
-    this.raised.emit({ list, step });
+  protected onBoughtOther(list: BasketProductList, step: QuantityStep): void {
+    this.boughtOther.emit({ list, step });
   }
 
+  /** The one step of a reel that closed, which the sheet writes at once. */
+  protected onReeled(lineId: string, step: QuantityStep): void {
+    this.bought.emit({ lineId, step, closed: true });
+  }
+
+  protected onReeledOther(list: BasketProductList, step: QuantityStep): void {
+    this.boughtOther.emit({ list, step, closed: true });
+  }
+
+  private readonly _reels = viewChildren(QuantityReel);
+  private readonly _reelEls = viewChildren(QuantityReel, { read: ElementRef });
+
+  constructor() {
+    // A press anywhere outside an open reel closes it first: see the class's
+    // compact view section. On the document, because the settle actions, the scrim
+    // and the other lists' reels are all outside the reel that is open, and in the
+    // capture phase, so the step is in the sheet's run before the press reaches what
+    // it landed on.
+    const doc = inject(DOCUMENT);
+    const onPress = (event: Event) => this._closeReelsOnPress(event);
+    doc.addEventListener('pointerdown', onPress, true);
+    inject(DestroyRef).onDestroy(() =>
+      doc.removeEventListener('pointerdown', onPress, true)
+    );
+  }
+
+  private _closeReelsOnPress(event: Event): void {
+    const elements = this._reelEls();
+    this._reels().forEach((reel, index) => {
+      if (!reel.open()) {
+        return;
+      }
+      const element = elements[index]?.nativeElement as HTMLElement | undefined;
+      if (element !== undefined && element.contains(event.target as Node)) {
+        return;
+      }
+      reel.close();
+    });
+  }
+
+  /** The server's `demandEditable`, as the detailed view reads it (velista `0200`). */
   private _mayDemand(entry: BasketRowEntry): boolean {
-    // A row bought outside this shopping list keeps it (velista `0142`): asking
-    // the list for the product again is the one thing left to do there.
     return (
       !this.finished() &&
       entry.demandEditable &&
@@ -285,6 +367,7 @@ export class RowEntries {
 
   private _draw(entry: BasketRowEntry): DrawnEntry {
     const locale = this._locale();
+    const unit = this.unit();
     const ref =
       entry.listId === null ? undefined : this.lists().get(entry.listId);
     const list =
@@ -301,45 +384,47 @@ export class RowEntries {
     // Its quantity is 0, and the words say why (velista `0142`, section 1). The
     // entry carries no note, so it does not say where the buy was made. First,
     // because the line is cut at its end and a long line name must not take them.
-    const bought =
+    const elsewhere =
       entry.state === 'BOUGHT_ELSEWHERE'
         ? this._translator.t('basket.line.alreadyBought', undefined, locale)
         : null;
     const where =
       place === null
-        ? bought
-        : bought === null
+        ? elsewhere
+        : elsewhere === null
           ? place
-          : `${bought} · ${place}`;
+          : `${elsewhere} · ${place}`;
+    const ask = exactAmount(entry.asked, unit, locale);
 
     return {
       lineId: entry.lineId,
       list,
+      ask: ` · ${ask.symbol === '' ? ask.figure : `${ask.figure} ${ask.symbol}`}`,
       where,
-      asks: entry.left,
-      asksSpoken: exactAmount(entry.left, this.unit(), locale).spoken,
-      shown: this.pending().get(entry.lineId) ?? entry.left,
-      editable: this._mayDemand(entry),
+      asked: entry.asked,
+      bought: entry.bought,
+      boughtSpoken: exactAmount(entry.bought, unit, locale).spoken,
+      shown: this.pending().get(entry.lineId) ?? entry.bought,
+      steppable: this.buying() && !this.finished(),
       step: this.steps().get(entry.lineId) ?? null,
+      snaps: [...QUANTITY_SNAP_POINTS, entry.asked],
       // The list's own name, so two steppers on one sheet are told apart by somebody
       // who hears them. A single unserved entry takes the plain label: there is one
       // list in the row and nothing to tell apart.
       label:
         ref === undefined
-          ? this._translator.t('basket.demand.label', undefined, locale)
-          : this._translator.t('basket.demand.askLabel', undefined, locale, {
-              name: list,
-            }),
+          ? this._translator.t('basket.entries.boughtPlain', undefined, locale)
+          : this._translator.t(
+              'basket.entries.boughtLabel',
+              undefined,
+              locale,
+              {
+                name: list,
+              }
+            ),
       name: list,
       changeable: this.changeable().has(entry.lineId),
-      changeLabel: this._translator.t(
-        'basket.change.oneLabel',
-        undefined,
-        locale,
-        {
-          name: list,
-        }
-      ),
+      askEditable: this._mayDemand(entry),
     };
   }
 }

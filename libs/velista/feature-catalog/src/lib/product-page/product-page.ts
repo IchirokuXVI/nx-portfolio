@@ -3,10 +3,13 @@ import {
   Component,
   computed,
   DestroyRef,
+  DOCUMENT,
   effect,
+  ElementRef,
   inject,
   signal,
   untracked,
+  viewChild,
 } from '@angular/core';
 import {
   ActivatedRoute,
@@ -25,6 +28,7 @@ import {
   CatalogAddStore,
   CategoryStore,
   GroupMembers,
+  ListRowsStore,
   SessionStore,
   type CatalogBrowseServiceI,
   type CatalogServiceI,
@@ -62,6 +66,8 @@ import {
 import {
   AddingBar,
   ChevronRightIcon,
+  ExtraAskHost,
+  ExtraAskPopover,
   InfoIcon,
   ListsTable,
   PageHeader,
@@ -73,6 +79,7 @@ import {
   ProductRowSkeleton,
   productRowView,
   unitPriceWords,
+  type ListsTableAdd,
   type ListsTableStep,
   type PriceHistoryLine,
   type PriceTableRow,
@@ -81,6 +88,7 @@ import {
   type ProductRowView,
 } from '@portfolio/velista/ui';
 import { CatalogContext } from '../catalog-context';
+import { catalogExtraAsk } from '../catalog-extra-ask';
 import { CATEGORY_PARAM } from '../category-choice';
 import { addFailedCopy, rowAdds } from '../row-adds';
 
@@ -144,6 +152,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
   imports: [
     AddingBar,
     ChevronRightIcon,
+    ExtraAskPopover,
     InfoIcon,
     ListsTable,
     PageHeader,
@@ -156,7 +165,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
     RouterLink,
     RouterOutlet,
   ],
-  providers: [CatalogContext],
+  // The question about the extra already bought on the table and the similar
+  // cards (velista `0208`, target state 14), one for this page, gone with it.
+  providers: [CatalogContext, ExtraAskHost],
   templateUrl: './product-page.html',
   styleUrl: './product-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -170,6 +181,11 @@ export class ProductPage {
   private readonly _categories = inject(CategoryStore);
   private readonly _groupMembers = inject(GroupMembers);
   private readonly _adds = inject(CatalogAddStore);
+  /**
+   * How this device draws the rows of a zone list (velista `0202`): the table of
+   * lists draws reels in the compact view (velista `0203`).
+   */
+  protected readonly listRows = inject(ListRowsStore);
   private readonly _session = inject(SessionStore);
   private readonly _pages = inject(PageNavigation);
   private readonly _translator = inject(RokuTranslatorService);
@@ -178,6 +194,21 @@ export class ProductPage {
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _route = inject(ActivatedRoute);
   private readonly _router = inject(Router);
+  private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly _document = inject(DOCUMENT);
+  private readonly _table = viewChild(ListsTable);
+
+  /**
+   * The question a raise from the table or a similar card asks about the extra
+   * already bought (velista `0208`, target state 14), while no sheet or dialog is
+   * over the page.
+   */
+  private readonly _extra = catalogExtraAsk(
+    () =>
+      !this._route.firstChild &&
+      this._document.visibilityState !== 'hidden' &&
+      this._document.querySelector('dialog[open]') === null
+  );
 
   /**
    * The product on show. It follows the route, because a similar product opens
@@ -488,19 +519,67 @@ export class ProductPage {
       entry?.status === 'ready'
         ? (entry.members.find((member) => member.id === row.id) ?? null)
         : null;
-    void this._adds.add({
-      itemId: row.id,
-      name: row.name,
-      detail: row.summary,
-      imageUrl: row.imageUrl,
-      // A product sold by the kilo is asked for by weight (velista `0182`).
-      unit: row.lineUnit,
-      // At one step of its own (velista `0186`, ruling 43).
-      step: lineStepOf(
-        { unit: row.lineUnit ?? 'UNIT', itemIds: [row.id] },
-        () => record
-      ),
-    });
+    void this._adds.add(
+      {
+        itemId: row.id,
+        name: row.name,
+        detail: row.summary,
+        imageUrl: row.imageUrl,
+        // A product sold by the kilo is asked for by weight (velista `0182`).
+        unit: row.lineUnit,
+        // At one step of its own (velista `0186`, ruling 43).
+        step: lineStepOf(
+          { unit: row.lineUnit ?? 'UNIT', itemIds: [row.id] },
+          () => record
+        ),
+      },
+      undefined,
+      // An add that raised a line asks on the card's plus (velista `0208`).
+      this._extra.options(
+        { itemId: row.id, detail: row.summary, imageUrl: row.imageUrl },
+        {
+          origin: () =>
+            this._card(row.id)?.querySelector<HTMLElement>('.add.control') ??
+            null,
+          keepInSight: () => this._card(row.id),
+          side: 'below',
+        }
+      )
+    );
+  }
+
+  /** A similar product's card, while the page draws it. */
+  private _card(itemId: string): HTMLElement | null {
+    return (
+      Array.from(
+        this._host.nativeElement.querySelectorAll<HTMLElement>(
+          'li[data-product] > lib-product-row'
+        )
+      ).find((card) => card.parentElement?.dataset['product'] === itemId) ??
+      null
+    );
+  }
+
+  /** The table's control of one list's line, for its question (target state 14). */
+  private _tablePlace(listId: string, lineId: string | null) {
+    return {
+      origin: () => this._table()?.controlFor(listId, lineId)?.control ?? null,
+      keepInSight: () => this._table()?.controlFor(listId, lineId)?.row ?? null,
+      // Above the row: every list of the table stays in sight (the board's frame 4).
+      side: 'above' as const,
+    };
+  }
+
+  /** A sheet opened over the page: its question goes with no answer (target state 10). */
+  protected onSheetOpened(): void {
+    this._extra.host.drop();
+  }
+
+  /** A press on the control the question points at is no answer (target state 4). */
+  private _pressedOn(lineId: string): void {
+    if (this._extra.host.asked()?.lineId === lineId) {
+      this._extra.host.close('outside');
+    }
   }
 
   /** A press on the stepper of one line under a similar product. */
@@ -518,15 +597,35 @@ export class ProductPage {
         imageUrl: row.imageUrl,
       },
       step.lineId,
-      step.step
+      step.step,
+      // A raise asks on the card's stepper of that line (velista `0208`).
+      this._extra.options(
+        { itemId: row.id, detail: row.summary, imageUrl: row.imageUrl },
+        {
+          origin: () =>
+            Array.from(
+              this._card(row.id)?.querySelectorAll<HTMLElement>(
+                'li[data-line] > lib-quantity-stepper'
+              ) ?? []
+            ).find(
+              (stepper) =>
+                stepper.parentElement?.dataset['line'] === step.lineId
+            ) ?? null,
+          keepInSight: () => this._card(row.id),
+          side: 'below',
+        }
+      )
     );
+    this._pressedOn(step.lineId);
   }
 
   /**
    * The plus of a list in the table that holds no line of this product: one of
-   * it on that list. A list that holds it steps that line (velista `0187`).
+   * it on that list, or, from a reel of the compact view, the amount the reel
+   * closed on (velista `0203`). A list that holds it steps that line (velista
+   * `0187`).
    */
-  protected addToList(listId: string): void {
+  protected addToList({ listId, quantity }: ListsTableAdd): void {
     this.addFailed.set(false);
     void this._adds.add(
       {
@@ -538,8 +637,18 @@ export class ProductPage {
         unit: this.lineUnit(),
         // At one step of its own (velista `0186`, ruling 43).
         step: this.step(),
+        ...(quantity === null ? {} : { quantity }),
       },
-      listId
+      listId,
+      // An add that raised the list's line asks on that list's control (`0208`).
+      this._extra.options(
+        {
+          itemId: this.itemId(),
+          detail: this.detail(),
+          imageUrl: this.imageUrl(),
+        },
+        this._tablePlace(listId, null)
+      )
     );
   }
 
@@ -554,8 +663,18 @@ export class ProductPage {
         imageUrl: this.imageUrl(),
       },
       step.lineId,
-      step.step
+      step.step,
+      // A raise asks on that row's stepper or reel (velista `0208`).
+      this._extra.options(
+        {
+          itemId: this.itemId(),
+          detail: this.detail(),
+          imageUrl: this.imageUrl(),
+        },
+        this._tablePlace(step.listId, step.lineId)
+      )
     );
+    this._pressedOn(step.lineId);
   }
 
   protected chooseRange(range: PriceHistoryRange): void {

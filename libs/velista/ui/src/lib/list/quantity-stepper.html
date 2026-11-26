@@ -10,6 +10,7 @@
   </span>
 } @else {
   <span
+    [attr.aria-disabled]="!typed() && locked() ? 'true' : null"
     [attr.aria-label]="
       typed() ? null : ('amount.group' | rokuT: { name: name() })
     "
@@ -20,16 +21,18 @@
     <button
       (click)="press(-1, $event)"
       (contextmenu)="$event.preventDefault()"
-      (pointercancel)="endHold()"
+      (lostpointercapture)="endHold($event)"
+      (pointercancel)="endHold($event)"
       (pointerdown)="startHold(-1, $event)"
-      (pointerleave)="endHold()"
-      (pointerup)="endHold()"
-      [attr.aria-disabled]="disabled() || minusAtEnd() ? 'true' : null"
+      (pointerup)="endHold($event)"
+      [attr.aria-describedby]="locked() ? describedBy() : null"
+      [attr.aria-disabled]="blocked() || minusAtEnd() ? 'true' : null"
       [attr.aria-label]="
         'amount.less' | rokuT: { step: lessStep(), name: name() }
       "
       [class.at-end]="minusAtEnd()"
       [class.is-clear]="minusClears()"
+      #step
       class="step minus"
       type="button"
     >
@@ -45,10 +48,12 @@
         <span [attr.data-text]="fieldText()" class="field">
           <input
             (blur)="onFieldBlur($event)"
+            (click)="onFieldClick()"
             (focus)="onFieldFocus($event)"
             (input)="onFieldInput($event)"
             (keydown)="onFieldKey($event)"
-            [attr.aria-disabled]="disabled() ? 'true' : null"
+            [attr.aria-describedby]="locked() ? describedBy() : null"
+            [attr.aria-disabled]="blocked() ? 'true' : null"
             [attr.aria-label]="
               fieldName() ?? ('amount.group' | rokuT: { name: name() })
             "
@@ -57,7 +62,7 @@
             [attr.aria-valuenow]="value()"
             [attr.aria-valuetext]="words().spoken"
             [class.is-zero]="value() === 0 && draft() === null"
-            [readOnly]="disabled()"
+            [readOnly]="blocked()"
             [value]="fieldText()"
             autocomplete="off"
             class="number"
@@ -81,24 +86,28 @@
     <button
       (click)="press(1, $event)"
       (contextmenu)="$event.preventDefault()"
-      (pointercancel)="endHold()"
+      (lostpointercapture)="endHold($event)"
+      (pointercancel)="endHold($event)"
       (pointerdown)="startHold(1, $event)"
-      (pointerleave)="endHold()"
-      (pointerup)="endHold()"
-      [attr.aria-disabled]="disabled() || plusAtEnd() ? 'true' : null"
+      (pointerup)="endHold($event)"
+      [attr.aria-describedby]="locked() ? describedBy() : null"
+      [attr.aria-disabled]="blocked() || plusAtEnd() ? 'true' : null"
       [attr.aria-label]="
         'amount.more' | rokuT: { step: moreStep(), name: name() }
       "
       [class.at-end]="plusAtEnd()"
+      #step
       class="step plus"
       type="button"
     >
       <span aria-hidden="true" class="glyph"></span>
     </button>
 
+    @let reached = reachKey();
     <span aria-live="polite" class="visually-hidden">{{
       announcing()
-        ? ('amount.settled' | rokuT: { name: name(), amount: words().spoken })
+        ? ('amount.settled' | rokuT: { name: name(), amount: words().spoken }) +
+          (reached ? ', ' + (reached | rokuT) : '')
         : ''
     }}</span>
     @if (typed()) {

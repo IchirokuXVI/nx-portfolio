@@ -667,7 +667,13 @@ describe('SuggestionList, the cards', () => {
       await press(fixture, steps?.[1] ?? null);
 
       expect(changed).toEqual([
-        { holding: holdings[0], from: 2, to: 3, repeat: false },
+        {
+          holding: holdings[0],
+          from: 2,
+          to: 3,
+          repeat: false,
+          cardKey: 'item:held',
+        },
       ]);
       expect(chose).toEqual([]);
     });
@@ -681,7 +687,13 @@ describe('SuggestionList, the cards', () => {
       await press(fixture, steps?.[0] ?? null);
 
       expect(changed).toEqual([
-        { holding: holdings[0], from: 2, to: 1, repeat: false },
+        {
+          holding: holdings[0],
+          from: 2,
+          to: 1,
+          repeat: false,
+          cardKey: 'item:held',
+        },
       ]);
     });
 
@@ -699,11 +711,17 @@ describe('SuggestionList, the cards', () => {
       await press(fixture, steps?.[0] ?? null);
 
       expect(changed).toEqual([
-        { holding: stepped[0], from: 1000, to: 900, repeat: false },
+        {
+          holding: stepped[0],
+          from: 1000,
+          to: 900,
+          repeat: false,
+          cardKey: 'item:held',
+        },
       ]);
     });
 
-    it('steps and draws a weight line by its unit: 1 kg up to 1,025 kg, down to 975 g (velista 0188)', async () => {
+    it('steps and draws a weight line by its unit: 1 kg up to 1,05 kg, down to 975 g (velista 0188, 0195)', async () => {
       const weighed = [
         { ...holdings[0], quantity: 1000, unit: 'GRAM' as const },
       ];
@@ -720,8 +738,20 @@ describe('SuggestionList, the cards', () => {
       await press(fixture, steps?.[0] ?? null);
 
       expect(changed).toEqual([
-        { holding: weighed[0], from: 1000, to: 1025, repeat: false },
-        { holding: weighed[0], from: 1000, to: 975, repeat: false },
+        {
+          holding: weighed[0],
+          from: 1000,
+          to: 1050,
+          repeat: false,
+          cardKey: 'item:held',
+        },
+        {
+          holding: weighed[0],
+          from: 1000,
+          to: 975,
+          repeat: false,
+          cardKey: 'item:held',
+        },
       ]);
     });
 

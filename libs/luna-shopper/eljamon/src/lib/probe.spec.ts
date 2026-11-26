@@ -109,6 +109,68 @@ describe('probeElJamon', () => {
     expect(urls.some((url) => url.startsWith(LOCATOR))).toBe(false);
   });
 
+  describe('a product page whose breadcrumb names another product (plan 0169, notes of 2026-11-25)', () => {
+    /**
+     * CONSTRUCTED from `product.html`: its last breadcrumb item and its
+     * `page-act` heading name another product, as the shop drew them for
+     * concurrent requests in one session. No fixture is edited.
+     */
+    const contaminated = fixture('product.html')
+      .replace(
+        /(<ul class="breadcrumbs[^"]*migas-custom[^"]*">[\s\S]*?<li class="last">)[\s\S]*?(<\/li>)/,
+        '$1<span><a href="#">tortas de aceite con canela 4ud, 120g</a></span>$2'
+      )
+      .replace(
+        /(<div class="page-act">\s*<h1[^>]*>)[\s\S]*?(<\/h1>)/,
+        '$1tortas de aceite con canela 4ud, 120g$2'
+      );
+
+    it('reads the page again, and names the cause when it is still wrong', async () => {
+      expect(contaminated).not.toBe(fixture('product.html'));
+      const { fetchImpl, urls } = fakeSite((url) =>
+        url.pathname.startsWith('/detalle/')
+          ? { body: contaminated }
+          : undefined
+      );
+
+      const result = await run(fetchImpl);
+
+      const product = result.steps[2];
+      expect(product.name).toBe('product');
+      expect(product.ok).toBe(false);
+      expect(product.problems).toEqual([
+        'the page drew its breadcrumb for another product twice, ' +
+          'so its categoryPath was not read',
+      ]);
+      expect(product.problems.join(' ')).not.toContain('carried no');
+      expect(product.sample['rereads']).toBe(1);
+      expect(urls.filter((url) => url.includes('/detalle/'))).toHaveLength(2);
+      // A product with a problem ends the probe, as for any field it lost.
+      expect(result.steps).toHaveLength(3);
+      expect(urls.some((url) => url.startsWith(LOCATOR))).toBe(false);
+      expect(result.requests).toBe(5);
+    });
+
+    it('passes when the second answer is clean', async () => {
+      let asked = 0;
+      const { fetchImpl } = fakeSite((url) => {
+        if (!url.pathname.startsWith('/detalle/')) {
+          return undefined;
+        }
+        asked += 1;
+        return asked === 1 ? { body: contaminated } : undefined;
+      });
+
+      const result = await run(fetchImpl);
+
+      expect(result.steps[2]).toEqual(
+        expect.objectContaining({ name: 'product', ok: true, problems: [] })
+      );
+      expect(result.steps[2].sample['rereads']).toBe(1);
+      expect(result.requests).toBe(6);
+    });
+  });
+
   it('stops at a 403 on the first step with no second request', async () => {
     const { fetchImpl, urls } = fakeSite(() => ({ status: 403, body: '' }));
 

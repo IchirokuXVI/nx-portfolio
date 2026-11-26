@@ -57,6 +57,11 @@ export const LINE_PATTERNS = {
   addMany: 'line.addMany',
   update: 'line.update',
   addQuantity: 'line.addQuantity',
+  /**
+   * "Count the extra" (plan 0276, section 7): lower a line by what a raise's
+   * report offered, refused when the line moved since that answer.
+   */
+  countExtra: 'line.countExtra',
   setApproval: 'line.setApproval',
   /**
    * Say what happened to a line on a trip (plan 0047, section 4). It replaced
@@ -775,6 +780,12 @@ export interface AddLineRequest {
    * what plan 0260 prevents.
    */
   newLine?: boolean;
+  /**
+   * Ask for {@link AddLineResult.extra} (plan 0276): on a `RAISED` answer,
+   * what the raise took into the ask. The raise takes it in with or without
+   * this flag; the flag only adds the report.
+   */
+  reportExtra?: boolean;
 }
 
 /**
@@ -872,6 +883,11 @@ export interface AddLineResult {
    * item): nothing was written for it (the owner, 2026-11-16).
    */
   alreadyOnList: LineView[];
+  /**
+   * What the raise took into the ask (plan 0276), only on a `RAISED` answer
+   * to a request that carried `reportExtra: true`.
+   */
+  extra?: AbsorbedExtra;
 }
 
 /**
@@ -1040,6 +1056,12 @@ export interface UpdateLineRequest {
    * not rename.
    */
   confirmMerge?: boolean;
+  /**
+   * Ask for {@link UpdateLineResult.extra} (plan 0276): when this edit
+   * raised the quantity, what the raise took into the ask. The raise takes it
+   * in with or without this flag; the flag only adds the report.
+   */
+  reportExtra?: boolean;
 }
 
 /**
@@ -1051,6 +1073,12 @@ export interface UpdateLineRequest {
  */
 export interface UpdateLineResult extends LineView {
   absorbedLineId?: string;
+  /**
+   * What the raise took into the ask (plan 0276), only when the request
+   * carried `reportExtra: true` and the edit raised the quantity without a
+   * merge.
+   */
+  extra?: AbsorbedExtra;
 }
 
 /**
@@ -1115,6 +1143,91 @@ export interface AddLineQuantityRequest {
    * did not intend. A delta alone would apply silently on top of it.
    */
   expect?: number;
+  /**
+   * Ask for {@link AddLineQuantityResult.extra} (plan 0276).
+   *
+   * Every raise, with or without this flag, moves the units bought above the
+   * ask on the standing buys of the line in every open basket that covers the
+   * list into the ask, in the raise's own transaction under the line's lock,
+   * and the line still rises by the whole {@link delta}. The flag only adds
+   * the report of what was taken in. Absent or `false` answers the line alone.
+   */
+  reportExtra?: boolean;
+}
+
+/**
+ * One person who bought units above the ask (plan 0275, section 8; plan
+ * 0276).
+ *
+ * A participant with an account is that account. A guest is the owner of the
+ * basket the guest bought through, never the guest. The id is answered only
+ * for an approved member of the list's zone. `null` is anyone else, or a buy
+ * whose participant is gone, and is one entry however many it stands for.
+ * Core serves no name: the reader names the people.
+ */
+export interface ExtraBuyer {
+  userId: string | null;
+}
+
+/**
+ * What a raise took into the ask (plan 0276, section 6), on an answer to a
+ * request that carried `reportExtra: true` and raised the line.
+ *
+ * `countable > 0` exactly when `above > 0` and the raise moved the line up.
+ */
+export interface AbsorbedExtra {
+  /** The units above the ask the raise moved into the ask, in the line's unit. */
+  above: number;
+  /**
+   * What "Count the extra" (`line.countExtra`) would take off the line: the
+   * smaller of {@link above} and what the raise added to the line above zero.
+   */
+  countable: number;
+  /**
+   * Who bought the units of {@link above}, one entry each, in the order of
+   * their oldest such buy. Empty when {@link above} is 0.
+   */
+  buyers: ExtraBuyer[];
+}
+
+/**
+ * What `line.addQuantity` answers: the line as it now stands, and
+ * {@link extra} only when the request carried `reportExtra: true` and raised
+ * the line (plan 0276).
+ */
+export interface AddLineQuantityResult extends LineView {
+  extra?: AbsorbedExtra;
+}
+
+/**
+ * "Count the extra" (plan 0276, section 7): lower the line by {@link amount},
+ * the `countable` a raise's report answered, once the person said the extra
+ * covers the raise.
+ *
+ * Nothing is remembered about the raise, so the server holds the count to the
+ * line as the person saw it: {@link expect} must be the line's quantity when
+ * the count reads it under its lock, or the count is refused with
+ * `stale_quantity` and writes nothing. It is a lowering of the line under the
+ * same authorization as any other, and it moves no `applied`: the extra stays
+ * inside the ask, and every covering basket's ask falls with the line.
+ */
+export interface CountLineExtraRequest {
+  userId: string;
+  lineId: string;
+  /** The unit of {@link amount} and {@link expect}, which must be the line's. */
+  unit: LineUnit;
+  /** What to take off, a positive whole number, at most {@link expect}. */
+  amount: number;
+  /** The line's quantity as the raise answered it. */
+  expect: number;
+  /** Set by a basket write alone (plan 0138). Never sent by a client. */
+  via?: LineWriteVia;
+}
+
+/** What `line.countExtra` answers: the line as it now stands, and what it took off. */
+export interface CountLineExtraResult extends LineView {
+  /** The units taken off the line, equal to the request's `amount`. */
+  counted: number;
 }
 
 export interface SetLineApprovalRequest {

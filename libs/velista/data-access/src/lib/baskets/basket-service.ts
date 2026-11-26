@@ -3,7 +3,9 @@ import { serviceToken } from '@portfolio/shared/data-access';
 import type {
   Basket,
   BasketAddLineRequest,
+  BasketBuyForListRequest,
   BasketChangePage,
+  BasketCountExtraRequest,
   BasketDemandRequest,
   BasketLinkPreview,
   BasketMarks,
@@ -247,6 +249,18 @@ export interface BasketServiceI {
   ): Promise<BasketRowResult>;
 
   /**
+   * "Count the extra" on one line of a row (`POST
+   * /v1/baskets/:id/rows/:rowKey/extra`, backend `0276`; velista `0208`, target
+   * state 17): take `amount` off the line's ask, keyed by the line as the demand
+   * is. A line that no longer holds `expect` is refused with `stale_quantity` and
+   * nothing is written. The answer is the line as it now stands, and `counted`.
+   */
+  countExtra(
+    basketId: string,
+    body: BasketCountExtraRequest
+  ): Promise<BasketRowResult>;
+
+  /**
    * Take another product on these lines (`POST /v1/baskets/:id/lines/product`,
    * backend `0202` section 3; velista `0140`, section 4).
    *
@@ -289,6 +303,21 @@ export interface BasketServiceI {
   addLine(
     basketId: string,
     body: BasketAddLineRequest
+  ): Promise<BasketRowResult>;
+
+  /**
+   * Buy the row's product for a covered list that did not ask for it (`POST
+   * /v1/baskets/:id/rows/:rowKey/buy-for-list`, backend `0273`; velista `0201`).
+   *
+   * One write that finds or makes the list's line at quantity 0 and records the
+   * buy on it, so the list joins the row with an ask of 0. A guest is refused
+   * with `forbidden`, and the sheet never offers it to one. The answer is the
+   * row's lines as a settle answers them, the new one among them.
+   */
+  buyForList(
+    basketId: string,
+    rowKey: string,
+    body: BasketBuyForListRequest
   ): Promise<BasketRowResult>;
 
   /**

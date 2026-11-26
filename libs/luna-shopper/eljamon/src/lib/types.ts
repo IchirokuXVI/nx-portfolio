@@ -111,8 +111,27 @@ export interface ElJamonProduct {
   /** `offers.price` of the JSON-LD, or null. */
   price: number | null;
   image: string | null;
-  /** The breadcrumb, top level first, without `Inicio` and the product. */
+  /**
+   * The breadcrumb, top level first, without `Inicio` and the product. Empty
+   * when the page carries none, when {@link contaminated} is true, and when
+   * {@link otherProductCode} is set.
+   */
   categoryPath: string[];
+  /**
+   * Whether the parts of the page the shop draws from its session (the
+   * breadcrumb and the `page-act` heading) name another product than the
+   * JSON-LD does. Every other field here is read from the JSON-LD, which is
+   * always the product the URL names, so only the breadcrumb is withheld.
+   */
+  contaminated: boolean;
+  /**
+   * The article code the page states (its JSON-LD `sku`, else the last
+   * segment of its JSON-LD `url`) when the caller asked for another one, else
+   * null (plan 0169, notes of 2026-11-26). Such a page is another product's
+   * page, JSON-LD included, so nothing on it describes the asked product. Null
+   * too when no code was asked for, or the page states none.
+   */
+  otherProductCode: string | null;
 }
 
 export interface ElJamonClientOptions {

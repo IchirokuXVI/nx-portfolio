@@ -426,3 +426,125 @@ Harvester:
 - Every item of "Target state" in the brief holds.
 - The PR shows both rehearsal reports and states the answer to section 2.1 and the question at
   the end of section 7.
+
+## Notes after the build (2026-11-25)
+
+These notes record a defect of the detail stage and its fix
+([#1106](https://github.com/IchirokuXVI/nx-portfolio/pull/1106)). Where the text above disagrees,
+these notes hold.
+
+**The shop draws part of a product page from the session.** It keeps a current product in the
+session, and the breadcrumb (`migas-custom`) and the heading beside it (`div.page-act h1`) are
+drawn for that product, not for the one the URL names. The JSON-LD, the `<title>` and the
+`h1.tituloProducto` heading are always the asked product's. Saved pages of 2026-11-25 prove it:
+cookieless requests and sequential requests in one session are always right, a listing request
+leaves no trace in the next product page, and three concurrent requests in one session came
+back, twice, with one breadcrumb and one `page-act` heading shared by all three pages.
+
+**The detail stage sent its workers through one session.** One client was one cookie jar, and
+six workers on production shared it. About half of the stored El Jamón breadcrumbs
+(`categoryPath` and `categoryPaths`) are another product's below the top level. Category
+resolution, the review queue and the curation packet read them.
+
+**What the page parser reads, and from where.** The product name, the format and the size come
+from the listing row, which is fetched serially and is not affected. From the product page: the
+article code, the name, the brand, the price and the photo come from the JSON-LD, which is
+trusted; the category path comes from the breadcrumb, which is not. The site prints no EAN, and
+the parser reads no description. So the breadcrumb is the one field a contaminated page spoils,
+and the name changes of the walk of 2026-11-25 are the listing's, not another product's.
+
+**The fix.**
+
+- **One session per detail worker** (`SessionPool` in `eljamon-catalog.runner.ts`). A page takes
+  an idle client, or opens one with its own session, and gives it back when it is done, so no
+  session ever has two requests in flight. The listing's client is the first one. Every client
+  is opened with the run's one `acquire`, so the rate of the source row bounds all of them
+  together. Each extra session costs two requests (`/` and the postal code), and the report
+  names how many sessions the run used (`detail.sessions`).
+- **A guard in the parser** (`sessionPartsDisagree` in `product.ts`). The last breadcrumb item
+  and the `page-act` heading are compared with the JSON-LD name, after undoing entities (once or
+  twice encoded), case, runs of spaces and the separator dot. Both sides print the size suffix,
+  so it needs no special case. A page that disagrees answers `contaminated: true` and no
+  breadcrumb. Over the saved pages, every clean product page (01 to 04, 07 to 10, 14, 23 to 36
+  and the committed fixture) reads clean, and the four pages whose breadcrumb named another
+  product (17, 18, 20, 22) read contaminated. Pages 19 and 21 carry their own breadcrumb, which
+  the other pages of their round shared, and read clean.
+- **A contaminated page is read once more on the same session.** One that still disagrees keeps
+  every field the JSON-LD and the listing gave, states no category path, and is marked with
+  `detailFailed` so the next `NEW` walk reads it again. Its `categoryPaths` call adds and never
+  replaces. The report counts both (`detail.rereads`, `detail.untrustedBreadcrumbs`) and names
+  the products (`untrustedBreadcrumbs`).
+- **An observation may leave `categoryPath` out**, which means "not stated" as for the size
+  fields (owner decision 143a): the stored path stays, and a new row gets `[]`. Only El Jamón
+  sends it absent.
+- **A product page that fails states no category path either**, when the chain may already hold
+  a row for the product. Before, it stated the listing's top level category, and on a
+  `details: ALL` walk that replaced a stored breadcrumb. A row the chain surely holds none of (a
+  new product on a `NEW` walk) still starts with the top level category. Such a page still
+  states its photo as null, so a failed page of an `ALL` walk still clears a stored photo: an
+  observation must state its photo (plan 0198), and to change that is a change to every chain's
+  observation. Its `detailFailed` mark and its count as failed are as before.
+
+**Other stages.** The listing is serial in one session and stays as it is. The source probe makes
+its four requests one after the other, and reads a contaminated product page once more as a run
+does. When the second answer is still contaminated, it reports that cause, not a product with no
+category. The price refresh has no El Jamón fetcher, and the store discovery reads the locator,
+which has no session.
+
+**What a later walk repairs, and what it does not.** The stored breadcrumbs are not repaired
+here. A `details: ALL` walk after this fix repairs part of them:
+
+- `categoryPath` is rewritten on every listed row whose page reads clean, bound rows and decided
+  rows included: the walk owns the source group of the row, and its status does not change that.
+- `categoryPaths` is replaced only when the listing is whole. One failed listing page or one
+  category that read fewer rows than it printed makes every call an add, and then the wrong path
+  stays in `categoryPaths` beside the right one.
+- A catalog product already created or accepted from a wrong path keeps its catalog category.
+  Category resolution reads the path only when a row is accepted or created, never on a later
+  walk.
+- A row whose path the walk repaired is counted `unchanged` on the run report, because the
+  comparison that decides `updated` does not read `categoryPath`.
+
+## Notes after the build (2026-11-26)
+
+Three hardening items on top of the fix of 2026-11-25 (owner decisions 147, 148 and 150), built
+in [#1107](https://github.com/IchirokuXVI/nx-portfolio/pull/1107).
+
+- **The page's own code is read against the asked one** (decision 147). `parseProductPage` takes
+  the code the row asked for and reads the code the page states: the JSON-LD `sku`, else the last
+  segment of the JSON-LD `url`. All 29 product pages of the 36 saved pages of 2026-11-25 carry a
+  `sku`, and on every one, the four contaminated ones included, it is the asked product's, as are
+  the canonical link, the `cantidad_<code>` input and the analytics ids. So this check does not
+  catch the session defect; it catches a whole page of another product. Such a page answers
+  `otherProductCode` and no breadcrumb, is read once more on the same session, and one that still
+  states another code fails as a page with no product does: its JSON-LD is another product's, so
+  no field of it is kept, it is named in `failedProducts` and counted in `detailFailed` and
+  `detail.otherProductPages`. A page that states no code reads as the asked code.
+- **A session whose request got no answer is dropped** (decision 148). The client counts every
+  request with no answer (`transportFailures`: a timeout, a reset, a socket hang up, retries
+  included). When a page's work raised that count, the pool does not take the client back, and
+  the next page opens a fresh session (two requests). The report counts them
+  (`detail.droppedSessions`), and `detail.sessions` is then at most `workers` plus that count. An
+  answer to a session start (`/` or the postal code servlet) no longer resets the silent attempts
+  of plan 0253, so a chain that answers its home page and no product page still stops the stage
+  after 20.
+- **One report line when the guard still hit** (decision 150). When `detail.untrustedBreadcrumbs`
+  is above zero, the report's `warnings` list carries one line with the count, the same free
+  form `warnings` the store discovery reports carry. It is not a run warning: no
+  `HarvestWarningCode` names it, and a new code is a contract change. The admin run page draws
+  no report `warnings` field today.
+
+**A cap on dropped sessions (decision 151a, 2026-11-26).** Only a timeout counts toward the 20
+silent attempts of plan 0253, so a chain that resets or hangs up on every product page never
+stopped the stage and opened one session per page, about 7,000 sessions and 14,000 extra requests
+on a full walk. The detail stage now also stops after `DETAIL_DROPPED_SESSIONS_IN_A_ROW` (20)
+dropped sessions in a row, counted across every worker in the order pages finish. A page that
+finishes with its session kept starts the count again, and a page whose session was dropped adds
+one, also when a retry on it then answered. The stop is the one of plan 0253: no new page is
+asked, every listed row is still recorded, a page never read is reported from the listing alone
+or marked for the next walk exactly as before, and the run ends `COMPLETED` with one
+`DETAIL_UNREAD` warning whose words name the dropped sessions. The report's `detail` gains
+`droppedSessionsInARow` (the longest run of the walk, 0 on a normal run) and `stoppedBy`
+(`SILENCE`, `DROPPED_SESSIONS` or null). A failed page that meets both limits at once stops on
+`SILENCE`, so the silence stop fires where it did before. Built in
+[#1108](https://github.com/IchirokuXVI/nx-portfolio/pull/1108).

@@ -13,6 +13,7 @@ import type {
 import { isOpenBasket } from './enums';
 import type { LineUnit } from './line-unit';
 import type { ProductCategory } from './product-category';
+import type { AbsorbedExtra } from './requests';
 import type { ShopSectionName } from './shop';
 import type { LocalizedName } from './shopping-profile';
 
@@ -355,6 +356,16 @@ export interface BasketProduct {
    * unseen.
    */
   readonly quantityStep: number | null;
+  /**
+   * How many units the pack holds, a whole number from 2, or null for a product
+   * that is not a pack (backend `0162`). The size is the whole pack.
+   */
+  readonly packCount: number | null;
+  /**
+   * How many pieces the whole product holds, across its pack, a whole number
+   * from 2, or null (backend `0278`). Only beside a size in grams or millilitres.
+   */
+  readonly pieceCount: number | null;
   /** The cheapest price at the run's scopes, or null where there is none. */
   readonly offer: ProductOffer | null;
   /**
@@ -1319,6 +1330,43 @@ export type BasketRevertRequest =
 export type BasketSettleInput = Omit<BasketSettleRequest, 'unit'>;
 
 /**
+ * A buy of the row's product for a covered list that did not ask for it (backend
+ * `0273`; velista `0201`, target state 7), on
+ * `POST /v1/baskets/:id/rows/:rowKey/buy-for-list`.
+ *
+ * The product is the row's, which the server reads from the key: the body names
+ * none, because this write can make a line on another household's list. The
+ * list's line is made at quantity 0 when it has none, so what it asks for does
+ * not move, and the buy is recorded against that line.
+ *
+ * Refused with 409 `basket_line_already_in_row` for a line that is already an
+ * entry of the row, `basket_row_has_no_product`, `basket_product_has_no_name`,
+ * or `conflict` when the row's product changed under the request; 503
+ * `catalog_unavailable` when a line must be made and the catalog did not answer.
+ */
+export interface BasketBuyForListRequest {
+  /** The covered list the buy is for, which the reader may write. */
+  readonly targetListId: string;
+  /**
+   * That list's line of the product, from `productLists`, or null when it has
+   * none, which is then found or made by the server.
+   */
+  readonly lineId: string | null;
+  /** Units bought, 1 or more. */
+  readonly quantity: number;
+  /** The unit {@link quantity} is in: the row's (velista `0182`). */
+  readonly unit: LineUnit;
+  /** The shop the person is standing in, as on a settle (velista `0102`). */
+  readonly supermarketLocationId?: string;
+}
+
+/**
+ * A buy for another list as a screen asks for it: the store adds the row's unit,
+ * as it does for a settle.
+ */
+export type BasketBuyForListInput = Omit<BasketBuyForListRequest, 'unit'>;
+
+/**
  * Changing what one list asks for, from the basket (velista `0092`, section 6).
  *
  * **It writes to a household's list and not to this basket**, which is what
@@ -1343,15 +1391,46 @@ export interface BasketDemandRequest {
    * (velista `0139`, section 3).
    */
   readonly lineId: string;
-  /** What that list asks for from now on. Zero is allowed. */
+  /**
+   * What that list asks for from now on, as a **whole** (backend `0274`): what
+   * the line holds plus what this basket's buys already met of it, the entry's
+   * `asked`, never its `left`. An ask below what the buys met leaves the line at
+   * 0. Zero is allowed.
+   */
   readonly quantity: number;
-  /** The entry's `left` the person was looking at. */
+  /**
+   * The entry's `left` the person was looking at: what the line itself held,
+   * not the ask (backend `0274`). A line that moved since is refused with
+   * `stale_quantity`.
+   */
   readonly from: number;
   /**
    * The unit {@link quantity} and {@link from} are in, the line's (velista
    * `0182`). Refused with `line_unit_mismatch` when it is not.
    */
   readonly unit: LineUnit;
+  /**
+   * Ask the answer what a rising ask took into the ask (backend `0276`, velista
+   * `0208` target state 17): the result's `extra`. Sent only as `true`, and only
+   * for an ask that rises.
+   */
+  readonly reportExtra?: true;
+}
+
+/**
+ * "Count the extra" on a basket row (`POST /v1/baskets/:id/rows/:rowKey/extra`,
+ * backend `0276`, velista `0208` target state 17): take `amount` off the line's
+ * ask. The line must still hold `expect` as its entry's `left`, or the server
+ * refuses with `stale_quantity` and writes nothing.
+ */
+export interface BasketCountExtraRequest {
+  readonly lineId: string;
+  /** The line's unit, as on the demand. */
+  readonly unit: LineUnit;
+  /** The `countable` the demand or the add answered. */
+  readonly amount: number;
+  /** The entry's `left` the demand or the add answered. */
+  readonly expect: number;
 }
 
 /**
@@ -1419,6 +1498,11 @@ export interface BasketAddLineRequest {
   readonly askIfAmbiguous?: true;
   readonly intoLineId?: string;
   readonly newLine?: true;
+  /**
+   * Ask the answer what an add that raised a line took into the ask (backend
+   * `0276`, velista `0208` target state 19): the result's `extra`.
+   */
+  readonly reportExtra?: true;
 }
 
 /**
@@ -1451,6 +1535,14 @@ export interface BasketRowResult {
    * answered by a gateway of before backend `0260`.
    */
   readonly addOutcome?: AddOutcome;
+  /**
+   * What a demand or an add sent with `reportExtra` took into the ask when it
+   * raised the line (backend `0276`). Absent when it raised nothing, when the
+   * write did not ask, and when this build cannot read it.
+   */
+  readonly extra?: AbsorbedExtra;
+  /** What a count took off the line (backend `0276`), set by the count alone. */
+  readonly counted?: number;
 }
 
 /**

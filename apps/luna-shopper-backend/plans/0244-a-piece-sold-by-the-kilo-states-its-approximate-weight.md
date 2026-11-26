@@ -648,3 +648,12 @@ products, 9 `UNIT` products with a kilo label), because it is the production cop
     reports 131 pieces converted (7.1), 7 plus 6 pieces priced as one (7.2) and 6 products
     split (7.4), or the counts of that day, and a second run changes nothing.
 12. `npx nx affected -t lint test` is green, and `npx nx build luna-shopper-admin` builds.
+
+## Notes after the build (2026-11-25)
+
+**A LIDL range states no weight, and only a `ca.` range is per kilo (owner decisions 141a and
+144).** Section 5.2 says a printed range is "no size and no weight". It is still no size. It now
+states no weight at all, whatever its prefix, so a weight stored from an `Aprox.` week stays. The
+figure beside a `ca.` range is written as a price per kilo with no piece price. The figure beside
+any other range stays the piece price and is marked for a person. The `Aprox. 350 g` case of section
+5.2 is unchanged. Plan `0089`, notes after the build, holds the rule.

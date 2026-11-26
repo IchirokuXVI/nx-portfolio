@@ -316,6 +316,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     unitSize: 1,
     quantityStep: null,
     packCount: null,
+    pieceCount: null,
     categories: categoriesOf('milk'),
     defaultUnit: 'LITER',
     productGroupId: 'pg_whole_milk',
@@ -331,6 +332,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     unitSize: 6,
     quantityStep: null,
     packCount: 6,
+    pieceCount: null,
     categories: categoriesOf('milk'),
     defaultUnit: 'LITER',
     productGroupId: 'pg_whole_milk',
@@ -352,6 +354,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     unitSize: 1,
     quantityStep: null,
     packCount: null,
+    pieceCount: null,
     categories: categoriesOf('oils'),
     defaultUnit: 'LITER',
     productGroupId: 'pg_olive_oil',
@@ -367,6 +370,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     unitSize: 750,
     quantityStep: null,
     packCount: null,
+    pieceCount: null,
     categories: categoriesOf('dishwasher'),
     defaultUnit: 'MILLILITER',
     // Curation has not reached it. Nothing is wrong with this row.
@@ -388,11 +392,69 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     approxWeightSetBy: null,
     quantityStep: 100,
     packCount: null,
+    pieceCount: null,
     categories: categoriesOf('uncategorised'),
     defaultUnit: 'KILOGRAM',
     productGroupId: null,
   },
+  /*
+   * The pack and the pieces (backend plan 0278, admin plan 0075): a tray of
+   * 4 burgers, 2 bags of candies with 100 between them, one bag of 50, and a
+   * pack of 7 whose unit is not a whole number of grams. The list prints each
+   * size with its counts, and the record shows both fields.
+   */
+  sizedForCounts({
+    id: 'it_burgers_4pack',
+    name: { en: 'Beef burgers', es: 'Hamburguesas de vacuno' },
+    unitSize: 360,
+    packCount: 4,
+    pieceCount: null,
+  }),
+  sizedForCounts({
+    id: 'it_candies_2bags',
+    name: { en: 'Fruit jelly candies, two bags', es: 'Gominolas, dos bolsas' },
+    unitSize: 70,
+    packCount: 2,
+    pieceCount: 100,
+  }),
+  sizedForCounts({
+    id: 'it_candies_bag',
+    name: { en: 'Fruit jelly candies', es: 'Gominolas' },
+    unitSize: 35,
+    packCount: null,
+    pieceCount: 50,
+  }),
+  sizedForCounts({
+    id: 'it_breadsticks_7pack',
+    name: { en: 'Mini breadsticks', es: 'Picos de pan' },
+    unitSize: 185,
+    packCount: 7,
+    pieceCount: null,
+  }),
 ];
+
+/** A product sized in grams for the pack and piece rows of {@link ITEM_SEED}. */
+function sizedForCounts(
+  row: Pick<
+    Wire.CatalogItemView,
+    'id' | 'name' | 'unitSize' | 'packCount' | 'pieceCount'
+  >
+): Wire.CatalogItemView {
+  return {
+    ...row,
+    brand: null,
+    ...itemPhotos(null, []),
+    sku: null,
+    ean: null,
+    eans: [],
+    approxWeight: null,
+    approxWeightSetBy: null,
+    quantityStep: null,
+    categories: categoriesOf('uncategorised'),
+    defaultUnit: 'GRAM',
+    productGroupId: null,
+  };
+}
 
 /**
  * Effective prices: the row a shopper sees for each (product, scope), chosen
@@ -740,6 +802,7 @@ export const PIECE_SEED: {
     approxWeightSetBy: 'SOURCE',
     quantityStep: null,
     packCount: null,
+    pieceCount: null,
     categories: categoriesOf('uncategorised'),
     defaultUnit,
     productGroupId: null,

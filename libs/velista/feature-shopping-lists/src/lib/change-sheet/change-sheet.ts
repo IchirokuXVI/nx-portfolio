@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   inject,
   signal,
@@ -16,7 +17,9 @@ import {
 import {
   BasketStore,
   BasketViewStore,
+  ChangeLandingStore,
   ProductPickStore,
+  type ChangeLanding,
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
@@ -29,6 +32,7 @@ import {
 } from '@portfolio/velista/models';
 import {
   AppHistory,
+  PageNavigation,
   productPickPath,
   rowKeyOf,
   SheetNavigation,
@@ -47,7 +51,7 @@ import {
   type ProductRowView,
 } from '@portfolio/velista/ui';
 import { basketErrorKey } from '../basket-error-copy';
-import { settleSheetPath } from '../basket-paths';
+import { basketPath, settleSheetPath } from '../basket-paths';
 import { ChangeChoices } from './change-choices';
 import {
   basketProductOf,
@@ -127,6 +131,7 @@ export class ChangeSheet {
   private readonly _pick = inject(ProductPickStore);
   private readonly _history = inject(AppHistory);
   private readonly _sheet = inject(SheetNavigation);
+  private readonly _pages = inject(PageNavigation);
   private readonly _router = inject(Router);
   private readonly _route = inject(ActivatedRoute);
   private readonly _basePath = inject(APP_BASE_PATH);
@@ -138,6 +143,18 @@ export class ChangeSheet {
   /** The one line the sheet is for, or null for every line the reader may change. */
   private readonly _lineId: string | null =
     this._route.snapshot.paramMap.get('lineId');
+
+  /**
+   * Where a change lands when "Lists and amounts" opened this sheet
+   * (`ChangeLandingStore`). Asked after the change, never held by the sheet.
+   */
+  private readonly _landings = inject(ChangeLandingStore);
+
+  /**
+   * The catalog that chooses is opening, so the landing is kept for the sheet
+   * that comes back from it.
+   */
+  private _toCatalog = false;
 
   protected readonly skeletonRows = SKELETON_ROWS;
 
@@ -351,6 +368,14 @@ export class ChangeSheet {
   );
 
   constructor() {
+    // A sheet left any other way than to the catalog, a browser back among them,
+    // leaves no landing for a sheet opened later from somewhere else.
+    inject(DestroyRef).onDestroy(() => {
+      if (!this._toCatalog) {
+        this._releaseLanding();
+      }
+    });
+
     // Read the products once the row and its lines are known, and again when the
     // shop or a product picked in the catalog changes what is asked.
     effect(() => {
@@ -459,7 +484,18 @@ export class ChangeSheet {
       return;
     }
     this._left = true;
-    this.close();
+    const landing = this._landingOf();
+    if (landing === null) {
+      this.close();
+      return;
+    }
+    // Opened from "Lists and amounts": the change closes that view too, and the
+    // person is back on the shopping list (velista `0200`, 2026-11-25).
+    this._releaseLanding();
+    void this._pages.backTo(
+      landing.depth,
+      basketPath(this._locale(), this._basePath, this._store.address())
+    );
   }
 
   /**
@@ -477,6 +513,7 @@ export class ChangeSheet {
       return;
     }
     const locale = this._locale();
+    this._toCatalog = true;
     this._pick.open({
       kind: 'one',
       lineId: anchor.lineId,
@@ -512,11 +549,23 @@ export class ChangeSheet {
       ...(query === '' ? {} : { q: query }),
       ...(chain === null ? {} : { chain }),
     };
-    void this._router.navigateByUrl(url);
+    // A catalog that never opened leaves this sheet standing, and its leaving
+    // then lets the landing go as any other does.
+    this._router.navigateByUrl(url).then(
+      (opened) => {
+        if (!opened) {
+          this._toCatalog = false;
+        }
+      },
+      () => {
+        this._toCatalog = false;
+      }
+    );
   }
 
   /** Close, Escape and the scrim: back to the row's sheet. */
   protected close(): void {
+    this._releaseLanding();
     void this._sheet.dismiss(
       settleSheetPath(
         this._locale(),
@@ -525,6 +574,33 @@ export class ChangeSheet {
         this.row()?.rowKey ?? this._rowKey()
       )
     );
+  }
+
+  /**
+   * The landing held for this row and line, if this sheet stands on the entry
+   * it was held for: pushed there from "Lists and amounts", or popped back onto
+   * from the catalog. Any other is let go (`ChangeLandingStore.claim`), so a
+   * landing left over from a catalog trip that ended elsewhere, or from a
+   * navigation that never happened, closes this sheet one step.
+   *
+   * Asked after the change rather than in the constructor: by then the sheet's
+   * own navigation has ended, and `AppHistory.depth()` is its own entry however
+   * it was drawn.
+   */
+  private _landingOf(): ChangeLanding | null {
+    return this._landings.claim(
+      this._rowKey(),
+      this._lineId,
+      this._history.depth()
+    );
+  }
+
+  /** Whatever is held for this row and line is over. */
+  private _releaseLanding(): void {
+    const held = this._landings.landingFor(this._rowKey(), this._lineId);
+    if (held !== null) {
+      this._landings.release(held);
+    }
   }
 
   /**
@@ -548,6 +624,8 @@ export class ChangeSheet {
       ? null
       : {
           id: itemId,
+          packCount: null,
+          pieceCount: null,
           name: product.name,
           brand: product.brand,
           imageUrl: product.imageUrl,

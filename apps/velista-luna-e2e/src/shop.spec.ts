@@ -30,6 +30,8 @@ import {
   addInTheAisle,
   amountCell,
   askAmount,
+  askOf,
+  boughtAmount,
   chip,
   clearBasketSearch,
   closeSettleSheet,
@@ -38,6 +40,7 @@ import {
   filterTool,
   generateBasket,
   openFilterSheet,
+  openListsAndAmounts,
   openSettleSheet,
   pressBasketMenuRow,
   row,
@@ -241,14 +244,16 @@ test.describe('one trip, by the owner', () => {
       await expect(dialog.locator('.subtitle')).toHaveText(
         /€1\.15 each\s*·\s*2 to get/
       );
-      // One list asks, with its amount in a stepper the owner may change.
+      // One list asks for 2, named beside it, and its stepper records what this
+      // basket bought for it, nothing yet (velista 0201).
       const entries = dialog.locator('lib-row-entries');
       await expect(
-        entries.getByRole('heading', { name: 'Asked for on 1 list' })
+        entries.getByRole('heading', { name: 'What you bought' })
       ).toBeVisible();
-      await expect(askAmount(dialog, 'Groceries')).toHaveAttribute(
+      await expect(askOf(dialog, 'Groceries')).toHaveText('· 2');
+      await expect(boughtAmount(dialog, 'Groceries')).toHaveAttribute(
         'aria-valuenow',
-        '2'
+        '0'
       );
       await expect(
         dialog.getByRole('button', { name: 'Got all 2', exact: true })
@@ -467,8 +472,12 @@ test.describe('a loose product, by weight (velista 0182)', () => {
     await expect(cell.locator('.number')).toHaveText('1');
     await expect(cell.locator('.symbol')).toHaveText('kg');
 
+    // The ask is changed in "Lists and amounts" since velista 0200 and 0201: the
+    // row sheet's stepper records buys.
     const dialog = await openSettleSheet(page, NAME.en);
-    const field = askAmount(dialog, 'Groceries');
+    await expect(askOf(dialog, 'Groceries')).toHaveText('· 1 kg');
+    const view = await openListsAndAmounts(page, dialog);
+    const field = askAmount(view, 'Groceries');
     await expect(field).toHaveAttribute('aria-valuenow', '1000');
 
     // The owner's second ruling of 2026-11-17: under kg a whole number over 99
@@ -510,6 +519,9 @@ test.describe('a loose product, by weight (velista 0182)', () => {
     await field.press('Enter');
     await saved;
     await expect(field).toHaveAttribute('aria-valuenow', '750');
+    // Back onto the row sheet, which reads the new ask, then away.
+    await view.getByRole('button', { name: 'Back' }).click();
+    await expect(askOf(dialog, 'Groceries')).toHaveText('· 750 g');
     await closeSettleSheet(page, dialog, basketId);
 
     await expect(cell.locator('.number')).toHaveText('750');
@@ -959,10 +971,7 @@ test.describe('a product with a step of its own (velista 0186)', () => {
       `Stepped ${Date.now()}`
     );
     const dialog = await openSettleSheet(page, NAME.en);
-    await expect(askAmount(dialog, 'Groceries')).toHaveAttribute(
-      'aria-valuenow',
-      '800'
-    );
+    await expect(askOf(dialog, 'Groceries')).toHaveText('· 800 g');
     await dialog.getByRole('button', { name: /^Got all / }).click();
     await expectBasketUrl(page, basketId);
     await expect

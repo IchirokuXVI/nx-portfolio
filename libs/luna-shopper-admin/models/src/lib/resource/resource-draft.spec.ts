@@ -757,3 +757,135 @@ describe('settleDraft', () => {
     expect(settleDraft(pieces, draft, piece, 'unit')).toBe(draft);
   });
 });
+
+/**
+ * What one emptying leads to (admin plan 0075): A excludes B, and C is shown
+ * only while B holds a value, so typing A empties B and then C.
+ */
+describe('settleDraft, emptying in a chain', () => {
+  interface Chain {
+    id: string;
+    a: number | null;
+    b: number | null;
+    c: number | null;
+    d: number | null;
+  }
+
+  const held = (value: unknown): boolean =>
+    value !== null && value !== undefined && String(value).trim() !== '';
+
+  const chain: ResourceDescriptor<Chain> = {
+    name: 'chains',
+    segment: 'chains',
+    labels: { one: 'chains.one', many: 'chains.many' },
+    title: (row) => row.id,
+    fields: [
+      { kind: 'text', name: 'id', label: 'chains.id', editable: false },
+      {
+        kind: 'number',
+        name: 'a',
+        label: 'chains.a',
+        nullable: true,
+        excludes: 'b',
+      },
+      { kind: 'number', name: 'b', label: 'chains.b', nullable: true },
+      {
+        kind: 'number',
+        name: 'c',
+        label: 'chains.c',
+        nullable: true,
+        shown: (row) => held(row.b),
+      },
+      {
+        kind: 'number',
+        name: 'd',
+        label: 'chains.d',
+        nullable: true,
+        shown: (row) => held(row.c),
+      },
+    ],
+    list: { columns: ['id'], compact: ['id'] },
+    gateway: () => {
+      throw new Error('not used');
+    },
+  };
+
+  const row: Chain = { id: 'c1', a: null, b: 70, c: 100, d: 3 };
+
+  it('empties B and every field shown only beside it in one settle', () => {
+    const draft = { a: '50', b: '70', c: '100', d: '3' };
+
+    expect(settleDraft(chain, draft, row, 'a')).toEqual({
+      a: '50',
+      b: '',
+      c: '',
+      d: '',
+    });
+  });
+
+  it('reports no field that held nothing as changed', () => {
+    const draft = { a: '50', b: '70', c: '', d: '' };
+    const settled = settleDraft(
+      chain,
+      draft,
+      { ...row, c: null, d: null },
+      'a'
+    );
+
+    expect(settled).toEqual({ a: '50', b: '', c: '', d: '' });
+    expect(changedFields(settled, draft)).toEqual(['b']);
+  });
+
+  it('answers the same draft when the chain starts nowhere', () => {
+    const draft = { a: '', b: '70', c: '100', d: '3' };
+
+    expect(settleDraft(chain, draft, row, 'a')).toBe(draft);
+  });
+
+  it('ends when two rules would empty each other', () => {
+    interface Pair {
+      id: string;
+      left: number | null;
+      right: number | null;
+      flagged: boolean;
+    }
+    const pair: ResourceDescriptor<Pair> = {
+      name: 'pairs',
+      segment: 'pairs',
+      labels: { one: 'pairs.one', many: 'pairs.many' },
+      title: (value) => value.id,
+      fields: [
+        { kind: 'text', name: 'id', label: 'pairs.id', editable: false },
+        {
+          kind: 'number',
+          name: 'left',
+          label: 'pairs.left',
+          nullable: true,
+          shown: (value) => !held(value.right),
+        },
+        {
+          kind: 'number',
+          name: 'right',
+          label: 'pairs.right',
+          nullable: true,
+          shown: (value) => !held(value.left),
+        },
+        { kind: 'boolean', name: 'flagged', label: 'pairs.flagged' },
+      ],
+      list: { columns: ['id'], compact: ['id'] },
+      gateway: () => {
+        throw new Error('not used');
+      },
+    };
+    const draft = { left: '1', right: '2', flagged: true };
+
+    expect(
+      settleDraft(
+        pair,
+        draft,
+        { id: 'p', left: 1, right: 2, flagged: true },
+        'flagged'
+      )
+    ).toEqual({ left: '', right: '', flagged: true });
+  });
+});

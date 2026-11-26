@@ -466,6 +466,13 @@ export interface ProductOffer {
   /** "EUR/L", "EUR/lv". Text for a human, not a unit to parse. */
   readonly unitPriceLabel: string | null;
   /**
+   * What {@link unitPrice} is counted in, read off the offer itself, or null when
+   * the wire names none. Absent on an offer the client built by hand, which reads
+   * as null. A basket product has no `unitBasis` of its own, so the unit price
+   * line of "Lists and amounts" names the basis of the offer it draws.
+   */
+  readonly unitBasis?: PriceUnitBasis | null;
+  /**
    * The price of a kilo, a litre or one unit of the product, derived by the
    * catalog from the till price and the product's size (backend `0245`). Never
    * derived here. **This is the figure that compares**: two offers are cheaper
@@ -603,10 +610,14 @@ export interface CatalogItem {
   readonly imageUrl: string | null;
   /**
    * How many units the pack holds, a whole number from 2, or null for a product
-   * that is not a pack (backend `0162`). A number rather than the words a chain
-   * prints, so the card renders "Pack 6" or "Pack de 6" itself.
+   * that is not a pack (backend `0162`). The size is the whole pack.
    */
   readonly packCount: number | null;
+  /**
+   * How many pieces the whole product holds, across its pack, a whole number
+   * from 2, or null (backend `0278`). Only beside a size in grams or millilitres.
+   */
+  readonly pieceCount: number | null;
   /**
    * What {@link ProductOffer.unitPrice} on {@link offer} is counted in, or null
    * when unknown or when there is no offer (velista `0101`). The card's "1,09 € /

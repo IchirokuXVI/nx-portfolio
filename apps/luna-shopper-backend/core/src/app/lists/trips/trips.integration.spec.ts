@@ -278,6 +278,9 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
         outcome,
         quantity:
           outcome === SettlementOutcome.BOUGHT ? (options.quantity ?? 1) : 0,
+        // Every unit met the ask, which is what a buy before plan 0274 reads as.
+        applied:
+          outcome === SettlementOutcome.BOUGHT ? (options.quantity ?? 1) : 0,
         settledByUserId: byBasket ? null : (options.userId ?? ids.shopper),
         settledByParticipantId: byBasket
           ? (options.participantId ?? randomUUID())

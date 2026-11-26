@@ -173,6 +173,18 @@
       }
 
       <!--
+        The view picker (velista 0202), beside the filter, the same pair as on the
+        zone list's header. Here and not in the header, which keeps its three
+        actions; the menu offers the same choice as its first row.
+      -->
+      <lib-view-picker
+        (chosen)="listRows.setLayout($event)"
+        [layout]="listRows.layout()"
+        listToolsTrail
+        look="tool"
+      />
+
+      <!--
         What the sheet turned on, named on the page (plan 0075, section 5). Absent
         entirely when nothing is on, so the lines move up. The chips name the order
         and the grouping as well as the filters, because a basket that is suddenly
@@ -767,7 +779,14 @@
 <p aria-live="polite" class="visually-hidden said">{{ outstandingSaid() }}</p>
 
 <!--
+  The question about the extra already bought, on a catalog card of "Add or find"
+  (velista 0208, target state 18), and the notice a count that wrote nothing
+  leaves in its place.
+-->
+<lib-extra-ask-popover />
+
+<!--
   The sheets, as children of the page they cover (rule E1, plan 0008): the page
   keeps its scroll underneath and Android's back button dismisses them.
 -->
-<router-outlet />
+<router-outlet (activate)="onSheetOpened()" />

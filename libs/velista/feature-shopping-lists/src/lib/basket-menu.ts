@@ -71,12 +71,20 @@ export function basketDoors(store: BasketStore): BasketDoors {
 }
 
 /** The menu's rows, by what each one is about. */
-export type BasketMenuEntry = 'people' | 'history' | 'create' | 'finish';
+export type BasketMenuEntry =
+  | 'view'
+  | 'people'
+  | 'history'
+  | 'create'
+  | 'finish';
 
 /**
  * The rows of the menu, **in the order they are drawn**, and only the ones this
  * reader may use. An entry that is not allowed is absent, and a menu with no entry
  * is a menu button that is not drawn.
+ *
+ * The view comes first and is there for every reader, guests included (velista
+ * `0202`): it is a choice about this device, not about the basket.
  *
  * @param finishSheet whether the page's route declares the finish sheet. See
  *   {@link hasFinishSheet}.
@@ -86,6 +94,7 @@ export function basketMenuEntries(
   finishSheet: boolean
 ): readonly BasketMenuEntry[] {
   const offered: readonly (readonly [BasketMenuEntry, boolean])[] = [
+    ['view', true],
     ['people', doors.canOpenPeople()],
     ['history', doors.canOpenHistory()],
     ['create', doors.canCreate()],

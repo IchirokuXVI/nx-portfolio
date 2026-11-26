@@ -1,24 +1,23 @@
 <!--
-  The lists that ask (velista 0139, section 3). A small heading in the secondary
-  colour on a hairline, then one row per list: the list, then "zone · line" under
-  it, Change (velista 0140, section 1) as the swap icon, then what it asks for
-  in the stepper of velista 0188 (velista 0190). "Change for all lists" closes
-  the heading's row when two lists or more can change.
+  What you bought (velista 0201). A small heading in the secondary colour on a
+  hairline, with "Lists and amounts" at its right (velista 0200), then one row
+  per list: the list and what it asks for, then "zone · line" under it, then
+  what this basket bought for it in the stepper of velista 0188.
 
   Not a live region: the stepper changes its value on every step, and it says
   the amount once by itself when the presses stop.
 -->
 <section class="entries">
   <div class="head">
-    <h3 class="heading">{{ heading() }}</h3>
-    @if (changesAll()) {
+    <h3 class="heading">{{ 'basket.entries.heading' | rokuT }}</h3>
+    @if (opensLists()) {
       <button
-        (click)="changedAll.emit()"
+        (click)="listsOpened.emit()"
         [disabled]="busy()"
-        class="change-all"
+        class="lists-open"
         type="button"
       >
-        {{ 'basket.change.all' | rokuT }}
+        {{ 'basket.lists.open' | rokuT }}
       </button>
     }
   </div>
@@ -27,32 +26,43 @@
     @for (entry of entries(); track entry.lineId) {
       <li class="row">
         <span class="row-label">
-          <span class="row-name">{{ entry.list }}</span>
+          <span class="row-name">
+            <span class="row-list">{{ entry.list }}</span>
+            <span class="row-ask">{{ entry.ask }}</span>
+          </span>
           @if (entry.where; as where) {
             <span class="row-where">{{ where }}</span>
           }
         </span>
 
-        @if (entry.changeable) {
-          <button
-            (click)="changed.emit(entry.lineId)"
-            [attr.aria-label]="entry.changeLabel"
-            [disabled]="busy()"
-            class="change"
-            type="button"
-          >
-            <lib-swap-icon class="change-glyph" />
-          </button>
-        }
-
-        @if (entry.editable) {
+        @if (entry.steppable && compact()) {
+          <!--
+            The compact view (velista 0204): the reel of velista 0203, with the
+            list's ask as its target and as a snap point beside 1000. No typing.
+          -->
+          <lib-quantity-reel
+            (stepped)="onReeled(entry.lineId, $event)"
+            [label]="entry.label"
+            [min]="0"
+            [readonly]="busy()"
+            [snaps]="entry.snaps"
+            [step]="entry.step"
+            [target]="entry.asked"
+            [unit]="unit()"
+            [value]="entry.shown"
+            class="ask-amount"
+          />
+        } @else if (entry.steppable) {
           <lib-quantity-stepper
-            (stepped)="onAsked(entry.lineId, $event)"
+            (stepped)="onBought(entry.lineId, $event)"
             [disabled]="busy()"
             [fieldName]="entry.label"
             [min]="0"
             [name]="entry.name"
+            [snaps]="entry.snaps"
             [step]="entry.step"
+            [target]="entry.asked"
+            [trashAtZero]="false"
             [unit]="unit()"
             [value]="entry.shown"
             class="ask-amount"
@@ -60,17 +70,18 @@
           />
         } @else {
           <!--
-            The number, and no control: the server does not allow this list's ask
-            to change from here, or it is a list this reader was not served. The
+            The number, and no control: the trip is finished. The
             exact form, end aligned in the stepper's width, so the numbers of one
             sheet line up with the controls above them (velista 0190, decision I).
           -->
           <span class="row-number">
             <span class="visually-hidden">
-              {{ 'basket.entries.asks' | rokuT: { amount: entry.asksSpoken } }}
+              {{
+                'basket.entries.bought' | rokuT: { amount: entry.boughtSpoken }
+              }}
             </span>
             <lib-amount-figure
-              [quantity]="entry.asks"
+              [quantity]="entry.bought"
               [speak]="false"
               [unit]="unit()"
               form="exact"
@@ -83,7 +94,7 @@
 
   @if (showsOthers()) {
     <!--
-      "Add it to another list": a disclosure, closed on every sheet, last.
+      "Bought for another list": a disclosure, closed on every sheet, last.
       A plain row with a chevron and never a big button, because it is a way in
       and not the act the sheet is for.
     -->
@@ -94,7 +105,7 @@
       class="disclosure"
       type="button"
     >
-      <span>{{ 'basket.sheet.addElsewhere' | rokuT }}</span>
+      <span>{{ 'basket.entries.otherHeading' | rokuT }}</span>
       <lib-chevron-down-icon
         [class.is-open]="open()"
         class="disclosure-glyph"
@@ -117,21 +128,44 @@
               @for (other of otherRows(); track other.list.listId) {
                 <li class="row">
                   <span class="row-label">
-                    <span class="row-name">{{ other.list.listName }}</span>
+                    <span class="row-name">
+                      <span class="row-list">{{ other.list.listName }}</span>
+                    </span>
                     <span class="row-where">{{ other.where }}</span>
                   </span>
-                  <lib-quantity-stepper
-                    (stepped)="onRaised(other.list, $event)"
-                    [disabled]="busy()"
-                    [fieldName]="other.label"
-                    [min]="0"
-                    [name]="other.name"
-                    [step]="step()"
-                    [unit]="unit()"
-                    [value]="other.shown"
-                    class="ask-amount"
-                    variant="sheet-narrow"
-                  />
+                  <!--
+                    The list asks nothing, so its target is 0: any amount bought for
+                    it is above the ask and amber, and 0 is plain (a target of 0 is
+                    never green). No snap point but 1000.
+                  -->
+                  @if (compact()) {
+                    <lib-quantity-reel
+                      (stepped)="onReeledOther(other.list, $event)"
+                      [label]="other.label"
+                      [min]="0"
+                      [readonly]="busy()"
+                      [step]="step()"
+                      [target]="0"
+                      [unit]="unit()"
+                      [value]="other.shown"
+                      class="ask-amount"
+                    />
+                  } @else {
+                    <lib-quantity-stepper
+                      (stepped)="onBoughtOther(other.list, $event)"
+                      [disabled]="busy()"
+                      [fieldName]="other.label"
+                      [min]="0"
+                      [name]="other.name"
+                      [step]="step()"
+                      [target]="0"
+                      [trashAtZero]="false"
+                      [unit]="unit()"
+                      [value]="other.shown"
+                      class="ask-amount"
+                      variant="sheet-narrow"
+                    />
+                  }
                 </li>
               }
             </ul>

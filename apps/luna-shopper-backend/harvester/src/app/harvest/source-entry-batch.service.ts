@@ -13,6 +13,7 @@ import {
   type LocalizedText,
   type SourceEntryDecisionOperation,
   type SourceEntryDecisionOutcome,
+  type SourceEntryObserved,
   type SourceEntryPriceSkip,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -23,6 +24,7 @@ import { In, Repository, type EntityManager } from 'typeorm';
 import { SourceCatalogEntry } from '../entities';
 import { CatalogClient } from './catalog-client.service';
 import { CategorySlugIndex, categorySlugsFor } from './category-resolution';
+import { toSourceCatalogEntryView } from './harvest.mappers';
 import { PlatformAdminService } from './platform-admin.service';
 import { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { acceptedName, lacksEnglish } from './source-entry-name';
@@ -511,15 +513,29 @@ export class SourceEntryBatchService {
         );
         return;
       }
-      const seen = row.lastSeenAt.toISOString();
-      if (seen !== operation.expect.lastSeenAt) {
-        fail(
-          outcomes[index],
-          BulkOperationErrorCode.EXPECT_MISMATCH,
-          `Source entry ${operation.entryId} was observed again at ${seen}, ` +
-            `after the decision was made about it as of ` +
-            `${operation.expect.lastSeenAt}.`
-        );
+      const { lastSeenAt, observed } = operation.expect;
+      if (lastSeenAt !== undefined && lastSeenAt !== null) {
+        const seen = row.lastSeenAt.toISOString();
+        if (seen !== lastSeenAt) {
+          fail(
+            outcomes[index],
+            BulkOperationErrorCode.EXPECT_MISMATCH,
+            `Source entry ${operation.entryId} was observed again at ${seen}, ` +
+              `after the decision was made about it as of ${lastSeenAt}.`
+          );
+          return;
+        }
+      }
+      if (observed !== undefined && observed !== null) {
+        const moved = movedFields(observed, observedOf(row));
+        if (moved.length > 0) {
+          fail(
+            outcomes[index],
+            BulkOperationErrorCode.EXPECT_MISMATCH,
+            `Source entry ${operation.entryId} says something else now: ` +
+              `${moved.join('; ')}.`
+          );
+        }
       }
     });
 
@@ -981,6 +997,78 @@ function checkSizeDoubts(
   return outcomes;
 }
 
+/** The fields of `observed`, in the order a mismatch names them (plan 0277). */
+const OBSERVED_FIELDS: readonly (keyof SourceEntryObserved)[] = [
+  'name',
+  'brand',
+  'ean',
+  'sizeFormat',
+  'unitSize',
+  'sizeUnit',
+  'packCount',
+  'soldByWeight',
+  'approxWeight',
+  'packaging',
+];
+
+/** The numeric fields, compared as numbers rather than as their spelling. */
+const OBSERVED_NUMBERS: ReadonlySet<keyof SourceEntryObserved> = new Set([
+  'unitSize',
+  'packCount',
+  'approxWeight',
+]);
+
+/**
+ * The row's content as the queue view prints it (plan 0277, section 1).
+ *
+ * Read through the view's own mapper rather than off the entity, so the value
+ * the decider read and the value compared are the same thing: a `numeric`
+ * column that arrives as `"53.0000"` is the 53 the listing printed.
+ */
+function observedOf(row: SourceCatalogEntry): SourceEntryObserved {
+  const view = toSourceCatalogEntryView(row);
+  return {
+    name: view.name,
+    brand: view.brand ?? null,
+    ean: view.ean ?? null,
+    sizeFormat: view.sizeFormat ?? null,
+    unitSize: view.unitSize ?? null,
+    sizeUnit: view.sizeUnit ?? null,
+    packCount: view.packCount ?? null,
+    soldByWeight: view.soldByWeight,
+    approxWeight: view.approxWeight ?? null,
+    packaging: view.packaging ?? null,
+  };
+}
+
+/**
+ * Each field the row holds differently from what the decision expected, as
+ * `field was <expected>, is <held>`. Strings are compared exactly, with no trim
+ * or case fold, and `null` equals only `null`.
+ */
+function movedFields(
+  expected: SourceEntryObserved,
+  held: SourceEntryObserved
+): string[] {
+  const moved: string[] = [];
+  for (const field of OBSERVED_FIELDS) {
+    const was = expected[field] ?? null;
+    const is = held[field];
+    const same =
+      was === null || is === null
+        ? was === is
+        : OBSERVED_NUMBERS.has(field)
+          ? Number(was) === Number(is)
+          : was === is;
+    if (!same) {
+      moved.push(
+        `${field} was ${JSON.stringify(was)}, is ${JSON.stringify(is)}`
+      );
+    }
+  }
+  return moved;
+}
+
 /** Everything the file gets wrong on its own, with no database read. */
 function checkShape(
   operations: readonly SourceEntryDecisionOperation[]
@@ -1000,6 +1088,24 @@ function checkShape(
       return;
     }
     entryIds.add(operation.entryId);
+
+    // Plan 0277: the gateway leaves both checks optional, and an operation
+    // that carries neither would bind a row with nothing compared but its
+    // status.
+    const expectation = operation.expect;
+    if (
+      !expectation ||
+      ((expectation.lastSeenAt === undefined ||
+        expectation.lastSeenAt === null) &&
+        (expectation.observed === undefined || expectation.observed === null))
+    ) {
+      fail(
+        outcome,
+        BulkOperationErrorCode.MALFORMED_OPERATION,
+        'An operation expects at least one of lastSeenAt and observed.'
+      );
+      return;
+    }
 
     if (operation.op === 'createItem') {
       // The gateway's one DTO covers both kinds, so the fields a createItem

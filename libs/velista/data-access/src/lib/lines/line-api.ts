@@ -1,10 +1,12 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import type {
+  AbsorbedExtra,
   AddLineOptions,
   AddLineQuantityRequest,
   AddLineRequest,
   AlsoOnVm,
+  CountLineExtraRequest,
   ItemLists,
   Line,
   LineApprovalStatus,
@@ -21,6 +23,7 @@ import type {
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { operation } from '../auth/http-context';
+import { toAbsorbedExtra, toCounted } from '../mapping/absorbed-extra-mapper';
 import { toAddOutcome } from '../mapping/add-choice-mappers';
 import {
   toAlsoOnPlace,
@@ -157,6 +160,8 @@ export class LineApi implements LineServiceI {
       // owner's ruling of 2026-11-16: a product add that meets two or more lines is
       // a question as well. Never `newLine` beside products (backend `0260`, R7).
       ...addLineOptionsRequest(options, products),
+      // Beside any of the three (velista `0208`): a raise answers its report.
+      ...(options?.reportExtra === true ? { reportExtra: true } : {}),
     };
 
     const body = await firstValueFrom(
@@ -186,6 +191,9 @@ export class LineApi implements LineServiceI {
       outcome,
       alreadyOnList:
         outcome === 'alreadyOnList' && met.length === 0 ? [line] : met,
+      // Read on its own, from `unknown` (rule D4), and only for a raise: an add
+      // that made or met a line took nothing in.
+      extra: outcome === 'raised' ? toAbsorbedExtra(record?.['extra']) : null,
     };
   }
 
@@ -201,6 +209,7 @@ export class LineApi implements LineServiceI {
       favoriteItemId?: string | null;
       preferredSupermarketId?: string | null;
       confirmMerge?: boolean;
+      reportExtra?: boolean;
     }
   ): Promise<LineUpdateResult> {
     const request: UpdateLineRequest = {};
@@ -249,6 +258,11 @@ export class LineApi implements LineServiceI {
     if (changes.confirmMerge === true) {
       (request as { confirmMerge?: boolean }).confirmMerge = true;
     }
+    // Only ever `true`, and only beside a quantity (velista `0208`): the report is
+    // about a raise of the amount, which a save with no quantity cannot be.
+    if (changes.reportExtra === true && changes.quantity !== undefined) {
+      (request as { reportExtra?: boolean }).reportExtra = true;
+    }
 
     const body = await firstValueFrom(
       this._http.patch<unknown>(this._line(lineId), request, {
@@ -261,6 +275,8 @@ export class LineApi implements LineServiceI {
     return {
       line: required(toLine(body), 'lines.update'),
       absorbedLineId: isRecord(body) ? str(body['absorbedLineId']) : null,
+      // Beside the line too (backend `0276`), read from `unknown` (rule D4).
+      extra: isRecord(body) ? toAbsorbedExtra(body['extra']) : null,
     };
   }
 
@@ -278,6 +294,48 @@ export class LineApi implements LineServiceI {
     );
 
     return required(toLine(body), 'lines.addQuantity');
+  }
+
+  async raiseReportingExtra(
+    lineId: string,
+    delta: number,
+    unit: LineUnit
+  ): Promise<{ readonly line: Line; readonly extra: AbsorbedExtra | null }> {
+    const request: AddLineQuantityRequest = { delta, unit, reportExtra: true };
+
+    const body = await firstValueFrom(
+      this._http.post<unknown>(`${this._line(lineId)}/quantity`, request, {
+        context: operation('lines.addQuantity'),
+      })
+    );
+
+    // The answer is a line view with `extra` beside it (backend `0276`), so the line
+    // maps as any other and the extra is read on its own, from `unknown` (rule D4).
+    return {
+      line: required(toLine(body), 'lines.addQuantity'),
+      extra: isRecord(body) ? toAbsorbedExtra(body['extra']) : null,
+    };
+  }
+
+  async countExtra(
+    lineId: string,
+    amount: number,
+    expect: number,
+    unit: LineUnit
+  ): Promise<{ readonly line: Line; readonly counted: number | null }> {
+    const request: CountLineExtraRequest = { unit, amount, expect };
+
+    const body = await firstValueFrom(
+      this._http.post<unknown>(`${this._line(lineId)}/extra`, request, {
+        context: operation('lines.countExtra'),
+      })
+    );
+
+    // A line view with `counted` beside it (backend `0276`, target state 8).
+    return {
+      line: required(toLine(body), 'lines.countExtra'),
+      counted: isRecord(body) ? toCounted(body['counted']) : null,
+    };
   }
 
   async settle(

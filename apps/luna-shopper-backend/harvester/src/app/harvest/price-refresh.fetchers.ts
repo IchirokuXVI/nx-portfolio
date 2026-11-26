@@ -4,7 +4,6 @@ import {
   LidlClient,
   LidlHttpError,
   type LidlListRow,
-  type LidlProduct,
 } from '@portfolio/luna-shopper/lidl';
 import {
   MercadonaClient,
@@ -12,6 +11,7 @@ import {
   type MercadonaProduct,
 } from '@portfolio/luna-shopper/mercadona';
 import type { SourceCatalogEntry, SupermarketSource } from '../entities';
+import { lidlObservationPrices } from './lidl-catalog.runner';
 import type {
   PartialSourceObservation,
   SourceObservationPrice,
@@ -111,7 +111,10 @@ export const fetchLidl: RefreshFetcher = async (request) => {
       detailFetched: false,
       observedAt: product.observedAt,
       // The page has no field for it (plan 0181), so the row keeps its own.
-      prices: lidlPrices(product),
+      // Each price as the walk writes it: beside a `ca.` weight range by the
+      // kilo, beside any other range as the piece price (owner decisions 141a
+      // and 144).
+      prices: lidlObservationPrices(product),
     },
   };
 };
@@ -163,24 +166,6 @@ function mercadonaPrices(
   ];
 }
 
-/**
- * One price per region, verbatim, with no unit price, as the walk writes them
- * (`lidl-catalog.runner.ts`): LIDL publishes no per kilogram figure.
- */
-function lidlPrices(product: LidlProduct): SourceObservationPrice[] {
-  return product.prices.flatMap((price) =>
-    price.regions.map((region) => ({
-      scopeKey: region.id,
-      price: price.price,
-      currency: price.currency,
-      unitPrice: null,
-      unitPriceLabel: null,
-      validFrom: price.validFrom,
-      validUntil: price.validUntil,
-    }))
-  );
-}
-
 /** The base URL a walk of this chain reads, from its row (plan 0083). */
 function lidlBaseUrl(source: SupermarketSource): string {
   const value = source.config?.['baseUrl'];
@@ -205,7 +190,12 @@ function lidlRowOf(entry: SourceCatalogEntry, baseUrl: string): LidlListRow {
     // A refresh walks no category and states no path (plan 0268).
     categoryBreadcrumbs: null,
     path: pathOf(entry.url, baseUrl),
-    sizeFormat: entry.sizeFormat,
+    // Never the stored format: a block that prints no format is read with the
+    // row's, and the stored one is an earlier week's. A range stored then would
+    // make this week's figure a price per kilo (owner decisions 141a and 144),
+    // so a refresh classifies a price by what the page prints only. The
+    // observation carries prices only, so nothing else read this field.
+    sizeFormat: null,
     listPrice: null,
     ian: null,
     image: null,

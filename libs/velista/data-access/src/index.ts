@@ -32,6 +32,7 @@ export * from './lib/baskets/basket-session-store';
 export * from './lib/baskets/basket-socket';
 export * from './lib/baskets/basket-store';
 export * from './lib/baskets/basket-view-store';
+export * from './lib/baskets/change-landing-store';
 export * from './lib/baskets/held-product-choices';
 export * from './lib/baskets/live-basket-store';
 export * from './lib/baskets/shared-list-store';

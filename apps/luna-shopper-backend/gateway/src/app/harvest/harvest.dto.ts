@@ -15,12 +15,14 @@ import {
   PostalCodeDiscoveryStatus,
   PriceSourceKind,
   SOURCE_ADAPTER_KEYS,
+  SOURCE_SIZE_UNITS,
   SourceEntryStatus,
   SourceLocationStatus,
   UnitOfMeasure,
   type ContentLocale,
   type HarvestDocument,
   type SourceAdapterKey,
+  type SourceSizeUnit,
 } from '@portfolio/luna-shopper/contracts';
 import { asQueryFlag, PageQueryDto } from '@portfolio/luna-shopper/platform';
 import { Transform, Type } from 'class-transformer';
@@ -43,6 +45,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 
@@ -490,24 +493,126 @@ export class CreateItemFromEntryDto {
 }
 
 /**
- * The row as the decisions file saw it (plan 0100).
+ * The content of a queued row a decision was made on (plan 0277, section 1),
+ * each field as the queue listing printed it.
  *
- * Two fields, because two are enough: a row whose status has moved was decided
- * by somebody else, and a row whose `lastSeenAt` has moved was observed again by
- * a later run and may say something different from what was decided about.
+ * Every field is required and null is a value: a partial `observed` would
+ * guard less than it seems to, and a reader of the file could not tell. So
+ * each nullable field carries `@ValidateIf` for null alone, and an absent one
+ * still fails its validators.
+ *
+ * Every field is read as sent ({@link asSent}): the pipe's implicit
+ * conversion would turn `soldByWeight: "false"` into true and `unitSize:
+ * "360"` into 360, and a check compared on a converted value can pass a row it
+ * should refuse. A value of the wrong JSON type is a 400.
+ */
+export class SourceEntryObservedDto {
+  @ApiProperty({ minLength: 1 })
+  @Transform(asSent)
+  @IsString()
+  @MinLength(1)
+  name!: string;
+
+  @ApiProperty({ type: String, nullable: true })
+  @Transform(asSent)
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  brand!: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  @Transform(asSent)
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  ean!: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  @Transform(asSent)
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  sizeFormat!: string | null;
+
+  @ApiProperty({ type: Number, nullable: true })
+  @Transform(asSent)
+  @ValidateIf((_, value) => value !== null)
+  @IsNumber()
+  unitSize!: number | null;
+
+  @ApiProperty({ enum: SOURCE_SIZE_UNITS, nullable: true })
+  @Transform(asSent)
+  @ValidateIf((_, value) => value !== null)
+  @IsIn([...SOURCE_SIZE_UNITS])
+  sizeUnit!: SourceSizeUnit | null;
+
+  @ApiProperty({
+    type: 'integer',
+    nullable: true,
+    minimum: PACK_COUNT_MIN,
+    maximum: PACK_COUNT_MAX,
+  })
+  @Transform(asSent)
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(PACK_COUNT_MIN)
+  @Max(PACK_COUNT_MAX)
+  packCount!: number | null;
+
+  @ApiProperty()
+  @Transform(asSent)
+  @IsBoolean()
+  soldByWeight!: boolean;
+
+  @ApiProperty({ type: Number, nullable: true })
+  @Transform(asSent)
+  @ValidateIf((_, value) => value !== null)
+  @IsNumber()
+  approxWeight!: number | null;
+
+  /** The container the chain printed, compared since decision 154a. */
+  @ApiProperty({ type: String, nullable: true })
+  @Transform(asSent)
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  packaging!: string | null;
+}
+
+/**
+ * The row as the decisions file saw it (plan 0100, and plan 0277).
+ *
+ * A row whose status has moved was decided by somebody else. Beside the
+ * status, `lastSeenAt`, `observed` or both, and each one present is compared:
+ * a moved `lastSeenAt` means a later run observed the row again, and a moved
+ * field of `observed` means the row says something else now. Both are optional
+ * here; the harvester refuses an operation that carries neither, as it checks
+ * the other combinations of {@link SourceEntryDecisionDto}.
+ *
+ * Optional means absent, not null. `@IsOptional` would let a null through,
+ * which the contract schema refuses, so each of the two skips its validators
+ * only when it is undefined and a null is a 400.
  */
 export class SourceEntryExpectationDto {
   @ApiProperty({ enum: SourceEntryStatus })
   @IsEnum(SourceEntryStatus)
   status!: SourceEntryStatus;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     format: 'date-time',
     description:
-      'Exactly the string the queue listing printed for this row. A row observed again since then fails the check.',
+      'Exactly the string the queue listing printed for this row. When present, a row observed again since then fails the check, whatever it says. At least one of this and `observed` is present.',
   })
+  @ValidateIf((_, value) => value !== undefined)
   @IsDateString()
-  lastSeenAt!: string;
+  lastSeenAt?: string;
+
+  @ApiPropertyOptional({
+    type: SourceEntryObservedDto,
+    description:
+      'The fields the decision was made on, exactly as the queue listing printed them, every one present with null where the row holds nothing. When present, each field is compared with the row under the route’s lock, and a field that differs fails the operation with `EXPECT_MISMATCH` naming it. A row a later walk saw again but that says the same passes. Prices are not compared. At least one of this and `lastSeenAt` is present.',
+  })
+  @ValidateIf((_, value) => value !== undefined)
+  @IsObject()
+  @ValidateNested()
+  @Type(() => SourceEntryObservedDto)
+  observed?: SourceEntryObservedDto;
 }
 
 /**

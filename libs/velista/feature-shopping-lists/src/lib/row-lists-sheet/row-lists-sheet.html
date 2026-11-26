@@ -1,0 +1,185 @@
+<lib-sheet-shell (dismiss)="close()" labelledBy="row-lists-title">
+  <!--
+    The chevron beside the title (velista 0200, the mock's boards Detail and
+    DetailAll), as the shop picker draws it: this sheet is reached from the row's
+    sheet, so the way back is a control here. It pops onto that sheet.
+  -->
+  <div class="head">
+    <button
+      (click)="close()"
+      [attr.aria-label]="'basket.lists.back' | rokuT"
+      class="back"
+      type="button"
+    >
+      <lib-chevron-left-icon class="back-glyph" />
+    </button>
+    <h2 class="title" id="row-lists-title">
+      {{ 'basket.lists.title' | rokuT }}
+    </h2>
+  </div>
+
+  <!-- What the view is for, on every visit, in the sheets' secondary text. -->
+  <p class="description">{{ 'basket.lists.description' | rokuT }}</p>
+
+  <!--
+    The row's product, as the product card's compact row draws it: the price,
+    and the card's unit price line under it where it says something the price
+    does not. "Change for all lists" under it when two lists or more may change.
+  -->
+  @if (product(); as top) {
+    <div [class.has-all]="changesAll()" class="product">
+      <lib-product-picture
+        [imageUrl]="top.imageUrl"
+        [zoom]="top.name"
+        class="product-picture"
+        loading="eager"
+      />
+      <span class="product-what">
+        <span class="product-name">{{ top.name }}</span>
+        @if (top.detail; as detail) {
+          <span class="product-detail">{{ detail }}</span>
+        }
+      </span>
+      @if (top.price; as price) {
+        <span class="product-price">
+          <span class="product-amount"
+            ><span>{{ price.amount }}</span>
+            @if (price.per; as per) {
+              <span class="per">{{ per }}</span>
+            }
+          </span>
+          @if (top.unit; as unit) {
+            <span class="product-unit"
+              ><span>{{ unit.amount }}</span>
+              @if (unit.per; as per) {
+                <span class="per">{{ per }}</span>
+              }
+            </span>
+          }
+        </span>
+      }
+      @if (changesAll()) {
+        <button (click)="change(null)" class="change-all" type="button">
+          {{ 'basket.change.all' | rokuT }}
+        </button>
+      }
+    </div>
+  }
+
+  <section class="entries">
+    <div class="rows-head">
+      <h3 class="heading">{{ 'basket.lists.heading' | rokuT }}</h3>
+    </div>
+
+    <ul class="rows">
+      @for (list of lists(); track list.lineId) {
+        <li [attr.data-line-id]="list.lineId" #rowElement class="row">
+          <div class="row-top">
+            <!--
+              The list's reading column: its name, "zone · line", "Bought 2 of
+              3", then "Change product" on its own line where the list may change
+              its product (the mock's placement A). No product line: every list
+              of a row has the row's product.
+            -->
+            <span class="row-label">
+              <span class="row-name">{{ list.list }}</span>
+              @if (list.where; as where) {
+                <span class="row-where">{{ where }}</span>
+              }
+              <span class="row-bought">{{ list.bought }}</span>
+              @if (list.changeable) {
+                <button
+                  (click)="change(list.lineId)"
+                  [attr.aria-label]="list.changeLabel"
+                  class="change"
+                  type="button"
+                >
+                  {{ 'basket.lists.changeProduct' | rokuT }}
+                </button>
+              }
+            </span>
+
+            @if (list.finished) {
+              <!--
+                A finished trip: the ask as a number in its exact form, with its
+                unit, and no control, as the row sheet draws a finished basket.
+              -->
+              <span [class.is-measured]="unit() !== 'UNIT'" class="ask-number">
+                <span class="visually-hidden">
+                  {{
+                    'basket.entries.asks' | rokuT: { amount: list.shownSpoken }
+                  }}
+                </span>
+                <lib-amount-figure
+                  [quantity]="list.shown"
+                  [speak]="false"
+                  [unit]="unit()"
+                  form="exact"
+                />
+              </span>
+            } @else {
+              <!--
+                What the list asks for, as a whole. Locked where the reader may not
+                change it: still in the tab order, and a press says why.
+              -->
+              <span #anchor class="anchor">
+                <lib-quantity-stepper
+                  (disabledPress)="explain(list)"
+                  (stepped)="stepAsk(list.lineId, $event)"
+                  [describedBy]="list.reason === null ? null : list.reasonId"
+                  [fieldName]="list.label"
+                  [locked]="!list.editable"
+                  [min]="0"
+                  [name]="list.name"
+                  [step]="list.step"
+                  [trashAtZero]="false"
+                  [unit]="unit()"
+                  [value]="list.shown"
+                  [variant]="unit() === 'UNIT' ? 'sheet-narrow' : 'sheet'"
+                  class="ask"
+                />
+              </span>
+              @if (list.reason; as reason) {
+                <span [id]="list.reasonId" class="visually-hidden">{{
+                  reason
+                }}</span>
+                @if (explained() === list.lineId) {
+                  <lib-anchored-popover
+                    (closed)="unexplain(list.lineId, $event)"
+                    [keepInSight]="rowElement"
+                    [open]="true"
+                    [origin]="anchor"
+                    [pointer]="true"
+                    [role]="null"
+                    align="end"
+                    frame="note"
+                  >
+                    <p class="why">{{ reason }}</p>
+                  </lib-anchored-popover>
+                }
+              }
+            }
+          </div>
+        </li>
+      }
+    </ul>
+  </section>
+
+  <!--
+    The question about the extra already bought (velista 0208, target state 17),
+    held against the raised list's stepper, and the notice a count that wrote
+    nothing leaves in its place.
+  -->
+  <lib-extra-ask-popover />
+
+  @if (failure(); as failed) {
+    <p aria-live="assertive" class="failed" role="alert">
+      {{ failed.key | rokuT: { count: failed.count } }}
+      @if (failed.correlationId; as reference) {
+        <span class="reference">
+          {{ 'basket.error.reference' | rokuT: { correlationId: reference } }}
+        </span>
+      }
+    </p>
+  }
+</lib-sheet-shell>

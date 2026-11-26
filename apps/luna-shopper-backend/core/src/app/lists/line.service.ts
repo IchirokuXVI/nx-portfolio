@@ -11,16 +11,23 @@ import {
   LineApprovalStatus,
   LineItemSource,
   ListPermission,
+  MembershipStatus,
   NO_LINE_CLAIM,
   NO_LINE_SETTLEMENTS,
+  ParticipantKind,
   RealtimeEvent,
   SettlementOutcome,
+  type AbsorbedExtra,
   type AddLineQuantityRequest,
+  type AddLineQuantityResult,
   type AddLineRequest,
   type AddLineResult,
   type AddLinesItem,
   type AddLinesRequest,
+  type CountLineExtraRequest,
+  type CountLineExtraResult,
   type DeleteLineRequest,
+  type ExtraBuyer,
   type LineAddNeedsChoiceDetails,
   type LineClaim,
   type LineMergeRequiredDetails,
@@ -32,6 +39,7 @@ import {
   type LineUnitBasisRequest,
   type LineUnitDiffersDetails,
   type LineView,
+  type LineWriteVia,
   type ListLinesRequest,
   type ReorderLinesRequest,
   type SetLineApprovalRequest,
@@ -39,6 +47,8 @@ import {
   type UpdateLineResult,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  BasketProductHasNoNameException,
+  CatalogUnavailableException,
   clampPageSize,
   decodeCursor,
   encodeCursor,
@@ -65,8 +75,19 @@ import {
 } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
 import { BasketAnnouncer } from '../baskets/basket-announcer.service';
+import {
+  absorbAboveAsk,
+  buysOf,
+  type StandingBuy,
+} from '../baskets/basket-applied';
+import {
+  COVERING_BASKETS_SQL,
+  type CoveringBasket,
+} from '../baskets/basket-coverage.sql';
+import { basketScopeOf, type BasketScope } from '../baskets/basket-line-facts';
 import { LineClaimService } from '../baskets/line-claim.service';
 import {
+  BasketParticipant,
   BasketTripRow,
   LineComment,
   LineSettlement,
@@ -74,6 +95,7 @@ import {
   ListLineGroupRemoval,
   ListLineItem,
   ShoppingList,
+  ZoneMembership,
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import {
@@ -109,6 +131,41 @@ import { ListAccessService } from './list-access.service';
 import { canChangeDemand } from './list-acts';
 import { toLineView } from './list.mappers';
 import { readLineSettlementSummaries } from './settlement.sql';
+
+/**
+ * An open basket that covers the list, as the absorption of a raise reads it
+ * (plan 0275, section 3; plan 0276, section 1).
+ */
+interface CountingBasket {
+  basketId: string;
+  ownerUserId: string;
+  scope: BasketScope;
+}
+
+/** A buy above the ask, with the owner of the basket it was made through. */
+interface CountedBuy extends StandingBuy {
+  ownerUserId: string;
+}
+
+/**
+ * What a raise took into the ask (plan 0276, section 1), before anything is
+ * reported: the units, and the buys that held them, oldest first.
+ */
+interface Absorbed {
+  above: number;
+  buys: readonly CountedBuy[];
+}
+
+/** A write that raised nothing, or took nothing in. */
+const NOTHING_ABSORBED: Absorbed = { above: 0, buys: [] };
+
+/** What a raise of {@link LineService.raiseForAdd} wrote and took in. */
+interface RaisedLine {
+  written: WrittenLine;
+  /** The quantity the lock read, before the raise. */
+  from: number;
+  absorbed: Absorbed;
+}
 
 interface LineCursor {
   order: LineOrder;
@@ -182,6 +239,43 @@ export interface ListRenameOutcome {
   written: WrittenLine[];
 }
 
+/**
+ * The line a basket buy for a list that does not ask for a product stands on
+ * (plan 0273): the list, the product and what the line would be called.
+ */
+export interface LineAtZeroRequest {
+  /** The actor's own account, which must hold `WRITE` on the list. */
+  userId: string;
+  listId: string;
+  itemId: string;
+  unit: LineUnit;
+  /**
+   * The product's name in the actor's language, else in any language catalog
+   * holds, which a line that is not named carries. Null when catalog named it
+   * in no language.
+   */
+  content: string | null;
+  /**
+   * Catalog did not answer for the name, so a null {@link content} says
+   * nothing about the product (plan 0273, amended again on 2026-11-22).
+   */
+  catalogUnanswered?: boolean;
+  /** The basket the buy is made through, for the change row. */
+  via: LineWriteVia;
+}
+
+/** {@link LineAtZeroRequest} with its access answered, before the transaction. */
+export interface PreparedLineAtZero {
+  list: ShoppingList;
+  userId: string;
+  itemId: string;
+  unit: LineUnit;
+  content: string | null;
+  catalogUnanswered: boolean;
+  approval: { decides: boolean; autoApproves: boolean };
+  actor: LineChangeActor;
+}
+
 /** A line as the fold of a basket rename sees it (plan 0113, section 4). */
 interface FoldLine {
   id: string;
@@ -248,6 +342,11 @@ interface LineEdit {
    * change must name the quantity it starts from, or the edit is refused.
    */
   unit?: LineUnit;
+  /**
+   * Answer what a raise of the quantity took into the ask (plan 0276). Only a
+   * member's edit can ask; the operator path never names it.
+   */
+  reportExtra?: boolean;
 }
 
 /**
@@ -292,7 +391,7 @@ function inUnit(identity: string, unit: LineUnit): string {
  */
 type AddOutcome =
   | { kind: 'CREATED'; line: ListLine }
-  | { kind: 'RAISED'; written: WrittenLine }
+  | { kind: 'RAISED'; written: WrittenLine; extra?: AbsorbedExtra }
   | { kind: 'ALREADY_ON_LIST'; views: LineView[] };
 
 /**
@@ -1156,15 +1255,35 @@ export class LineService {
         // A kept line is raised by the add's amount, or by one step of its own
         // unit when that is not the add's (plan 0260 R4): only a free text add
         // reaches a line of another unit, and its amount was said in pieces.
-        const raise = async (line: ListLine): Promise<AddOutcome> => ({
-          kind: 'RAISED',
-          written: await this.raiseForAdd(
+        //
+        // The raise takes the units bought above the ask into the ask (plan
+        // 0276, section 1). An add learns that it raises only here, under the
+        // lock, so the covering baskets are read through this transaction's
+        // manager, which holds no second connection.
+        const raise = async (line: ListLine): Promise<AddOutcome> => {
+          const raised = await this.raiseForAdd(
             manager,
             line,
             amountOnto(line, unit, quantity),
-            { list: this.listRef(list), actor }
-          ),
-        });
+            { list: this.listRef(list), actor },
+            await this.countersOf(manager, req.listId)
+          );
+          return {
+            kind: 'RAISED',
+            written: raised.written,
+            ...(req.reportExtra === true
+              ? {
+                  extra: await this.reportOf(
+                    manager,
+                    raised.absorbed,
+                    list.zoneId,
+                    raised.from,
+                    raised.written.line.quantity
+                  ),
+                }
+              : {}),
+          };
+        };
         // Met lines are left as they were (A1): read for the answer, with no
         // save, no change record and no event. A line deleted since the read
         // that found it is no line, and with none left the add goes on.
@@ -1180,63 +1299,16 @@ export class LineService {
 
         // The flag the new line would carry, so an add that is not named meets
         // a line that is not named by its products alone (plan 0214, section 1).
-        const identities = lineIdentities({
+        const matches = await this.matchesOfAdd(manager, {
+          listId: req.listId,
           content: req.content,
-          named: namedOnAdd(req.named, itemIds.length > 0),
-          itemSetHash: itemSetHash(itemIds),
+          named: req.named,
+          itemIds,
           productGroupId,
+          unit,
+          freeText,
+          newLine: choice.newLine,
         });
-        const targets = await this.findAddTarget(
-          manager,
-          req.listId,
-          identities
-        );
-        const linesUnder = (keys: readonly string[]): ListLine[] =>
-          keys
-            .map((key) => targets.get(key))
-            .filter((line): line is ListLine => line !== undefined);
-
-        // The matches of the add (the owner, 2026-11-16): every line it could
-        // land on, wanted and kept alike, once each and in position order.
-        let matches: ListLine[];
-        if (freeText) {
-          // The free text line of the name, of any unit (R4), and the lines
-          // that hold a product under the name (plan 0228, target 1.4), unless
-          // the person already chose a new line. The free text line of the
-          // name meets even a `newLine` answer (plan 0228, target 1.2).
-          const own = linesUnder(identities);
-          matches = choice.newLine
-            ? inPositionOrder(own)
-            : inPositionOrder([
-                ...own,
-                ...(await this.findNamedProductLines(
-                  manager,
-                  req.listId,
-                  req.content
-                )),
-              ]);
-        } else {
-          // The identity line of the add's unit (plan 0246 M5) and every line
-          // of its unit that holds every product of the add (R5). Only when
-          // no line of its unit holds the product does a line of another unit
-          // answer, and then as the refusal (plan 0260 U2; the owner,
-          // 2026-11-12: "only").
-          const held = await this.findLinesHolding(
-            manager,
-            req.listId,
-            itemIds
-          );
-          matches = inPositionOrder([
-            ...linesUnder(identities.map((identity) => inUnit(identity, unit))),
-            ...held.filter((line) => unitOf(line) === unit),
-          ]);
-          if (matches.length === 0) {
-            const refused = earliestLine([...linesUnder(identities), ...held]);
-            if (refused !== undefined) {
-              throw lineUnitDiffers(refused, unit, null);
-            }
-          }
-        }
 
         // The person chose a line (plan 0228, target 1.1): one of the add's
         // matches, a product add's included (the owner, 2026-11-16). It is
@@ -1284,26 +1356,16 @@ export class LineService {
           }
         }
 
-        const repo = manager.getRepository(ListLine);
-        const position = (await this.maxPosition(repo, req.listId)) + 1;
-        const line = await repo.save(
-          repo.create(
-            this.newLine(
-              { ...req, quantity, unit },
-              req.listId,
-              req.userId,
-              position,
-              approval,
-              productGroupId
-            )
-          )
-        );
-        if (itemIds.length > 0) {
-          await this.writeItemSet(manager, line.id, itemIds, source);
-        }
-        // Inside the add's own transaction, so a line and the record of it
-        // arriving cannot exist apart.
-        await this.changes.added(manager, this.listRef(list), line, actor);
+        const line = await this.createAddedLine(manager, {
+          item: { ...req, quantity, unit },
+          list,
+          userId: req.userId,
+          approval,
+          productGroupId,
+          itemIds,
+          source,
+          actor,
+        });
         return { kind: 'CREATED', line };
       }
     );
@@ -1327,6 +1389,7 @@ export class LineService {
         merged: true,
         outcome: 'RAISED',
         alreadyOnList: [],
+        ...(outcome.extra ? { extra: outcome.extra } : {}),
       };
     }
 
@@ -1357,6 +1420,266 @@ export class LineService {
       outcome: 'CREATED',
       alreadyOnList: [],
     };
+  }
+
+  /**
+   * The lines an add could land on (the owner, 2026-11-16): every match,
+   * wanted and kept alike, once each and in position order. A product add
+   * that meets only lines of another unit is refused here with
+   * `line_unit_differs` (plan 0260 U2).
+   *
+   * Read under the list lock the caller already holds. {@link add} asks it,
+   * and so does {@link lineAtZeroWithin}, so the two cannot disagree on which
+   * line a product already has (plan 0273).
+   */
+  private async matchesOfAdd(
+    manager: EntityManager,
+    add: {
+      listId: string;
+      content: string;
+      named: boolean | undefined;
+      itemIds: readonly string[];
+      productGroupId: string | null;
+      unit: LineUnit;
+      freeText: boolean;
+      newLine: boolean;
+    }
+  ): Promise<ListLine[]> {
+    // The flag the new line would carry, so an add that is not named meets
+    // a line that is not named by its products alone (plan 0214, section 1).
+    const identities = lineIdentities({
+      content: add.content,
+      named: namedOnAdd(add.named, add.itemIds.length > 0),
+      itemSetHash: itemSetHash([...add.itemIds]),
+      productGroupId: add.productGroupId,
+    });
+    const targets = await this.findAddTarget(manager, add.listId, identities);
+    const linesUnder = (keys: readonly string[]): ListLine[] =>
+      keys
+        .map((key) => targets.get(key))
+        .filter((line): line is ListLine => line !== undefined);
+
+    if (add.freeText) {
+      // The free text line of the name, of any unit (R4), and the lines
+      // that hold a product under the name (plan 0228, target 1.4), unless
+      // the person already chose a new line. The free text line of the
+      // name meets even a `newLine` answer (plan 0228, target 1.2).
+      const own = linesUnder(identities);
+      return add.newLine
+        ? inPositionOrder(own)
+        : inPositionOrder([
+            ...own,
+            ...(await this.findNamedProductLines(
+              manager,
+              add.listId,
+              add.content
+            )),
+          ]);
+    }
+    // The identity line of the add's unit (plan 0246 M5) and every line
+    // of its unit that holds every product of the add (R5). Only when
+    // no line of its unit holds the product does a line of another unit
+    // answer, and then as the refusal (plan 0260 U2; the owner,
+    // 2026-11-12: "only").
+    const held = await this.findLinesHolding(manager, add.listId, add.itemIds);
+    const matches = inPositionOrder([
+      ...linesUnder(identities.map((identity) => inUnit(identity, add.unit))),
+      ...held.filter((line) => unitOf(line) === add.unit),
+    ]);
+    if (matches.length === 0) {
+      const refused = earliestLine([...linesUnder(identities), ...held]);
+      if (refused !== undefined) {
+        throw lineUnitDiffers(refused, add.unit, null);
+      }
+    }
+    return matches;
+  }
+
+  /**
+   * Write a line an add creates, its products and the record of it arriving,
+   * in the caller's transaction (plan 0138). The position is the list's next.
+   *
+   * {@link add} and {@link lineAtZeroWithin} both create through it, so a line
+   * a buy made has the order and the change row of any added line (plan 0273).
+   */
+  private async createAddedLine(
+    manager: EntityManager,
+    created: {
+      item: AddLinesItem;
+      list: ShoppingList;
+      userId: string;
+      approval: { decides: boolean; autoApproves: boolean };
+      productGroupId: string | null;
+      itemIds: readonly string[];
+      source: LineItemSource;
+      actor: LineChangeActor;
+    }
+  ): Promise<ListLine> {
+    const repo = manager.getRepository(ListLine);
+    const position = (await this.maxPosition(repo, created.list.id)) + 1;
+    const line = await repo.save(
+      repo.create(
+        this.newLine(
+          created.item,
+          created.list.id,
+          created.userId,
+          position,
+          created.approval,
+          created.productGroupId
+        )
+      )
+    );
+    if (created.itemIds.length > 0) {
+      await this.writeItemSet(
+        manager,
+        line.id,
+        [...created.itemIds],
+        created.source
+      );
+    }
+    // Inside the add's own transaction, so a line and the record of it
+    // arriving cannot exist apart.
+    await this.changes.added(
+      manager,
+      this.listRef(created.list),
+      line,
+      created.actor
+    );
+    return line;
+  }
+
+  /**
+   * What a basket buy for a list that does not ask for the product needs
+   * from the list before its transaction opens (plan 0273).
+   *
+   * `WRITE` on the list, asked of the actor's own account as the list's add
+   * asks it, and outside any transaction for the reason
+   * {@link ListAccessService} reads draw their own connection. The quantity
+   * is zero and is not a question: the line asks for nothing, and the buy is
+   * a settlement beside it.
+   */
+  async prepareLineAtZero(req: LineAtZeroRequest): Promise<PreparedLineAtZero> {
+    const { list, permissions } = await this.listAccess.requireAccess(
+      req.listId,
+      req.userId,
+      ListPermission.WRITE
+    );
+    const [itemId] = this.validateItemIds([req.itemId]);
+    if (itemId === undefined) {
+      throw new ValidationException('itemId must name one product', {
+        messageArgs: { field: 'itemId' },
+      });
+    }
+    return {
+      list,
+      userId: req.userId,
+      itemId,
+      unit: this.validateUnit(req.unit) ?? 'UNIT',
+      content: req.content?.trim() || null,
+      catalogUnanswered: req.catalogUnanswered === true,
+      approval: {
+        decides: permissions.has(ListPermission.DECIDE),
+        autoApproves: list.autoApproveLines,
+      },
+      actor: actorOf(req),
+    };
+  }
+
+  /**
+   * The line of the product on the list, or a new one at zero, inside the
+   * caller's transaction and under the list lock (plan 0273).
+   *
+   * The list's own add asked as an add of the product at zero with `named:
+   * false` would ask it: the same matches, so a list that holds the product
+   * already, at zero or not, gets no second line. Where the add would meet
+   * one line or ask between several, this takes the earliest by position and
+   * creates nothing; a line deleted since the read is no match. A line of
+   * another unit alone refuses with `line_unit_differs`, as the add does.
+   *
+   * With no match the line is created at zero through the add's own create,
+   * so it gets the list's next position and an `ADDED` change row. It is
+   * announced by {@link announceLineAtZero} once the caller commits.
+   */
+  async lineAtZeroWithin(
+    manager: EntityManager,
+    prepared: PreparedLineAtZero
+  ): Promise<{ line: ListLine; created: boolean }> {
+    await this.lockList(manager, prepared.list.id);
+    const matches = await this.matchesOfAdd(manager, {
+      listId: prepared.list.id,
+      content: prepared.content ?? '',
+      named: false,
+      itemIds: [prepared.itemId],
+      productGroupId: null,
+      unit: prepared.unit,
+      freeText: false,
+      newLine: false,
+    });
+    for (const match of matches) {
+      const line = await this.lockCandidateLine(
+        manager,
+        prepared.list.id,
+        match.id
+      );
+      if (line !== null) {
+        return { line, created: false };
+      }
+    }
+    if (prepared.content === null && prepared.catalogUnanswered) {
+      // No name because catalog did not answer, which a moment later it may
+      // (plan 0273, amended again on 2026-11-22). The transaction rolls back.
+      throw new CatalogUnavailableException(
+        'The catalog did not answer, so no line was made. Try again'
+      );
+    }
+    if (prepared.content === null) {
+      // The name of a line that is not named is the product's, which the
+      // gateway reads from catalog, and never another list's text. A product
+      // with no name in any language leaves nothing to call the line, and a
+      // line with no name is not written.
+      throw new BasketProductHasNoNameException(
+        'This product has no name, so no line was made for it'
+      );
+    }
+    const line = await this.createAddedLine(manager, {
+      item: {
+        content: prepared.content,
+        quantity: 0,
+        unit: prepared.unit,
+        itemIds: [prepared.itemId],
+        named: false,
+      },
+      list: prepared.list,
+      userId: prepared.userId,
+      approval: prepared.approval,
+      productGroupId: null,
+      itemIds: [prepared.itemId],
+      source: LineItemSource.USER,
+      actor: prepared.actor,
+    });
+    return { line, created: true };
+  }
+
+  /**
+   * Announce a line {@link lineAtZeroWithin} created, after the caller's
+   * transaction committed: the `line.added` every added line sends, born with
+   * no settlements and with its claim, and the nudge to every basket that
+   * covers the list (plan 0273).
+   */
+  async announceLineAtZero(
+    prepared: PreparedLineAtZero,
+    line: ListLine
+  ): Promise<void> {
+    const items: LineItemSet = { itemIds: [prepared.itemId], groupItemIds: [] };
+    const claim = await this.claims.claimOf(line.id);
+    this.emit(
+      RealtimeEvent.LineAdded,
+      prepared.list.zoneId,
+      line,
+      items,
+      NO_LINE_SETTLEMENTS,
+      claim
+    );
   }
 
   /**
@@ -1684,14 +2007,25 @@ export class LineService {
         created.push(line);
       }
 
+      // Every raise takes the units bought above the ask into the ask (plan
+      // 0276, section 1), and a batch reports nothing. The covering baskets
+      // are read once, through this transaction's manager, and only when the
+      // batch raises a line.
       const raised = new Map<string, WrittenLine>();
+      const counters =
+        raises.size > 0 ? await this.countersOf(manager, req.listId) : [];
       for (const [lineId, raise] of raises) {
         raised.set(
           lineId,
-          await this.raiseForAdd(manager, raise.line, raise.delta, {
-            list: this.listRef(list),
-            actor,
-          })
+          (
+            await this.raiseForAdd(
+              manager,
+              raise.line,
+              raise.delta,
+              { list: this.listRef(list), actor },
+              counters
+            )
+          ).written
         );
       }
       return { creations, created, slots, raised };
@@ -2339,13 +2673,20 @@ export class LineService {
    * being refused whole. An add is a request for a thing, not a request to write
    * a number, so the failure a caller would get from {@link validateQuantity}
    * here would be about an arithmetic result they never named.
+   *
+   * ## A raise takes the extra into the ask (plan 0276)
+   *
+   * Once the line is written, every unit bought above the ask in the open
+   * baskets that cover the list moves into the ask, under the lock the caller
+   * took on the line. `counters` are those baskets, read by the caller.
    */
   private async raiseForAdd(
     manager: EntityManager,
     line: ListLine,
     added: number,
-    record: { list: ListRef; actor: LineChangeActor }
-  ): Promise<WrittenLine> {
+    record: { list: ListRef; actor: LineChangeActor },
+    counters: readonly CountingBasket[]
+  ): Promise<RaisedLine> {
     // Before the raise, since the change says what the list asked for and what
     // it asks for now. A raise is an **edit** rather than an add (plan 0091 made
     // it one), so the record says `QUANTITY_CHANGED` and not `ADDED`: the line
@@ -2362,7 +2703,11 @@ export class LineService {
       snapshotOf(written.line),
       record.actor
     );
-    return written;
+    const absorbed =
+      written.line.quantity > before.quantity
+        ? await this.absorbExtra(manager, written.line, counters)
+        : NOTHING_ABSORBED;
+    return { written, from: before.quantity, absorbed };
   }
 
   /** A quantity held under the ceiling, for the sums only a merge produces. */
@@ -2575,6 +2920,16 @@ export class LineService {
     this.authorizeEdit(req, line, permissions);
     this.validateUnitEdit(req);
 
+    // An edit that names a quantity may raise the line, and a raise takes the
+    // units bought above the ask into the ask (plan 0276, section 1). The
+    // baskets that cover the list are read out here, through the pool, for
+    // the reason `addQuantity` reads its access out here: the lock is then
+    // held no longer than it was. Their buys are read under the lock.
+    const counters =
+      req.quantity !== undefined
+        ? await this.countersOf(this.dataSource, list.id)
+        : [];
+
     // A new name, as the fold reads it, is a question about the rest of the list
     // and takes the list lock to answer it (plan 0112). A change of case, accents
     // or spacing alone is not, and stays on the path below.
@@ -2589,7 +2944,8 @@ export class LineService {
         req,
         permissions,
         writer,
-        actor
+        actor,
+        counters
       );
     }
 
@@ -2606,13 +2962,14 @@ export class LineService {
     // landed after that read would otherwise be overwritten by a save of the
     // row as it stood before the purchase.
     let unitMoved = false;
-    const written = await writer.transaction(async (manager, record) => {
+    const outcome = await writer.transaction(async (manager, record) => {
       const locked = await this.lockLine(manager, line.id);
       // Asked again of the row the lock read, since its approval may have
       // moved since the check outside.
       this.authorizeEdit(req, locked, permissions);
       assertFrom(req, locked);
       const unitBefore = locked.unit ?? 'UNIT';
+      const from = locked.quantity;
       const prepared = await this.prepareEdit(
         locked,
         list,
@@ -2621,7 +2978,7 @@ export class LineService {
         manager
       );
       unitMoved = (locked.unit ?? 'UNIT') !== unitBefore;
-      return this.writePreparedEdit(
+      const written = await this.writePreparedEdit(
         manager,
         locked,
         list,
@@ -2629,17 +2986,65 @@ export class LineService {
         actor,
         record
       );
+      // Under the same lock, after the line is written (plan 0276, section
+      // 1). A unit change is not a raise: its quantity is in another unit.
+      const raised = !unitMoved && written.line.quantity > from;
+      return {
+        written,
+        ...(await this.absorbOnEdit(manager, {
+          raised,
+          line: written.line,
+          from,
+          counters,
+          zoneId: list.zoneId,
+          report: req.reportExtra === true,
+        })),
+      };
     });
-    return this.announce(
+    const view = this.announce(
       list,
-      written,
+      outcome.written,
       // The quantity alone moved, so the baskets are sent the numbers and do
       // not read again (plan 0204, section 3). A name, a product set, a
       // favourite or a chain is something a room must not carry or core does
       // not hold, and those edits send the ids as before. So is a unit change
-      // (plan 0246 M6): it moves the line to another row.
+      // (plan 0246 M6): it moves the line to another row. Either one tells
+      // every covering basket, so a basket whose ask the raise moved is told.
       movesQuantityAlone(req) && !unitMoved ? 'moved' : 'here'
     );
+    return outcome.extra ? { ...view, extra: outcome.extra } : view;
+  }
+
+  /**
+   * The absorption of an edit that raised the line (plan 0276, section 1),
+   * and its report when the request asked for one.
+   */
+  private async absorbOnEdit(
+    manager: EntityManager,
+    edit: {
+      raised: boolean;
+      line: ListLine;
+      from: number;
+      counters: readonly CountingBasket[];
+      zoneId: string;
+      report: boolean;
+    }
+  ): Promise<{ extra?: AbsorbedExtra }> {
+    if (!edit.raised) {
+      return {};
+    }
+    const absorbed = await this.absorbExtra(manager, edit.line, edit.counters);
+    return edit.report
+      ? {
+          extra: await this.reportOf(
+            manager,
+            absorbed,
+            edit.zoneId,
+            edit.from,
+            edit.line.quantity
+          ),
+        }
+      : {};
   }
 
   /**
@@ -2880,7 +3285,8 @@ export class LineService {
     req: LineEdit,
     permissions: ReadonlySet<ListPermission>,
     writer: LineWriter,
-    actor: LineChangeActor
+    actor: LineChangeActor,
+    counters: readonly CountingBasket[]
   ): Promise<UpdateLineResult> {
     const adopt = req.adoptItemIds ?? [];
     const touchesSet = req.itemIds !== undefined || adopt.length > 0;
@@ -2894,7 +3300,11 @@ export class LineService {
       async (
         manager,
         record
-      ): Promise<{ written: WrittenLine; absorbedLineId?: string }> => {
+      ): Promise<{
+        written: WrittenLine;
+        absorbedLineId?: string;
+        extra?: AbsorbedExtra;
+      }> => {
         const locked = await this.lockList(manager, list.id);
         const line = await manager.getRepository(ListLine).findOne({
           where: { id: lineId },
@@ -2980,7 +3390,22 @@ export class LineService {
             snapshotOf(written.line),
             actor
           );
-          return { written };
+          // A rename that does not merge and raises the quantity is a raise
+          // the person set (plan 0276, section 1); a merge is not, and takes
+          // nothing in. A unit change is not a raise either.
+          return {
+            written,
+            ...(await this.absorbOnEdit(manager, {
+              raised:
+                before.unit === snapshotOf(written.line).unit &&
+                written.line.quantity > before.quantity,
+              line: written.line,
+              from: before.quantity,
+              counters,
+              zoneId: locked.zoneId,
+              report: req.reportExtra === true,
+            })),
+          };
         }
 
         // Two lines of two units never merge (plan 0246 M5): converting needs
@@ -3070,7 +3495,8 @@ export class LineService {
     );
 
     if (outcome.absorbedLineId === undefined) {
-      return this.announce(list, outcome.written);
+      const view = this.announce(list, outcome.written);
+      return outcome.extra ? { ...view, extra: outcome.extra } : view;
     }
     // Section 5: the absorbed line goes first, so a client that applies events
     // in order never draws two lines of one name, then the survivor as it now
@@ -3585,12 +4011,34 @@ export class LineService {
    * do with a read and a write, which is precisely the failure this exists to
    * remove. Routing it through the same code costs nothing, because that code
    * already knows what a reduction means.
+   *
+   * ## A raise takes the extra into the ask (plan 0276)
+   *
+   * A positive delta raises the line by the whole delta, and then, under the
+   * same lock, moves every unit bought above the ask in the open baskets that
+   * cover the list into the ask ({@link absorbExtra}). So after a raise no
+   * unit is left above any open basket's ask, whatever the caller, and the
+   * line holds the amount the person set. Only "Count the extra"
+   * ({@link countExtra}) lowers the line for the extra afterwards. With
+   * `reportExtra`, the answer says what was taken in.
    */
-  async addQuantity(req: AddLineQuantityRequest): Promise<LineView> {
+  async addQuantity(
+    req: AddLineQuantityRequest,
+    /**
+     * A write of the caller's that belongs in this transaction, run under the
+     * line's lock after the `expect` check and before the line is written
+     * (plan 0274, section 5: the basket's demand moves `applied` on its buys
+     * with the line). It may refuse by throwing, and then nothing is written.
+     */
+    underLock?: (manager: EntityManager, line: ListLine) => Promise<void>
+  ): Promise<AddLineQuantityResult> {
     this.validateDelta(req.delta);
     // Required (plan 0246 M8): an old client holding a weight line would add
     // one gram where it meant one kilo. Refused before anything is read.
     requireLineUnit(req.unit);
+    const raising = req.delta > 0;
+    // A JSON `true` alone (plan 0276); the schema refuses anything else.
+    const reporting = req.reportExtra === true;
 
     // Resolved **before** the transaction, and not because it is cheaper there.
     // Every repository the access service holds draws its own connection from the
@@ -3606,8 +4054,14 @@ export class LineService {
       found.listId,
       req.userId
     );
+    // The baskets whose buys a raise takes in, and the scope of each, read out
+    // here for the reason the access is: each is a read through the pool. The
+    // buys themselves are read under the lock below.
+    const counters = raising
+      ? await this.countersOf(this.dataSource, found.listId)
+      : [];
 
-    const written = await this.dataSource.transaction(async (manager) => {
+    const outcome = await this.dataSource.transaction(async (manager) => {
       const repo = manager.getRepository(ListLine);
       const line = await repo.findOne({
         where: { id: req.lineId },
@@ -3639,6 +4093,9 @@ export class LineService {
       // The request an absolute edit of the same field would have been, so the
       // refusal a caller gets is word for word the one the PATCH gives them.
       this.authorizeEdit({ quantity }, line, permissions);
+      if (underLock) {
+        await underLock(manager, line);
+      }
 
       // The row as the lock read it, which is the only state a delta can
       // honestly say it moved from.
@@ -3656,11 +4113,310 @@ export class LineService {
         snapshotOf(written.line),
         actorOf(req)
       );
-      return written;
+
+      // The buys as they stand at the lock: a settle or a revert of this line
+      // takes the same lock before it writes a settlement, so none can land
+      // between this read and the writes of `applied`.
+      if (!raising) {
+        return { written };
+      }
+      const absorbed = await this.absorbExtra(manager, written.line, counters);
+      return {
+        written,
+        extra: reporting
+          ? await this.reportOf(
+              manager,
+              absorbed,
+              list.zoneId,
+              before.quantity,
+              written.line.quantity
+            )
+          : undefined,
+      };
     });
 
-    // A delta moves the quantity and nothing else (plan 0204, section 3).
-    return this.announce(list, written, 'moved');
+    // A delta moves the quantity and nothing else (plan 0204, section 3). The
+    // announcement tells every covering basket what its entries read now,
+    // which is also every basket whose ask the absorption moved.
+    const view = this.announce(list, outcome.written, 'moved');
+    return outcome.extra ? { ...view, extra: outcome.extra } : view;
+  }
+
+  /**
+   * "Count the extra" (plan 0276, section 7): lower the line by `amount`, the
+   * `countable` a raise's report answered, once the person said the extra
+   * covers the raise.
+   *
+   * Nothing is remembered about the raise, so the server cannot tell that
+   * `amount` is what it answered. It holds the count to the line as the person
+   * saw it: the line the lock reads must hold `expect`, or the count is
+   * refused with `stale_quantity` and writes nothing (the owner's answer 2).
+   * The count is then a lowering the same reader could make with the
+   * stepper, under the same authorization, and it moves no `applied`: the
+   * extra stays inside the ask, and the ask of every basket falls with the
+   * line.
+   *
+   * `options.permissions` replaces the requester's own, for a caller that has
+   * already decided whose they are. The basket's count passes none: it writes
+   * as the basket's owner, whose permissions the access resolves.
+   */
+  async countExtra(
+    req: CountLineExtraRequest,
+    options: { permissions?: ReadonlySet<ListPermission> } = {}
+  ): Promise<CountLineExtraResult> {
+    requireLineUnit(req.unit);
+    const amount = req.amount;
+    if (!Number.isInteger(amount) || amount < 1 || amount > LINE_QUANTITY_MAX) {
+      throw new ValidationException(
+        `amount must be a whole number between 1 and ${LINE_QUANTITY_MAX}`,
+        { messageArgs: { field: 'amount' } }
+      );
+    }
+    if (!Number.isInteger(req.expect) || req.expect < 0) {
+      throw new ValidationException('expect must be a whole number', {
+        messageArgs: { field: 'expect' },
+      });
+    }
+    if (amount > req.expect) {
+      // A count can never take the line below zero, so it is refused before
+      // anything is read.
+      throw new ValidationException('amount must be at most expect', {
+        messageArgs: { field: 'amount' },
+      });
+    }
+
+    // Outside the transaction, for the reason `addQuantity` gives.
+    const found = await this.listAccess.getLine(req.lineId);
+    const resolved = await this.listAccess.resolve(found.listId, req.userId);
+    const { list } = resolved;
+    const permissions = options.permissions ?? resolved.permissions;
+
+    const written = await this.dataSource.transaction(async (manager) => {
+      const line = await this.lockLine(manager, req.lineId);
+      assertLineUnit(line, req.unit);
+      if (line.quantity !== req.expect) {
+        throw new StaleQuantityException(
+          'Somebody else changed this while you were looking at it',
+          { messageArgs: { current: line.quantity } }
+        );
+      }
+      const quantity = this.validateQuantity(line.quantity - amount);
+      // Exactly as any lowering of the amount.
+      this.authorizeEdit({ quantity }, line, permissions);
+
+      const before = snapshotOf(line);
+      line.quantity = quantity;
+      this.reopenAfterEdit(line, list, permissions);
+      line.version += 1;
+      const saved = await this.writeEdit(manager, line);
+      await this.changes.edited(
+        manager,
+        this.listRef(list),
+        line.id,
+        before,
+        snapshotOf(saved.line),
+        actorOf(req)
+      );
+      return saved;
+    });
+
+    // As any written delta: `line.updated` to the zone, and the numbers to
+    // every covering basket.
+    return { ...this.announce(list, written, 'moved'), counted: amount };
+  }
+
+  /**
+   * The open baskets that cover a list now, each with the scope its read
+   * counts buys in (plan 0275, section 3). `COVERING_BASKETS_SQL` is the
+   * announcer's own audience, so a basket is counted exactly when it is told.
+   *
+   * `runner` is the pool, for a caller that reads before its transaction, or
+   * the transaction's manager, for one that learns under the lock that it
+   * raises (plan 0276, section 1): through the manager it holds no second
+   * connection.
+   */
+  private async countersOf(
+    runner: DataSource | EntityManager,
+    listId: string
+  ): Promise<CountingBasket[]> {
+    const covering = await runner.query<CoveringBasket[]>(
+      COVERING_BASKETS_SQL,
+      [listId]
+    );
+    const counters: CountingBasket[] = [];
+    for (const basket of covering) {
+      if (!basket.kind) {
+        continue;
+      }
+      counters.push({
+        basketId: basket.basketId,
+        ownerUserId: basket.ownerUserId,
+        scope: await basketScopeOf(runner, {
+          id: basket.basketId,
+          kind: basket.kind,
+        }),
+      });
+    }
+    return counters;
+  }
+
+  /**
+   * Take every unit bought above the ask into the ask, under the line's lock,
+   * after a raise wrote the line (plan 0276, section 1). The one place that
+   * absorbs.
+   *
+   * The buys are each counting basket's standing buys of the line in its
+   * scope, read with `buysOf`, the demand's own expression, and taken oldest
+   * first across every basket by `(settledAt, id)`. Each one's `applied`
+   * becomes its `quantity`, so each unit raises the ask of the basket that
+   * bought it.
+   *
+   * The baskets may have been read before the lock, so a basket that finished
+   * since is dropped by the read of its buys, which keeps only open baskets:
+   * the units of a trip that is over are never taken in.
+   */
+  private async absorbExtra(
+    manager: EntityManager,
+    line: ListLine,
+    counters: readonly CountingBasket[]
+  ): Promise<Absorbed> {
+    if (counters.length === 0) {
+      return NOTHING_ABSORBED;
+    }
+    const buys: CountedBuy[] = [];
+    for (const basket of counters) {
+      for (const buy of await buysOf(
+        manager,
+        basket.basketId,
+        line,
+        basket.scope,
+        { openOnly: true }
+      )) {
+        if (buy.quantity > buy.applied) {
+          buys.push({ ...buy, ownerUserId: basket.ownerUserId });
+        }
+      }
+    }
+    buys.sort(
+      (a, b) =>
+        a.settledAt.getTime() - b.settledAt.getTime() ||
+        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+    );
+
+    const absorption = absorbAboveAsk(buys);
+    const settlements = manager.getRepository(LineSettlement);
+    for (const [id, applied] of absorption.changes) {
+      await settlements.update({ id }, { applied });
+    }
+    return { above: absorption.above, buys };
+  }
+
+  /**
+   * What a raise reports about what it took in (plan 0276, section 6).
+   *
+   * `countable` is bounded by the raise, so a count can never take the line
+   * below where it stood before the raise, and by `above`, so it never takes
+   * off more than the extra covers. `from` is the quantity the lock read and
+   * `to` the quantity written.
+   */
+  private async reportOf(
+    manager: EntityManager,
+    absorbed: Absorbed,
+    zoneId: string,
+    from: number,
+    to: number
+  ): Promise<AbsorbedExtra> {
+    const raisedBy = Math.max(to - Math.max(from, 0), 0);
+    return {
+      above: absorbed.above,
+      countable: Math.min(absorbed.above, raisedBy),
+      buyers:
+        absorbed.above === 0
+          ? []
+          : await this.buyersOf(manager, absorbed.buys, zoneId),
+    };
+  }
+
+  /**
+   * Who bought the units above the ask, as user ids, in the order of each
+   * one's oldest such buy (plan 0275, section 8).
+   *
+   * A participant with an account is that account. A guest is the owner of
+   * the basket the guest bought through, never the guest: core serves no
+   * name, and a guest has no account to name.
+   *
+   * A user id is answered only when that user is an approved member of the
+   * list's zone (amended after the plan's review): the person who reads the
+   * answer is a member, and an id of anyone else would tell them which account
+   * a participant of somebody's basket is, which no read serves them. Anyone
+   * else, and a buy whose participant row is gone, is `null`, and every `null`
+   * is one entry, at the place of the first.
+   */
+  private async buyersOf(
+    manager: EntityManager,
+    buys: readonly CountedBuy[],
+    zoneId: string
+  ): Promise<ExtraBuyer[]> {
+    const ids = [
+      ...new Set(
+        buys
+          .map((buy) => buy.settledByParticipantId)
+          .filter((id): id is string => id !== null)
+      ),
+    ];
+    const participants = new Map(
+      (ids.length === 0
+        ? []
+        : await manager.getRepository(BasketParticipant).find({
+            select: { id: true, kind: true, userId: true },
+            where: { id: In(ids) },
+          })
+      ).map((row) => [row.id, row])
+    );
+
+    const accountOf = (buy: CountedBuy): string | null => {
+      const participant =
+        buy.settledByParticipantId === null
+          ? undefined
+          : participants.get(buy.settledByParticipantId);
+      if (!participant) {
+        return null;
+      }
+      return participant.kind === ParticipantKind.GUEST
+        ? buy.ownerUserId
+        : participant.userId;
+    };
+    const accounts = [
+      ...new Set(buys.map(accountOf).filter((id): id is string => id !== null)),
+    ];
+    // One read of the zone's approved members among them, through the
+    // transaction's manager, so it takes no second connection.
+    const members = new Set(
+      (accounts.length === 0
+        ? []
+        : await manager.getRepository(ZoneMembership).find({
+            select: { userId: true },
+            where: {
+              zoneId,
+              userId: In(accounts),
+              status: MembershipStatus.APPROVED,
+            },
+          })
+      ).map((row) => row.userId)
+    );
+
+    const seen = new Set<string>();
+    const buyers: ExtraBuyer[] = [];
+    for (const buy of buys) {
+      const account = accountOf(buy);
+      const userId = account !== null && members.has(account) ? account : null;
+      const key = userId ?? '';
+      if (!seen.has(key)) {
+        seen.add(key);
+        buyers.push({ userId });
+      }
+    }
+    return buyers;
   }
 
   /**

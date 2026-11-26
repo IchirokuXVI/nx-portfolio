@@ -18,8 +18,11 @@ import {
 } from './catalog-runner';
 import { mergeCategoryPaths } from './category-paths';
 import {
+  DETAIL_DROPPED_SESSIONS_IN_A_ROW,
+  DETAIL_TIMEOUTS_IN_A_ROW,
   ElJamonCatalogRunner,
-  type SilentAttempts,
+  SessionPool,
+  SilentAttempts,
 } from './eljamon-catalog.runner';
 import { FailingRunReport } from './failing-run-report.fake';
 import type { RunContext } from './run-context';
@@ -583,7 +586,19 @@ describe('ElJamonCatalogRunner', () => {
       failed: 1,
       timeouts: 0,
       silentAttempts: 0,
+      rereads: 0,
+      untrustedBreadcrumbs: 0,
+      otherProductPages: 0,
+      // Two workers, two sessions: the listing's and one more. 102's page
+      // answered with no product, which is an answer, so none is dropped.
+      sessions: 2,
+      droppedSessions: 0,
+      // A normal run: no session dropped, and the stage did not stop.
+      droppedSessionsInARow: 0,
+      stoppedBy: null,
     });
+    expect(written['warnings']).toEqual([]);
+    expect(written['untrustedBreadcrumbs']).toEqual([]);
     // One failed page and one failed product, both counted.
     const failures = ctx.report.mock.calls
       .map(([counters]) => (counters as { failed?: number }).failed ?? 0)
@@ -598,6 +613,39 @@ describe('ElJamonCatalogRunner', () => {
     expect(bacon?.prices[0].price).toBe(8.95);
     // Marked, so the next walk reads its page again.
     expect(bacon?.extra).toEqual({ detailFailed: true });
+  });
+
+  it('states no category path for a page that failed on an ALL walk, so the stored one stays (plan 0169, notes of 2026-11-25)', async () => {
+    const ctx = context();
+    const report = new RecordingRunReport();
+    await new TestRunner(storefront).run(
+      ctx,
+      report,
+      { ...input, details: HarvestDetailFetch.ALL },
+      source
+    );
+
+    // An ALL walk is handed no ids, so the chain may hold a row for 102, and
+    // the top level category would replace a stored breadcrumb.
+    const bacon = report.products.find(
+      (product) => product.externalId === '102'
+    );
+    expect(bacon).not.toHaveProperty('categoryPath');
+    expect(bacon?.prices[0].price).toBe(8.95);
+    // The photo is still stated as null: an observation must state one.
+    expect(bacon?.imageUrl).toBeNull();
+    // Still marked, and still counted once as failed.
+    expect(bacon?.extra).toEqual({ detailFailed: true });
+    const written = ctx.setReport.mock.calls[0][0] as Record<string, unknown>;
+    expect(written).toMatchObject({
+      detailFailed: 1,
+      failedProducts: [expect.objectContaining({ code: '102' })],
+    });
+    expect(written['detail']).toMatchObject({ pages: 22, failed: 1 });
+    // The listing's category is only added to the stored paths.
+    expect(
+      report.categoryPathCalls.find((call) => call.externalId === '102')
+    ).toEqual({ externalId: '102', paths: [['FRESCOS']], mode: 'ADD' });
   });
 
   it('asks for page 2 with a POST, as the listing form does', async () => {
@@ -962,6 +1010,18 @@ describe('ElJamonCatalogRunner', () => {
         failed: asked - 1,
         timeouts: asked - 1,
         silentAttempts: 20,
+        rereads: 0,
+        untrustedBreadcrumbs: 0,
+        otherProductPages: 0,
+        // Each page that timed out dropped its session (plan 0169, notes of
+        // 2026-11-26): the listing's took the first, and each of the other
+        // 19 opened one. The answered session starts reset no count.
+        sessions: 20,
+        droppedSessions: 20,
+        // The 21st page met both limits at once; silence is read first, so
+        // the stop is where and what it was before decision 151a.
+        droppedSessionsInARow: 20,
+        stoppedBy: 'SILENCE',
       });
 
       // Every listed row reaches the ingest; every new product whose page was
@@ -1029,6 +1089,14 @@ describe('ElJamonCatalogRunner', () => {
         failed: 5,
         timeouts: 5,
         silentAttempts: 20,
+        rereads: 0,
+        untrustedBreadcrumbs: 0,
+        otherProductPages: 0,
+        // One session per failed page, the retries of a page on its own.
+        sessions: 5,
+        droppedSessions: 5,
+        droppedSessionsInARow: 5,
+        stoppedBy: 'SILENCE',
       });
       expect(ctx.warn).toHaveBeenCalledWith(
         expect.objectContaining({ code: HarvestWarningCode.DETAIL_UNREAD })
@@ -1053,6 +1121,14 @@ describe('ElJamonCatalogRunner', () => {
         failed: 10,
         timeouts: 0,
         silentAttempts: 20,
+        rereads: 0,
+        untrustedBreadcrumbs: 0,
+        otherProductPages: 0,
+        // A reset connection drops the session as a timeout does.
+        sessions: 10,
+        droppedSessions: 10,
+        droppedSessionsInARow: 10,
+        stoppedBy: 'SILENCE',
       });
       expect(ctx.warn).toHaveBeenCalledWith(
         expect.objectContaining({ code: HarvestWarningCode.DETAIL_UNREAD })
@@ -1076,6 +1152,17 @@ describe('ElJamonCatalogRunner', () => {
         failed: 42,
         timeouts: 40,
         silentAttempts: 40,
+        rereads: 0,
+        untrustedBreadcrumbs: 0,
+        otherProductPages: 0,
+        // The two 404s are answers and keep their session; each of the 40
+        // silent pages drops one. Page 1 is a timeout on the listing's.
+        sessions: 40,
+        droppedSessions: 40,
+        // 12, 19 and 9 in a row: a 404 keeps its session, so it starts the
+        // count of dropped sessions again too.
+        droppedSessionsInARow: 19,
+        stoppedBy: null,
       });
       expect(ctx.warn).not.toHaveBeenCalled();
     });
@@ -1124,6 +1211,168 @@ describe('ElJamonCatalogRunner', () => {
         expect(product).not.toHaveProperty('name');
         expect(product.prices).toHaveLength(1);
       }
+    });
+
+    describe('dropped sessions in a row (plan 0169, notes of 2026-11-26, decision 151a)', () => {
+      it('stops after 20 dropped sessions on a chain that resets every product page, and still records every listed row', async () => {
+        const ctx = context();
+        const report = new RecordingRunReport();
+        // A reset is no answer and no silence: the silent attempts never count it.
+        const runner = new TestRunner(siteAnswering(() => 'reset'));
+
+        await runner.run(ctx, report, input, oneWorker);
+
+        expect(detailAsked(runner)).toBe(DETAIL_DROPPED_SESSIONS_IN_A_ROW);
+        expect(written(ctx)['detail']).toEqual({
+          pages: 20,
+          failed: 20,
+          timeouts: 0,
+          silentAttempts: 0,
+          rereads: 0,
+          untrustedBreadcrumbs: 0,
+          otherProductPages: 0,
+          // The listing's session took the first page, and each of the other
+          // 19 opened one: no session is opened for a page never asked.
+          sessions: 20,
+          droppedSessions: 20,
+          droppedSessionsInARow: 20,
+          stoppedBy: 'DROPPED_SESSIONS',
+        });
+        // Every listed row reaches the ingest, marked for the next walk.
+        expect(report.products).toHaveLength(42);
+        expect(
+          report.products.every(
+            (product) => product.extra?.[DETAIL_FAILED_KEY] === true
+          )
+        ).toBe(true);
+        expect(processedOf(ctx)).toBe(42);
+        expect(ctx.warn).toHaveBeenCalledTimes(1);
+        expect(ctx.warn).toHaveBeenCalledWith({
+          code: HarvestWarningCode.DETAIL_UNREAD,
+          name: null,
+          offerId: null,
+          page: null,
+          message:
+            'Product pages stopped after 20 sessions in a row were dropped ' +
+            'with no clean page between them: 20 of 42 page(s) asked, ' +
+            '20 failed, 0 timed out. 42 product(s) had no page; the next ' +
+            'walk asks for them again.',
+        });
+        expect(report.wholeListings).toHaveLength(1);
+      });
+
+      it('opens no more than 20 sessions plus the worker count on a chain that resets every page', async () => {
+        const ctx = context();
+        const runner = new TestRunner(siteAnswering(() => 'reset'));
+        const four = { ...source, workers: 4 } as SupermarketSource;
+
+        await runner.run(ctx, new RecordingRunReport(), input, four);
+
+        const detail = written(ctx)['detail'] as Record<string, unknown>;
+        expect(detail['stoppedBy']).toBe('DROPPED_SESSIONS');
+        expect(detail['pages']).toBeLessThan(42);
+        expect(detail['sessions']).toBeLessThanOrEqual(
+          DETAIL_DROPPED_SESSIONS_IN_A_ROW + 4
+        );
+        // Each fresh session costs its two session starts, and no more.
+        const sessionStarts = runner.sent.filter(
+          (request) => new URL(request.url).pathname === '/'
+        ).length;
+        expect(sessionStarts).toBeLessThanOrEqual(
+          DETAIL_DROPPED_SESSIONS_IN_A_ROW + 4
+        );
+      });
+
+      it('counts a dropped session whose retry answered, and treats the unread pages as the silence stop does', async () => {
+        const ctx = context();
+        const report = new RecordingRunReport();
+        const attempts = new Map<string, number>();
+        // Each product page resets once and answers its retry: the page is
+        // read, and its session is still dropped.
+        const runner = new TestRunner(
+          siteAnswering((code) => {
+            const attempt = attempts.get(code) ?? 0;
+            attempts.set(code, attempt + 1);
+            return attempt === 0 ? 'reset' : undefined;
+          }),
+          1
+        );
+
+        // An `ALL` walk was handed no ids, so every row may be held.
+        await runner.run(
+          ctx,
+          report,
+          { ...input, details: HarvestDetailFetch.ALL },
+          oneWorker
+        );
+
+        const detail = written(ctx)['detail'] as Record<string, unknown>;
+        expect(detail).toMatchObject({
+          pages: 20,
+          droppedSessions: 20,
+          droppedSessionsInARow: 20,
+          stoppedBy: 'DROPPED_SESSIONS',
+        });
+        expect(ctx.signal.aborted).toBe(false);
+        expect(processedOf(ctx)).toBe(42);
+        // The 20 pages asked are reported whole: 19 read, and 102's, which
+        // carries no product and fails as before.
+        expect(report.products).toHaveLength(20);
+        const full = new Set(
+          report.products.map((product) => product.externalId)
+        );
+        // The 22 pages never asked are reported from the listing alone: no
+        // photo, no category path and no name, so nothing stored is cleared.
+        expect(report.partialProducts).toHaveLength(22);
+        for (const product of report.partialProducts) {
+          expect(full.has(product.externalId)).toBe(false);
+          expect(product).not.toHaveProperty('imageUrl');
+          expect(product).not.toHaveProperty('categoryPath');
+          expect(product).not.toHaveProperty('name');
+          expect(product.prices).toHaveLength(1);
+        }
+        expect(ctx.warn).toHaveBeenCalledWith(
+          expect.objectContaining({
+            code: HarvestWarningCode.DETAIL_UNREAD,
+            message: expect.stringContaining('sessions in a row were dropped'),
+          })
+        );
+      });
+
+      it('never stops when every 19th dropped session is followed by a clean page', async () => {
+        const ctx = context();
+        let page = 0;
+        // 19 resets, then a page that keeps its session, over and over.
+        const runner = new TestRunner(
+          siteAnswering(() => (page++ % 20 === 19 ? undefined : 'reset'))
+        );
+
+        await runner.run(ctx, new RecordingRunReport(), input, oneWorker);
+
+        expect(detailAsked(runner)).toBe(42);
+        expect(written(ctx)['detail']).toMatchObject({
+          pages: 42,
+          droppedSessions: 40,
+          droppedSessionsInARow: 19,
+          stoppedBy: null,
+        });
+        expect(ctx.warn).not.toHaveBeenCalled();
+      });
+
+      it('reports zero and does not stop on a run where every request was answered', async () => {
+        const ctx = context();
+        const runner = new TestRunner(site(() => false));
+
+        await runner.run(ctx, new RecordingRunReport(), input, oneWorker);
+
+        expect(detailAsked(runner)).toBe(42);
+        expect(written(ctx)['detail']).toMatchObject({
+          droppedSessions: 0,
+          droppedSessionsInARow: 0,
+          stoppedBy: null,
+        });
+        expect(ctx.warn).not.toHaveBeenCalled();
+      });
     });
   });
 
@@ -1604,5 +1853,633 @@ describe('ElJamonCatalogRunner', () => {
 
       expect(report.categoryPathCalls).toEqual([]);
     });
+  });
+
+  describe('one session per detail worker (plan 0169, notes of 2026-11-25)', () => {
+    const written = (ctx: { setReport: jest.Mock }) =>
+      ctx.setReport.mock.calls[0][0] as Record<string, unknown>;
+
+    /**
+     * A storefront that behaves as El Jamón's did on 2026-11-25: every `GET /`
+     * starts a session with its own `JSESSIONID`, and a product page draws its
+     * breadcrumb from the product the session was asked for last, while its
+     * JSON-LD is always the product the URL names. Each answer takes a few
+     * milliseconds, so the pages of several workers are in flight together.
+     *
+     * It records, per session, how many requests were in flight at once.
+     */
+    class SessionShop {
+      readonly sent: Array<{ session: string; path: string }> = [];
+      /** The most requests one session ever had in flight at the same time. */
+      readonly mostInFlight = new Map<string, number>();
+      private readonly inFlight = new Map<string, number>();
+      private readonly current = new Map<string, string>();
+      private readonly asks = new Map<string, number>();
+      private sessions = 0;
+
+      constructor(
+        private readonly rows: readonly Row[],
+        /** A page the shop answers with another product's breadcrumb anyway. */
+        private readonly alwaysWrong: (
+          code: string,
+          ask: number
+        ) => boolean = () => false,
+        /**
+         * How the shop answers one product page instead: no answer at all
+         * (`timeout`), or a page whose JSON-LD states another code.
+         */
+        private readonly instead: (
+          code: string,
+          ask: number
+        ) => 'timeout' | { sku: string } | undefined = () => undefined
+      ) {}
+
+      readonly fetch = (async (url: string, init?: RequestInit) => {
+        const target = new URL(String(url));
+        const cookie = /JSESSIONID=(\w+)/.exec(
+          String((init?.headers as Record<string, string>)?.['cookie'] ?? '')
+        )?.[1];
+        const session =
+          target.pathname === '/' ? `s${++this.sessions}` : (cookie ?? 'none');
+        this.sent.push({ session, path: target.pathname });
+        const now = (this.inFlight.get(session) ?? 0) + 1;
+        this.inFlight.set(session, now);
+        this.mostInFlight.set(
+          session,
+          Math.max(now, this.mostInFlight.get(session) ?? 0)
+        );
+        const code = /\/detalle\/.*\/(\d+)$/.exec(target.pathname)?.[1];
+        if (code) {
+          this.current.set(session, code);
+        }
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 2));
+          if (
+            code &&
+            this.instead(code, (this.asks.get(code) ?? 0) + 1) === 'timeout'
+          ) {
+            this.asks.set(code, (this.asks.get(code) ?? 0) + 1);
+            throw new ElJamonTimeoutError(target.toString(), 30_000);
+          }
+          const headers =
+            target.pathname === '/'
+              ? { 'set-cookie': `JSESSIONID=${session}; Path=/` }
+              : undefined;
+          return new Response(this.page(target, session, code), { headers });
+        } finally {
+          this.inFlight.set(session, (this.inFlight.get(session) ?? 1) - 1);
+        }
+      }) as unknown as typeof fetch;
+
+      private page(target: URL, session: string, code?: string): string {
+        if (target.pathname === '/') return HOME;
+        if (target.pathname.startsWith('/delegate/')) return '';
+        if (target.pathname === '/categorias/frescos/04') {
+          return listing(this.rows, this.rows.length, '04');
+        }
+        if (target.pathname === '/categorias/bebidas/06') {
+          return listing([], 0, '06');
+        }
+        if (!code) return '';
+        const ask = (this.asks.get(code) ?? 0) + 1;
+        this.asks.set(code, ask);
+        // The breadcrumb and the heading are the session's current product's,
+        // as the shop draws them; the JSON-LD is the asked product's.
+        const drawnFor = this.alwaysWrong(code, ask)
+          ? `${code}9`
+          : (this.current.get(session) ?? code);
+        const other = this.instead(code, ask);
+        if (other && other !== 'timeout') {
+          // Another product's page, whole: its breadcrumb, heading and JSON-LD
+          // agree with each other, so only the code tells it apart.
+          return (
+            '<ul class="breadcrumbs lfr-component migas-custom">' +
+            '<li class="first"><span><a href="/">Inicio</a></span></li>' +
+            `<li ><span><a href="#">Level of ${other.sku}</a></span></li>` +
+            `<li class="last"><span><a href="#">product ${other.sku}</a></span></li></ul>` +
+            `<div class="page-act"><h1>product ${other.sku}</h1></div>` +
+            '<script type="application/ld+json">{"@type": "Product", ' +
+            `"name": "product ${other.sku}", "brand": {"name": "OTHER BRAND"}, ` +
+            `"image": "https://www.supermercadoseljamon.com/documents/10180/892067/${other.sku}_G.jpg", ` +
+            `"offers": {"price": "9.99", "availability": 'InStock'}, ` +
+            `"sku": "${other.sku}"}</script>`
+          );
+        }
+        return (
+          '<ul class="breadcrumbs lfr-component migas-custom">' +
+          '<li class="first"><span><a href="/">Inicio</a></span></li>' +
+          `<li ><span><a href="#">Level of ${drawnFor}</a></span></li>` +
+          `<li class="last"><span><a href="#">product ${drawnFor}</a></span></li></ul>` +
+          `<div class="page-act"><h1>product ${drawnFor}</h1></div>` +
+          '<script type="application/ld+json">{"@type": "Product", ' +
+          `"name": "product ${code}", "brand": {"name": "PAGE BRAND"}, ` +
+          `"image": "https://www.supermercadoseljamon.com/documents/10180/892067/${code}_G.jpg", ` +
+          `"offers": {"price": "1.00", "availability": 'InStock'}, ` +
+          `"sku": "${code}"}</script>`
+        );
+      }
+    }
+
+    class SessionRunner extends ElJamonCatalogRunner {
+      constructor(private readonly shop: SessionShop) {
+        super({
+          getOrThrow: () => ({ userAgent: 'LunaShopperBot/1.0' }),
+        } as unknown as ConfigService);
+      }
+
+      protected override createClient(
+        context: RunContext,
+        _source: SupermarketSource,
+        _postalCode: string,
+        silence: SilentAttempts
+      ): ElJamonClient {
+        return new ElJamonClient({
+          userAgent: 'LunaShopperBot/1.0',
+          baseUrl: BASE,
+          sleepImpl: async () => undefined,
+          retries: 0,
+          acquire: context.acquire,
+          guard: context.guard,
+          signal: context.signal,
+          fetchImpl: silence.watch(this.shop.fetch),
+        });
+      }
+    }
+
+    const rows: Row[] = Array.from({ length: 12 }, (_, index) => ({
+      code: String(500 + index),
+      description: `producto ${index}, 1kg`,
+      brand: 'MARCA',
+      price: '1,00',
+      unit: '1,00 €/Kilo',
+    }));
+
+    /** A context whose one bucket counts every request it lets through. */
+    function bucketContext() {
+      const ctx = context();
+      let admitted = 0;
+      const acquire = jest.fn(async () => {
+        admitted += 1;
+      });
+      return {
+        ctx: Object.assign(ctx, { acquire }),
+        admitted: () => admitted,
+      };
+    }
+
+    const workers = (count: number) =>
+      ({ ...source, workers: count }) as SupermarketSource;
+
+    it('gives N workers N sessions, and never has two requests in flight in one session', async () => {
+      const shop = new SessionShop(rows);
+      const { ctx } = bucketContext();
+      const report = new RecordingRunReport();
+
+      await new SessionRunner(shop).run(ctx, report, input, workers(4));
+
+      // Four sessions: the listing's, which the first page reuses, and three.
+      const sessions = new Set(
+        shop.sent.filter((s) => s.path === '/').map((s) => s.session)
+      );
+      expect(sessions.size).toBe(4);
+      expect(written(ctx)['detail']).toMatchObject({
+        pages: 12,
+        failed: 0,
+        rereads: 0,
+        untrustedBreadcrumbs: 0,
+        sessions: 4,
+      });
+      // The pool did run the pages of several sessions at the same time...
+      const pageSessions = new Set(
+        shop.sent
+          .filter((s) => s.path.includes('/detalle/'))
+          .map((s) => s.session)
+      );
+      expect(pageSessions.size).toBe(4);
+      // ...and no session ever had a second request while one was in flight.
+      expect(Math.max(...shop.mostInFlight.values())).toBe(1);
+      // So every page got its own breadcrumb.
+      for (const row of rows) {
+        expect(
+          report.products.find((p) => p.externalId === row.code)?.categoryPath
+        ).toEqual([`Level of ${row.code}`]);
+      }
+    });
+
+    it('sends every request of every session through the one bucket of the run', async () => {
+      const shop = new SessionShop(rows);
+      const { ctx, admitted } = bucketContext();
+
+      await new SessionRunner(shop).run(
+        ctx,
+        new RecordingRunReport(),
+        input,
+        workers(4)
+      );
+
+      // One admission per request, whichever session sent it: four sessions
+      // see together the rate one session saw.
+      expect(admitted()).toBe(shop.sent.length);
+      expect(written(ctx)['requests']).toBe(shop.sent.length);
+      // Each session starts with its own `GET /`, so four sessions are four.
+      expect(shop.sent.filter((s) => s.path === '/')).toHaveLength(4);
+    });
+
+    it('opens no second session for one worker', async () => {
+      const shop = new SessionShop(rows);
+      const { ctx } = bucketContext();
+
+      await new SessionRunner(shop).run(
+        ctx,
+        new RecordingRunReport(),
+        input,
+        workers(1)
+      );
+
+      expect(shop.sent.filter((s) => s.path === '/')).toHaveLength(1);
+      expect(written(ctx)['detail']).toMatchObject({ sessions: 1 });
+    });
+
+    it('reads a contaminated page again on its own session, and keeps the second answer when it is clean', async () => {
+      // 503's first answer carries another product's breadcrumb.
+      const shop = new SessionShop(
+        rows,
+        (code, ask) => code === '503' && ask === 1
+      );
+      const { ctx } = bucketContext();
+      const report = new RecordingRunReport();
+
+      await new SessionRunner(shop).run(ctx, report, input, workers(3));
+
+      const asked = shop.sent.filter((s) => s.path.endsWith('/503'));
+      expect(asked).toHaveLength(2);
+      // Both on one session.
+      expect(new Set(asked.map((s) => s.session)).size).toBe(1);
+      expect(written(ctx)['detail']).toMatchObject({
+        pages: 12,
+        rereads: 1,
+        untrustedBreadcrumbs: 0,
+      });
+      expect(report.products.find((p) => p.externalId === '503')).toMatchObject(
+        { categoryPath: ['Level of 503'], extra: null }
+      );
+      expect(
+        report.categoryPathCalls.find((call) => call.externalId === '503')
+      ).toEqual({
+        externalId: '503',
+        paths: [['Level of 503'], ['FRESCOS']],
+        mode: 'REPLACE',
+      });
+    });
+
+    it('keeps the trusted fields of a page still contaminated, states no path, replaces none, and counts it', async () => {
+      const shop = new SessionShop(rows, (code) => code === '503');
+      const { ctx } = bucketContext();
+      const report = new RecordingRunReport();
+
+      await new SessionRunner(shop).run(ctx, report, input, workers(3));
+
+      expect(shop.sent.filter((s) => s.path.endsWith('/503'))).toHaveLength(2);
+      const product = report.products.find((p) => p.externalId === '503');
+      // The listing's fields and the JSON-LD's photo, as for a clean page...
+      expect(product).toMatchObject({
+        name: 'producto 3',
+        brand: 'MARCA',
+        sizeFormat: '1kg',
+        imageUrl:
+          'https://www.supermercadoseljamon.com/documents/10180/892067/503_G.jpg',
+        // ...marked so the next walk reads the page again for its path...
+        extra: { [DETAIL_FAILED_KEY]: true },
+        prices: [expect.objectContaining({ price: 1 })],
+      });
+      // ...and no path at all: not the wrong one, not the top level.
+      expect(product).not.toHaveProperty('categoryPath');
+      // The paths call only adds the listing's category, so a stored
+      // breadcrumb stays.
+      expect(
+        report.categoryPathCalls.find((call) => call.externalId === '503')
+      ).toEqual({ externalId: '503', paths: [['FRESCOS']], mode: 'ADD' });
+      expect(
+        mergeCategoryPaths([['Frescos', 'Fiambres']], [['FRESCOS']], 'ADD')
+      ).toEqual([['Frescos', 'Fiambres'], ['FRESCOS']]);
+      // Counted, and named.
+      expect(written(ctx)['detail']).toMatchObject({
+        rereads: 1,
+        untrustedBreadcrumbs: 1,
+      });
+      expect(written(ctx)['untrustedBreadcrumbs']).toEqual(['503']);
+      expect(written(ctx)['detailRead']).toBe(12);
+      // Every other product is clean and replaces its paths.
+      expect(
+        report.categoryPathCalls.find((call) => call.externalId === '504')
+      ).toEqual({
+        externalId: '504',
+        paths: [['Level of 504'], ['FRESCOS']],
+        mode: 'REPLACE',
+      });
+    });
+
+    it('writes one warning line on the report when a page stayed contaminated (plan 0169, notes of 2026-11-26)', async () => {
+      const shop = new SessionShop(
+        rows,
+        (code) => code === '503' || code === '507'
+      );
+      const { ctx } = bucketContext();
+
+      await new SessionRunner(shop).run(
+        ctx,
+        new RecordingRunReport(),
+        input,
+        workers(3)
+      );
+
+      const warnings = written(ctx)['warnings'] as string[];
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(/^2 product page\(s\) drew their breadcrumb/);
+      // A report line, not a run warning: no code of that list names it.
+      expect(ctx.warn).not.toHaveBeenCalled();
+    });
+
+    it('writes no warning line when every page read clean, a reread included', async () => {
+      const shop = new SessionShop(
+        rows,
+        (code, ask) => code === '503' && ask === 1
+      );
+      const { ctx } = bucketContext();
+
+      await new SessionRunner(shop).run(
+        ctx,
+        new RecordingRunReport(),
+        input,
+        workers(3)
+      );
+
+      expect(written(ctx)['warnings']).toEqual([]);
+    });
+
+    it('reads a page that states another product code again, and fails it when it still does (plan 0169, notes of 2026-11-26)', async () => {
+      const shop = new SessionShop(
+        rows,
+        () => false,
+        (code) => (code === '503' ? { sku: '599' } : undefined)
+      );
+      const { ctx } = bucketContext();
+      const report = new RecordingRunReport();
+
+      await new SessionRunner(shop).run(ctx, report, input, workers(3));
+
+      expect(shop.sent.filter((s) => s.path.endsWith('/503'))).toHaveLength(2);
+      const product = report.products.find((p) => p.externalId === '503');
+      // Nothing of the other product's page: not its photo, brand or path.
+      expect(product).toMatchObject({
+        name: 'producto 3',
+        brand: 'MARCA',
+        imageUrl: null,
+        extra: { [DETAIL_FAILED_KEY]: true },
+        // A new product the chain holds no row for starts with the listing's
+        // top level category, as every failed page of a NEW walk does.
+        categoryPath: ['FRESCOS'],
+      });
+      expect(
+        report.categoryPathCalls.find((call) => call.externalId === '503')
+      ).toEqual({ externalId: '503', paths: [['FRESCOS']], mode: 'ADD' });
+      expect(written(ctx)['detail']).toMatchObject({
+        pages: 12,
+        failed: 1,
+        rereads: 1,
+        otherProductPages: 1,
+        untrustedBreadcrumbs: 0,
+      });
+      expect(written(ctx)['detailFailed']).toBe(1);
+      expect(written(ctx)['failedProducts']).toEqual([
+        expect.objectContaining({
+          code: '503',
+          error: expect.stringContaining('states product 599, not 503'),
+        }),
+      ]);
+    });
+
+    it('states no path for a page of another product on an ALL walk, so the stored one stays', async () => {
+      const shop = new SessionShop(
+        rows,
+        () => false,
+        (code) => (code === '503' ? { sku: '599' } : undefined)
+      );
+      const { ctx } = bucketContext();
+      const report = new RecordingRunReport();
+
+      await new SessionRunner(shop).run(
+        ctx,
+        report,
+        { ...input, details: HarvestDetailFetch.ALL },
+        workers(3)
+      );
+
+      const product = report.products.find((p) => p.externalId === '503');
+      expect(product).toMatchObject({ extra: { [DETAIL_FAILED_KEY]: true } });
+      expect(product).not.toHaveProperty('categoryPath');
+    });
+
+    it('keeps the second answer of a page whose first one stated another product code', async () => {
+      const shop = new SessionShop(
+        rows,
+        () => false,
+        (code, ask) =>
+          code === '503' && ask === 1 ? { sku: '599' } : undefined
+      );
+      const { ctx } = bucketContext();
+      const report = new RecordingRunReport();
+
+      await new SessionRunner(shop).run(ctx, report, input, workers(3));
+
+      expect(report.products.find((p) => p.externalId === '503')).toMatchObject(
+        { categoryPath: ['Level of 503'], extra: null }
+      );
+      expect(written(ctx)['detail']).toMatchObject({
+        failed: 0,
+        rereads: 1,
+        otherProductPages: 0,
+      });
+    });
+
+    it('drops a session whose page timed out, and reads the next page on a fresh one (plan 0169, notes of 2026-11-26)', async () => {
+      const shop = new SessionShop(
+        rows,
+        () => false,
+        (code) => (code === '503' ? 'timeout' : undefined)
+      );
+      const { ctx } = bucketContext();
+      const report = new RecordingRunReport();
+
+      await new SessionRunner(shop).run(ctx, report, input, workers(1));
+
+      const timedOut = shop.sent.find((s) => s.path.endsWith('/503'));
+      const pagesAfter = shop.sent
+        .slice(shop.sent.indexOf(timedOut as (typeof shop.sent)[number]) + 1)
+        .filter((s) => s.path.includes('/detalle/'));
+      // One worker, so every page after 503 is on one session, and not 503's.
+      expect(pagesAfter.length).toBe(8);
+      expect(new Set(pagesAfter.map((s) => s.session))).toEqual(
+        new Set(['s2'])
+      );
+      expect(timedOut?.session).toBe('s1');
+      expect(shop.sent.filter((s) => s.path === '/')).toHaveLength(2);
+      expect(written(ctx)['detail']).toMatchObject({
+        failed: 1,
+        timeouts: 1,
+        sessions: 2,
+        droppedSessions: 1,
+      });
+      // The fresh session reads clean pages.
+      expect(report.products.find((p) => p.externalId === '504')).toMatchObject(
+        { categoryPath: ['Level of 504'] }
+      );
+    });
+
+    it('drops no session on a run where every request was answered', async () => {
+      const shop = new SessionShop(rows);
+      const { ctx } = bucketContext();
+
+      await new SessionRunner(shop).run(
+        ctx,
+        new RecordingRunReport(),
+        input,
+        workers(2)
+      );
+
+      expect(written(ctx)['detail']).toMatchObject({
+        sessions: 2,
+        droppedSessions: 0,
+      });
+    });
+  });
+});
+
+describe('SessionPool (plan 0169, notes of 2026-11-26)', () => {
+  /** A client with only what the pool reads: its two counters. */
+  const fakeClient = (): ElJamonClient =>
+    ({ requests: 0, transportFailures: 0 }) as unknown as ElJamonClient;
+
+  it('lets a dropped client go, and still counts its requests', async () => {
+    const first = fakeClient();
+    const opened: ElJamonClient[] = [];
+    const pool = new SessionPool(() => {
+      const client = fakeClient();
+      opened.push(client);
+      return client;
+    }, first);
+
+    // The listing's client answers two pages, then meets a reset connection.
+    await pool.use(async (client) => {
+      client.requests += 2;
+    });
+    await pool.use(async (client) => {
+      expect(client).toBe(first);
+      client.requests += 3;
+      client.transportFailures += 1;
+    });
+    expect(pool.dropped).toBe(1);
+    expect(pool.held).toBe(0);
+    expect(pool.requests).toBe(5);
+
+    // The next page opens a fresh session, never the dropped one.
+    await pool.use(async (client) => {
+      expect(client).not.toBe(first);
+      client.requests += 4;
+    });
+    expect(opened).toHaveLength(1);
+    expect(pool.held).toBe(1);
+    expect(pool.size).toBe(2);
+    // The dropped client's five requests and the fresh one's four.
+    expect(pool.requests).toBe(9);
+  });
+
+  it('holds no dropped client however many pages met a reset', async () => {
+    const pool = new SessionPool(fakeClient);
+    for (let page = 0; page < 50; page += 1) {
+      await pool.use(async (client) => {
+        client.requests += 2;
+        client.transportFailures += 1;
+      });
+    }
+    expect(pool.dropped).toBe(50);
+    expect(pool.held).toBe(0);
+    expect(pool.size).toBe(50);
+    expect(pool.requests).toBe(100);
+  });
+
+  it('drops a client whose work threw, and keeps its requests', async () => {
+    const pool = new SessionPool(fakeClient);
+    await expect(
+      pool.use(async (client) => {
+        client.requests += 1;
+        client.transportFailures += 1;
+        throw new Error('socket hang up');
+      })
+    ).rejects.toThrow('socket hang up');
+    expect(pool.held).toBe(0);
+    expect(pool.requests).toBe(1);
+  });
+});
+
+describe('SilentAttempts and a session start (plan 0169, notes of 2026-11-26)', () => {
+  const timeout = (url: string) => new ElJamonTimeoutError(url, 30_000);
+
+  /** A transport that answers or times out per URL, counted by `silence`. */
+  function watched(
+    silence: SilentAttempts,
+    answer: (url: URL) => 'answer' | 'timeout'
+  ): typeof fetch {
+    return silence.watch((async (input: string) => {
+      const url = new URL(input);
+      if (answer(url) === 'timeout') {
+        throw timeout(input);
+      }
+      return new Response('');
+    }) as unknown as typeof fetch);
+  }
+
+  it('starts no new count on an answer to a session start', async () => {
+    const silence = new SilentAttempts();
+    const send = watched(silence, (url) =>
+      url.pathname.includes('/detalle/') ? 'timeout' : 'answer'
+    );
+
+    for (let page = 0; page < DETAIL_TIMEOUTS_IN_A_ROW; page += 1) {
+      await expect(
+        send(`${BASE}/detalle/-/Producto/p/${page}`)
+      ).rejects.toThrow();
+      // A fresh session after each page: its home page and postal code answer.
+      await send(`${BASE}/`);
+      await send(`${BASE}/delegate/seleccionarCodPostalAjaxServletFood`);
+    }
+
+    expect(silence.inARow).toBe(DETAIL_TIMEOUTS_IN_A_ROW);
+    expect(silence.exhausted).toBe(true);
+  });
+
+  it('counts a session start that times out', async () => {
+    const silence = new SilentAttempts();
+    const send = watched(silence, () => 'timeout');
+
+    await expect(send(`${BASE}/`)).rejects.toThrow();
+    await expect(send(`${BASE}/detalle/-/Producto/p/1`)).rejects.toThrow();
+
+    expect(silence.inARow).toBe(2);
+    expect(silence.total).toBe(2);
+  });
+
+  it('starts the count again on an answer to a product page', async () => {
+    const silence = new SilentAttempts();
+    let answers = false;
+    const send = watched(silence, () => (answers ? 'answer' : 'timeout'));
+
+    await expect(send(`${BASE}/detalle/-/Producto/p/1`)).rejects.toThrow();
+    await expect(send(`${BASE}/`)).rejects.toThrow();
+    answers = true;
+    await send(`${BASE}/detalle/-/Producto/p/2`);
+
+    expect(silence.inARow).toBe(0);
+    expect(silence.total).toBe(2);
   });
 });

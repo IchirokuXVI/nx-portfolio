@@ -5,10 +5,13 @@ import {
   computed,
   DestroyRef,
   DOCUMENT,
+  effect,
   inject,
   input,
   output,
   signal,
+  viewChildren,
+  type ElementRef,
 } from '@angular/core';
 import {
   RokuLocaleStore,
@@ -23,7 +26,9 @@ import {
   QUANTITY_HOLD_FACTOR,
   QUANTITY_HOLD_FASTEST_MS,
   QUANTITY_HOLD_FIRST_MS,
+  QUANTITY_SNAP_POINTS,
   QUANTITY_STEP_QUIET_MS,
+  snapPointsWithin,
   stepAt,
   stepFrom,
   type LineUnit,
@@ -105,8 +110,12 @@ export interface RefusalWords {
  * hundredth of the name the row shows. **The ends are
  * drawn, not hidden** (decision D): an end carries `aria-disabled` and ignores the
  * press, so focus stays on the button. **A hold repeats** after
- * `QUANTITY_HOLD_DELAY_MS`, from 300 ms down to 100 ms, and never takes an amount to
- * 0 (S8b): at 0 a line leaves the list's view, and that must take a press.
+ * `QUANTITY_HOLD_DELAY_MS`, from 300 ms down to 60 ms, and never takes an amount to
+ * 0 (S8b): at 0 a line leaves the list's view, and that must take a press. **A
+ * hold goes on until the finger lifts** (velista `0193`): the pointer is captured,
+ * and from the first repeat a moving touch no longer scrolls, so a wandering finger
+ * keeps stepping. Before the first repeat a swipe still scrolls the list. While a
+ * hold is down no text is selected anywhere on the page.
  *
  * **It never changes size**, whatever it holds: 155, 191 or 168 by 48 CSS px.
  * Typing is possible only in the two sheet variants (S9).
@@ -138,6 +147,9 @@ export interface RefusalWords {
     '[class.is-readonly]': 'readonly()',
     '[class.is-took]': 'took()',
     '[class.is-disabled]': 'disabled()',
+    '[class.is-locked]': 'locked()',
+    '[class.is-reached]': "reach() === 'reached'",
+    '[class.is-over]': "reach() === 'over'",
     '[attr.data-value]': 'value()',
   },
 })
@@ -151,6 +163,13 @@ export class QuantityStepper {
    * over it. A container passes `lineStepOf` of its line, never a step it computed.
    */
   readonly step = input<number | null>(null);
+  /**
+   * The amounts a press lands on rather than pass (velista `0195`): 1000 by default.
+   * A caller that passes its own list replaces the default, so a list that keeps
+   * the stop at 1000 names it too. Points at or under {@link min} or over the
+   * {@link ceiling} are dropped by `snapPointsWithin`.
+   */
+  readonly snaps = input<readonly number[]>(QUANTITY_SNAP_POINTS);
   /** What the amount is of, translated: "Plátano de Canarias IGP", or with its list. */
   readonly name = input.required<string>();
   /**
@@ -177,15 +196,50 @@ export class QuantityStepper {
   readonly max = input(LINE_QUANTITY_MAX);
   /** A write is in flight: both buttons and the field ignore input, and say so. */
   readonly disabled = input(false);
+  /**
+   * The reader may not change the amount (velista `0200`). Both buttons and the
+   * field ignore input and say so with `aria-disabled`, never the `disabled`
+   * attribute, so the stepper stays in the tab order. The whole capsule is drawn
+   * disabled, minus draws its bar and never the trash, and a press, Enter or Space
+   * on it is told through {@link disabledPress}, so a host can say why. A write in
+   * flight is {@link disabled}, which draws none of this.
+   */
+  readonly locked = input(false);
+  /**
+   * The id of an element that says why the amount may not change, for the
+   * controls' `aria-describedby` while {@link locked} (velista `0200`), or null.
+   */
+  readonly describedBy = input<string | null>(null);
   /** A reader: the amount alone, no buttons and no outline (decision I). */
   readonly readonly = input(false);
   /** An add just raised this amount (velista `0170`, decision J). */
   readonly took = input(false);
+  /**
+   * The amount this one is measured against, or null for none (velista `0201`): a
+   * list's ask, beside what was bought for it. At it the number is drawn in the
+   * success colour, above it in the quiet amber, and below it as always, and the
+   * live region says "reached" or "more than asked" after the settled amount. Only
+   * the number takes the colour, never the outline or the symbol.
+   */
+  readonly target = input<number | null>(null);
+  /**
+   * Whether minus draws the red trash where one press takes the amount to 0 (the
+   * owner's S14). True, the default, is the zone list, where 0 means the line leaves
+   * its list. The two basket sheets pass false (the owner, 2026-11-23): there 0 is an
+   * amount like any other, so minus keeps its bar and its colour and still steps to
+   * 0. Only the glyph changes; the step, the hold and the name do not.
+   */
+  readonly trashAtZero = input(true);
 
   /** The next amount, on every press, every repeat, every key and every typed commit. */
   readonly valueChange = output<number>();
   /** The same change with where it came from and whether the hold made it. */
   readonly stepped = output<QuantityStep>();
+  /**
+   * A press, Enter or Space on the stepper while it is {@link locked} (velista
+   * `0200`): once per gesture, with no {@link stepped} and no {@link valueChange}.
+   */
+  readonly disabledPress = output<void>();
 
   private readonly _localeStore = inject(RokuLocaleStore, { optional: true });
   private readonly _document = inject(DOCUMENT);
@@ -213,11 +267,45 @@ export class QuantityStepper {
   /**
    * Whether one press of minus takes the amount to 0, where the line leaves its list
    * (the owner's S14): minus then draws a red trash in place of its bar. Never with a
-   * floor above 0 (a due row, the how many step), and never at 0 itself.
+   * floor above 0 (a due row, the how many step), never at 0 itself, and never on
+   * a {@link locked} stepper, whose minus takes no press, and never where the caller
+   * turned it off with {@link trashAtZero}.
    */
   readonly minusClears = computed(() => {
     const value = this.value();
-    return value > 0 && this._down(value) === 0;
+    return (
+      this.trashAtZero() &&
+      !this.locked() &&
+      value > 0 &&
+      this._down(value) === 0
+    );
+  });
+
+  /** Both buttons and the field ignore input: a write in flight, or a locked amount. */
+  readonly blocked = computed(() => this.disabled() || this.locked());
+
+  /**
+   * Where the amount stands against {@link target}: `reached` at it, `over` above
+   * it, null below it or with no target. A target of 0 is never reached, so
+   * nothing is green for a list that asks nothing; any amount above it is over.
+   */
+  readonly reach = computed<'reached' | 'over' | null>(() => {
+    const target = this.target();
+    if (target === null) {
+      return null;
+    }
+    const value = this.value();
+    return value > target
+      ? 'over'
+      : value === target && target > 0
+        ? 'reached'
+        : null;
+  });
+
+  /** The word the live region says after the settled amount, as a key, or null. */
+  readonly reachKey = computed(() => {
+    const reach = this.reach();
+    return reach === null ? null : `amount.${reach}`;
   });
 
   /** What minus moves at the current amount, in short form words ("25 g", "1", "10"). */
@@ -229,9 +317,18 @@ export class QuantityStepper {
     );
   });
 
-  /** What plus moves at the current amount. */
-  readonly moreStep = computed(() =>
-    this._stepWords(stepAt(this.value(), this.unit(), this.step()))
+  /** What plus moves at the current amount: the real difference, as for minus. */
+  readonly moreStep = computed(() => {
+    const value = this.value();
+    const delta = this._up(value) - value;
+    return this._stepWords(
+      delta > 0 ? delta : stepAt(value, this.unit(), this.step())
+    );
+  });
+
+  /** The snap points this stepper's range can land on (velista `0195`). */
+  private readonly _snaps = computed(() =>
+    snapPointsWithin(this.snaps(), this.min(), this.ceiling())
   );
 
   /** The amount the presses settled on, which the live region says (decision E). */
@@ -332,12 +429,68 @@ export class QuantityStepper {
   private _draftPress = false;
   private _announceTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly _onScroll = () => this._stopRepeat();
+  /**
+   * The button a primary pointer holds down, from `pointerdown` until it goes up or
+   * is cancelled (velista `0193`). Null when no hold is down.
+   */
+  private _holdButton: HTMLElement | null = null;
+  /**
+   * The pointer that holds {@link _holdButton}. The end of any other pointer leaves
+   * the hold as velista `0188` left it: the repeat stops and the release is
+   * swallowed, but the hold keeps its claim and its selection guard.
+   */
+  private _holdPointer: number | null = null;
+  /** The hold repeated, so its touch no longer scrolls the page (velista `0193`, 1). */
+  private _holdClaimed = false;
+  /** No text was selected when the hold went down, so a selection now is the hold's. */
+  private _selectionWasEmpty = true;
+  /** The two buttons, which carry the touch listeners below. */
+  private readonly _stepButtons =
+    viewChildren<ElementRef<HTMLButtonElement>>('step');
+  /**
+   * A touch that moves while a hold that repeated is down does not pan, so the
+   * browser never takes it for a scroll and never cancels the pointer. It sits on
+   * the buttons from the start, not on the document from the first repeat: a
+   * browser decides at `touchstart` whether a blocking listener is under the
+   * finger, and a touch keeps the target it started on, so this sees only a touch
+   * that started on the held button and cancels no other touch of the page.
+   */
+  private readonly _onTouchMove = (event: Event) => {
+    if (this._holdClaimed && event.currentTarget === this._holdButton) {
+      event.preventDefault();
+    }
+  };
+  /** Nothing to do; it only makes the button a blocking touch target at the start. */
+  private readonly _onTouchStart = () => undefined;
+  /** A hold that lasts selects no text anywhere on the page (velista `0193`, 5). */
+  private readonly _onSelectStart = (event: Event) => event.preventDefault();
 
   constructor() {
     // A render means the caller has had its chance to redraw; from here its `value`
     // is the base again. A plain field, so the hook writes no signal.
     afterEveryRender(() => {
       this._ahead = null;
+    });
+    // The touch listeners are added by hand, not bound in the template: a template
+    // binding would schedule change detection on every move of every swipe that
+    // starts on a stepper, and these do nothing unless a hold is claimed. Added
+    // non passive, so a move can still be cancelled once the hold repeats.
+    effect((onCleanup) => {
+      const buttons = this._stepButtons().map((ref) => ref.nativeElement);
+      for (const button of buttons) {
+        button.addEventListener('touchstart', this._onTouchStart, {
+          passive: false,
+        });
+        button.addEventListener('touchmove', this._onTouchMove, {
+          passive: false,
+        });
+      }
+      onCleanup(() => {
+        for (const button of buttons) {
+          button.removeEventListener('touchstart', this._onTouchStart);
+          button.removeEventListener('touchmove', this._onTouchMove);
+        }
+      });
     });
     inject(DestroyRef).onDestroy(() => {
       this.endHold();
@@ -354,6 +507,11 @@ export class QuantityStepper {
    */
   press(direction: 1 | -1, event?: MouseEvent): void {
     const pointer = (event?.detail ?? 1) !== 0;
+    if (this.locked()) {
+      // A press, Enter or Space on a locked stepper steps nothing and is told.
+      this.disabledPress.emit();
+      return;
+    }
     if (!pointer) {
       // A key press of a button; a pointer's press cleared it on pointerdown, before
       // the blur that may have said why a typed count was held.
@@ -370,7 +528,7 @@ export class QuantityStepper {
       this._commitDraft();
       return;
     }
-    if (this.disabled() || this._atEnd(direction)) {
+    if (this.blocked() || this._atEnd(direction)) {
       return;
     }
     if (this._commitDraft()) {
@@ -397,13 +555,32 @@ export class QuantityStepper {
     }
     this._swallowClick = false;
     this._stopRepeat();
+    this._releaseHold();
     this._holdCount = 0;
     // Down comes before the focus moves, so typed text is still a draft here. The
     // owner's rule: this gesture commits the text only, with no step and no repeat.
     this._draftPress = this.draft() !== null;
-    if (this._draftPress || this.disabled() || this._atEnd(direction)) {
+    if (this._draftPress || this.blocked() || this._atEnd(direction)) {
       return;
     }
+    // The pointer stays with the button wherever it goes, for every pointer type:
+    // a slide off no longer ends the hold, only a lift or a cancel does.
+    const button = event.currentTarget as HTMLElement | null;
+    this._holdButton = button;
+    if (typeof event.pointerId === 'number') {
+      this._holdPointer = event.pointerId;
+      try {
+        button?.setPointerCapture?.(event.pointerId);
+      } catch {
+        // The pointer is no longer active; its up or cancel ends the hold as before.
+      }
+    }
+    const selection = this._document.getSelection?.();
+    this._selectionWasEmpty =
+      !selection || selection.rangeCount === 0 || selection.isCollapsed;
+    this._document.addEventListener('selectstart', this._onSelectStart, {
+      capture: true,
+    });
     this._document.defaultView?.addEventListener('scroll', this._onScroll, {
       capture: true,
       passive: true,
@@ -415,23 +592,47 @@ export class QuantityStepper {
   }
 
   /**
-   * The finger leaves the button: a lift, a slide off or a cancel. When the hold
-   * repeated, also when the repeat had already stopped at an end or on a scroll,
-   * every pointer click is swallowed until the next `pointerdown` on the control:
-   * a hold that stopped at the last amount above 0 must not reach 0 on the release
-   * (S8b), however late a touch browser sends that click, and also after the
-   * finger slid off and back on.
+   * The finger or the button goes up, or the pointer is cancelled. A slide off the
+   * button ends nothing (velista `0193`): the pointer is captured, so the hold goes
+   * on until the lift. When the hold repeated, also when the repeat had already
+   * stopped at an end or on a scroll, every pointer click is swallowed until the
+   * next `pointerdown` on the control: a hold that stopped at the last amount above
+   * 0 must not reach 0 on the release (S8b), however late a touch browser sends that
+   * click. A mouse or pen press that did not repeat and is released off the button
+   * steps nothing either: with the capture its click now reaches the button, and
+   * only a press released on the button steps. A touch is left as before, so a tap
+   * whose contact lands a few pixels past the box still steps.
+   *
+   * The end of a pointer that is not the hold's (a second finger) does what it did
+   * before velista `0193`: it stops the repeat and swallows the release, and leaves
+   * the hold its claim and its selection guard until its own pointer ends.
    */
-  endHold(): void {
+  endHold(event?: PointerEvent): void {
     this._stopRepeat();
     if (this._holdCount > 0) {
       this._swallowClick = true;
       this._holdCount = 0;
+    } else if (
+      event &&
+      event.type === 'pointerup' &&
+      !this._isOtherPointer(event) &&
+      this._releasedOff(event)
+    ) {
+      this._swallowClick = true;
+    }
+    if (!event || !this._isOtherPointer(event)) {
+      this._releaseHold();
     }
   }
 
   /** Arrow keys, Home and End on the sheet's field (the APG spinbutton pattern). */
   onFieldKey(event: KeyboardEvent): void {
+    if (this.locked() && (event.key === 'Enter' || event.key === ' ')) {
+      // The field takes no click from a key, so the press is told here.
+      event.preventDefault();
+      this.disabledPress.emit();
+      return;
+    }
     if (event.key === 'Escape' && this._refusal() !== null) {
       // The popover goes, and the Escape goes no further: the sheet stays open.
       event.preventDefault();
@@ -440,7 +641,7 @@ export class QuantityStepper {
       // Typed text stays: a second Escape puts the shown amount back.
       return;
     }
-    if (this.disabled()) {
+    if (this.blocked()) {
       return;
     }
     if (ENDS_THE_EDIT.has(event.key)) {
@@ -479,6 +680,13 @@ export class QuantityStepper {
           (event.target as HTMLInputElement).value = this.words().figure;
         }
         return;
+    }
+  }
+
+  /** A press on the sheet's field while {@link locked} is told once. */
+  onFieldClick(): void {
+    if (this.locked()) {
+      this.disabledPress.emit();
     }
   }
 
@@ -551,10 +759,71 @@ export class QuantityStepper {
     });
   }
 
+  /**
+   * The hold is over: the touch may scroll again and text may be selected again. A
+   * selection that started during the hold anyway is cleared; one the page had
+   * before the press is left as it was.
+   */
+  private _releaseHold(): void {
+    this._document.removeEventListener('selectstart', this._onSelectStart, {
+      capture: true,
+    });
+    if (this._holdButton !== null) {
+      this._clearHoldSelection();
+    }
+    this._holdButton = null;
+    this._holdPointer = null;
+    this._holdClaimed = false;
+  }
+
+  /** From the first repeat the hold owns its touch: a move no longer scrolls. */
+  private _claimHold(): void {
+    if (this._holdButton !== null) {
+      this._holdClaimed = true;
+    }
+  }
+
+  /** Whether an end event belongs to a pointer other than the one that holds. */
+  private _isOtherPointer(event: PointerEvent): boolean {
+    return (
+      this._holdPointer !== null &&
+      typeof event.pointerId === 'number' &&
+      event.pointerId !== this._holdPointer
+    );
+  }
+
+  private _clearHoldSelection(): void {
+    if (!this._selectionWasEmpty) {
+      return;
+    }
+    const selection = this._document.getSelection?.();
+    if (selection && selection.rangeCount > 0 && !selection.isCollapsed) {
+      selection.removeAllRanges();
+    }
+  }
+
+  /**
+   * Whether a mouse or pen release that has coordinates happened outside the held
+   * button. A touch never counts: the browser captured it on its own before
+   * velista `0193`, and its tap stepped wherever the contact point landed.
+   */
+  private _releasedOff(event: PointerEvent): boolean {
+    const button = this._holdButton;
+    const { clientX: x, clientY: y, pointerType } = event;
+    if (pointerType !== 'mouse' && pointerType !== 'pen') {
+      return false;
+    }
+    if (button === null || typeof x !== 'number' || typeof y !== 'number') {
+      return false;
+    }
+    const box = button.getBoundingClientRect();
+    return x < box.left || x > box.right || y < box.top || y > box.bottom;
+  }
+
   /** One step of the hold: from the current value, so the caller's answer is the base. */
   private _repeat(direction: 1 | -1): void {
     this._holdTimer = null;
-    if (this.disabled()) {
+    if (this.blocked()) {
       this._stopRepeat();
       return;
     }
@@ -573,6 +842,8 @@ export class QuantityStepper {
       return;
     }
     this._holdCount++;
+    this._claimHold();
+    this._clearHoldSelection();
     this._emit(next, true);
     this._announceLater();
     const interval = Math.max(
@@ -596,7 +867,13 @@ export class QuantityStepper {
   }
 
   private _plusAtEndOf(value: number): boolean {
-    return !canStepUp(value, this.unit(), this.ceiling(), this.step());
+    return !canStepUp(
+      value,
+      this.unit(),
+      this.ceiling(),
+      this.step(),
+      this._snaps()
+    );
   }
 
   private _atEnd(direction: 1 | -1): boolean {
@@ -608,13 +885,18 @@ export class QuantityStepper {
 
   private _next(direction: 1 | -1): number {
     const value = this._current();
-    return direction === 1
-      ? stepFrom(value, this.unit(), 1, this.step())
-      : this._down(value);
+    return direction === 1 ? this._up(value) : this._down(value);
+  }
+
+  private _up(value: number): number {
+    return stepFrom(value, this.unit(), 1, this.step(), this._snaps());
   }
 
   private _down(value: number): number {
-    return Math.max(this.min(), stepFrom(value, this.unit(), -1, this.step()));
+    return Math.max(
+      this.min(),
+      stepFrom(value, this.unit(), -1, this.step(), this._snaps())
+    );
   }
 
   private _emit(to: number, repeat: boolean, typed = false): boolean {

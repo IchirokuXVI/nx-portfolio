@@ -6,6 +6,7 @@ import {
   LIST_PATTERNS,
   type AddCommentRequest,
   type AddLineQuantityRequest,
+  type AddLineQuantityResult,
   type AddLineRequest,
   type AddLineResult,
   type AddLinesRequest,
@@ -13,6 +14,8 @@ import {
   type CommentAudioView,
   type CommentPage,
   type CommentView,
+  type CountLineExtraRequest,
+  type CountLineExtraResult,
   type CreateListRequest,
   type DeleteLineRequest,
   type GetCommentAudioRequest,
@@ -126,8 +129,18 @@ export class ListController {
   }
 
   @MessagePattern(LINE_PATTERNS.addQuantity)
-  addLineQuantity(@Payload() req: AddLineQuantityRequest): Promise<LineView> {
+  addLineQuantity(
+    @Payload() req: AddLineQuantityRequest
+  ): Promise<AddLineQuantityResult> {
     return this.lines.addQuantity(req);
+  }
+
+  /** "Count the extra" after a raise reported it (plan 0276, section 7). */
+  @MessagePattern(LINE_PATTERNS.countExtra)
+  countLineExtra(
+    @Payload() req: CountLineExtraRequest
+  ): Promise<CountLineExtraResult> {
+    return this.lines.countExtra(req);
   }
 
   @MessagePattern(LINE_PATTERNS.setApproval)

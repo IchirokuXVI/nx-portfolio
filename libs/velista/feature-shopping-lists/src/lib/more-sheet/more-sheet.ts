@@ -3,14 +3,16 @@ import {
   Component,
   computed,
   inject,
+  signal,
+  viewChild,
 } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
-import { BasketStore } from '@portfolio/velista/data-access';
-import { APP_BASE_PATH } from '@portfolio/velista/models';
+import { BasketStore, ListRowsStore } from '@portfolio/velista/data-access';
+import { APP_BASE_PATH, type ListRowLayout } from '@portfolio/velista/models';
 import {
   appPath,
   ListSearchNavigation,
@@ -22,6 +24,8 @@ import {
   PersonIcon,
   PlusIcon,
   SheetShell,
+  ViewChoices,
+  ViewIcon,
 } from '@portfolio/velista/ui';
 import { basketDoors, basketMenuEntries, hasFinishSheet } from '../basket-menu';
 import { BASKET_PATHS, basketPath, basketSheetPath } from '../basket-paths';
@@ -61,6 +65,8 @@ import { BASKET_PATHS, basketPath, basketSheetPath } from '../basket-paths';
     PlusIcon,
     RokuTranslatorPipe,
     SheetShell,
+    ViewChoices,
+    ViewIcon,
   ],
   templateUrl: './more-sheet.html',
   styleUrl: './more-sheet.scss',
@@ -101,6 +107,25 @@ export class MoreSheet {
   protected readonly peopleCount = computed(
     () => this._basket.participants().length
   );
+
+  /** How this device draws the rows of a zone list, for the View row (velista `0202`). */
+  protected readonly listRows = inject(ListRowsStore);
+
+  /** Whether the View row's choices are open. The sheet stays open under them. */
+  protected readonly viewOpen = signal(false);
+
+  private readonly _shell = viewChild.required(SheetShell);
+
+  /**
+   * A view was chosen: the device keeps it, and the menu closes as the tools row's
+   * picker does after a choice (the owner, 2026-11-23). The shell hands focus back
+   * to what opened the menu, its button on the page, as Escape does.
+   */
+  protected chooseView(view: ListRowLayout): void {
+    this.viewOpen.set(false);
+    this.listRows.setLayout(view);
+    this._shell().requestDismiss();
+  }
 
   protected openPeople(): void {
     void this._sheet.leaveTo(this._sheetUrl('people'));

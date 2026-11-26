@@ -238,6 +238,24 @@ export const ERROR_CODES = [
    * it as one more `false`, and the front door stays as it was (velista `0177`).
    */
   'google_sign_in_needs_consent',
+  /**
+   * A buy for another list named a line that is already an entry of the row
+   * (backend `0273`), as a 409. Nothing was written. The sheet reads the basket
+   * again, and the list then steps among the row's lists (velista `0201`).
+   */
+  'basket_line_already_in_row',
+  /** A buy for another list on a row with no product (backend `0273`), as a 409. */
+  'basket_row_has_no_product',
+  /**
+   * The line a buy for another list had to make would have no name: the product
+   * has none in any language (backend `0273`), as a 409. Nothing was written.
+   */
+  'basket_product_has_no_name',
+  /**
+   * The catalog did not answer while a buy for another list had to make a line
+   * (backend `0273`), as a 503. Nothing was written, and trying again is right.
+   */
+  'catalog_unavailable',
   'internal',
 ] as const;
 

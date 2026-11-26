@@ -10,18 +10,44 @@
   scrolls away and never waits for the list. On a cold arrival the name is not here
   yet and the title is the word for the kind of page; the name then takes its place in
   the same box, at the same size (rule H6).
+
+  The group is the line under the title (velista 0205): "in Casa". An empty line until
+  the group is known, so the title already sits where it will be once the group
+  arrives, and no line at all when there is no list to name a group for.
 -->
+@let zoneName = header()?.zoneName ?? null;
 <lib-page-header
   (back)="back()"
   [backLabel]="'list.header.back' | rokuT"
+  [subtitle]="
+    header() === null
+      ? null
+      : zoneName === null
+        ? ''
+        : ('list.header.inGroup' | rokuT: { name: zoneName })
+  "
   [title]="header()?.listName ?? ('list.header.title' | rokuT)"
 >
   <ng-container pageHeaderActions>
     <!--
-      The filter (velista 0082, section 2). The badge is how many settings are on, and
-      the **name carries it too**, because a count that only exists as a dot over a
-      glyph is a count a screen reader never hears. Absent while the composer's field
-      holds words, and on an empty list.
+      The view picker (velista 0202): the first action, before the filter. The default
+      view or the compact one, kept on the device, which the basket page offers too.
+      Drawn while the rows can be seen, the composer's results included, since the
+      view applies to those as well.
+    -->
+    @if (current.kind === 'loaded' && !current.empty) {
+      <lib-view-picker
+        (chosen)="listRows.setLayout($event)"
+        [layout]="listRows.layout()"
+        look="header"
+      />
+    }
+
+    <!--
+      The filter (velista 0082, section 2). A funnel since velista 0202. The badge is
+      how many settings are on, and the **name carries it too**, because a count that
+      only exists as a dot over a glyph is a count a screen reader never hears. Absent
+      while the composer's field holds words, and on an empty list.
     -->
     @if (current.kind === 'loaded' && !typing() && !current.empty) {
       <button
@@ -55,10 +81,10 @@
 
 <!--
   The head block (velista 0189): pinned between the page header and the column, so
-  the field stays put while the column scrolls. Which group, who else is here, and
-  whether the list is live, then the field. It draws from the cache when the caller
-  arrived from the group page, so the common path shows it on the first frame and
-  skeletons only the lines. On a cold arrival the lines still load without it, which
+  the field stays put while the column scrolls. Who else is here and whether the list
+  is live, then the field; the group is in the page header since velista 0205. It
+  draws from the cache when the caller arrived from the group page, so the common path
+  shows it on the first frame and skeletons only the lines. On a cold arrival the lines still load without it, which
   is rule L2 and is the whole reason these are two requests.
 -->
 <div class="page-top">
@@ -342,8 +368,13 @@
             (chooseProduct)="chooseProduct($event)"
             (dismiss)="dismissNote($event)"
             (opened)="openLine($event)"
+            (quantityReeled)="reelQuantity($event)"
             (quantityStepped)="stepQuantity($event)"
+            (reelOpened)="onReelOpened($event)"
             (retry)="retry($event)"
+            [askedId]="extraAskedId()"
+            [clearingIds]="clearing()"
+            [flashing]="extraFlashing()"
             [highlight]="highlight()"
             [layout]="listRows.layout()"
             [lines]="drawnLines()"
@@ -429,8 +460,13 @@
             (chooseProduct)="chooseProduct($event)"
             (dismiss)="dismissNote($event)"
             (opened)="openLine($event)"
+            (quantityReeled)="reelQuantity($event)"
             (quantityStepped)="stepQuantity($event)"
+            (reelOpened)="onReelOpened($event)"
             (retry)="retry($event)"
+            [askedId]="extraAskedId()"
+            [clearingIds]="clearing()"
+            [flashing]="extraFlashing()"
             [highlight]="highlight()"
             [layout]="listRows.layout()"
             [lines]="wantedLines()"
@@ -454,6 +490,7 @@
                     (added)="addDueLine($event)"
                     (opened)="openLine($event)"
                     [addsOnStep]="dueAddsOnStep"
+                    [layout]="listRows.layout()"
                     [row]="row"
                   />
                 </li>
@@ -472,8 +509,13 @@
               (chooseProduct)="chooseProduct($event)"
               (dismiss)="dismissNote($event)"
               (opened)="openLine($event)"
+              (quantityReeled)="reelQuantity($event)"
               (quantityStepped)="stepQuantity($event)"
+              (reelOpened)="onReelOpened($event)"
               (retry)="retry($event)"
+              [askedId]="extraAskedId()"
+              [clearingIds]="clearing()"
+              [flashing]="extraFlashing()"
               [highlight]="highlight()"
               [layout]="listRows.layout()"
               [lines]="restLines()"
@@ -488,8 +530,13 @@
             (chooseProduct)="chooseProduct($event)"
             (dismiss)="dismissNote($event)"
             (opened)="openLine($event)"
+            (quantityReeled)="reelQuantity($event)"
             (quantityStepped)="stepQuantity($event)"
+            (reelOpened)="onReelOpened($event)"
             (retry)="retry($event)"
+            [askedId]="extraAskedId()"
+            [clearingIds]="clearing()"
+            [flashing]="extraFlashing()"
             [highlight]="highlight()"
             [layout]="listRows.layout()"
             [lines]="drawnLines()"
@@ -538,6 +585,18 @@
         }
       }
     }
+
+    <!--
+      Does the extra already bought count? (velista 0207, 0208.) Asked after a raise
+      of a row that took units bought above the ask into the ask, pointed at that
+      row's amount control and covering neither the row nor the control. Only "Count
+      the extra" writes: whatever else closes it leaves the amount set, which the raise
+      already wrote. Held against the mark beside the row, laid over its control, so
+      it is inserted in the list item and never inside the row, which is a button.
+      A count that wrote nothing says so in the same place. The page's ExtraAskHost
+      holds both (velista 0208, target state 10).
+    -->
+    <lib-extra-ask-popover />
   }
 </main>
 
@@ -547,5 +606,5 @@
   open over nothing, and a write from it would only be refused (velista 0156).
 -->
 @if (current.kind === 'loading' || current.kind === 'loaded') {
-  <router-outlet />
+  <router-outlet (activate)="onSheetOpened()" />
 }

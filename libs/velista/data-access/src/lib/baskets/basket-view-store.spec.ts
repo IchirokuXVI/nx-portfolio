@@ -111,6 +111,8 @@ function product(
     categories: [
       {
         id: 'cat-uncategorised',
+        packCount: null,
+        pieceCount: null,
         parentId: 'cat-other',
         slug: 'uncategorised',
         name: { en: 'Not yet categorised', es: 'Sin categoría' },

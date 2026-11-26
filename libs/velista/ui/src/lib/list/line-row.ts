@@ -2,9 +2,14 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
+  effect,
+  ElementRef,
   inject,
   input,
   output,
+  untracked,
+  viewChild,
 } from '@angular/core';
 import {
   RokuTranslatorPipe,
@@ -14,6 +19,7 @@ import {
   lineRowFacts,
   lineStatuses,
   priceWordsText,
+  QUANTITY_REEL_CLICK_SHIELD_MS,
   type LineRowFacts,
   type LineRowShownProduct,
   type LineRowVm,
@@ -29,6 +35,7 @@ import {
   StarFilledIcon,
 } from '../icons/icons';
 import { ProductPicture } from './product-picture';
+import { QuantityReel } from './quantity-reel';
 import { QuantityStepper } from './quantity-stepper';
 
 /** The words of section 4, by status. */
@@ -39,6 +46,9 @@ const STATUS_KEYS: Record<LineStatus, string> = {
   notAvailable: 'line.indicator.notAvailable',
   bought: 'line.indicator.bought',
 };
+
+/** The presses a row being cleared swallows (velista `0199`). */
+const LOCKED_EVENTS = ['click', 'pointerdown', 'keydown'] as const;
 
 /**
  * What the row emits: the three approval decisions drawn under it.
@@ -75,15 +85,42 @@ export type LineRowAction = 'approve' | 'reject' | 'restore';
  *
  * The stepper (velista `0188`) is two buttons and an amount in one capsule of 155 by
  * 48, and it stops the pointer and the click from reaching the row underneath, so a
- * press on minus or plus never opens the sheet. It has no overlay, so nothing of the
- * row has to be made deaf around it: the reel's capture listeners and its deaf beat
- * went with the reel.
+ * press on minus or plus never opens the sheet. It is the control of the default
+ * view.
+ *
+ * ## In the compact view the control is the reel, and an open reel makes the line deaf
+ *
+ * The compact view draws the reel of velista `0043` in place of the stepper (velista
+ * `0203`), 52 by 44. Its overlay runs sideways over the row it belongs to, so the tap
+ * that dismisses it lands on the row underneath. That tap **closes the reel and does
+ * nothing else**: it was aimed at the thing on top. The same holds for
+ * {@link QUANTITY_REEL_CLICK_SHIELD_MS} after the overlay times out on its own, since
+ * a finger already falling does not stop when what it was falling towards vanishes.
+ *
+ * It is decided at `pointerdown` and enforced at `click`, both in the capture phase.
+ * The state has to be read at the press because focus leaves the reel between the
+ * press and the click, which closes it, so by click time there is nothing left to
+ * notice. The reel has no hold and no trash, so the lock of velista `0199` is the
+ * stepper's alone; a row locked in the default view stays locked when the view
+ * changes, because the lock is on the host and the layer over both layouts.
  *
  * ## A row with a write in flight stays live
  *
- * Drawn at 70% and `aria-busy`, and still usable. Blocking it would make the app feel
- * slow on exactly the connection it was designed for, and the next adjustment simply
- * supersedes the last (`0012`, section 3.3).
+ * `aria-busy`, and still usable. Blocking it would make the app feel slow on exactly
+ * the connection it was designed for, and the next adjustment simply supersedes the
+ * last (`0012`, section 3.3).
+ *
+ * It is not dimmed (velista `0197`, the owner's ruling of 2026-11-22). It was drawn at
+ * 70%, and on the night theme that let the dark page show through the stepper and the
+ * photo, so the row darkened and lightened again a beat after every step. Most people
+ * never learned what the dimming meant; the default row's spinner in place of the
+ * total says it better. The class `in-flight` stays, with no rule, because specs read
+ * it as the state.
+ *
+ * One write is the exception: the trash's (velista `0199`, the owner's ruling of
+ * 2026-11-22). From its press until the write to 0 answers, the row is `clearing`:
+ * locked, on the sunken surface of a pressed row, with a spinner in the middle. It
+ * is the same in both layouts, because it is drawn over the row element they share.
  *
  * ## Somebody else editing is drawn, and decides nothing
  *
@@ -100,6 +137,7 @@ export type LineRowAction = 'approve' | 'reject' | 'restore';
     CommentIcon,
     PlusIcon,
     ProductPicture,
+    QuantityReel,
     QuantityStepper,
     SpinnerIcon,
     StarFilledIcon,
@@ -112,12 +150,14 @@ export class LineRow {
   readonly line = input.required<LineRowVm>();
 
   /**
-   * How the row is drawn (velista `0191`): the row of today, or the compact row with
-   * the label and the brand on one line and three fact lines beside the stepper. One
-   * component either way, so every row feature exists once and both layouts draw it.
+   * How the row is drawn (velista `0202`): the default view, the row of velista
+   * `0191` with the label and the brand on one line and three fact lines beside the
+   * stepper, or the compact view, the two line row. One component either way, so
+   * every row feature exists once and both layouts draw it.
    */
   readonly layout = input<ListRowLayout>('default');
 
+  /** Whether this is the two line row of the compact view (velista `0202`). */
   protected readonly compact = computed(() => this.layout() === 'compact');
 
   /** Whether an add just raised this line, which marks its quantity (velista `0170`). */
@@ -128,6 +168,34 @@ export class LineRow {
    * `0188`, decision H). The page owns the run and writes it after the quiet beat.
    */
   readonly pending = input<number | null>(null);
+
+  /**
+   * Whether the line is being cleared (velista `0199`): its trash was pressed, the
+   * write to 0 went out at once, and the page keeps the row drawn until it answers.
+   * The row is locked meanwhile: a darker background, a spinner in the middle, and no
+   * press inside it reaches anything.
+   */
+  readonly clearing = input(false);
+
+  /**
+   * Whether the page's question about the extra already bought is open on this row
+   * (velista `0207`). The row draws the layer the flash lights, which reaches past
+   * its edges as the board draws it.
+   */
+  readonly asked = input(false);
+
+  /**
+   * Whether that question is flashing: three pulses of the quiet amber on the row's
+   * layer and the popover's hairline, or the frame held still under reduced motion.
+   * The page decides for how long.
+   */
+  readonly flashing = input(false);
+
+  /**
+   * The reel of the compact view went up or came down (velista `0207`). The page's
+   * question waits for the tape to close, so it is never drawn over a moving reel.
+   */
+  readonly reelOpened = output<{ lineId: string; open: boolean }>();
 
   /** What the row's stepper draws: the open run, or the stored amount. */
   protected readonly amount = computed(
@@ -170,6 +238,13 @@ export class LineRow {
    */
   readonly quantityStepped = output<{ lineId: string; step: QuantityStep }>();
 
+  /**
+   * The reel of the compact view closed on a new amount (velista `0203`): one step
+   * from the amount it opened on. Its own output, because the page writes it at once
+   * rather than waiting a quiet beat, and because a reel at 0 is not the trash.
+   */
+  readonly quantityReeled = output<{ lineId: string; step: QuantityStep }>();
+
   /** Anything from the decision buttons. */
   readonly act = output<{ action: LineRowAction; lineId: string }>();
 
@@ -198,7 +273,7 @@ export class LineRow {
   });
 
   /**
-   * The compact row's three facts, or null while it shows no product (velista
+   * The default row's three facts, or null while it shows no product (velista
    * `0191`, section 2.2). Decided by `lineRowFacts` over what the builder set; the
    * total is of the stored quantity, which is the one the builder counted.
    */
@@ -208,7 +283,7 @@ export class LineRow {
   });
 
   /**
-   * Whether the compact row's third fact draws the saving mark in place of the total
+   * Whether the default row's third fact draws the saving mark in place of the total
    * (velista `0191`, the owner's decision of 2026-11-12): while the line has an open
    * run of presses, or its write is in flight. The total follows the stored amount,
    * so during a run it would still say what the old amount cost.
@@ -253,6 +328,129 @@ export class LineRow {
   }
 
   private readonly _translator = inject(RokuTranslatorService);
+  private readonly _reel = viewChild(QuantityReel);
+  private readonly _reelEl = viewChild(QuantityReel, { read: ElementRef });
+
+  /** Until when a tap on this line is swallowed, after the reel closed by itself. */
+  private _deafUntil = 0;
+
+  /** Whether the click this press will produce belongs to the reel rather than the row. */
+  private _swallowClick = false;
+
+  /**
+   * The lock of a row being cleared (velista `0199`), on the host and in the capture
+   * phase, so a press is stopped before it reaches the stepper, the picture, a choose
+   * button or the row itself, and none of them has to know about the lock. Tab and
+   * Escape pass, so focus can still leave the row, and so does a key with Alt, Ctrl
+   * or Meta held, so the browser's shortcuts still work. A notice under the row is
+   * not covered by the lock's layer, so nothing on it is stopped either.
+   */
+  constructor() {
+    const host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+    const stop = (event: Event) => {
+      if (!this.clearing()) {
+        return;
+      }
+      if (event.target instanceof Element && event.target.closest('.notice')) {
+        return;
+      }
+      if (
+        event instanceof KeyboardEvent &&
+        (event.key === 'Tab' ||
+          event.key === 'Escape' ||
+          event.altKey ||
+          event.ctrlKey ||
+          event.metaKey)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    for (const type of LOCKED_EVENTS) {
+      host.addEventListener(type, stop, true);
+    }
+
+    // The deaf rule of the reel (velista `0203`), after the lock, so a locked row
+    // stops the press before the reel's rule reads it. Native listeners rather than
+    // host bindings, because both have to run in the capture phase.
+    const onPress = (event: Event) => this._notePress(event);
+    const onClick = (event: Event) => this._swallowReelDismissal(event);
+    host.addEventListener('pointerdown', onPress, true);
+    host.addEventListener('click', onClick, true);
+
+    // Only the changes, so a row drawn with its reel down says nothing.
+    let reelWasOpen = false;
+    effect(() => {
+      const open = this._reel()?.open() ?? false;
+      if (open !== reelWasOpen) {
+        reelWasOpen = open;
+        untracked(() => this.reelOpened.emit({ lineId: this.line().id, open }));
+      }
+    });
+
+    inject(DestroyRef).onDestroy(() => {
+      for (const type of LOCKED_EVENTS) {
+        host.removeEventListener(type, stop, true);
+      }
+      host.removeEventListener('pointerdown', onPress, true);
+      host.removeEventListener('click', onClick, true);
+    });
+  }
+
+  /**
+   * At the press, work out whether this tap is really about the reel: it is while the
+   * reel is open, and for the click shield after it closed by itself. Read here and
+   * not at the click because the press moves focus, the reel commits and closes on
+   * losing it, and by the time the click arrives the overlay is gone.
+   */
+  private _notePress(event: Event): void {
+    if (this._withinReel(event.target)) {
+      this._swallowClick = false;
+      return;
+    }
+
+    const reel = this._reel();
+    const open = reel?.open() ?? false;
+    this._swallowClick = open || Date.now() < this._deafUntil;
+
+    // Closed here rather than left to the blur. A tap on a span that cannot take focus
+    // moves focus nowhere, which is the ordinary case on a touch screen, and the reel
+    // would sit there until its own timer ran out.
+    if (open) {
+      reel?.close();
+    }
+  }
+
+  private _swallowReelDismissal(event: Event): void {
+    if (!this._swallowClick || this._withinReel(event.target)) {
+      return;
+    }
+
+    this._swallowClick = false;
+    event.stopPropagation();
+    event.preventDefault();
+  }
+
+  private _withinReel(target: EventTarget | null): boolean {
+    const reel = this._reelEl()?.nativeElement as HTMLElement | undefined;
+    return (
+      target !== null && reel !== undefined && reel.contains(target as Node)
+    );
+  }
+
+  /**
+   * The reel timed out and closed on its own, which starts the deaf beat. Only this
+   * path: a reel closed by a tap elsewhere on the line has already cost that tap.
+   */
+  protected onReelAutoClosed(): void {
+    this._deafUntil = Date.now() + QUANTITY_REEL_CLICK_SHIELD_MS;
+  }
+
+  /** The reel's one step, as the page's own output. */
+  protected onReeled(step: QuantityStep): void {
+    this.quantityReeled.emit({ lineId: this.line().id, step });
+  }
 
   /**
    * The accessible name (velista `0145`, section 3): the name, the product with its
@@ -277,8 +475,8 @@ export class LineRow {
     this._translator.locale();
     this._translator.loaded();
     const parts: (string | null | undefined)[] = [line.content];
-    if (this.compact() && shown !== null) {
-      parts.push(...this._compactNameParts(shown));
+    if (!this.compact() && shown !== null) {
+      parts.push(...this._factsNameParts(shown));
     } else if (line.product === undefined) {
       parts.push(line.detail);
     } else if (shown !== null) {
@@ -307,13 +505,13 @@ export class LineRow {
   }
 
   /**
-   * The product's part of a compact row's name (velista `0191`, section 5): what the
+   * The product's part of a default row's name (velista `0191`, section 5): what the
    * row draws, in its order. The favourite, the brand, the size, the unit price, the
    * total ("about 1,88 €" for an estimate), and "+N". A named line's product name is
    * not drawn, so it is not read (decision E). While the saving mark stands in for
    * the total, the total is left out: it would state the old cost.
    */
-  private _compactNameParts(shown: LineRowShownProduct): (string | null)[] {
+  private _factsNameParts(shown: LineRowShownProduct): (string | null)[] {
     const facts = lineRowFacts(shown);
     const total = this.saving() ? null : facts.total;
     return [
@@ -344,11 +542,16 @@ export class LineRow {
    * of the thing itself.
    */
   describedBy(): string | null {
-    return this.statuses().length === 0 ? null : `st-${this.line().id}`;
+    const ids = [
+      this.statuses().length === 0 ? null : `st-${this.line().id}`,
+      // The lock's word, "Saving" (velista `0199`).
+      this.clearing() ? `lk-${this.line().id}` : null,
+    ].filter((id): id is string => id !== null);
+    return ids.length === 0 ? null : ids.join(' ');
   }
 
   onRowClick(): void {
-    if (!this.line().interactive) {
+    if (!this.line().interactive || this.clearing()) {
       return;
     }
 

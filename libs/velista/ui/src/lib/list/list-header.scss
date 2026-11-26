@@ -3,17 +3,18 @@
   display: block;
 }
 
-// The first line of the head block, under the page header. No margin of its own: the
-// page sets the gap between this block and the field under it.
-.in-group {
-  margin: 0;
-  font-size: var(--app-text-xs);
-  color: var(--app-text-muted);
+// With nobody else here and a live list there is nothing to draw (velista 0205), and
+// an empty block must not be a flex item of the head: it would add the head's gap over
+// the field a second time, under the page header, for a line that is not there.
+:host(.empty) {
+  display: none;
 }
 
-// Under the group line. An empty row takes no room, so with nobody else here the
-// group line is the whole block in the usual case.
-.viewers:not(.empty) {
+// The viewers row is the first line of the block since the group line moved into the
+// page header (velista 0205), so it has no margin of its own: the page sets the gap
+// to the field under it. An empty row takes no room (`ListViewers` hides itself), and
+// the band below then starts the block, with no margin over it either.
+.viewers:not(.empty) + .stale {
   margin-block-start: var(--app-space-2);
 }
 
@@ -29,7 +30,7 @@
   display: flex;
   align-items: center;
   gap: var(--app-space-2);
-  margin: var(--app-space-2) 0 0;
+  margin: 0;
   padding: var(--app-space-2) var(--app-space-3);
   border-radius: var(--app-radius-sm);
   background: var(--app-status-attention-bg);

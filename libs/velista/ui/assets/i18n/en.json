@@ -763,7 +763,9 @@
       "wholeGrams": "Grams take no decimals",
       "wholeMilliliters": "Milliliters take no decimals",
       "decimals": "At most three decimals"
-    }
+    },
+    "reached": "reached",
+    "over": "more than asked"
   },
   "list": {
     "header": {
@@ -840,7 +842,11 @@
         "KILOGRAM": "{{size}} kg",
         "MILLILITER": "{{size}} ml",
         "LITER": "{{size}} L",
-        "PACK": "{{size}} packs"
+        "PACK": "{{size}} packs",
+        "packOf": "{{total}} ({{count}} × {{each}})",
+        "pieces": "{{size}}, {{count}} pieces",
+        "about": "~{{size}}",
+        "andPack": "{{size}} · {{pack}}"
       },
       "weight": {
         "KILOGRAM": "~{{size}} kg",
@@ -1205,7 +1211,7 @@
       "period": "Every {{days}} days · last bought {{when}}",
       "periodOne": "Every day · last bought {{when}}",
       "staple": "In {{with}} of your last {{seen}} shopping lists",
-      "add": "Add {{count}}",
+      "add": "Add",
       "addLabel": "Add {{count}} of {{name}} to the list",
       "more": "Show more suggestions",
       "added": "{{name}} added to the list"
@@ -1221,7 +1227,8 @@
       "pickFor": "For {{name}}",
       "failed": "The products on this list did not load.",
       "retry": "Try again",
-      "about": "about {{price}}"
+      "about": "about {{price}}",
+      "perUnit": "/ u"
     },
     "dropped": {
       "quantity": {
@@ -1230,6 +1237,27 @@
       },
       "resend": "Send it again",
       "dismiss": "Dismiss"
+    },
+    "extra": {
+      "boughtBy": "{{name}} already bought {{amount}} extra.",
+      "boughtByYou": "You already bought {{amount}} extra.",
+      "boughtByTwo": "{{first}} and {{second}} already bought {{amount}} extra.",
+      "boughtByYouAndOne": "You and {{name}} already bought {{amount}} extra.",
+      "boughtByOneAndSomeone": "{{name}} and someone else already bought {{amount}} extra.",
+      "boughtByYouAndSomeone": "You and someone else already bought {{amount}} extra.",
+      "boughtByMany": "{{count}} people already bought {{amount}} extra.",
+      "boughtBySomeone": "Someone already bought {{amount}} extra.",
+      "ask": "Do you still need {{asked}}, or just {{left}}?",
+      "askEnough": "Do you still need {{asked}}, or is that enough?",
+      "stillNeed": "Still need",
+      "count": "Count the extra",
+      "enough": "That's enough",
+      "units_one": "{{count}} unit",
+      "units_other": "{{count}} units",
+      "boughtByNamedAndOthers": "{{names}} and others already bought {{amount}} extra.",
+      "announce": "{{question}} Two answers are next to the line's amount: {{stillNeed}}, or {{keep}}.",
+      "stale": "The amount changed in the meantime, so nothing was counted.",
+      "countFailed": "Nothing was counted. Try again."
     }
   },
   "account": {
@@ -1328,10 +1356,6 @@
     },
     "tour": {
       "again": "Show me around again"
-    },
-    "listRows": {
-      "label": "Compact rows",
-      "hint": "Lists show the size, the price and the total on every row. Only on this device."
     }
   },
   "install": {
@@ -1976,7 +2000,17 @@
     },
     "entries": {
       "otherList": "Another list",
-      "asks": "asks for {{amount}}"
+      "asks": "asks for {{amount}}",
+      "heading": "What you bought",
+      "otherHeading": "Bought for another list",
+      "boughtLabel": "{{name}}, bought",
+      "boughtPlain": "Bought",
+      "bought": "bought {{amount}}",
+      "buyAlreadyInRow": "That list already has this product here, so step it with the lists above.",
+      "buyNoProduct": "This row has no product, so it cannot be bought for another list.",
+      "buyNoName": "This product has no name yet, so it cannot be added to that list.",
+      "buyCatalogDown": "That did not save. Try again in a moment.",
+      "buyChanged": "Somebody changed this product just now. Look at it again and try once more."
     },
     "row": {
       "boughtOf": "{{bought}} of {{asked}}",
@@ -2095,7 +2129,7 @@
       "listLabel": "{{list}}, amount of {{name}}: {{amount}}"
     },
     "change": {
-      "oneLabel": "Change the product on {{name}}",
+      "oneLabel": "Change product on {{name}}",
       "all": "Change for all lists",
       "openLabel": "There is a cheaper option than {{name}}. Change the product",
       "cheaper": "cheaper option",
@@ -2130,9 +2164,6 @@
       "gotAt_other": "Got {{count}} today at {{- price}}.",
       "gotAtShop_one": "Got {{count}} today at {{- price}}, at {{- shop}}.",
       "gotAtShop_other": "Got {{count}} today at {{- price}}, at {{- shop}}.",
-      "askedOn_one": "Asked for on 1 list",
-      "askedOn_other": "Asked for on {{count}} lists",
-      "addElsewhere": "Add it to another list",
       "othersLoading": "Looking at your other lists",
       "othersFailed": "Your other lists did not load.",
       "othersRetry": "Try again",
@@ -2147,6 +2178,17 @@
       "gotAtShopAmount": "Got {{amount}} today at {{- price}}, at {{- shop}}.",
       "gotAllAmount": "Got all {{amount}}",
       "gotOtherAmount": "Got the other {{amount}}"
+    },
+    "lists": {
+      "open": "Lists and amounts",
+      "title": "Lists and amounts",
+      "back": "Back",
+      "description": "Here you change the amount and the product of each list. What you bought goes on the previous screen.",
+      "heading": "What each list asks for",
+      "bought": "Bought {{bought}} of {{asked}}",
+      "notInGroup": "This list belongs to a group you are not in. Only its members can change what it asks for.",
+      "ownGroup": "What this list asks for cannot be changed from this shopping list. Change it on the list itself.",
+      "changeProduct": "Change product"
     }
   },
   "getList": {
@@ -2943,5 +2985,11 @@
       "fullPage": "Open the full page",
       "close": "Close"
     }
+  },
+  "view": {
+    "title": "View",
+    "default": "Default",
+    "compact": "Compact",
+    "compactHint": "More rows on the screen"
   }
 }

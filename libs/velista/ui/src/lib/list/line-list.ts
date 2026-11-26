@@ -37,6 +37,8 @@ import { LineRow, type LineRowAction } from './line-row';
       @for (line of lines(); track line.id) {
         <li
           [attr.data-line-id]="line.id"
+          [class.asked]="askedId() === line.id"
+          [class.flash]="flashing() && askedId() === line.id"
           [class.marked]="markedId() === line.id"
           class="line"
         >
@@ -45,14 +47,27 @@ import { LineRow, type LineRowAction } from './line-row';
             (chooseProduct)="chooseProduct.emit($event)"
             (dismiss)="dismiss.emit($event)"
             (opened)="opened.emit($event)"
+            (quantityReeled)="quantityReeled.emit($event)"
             (quantityStepped)="quantityStepped.emit($event)"
+            (reelOpened)="reelOpened.emit($event)"
             (retry)="retry.emit($event)"
+            [asked]="askedId() === line.id"
+            [clearing]="clearingIds().has(line.id)"
+            [flashing]="flashing() && askedId() === line.id"
             [layout]="layout()"
             [line]="line"
             [match]="matchOf(line)"
             [pending]="pending().get(line.id) ?? null"
             [took]="tookIds().has(line.id)"
           />
+          <!--
+            Where the page's question about the extra already bought is held
+            (velista 0207): the page lays this mark over the row's amount control,
+            and the popover is inserted right after it. Beside the row and not in
+            it, because the row is a button, whose content a screen reader does
+            not see.
+          -->
+          <span aria-hidden="true" class="ask-anchor" data-ask-anchor></span>
         </li>
       }
     </ul>
@@ -64,8 +79,8 @@ export class LineList {
   readonly lines = input.required<readonly LineRowVm[]>();
 
   /**
-   * How every row is drawn, as the device chose (velista `0191`): the row of today or
-   * the compact row.
+   * How every row is drawn, as the device chose (velista `0202`): the default view or
+   * the compact view.
    */
   readonly layout = input<ListRowLayout>('default');
 
@@ -93,6 +108,20 @@ export class LineList {
   readonly pending = input<ReadonlyMap<string, number>>(new Map());
 
   /**
+   * The lines whose trash was pressed and whose write to 0 has not answered yet
+   * (velista `0199`): the page's `clearing()`. Their rows are drawn locked.
+   */
+  readonly clearingIds = input<ReadonlySet<string>>(new Set());
+
+  /**
+   * The line whose question about the extra already bought is open (velista `0207`),
+   * and whether it is flashing. Only that row draws the layer the flash lights, and
+   * only its item carries the colour the popover's hairline reads.
+   */
+  readonly askedId = input<string | null>(null);
+  readonly flashing = input(false);
+
+  /**
    * The search, folded, or the empty string (velista `0082`, section 6).
    *
    * Each row gets the range of its first match in its own name, worked out here with
@@ -114,6 +143,12 @@ export class LineList {
    * about what is on one.
    */
   readonly quantityStepped = output<{ lineId: string; step: QuantityStep }>();
+
+  /** The one step of a row's reel, in the compact view (velista `0203`), passed up. */
+  readonly quantityReeled = output<{ lineId: string; step: QuantityStep }>();
+
+  /** A row's reel went up or came down (velista `0207`), passed up. */
+  readonly reelOpened = output<{ lineId: string; open: boolean }>();
   readonly act = output<{ action: LineRowAction; lineId: string }>();
   readonly retry = output<string>();
   readonly dismiss = output<string>();

@@ -8713,7 +8713,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/list.LineView"
+                  "$ref": "#/components/schemas/list.AddLineQuantityResult"
                 }
               }
             }
@@ -8760,6 +8760,121 @@
           },
           "409": {
             "description": "`line_unit_mismatch` — This line counts in another unit now. Look at it again and change the amount there.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "lines"
+        ]
+      }
+    },
+    "/v1/lines/{id}/extra": {
+      "post": {
+        "operationId": "LinesController_countExtra_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CountLineExtraDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `line.countExtra` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/list.CountLineExtraResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`stale_quantity` — Somebody else changed this while you were looking at it. It is {current} now.\n\n`line_unit_mismatch` — This line counts in another unit now. Look at it again and change the amount there.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -10815,6 +10930,144 @@
         ]
       }
     },
+    "/v1/baskets/{id}/rows/{rowKey}/buy-for-list": {
+      "post": {
+        "operationId": "BasketController_buyForList_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rowKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BuyForListBasketRowDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `basket.row.buyForList` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket.BasketRowResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.\n\n`basket_finished` — This basket is finished, so it cannot be changed.\n\n`basket_shop_locked` — This basket was started at a shop, and that shop cannot be changed.\n\n`basket_line_already_in_row` — That list already has this product in the basket.\n\n`basket_row_has_no_product` — This row has no product, so it cannot be bought for another list.\n\n`basket_product_has_no_name` — This product has no name yet, so it cannot be added to that list.\n\n`line_unit_mismatch` — This line counts in another unit now. Look at it again and change the amount there.\n\n`line_unit_differs` — These two lines count in different units, so they cannot be merged.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`line_unit_not_offered` — The products of this line cannot be counted in that unit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`catalog_unavailable` — We could not reach the product catalog just now. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "baskets"
+        ]
+      }
+    },
     "/v1/baskets/{id}/lines/product": {
       "post": {
         "operationId": "BasketController_changeProduct_v1",
@@ -11117,6 +11370,124 @@
           },
           "409": {
             "description": "`basket_finished` — This basket is finished, so it cannot be changed.\n\n`line_unit_mismatch` — This line counts in another unit now. Look at it again and change the amount there.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "baskets"
+        ]
+      }
+    },
+    "/v1/baskets/{id}/rows/{rowKey}/extra": {
+      "post": {
+        "operationId": "BasketController_countExtra_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rowKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CountBasketRowExtraDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `basket.row.countExtra` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket.BasketRowResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`stale_quantity` — Somebody else changed this while you were looking at it. It is {current} now.\n\n`basket_finished` — This basket is finished, so it cannot be changed.\n\n`line_unit_mismatch` — This line counts in another unit now. Look at it again and change the amount there.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18284,7 +18655,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.\n\n`item_piece_count_not_allowed` — Only a product with a fixed size in grams or millilitres has a piece count, from 2 to 10000 and above its pack count. Correct the count, or clear it.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18529,7 +18900,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.\n\n`item_piece_count_not_allowed` — Only a product with a fixed size in grams or millilitres has a piece count, from 2 to 10000 and above its pack count. Correct the count, or clear it.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18633,7 +19004,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.\n\n`item_piece_count_not_allowed` — Only a product with a fixed size in grams or millilitres has a piece count, from 2 to 10000 and above its pack count. Correct the count, or clear it.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18927,7 +19298,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.\n\n`item_piece_count_not_allowed` — Only a product with a fixed size in grams or millilitres has a piece count, from 2 to 10000 and above its pack count. Correct the count, or clear it.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -28893,7 +29264,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.\n\n`item_piece_count_not_allowed` — Only a product with a fixed size in grams or millilitres has a piece count, from 2 to 10000 and above its pack count. Correct the count, or clear it.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -31411,6 +31782,10 @@
           "newLine": {
             "type": "boolean",
             "description": "The person chose a new line over the lines that hold a product under this typed name (plan 0228). A free text line of the same name still meets the add, because a list holds one free text line per name. A free text add only: true beside itemIds or a productGroupId answers 400 under newLine, because a second line of one product in one unit is what plan 0260 prevents (the owner, 2026-11-16)."
+          },
+          "reportExtra": {
+            "type": "boolean",
+            "description": "Report the units bought above the ask that this raise moved into the ask, and what an answer of Count the extra would take off the line."
           }
         },
         "required": [
@@ -31552,6 +31927,10 @@
           "confirmMerge": {
             "type": "boolean",
             "description": "Merge this line with the line the new content already belongs to (plan 0112, section 2). A rename onto a name another line of the list holds answers 409 line_merge_required and writes nothing unless this is true; the refusal names the other line in details. With it, the earlier of the two lines survives with the summed quantity and both lines’ products, comments, settlements and basket origins, and the answer names the removed line in absorbedLineId. It changes nothing on a rename to a free name."
+          },
+          "reportExtra": {
+            "type": "boolean",
+            "description": "Report the units bought above the ask that this raise moved into the ask, and what an answer of Count the extra would take off the line."
           }
         }
       },
@@ -31572,11 +31951,45 @@
               "MILLILITER"
             ],
             "description": "The unit the number was made in, which must be the line’s (plan 0246). Required: a unit that is not the line’s answers 409 `line_unit_mismatch` and changes nothing, and the client reads the line again."
+          },
+          "reportExtra": {
+            "type": "boolean",
+            "description": "Report the units bought above the ask that this raise moved into the ask, and what an answer of Count the extra would take off the line."
           }
         },
         "required": [
           "delta",
           "unit"
+        ]
+      },
+      "CountLineExtraDto": {
+        "type": "object",
+        "properties": {
+          "unit": {
+            "type": "string",
+            "enum": [
+              "UNIT",
+              "GRAM",
+              "MILLILITER"
+            ],
+            "description": "The unit the number was made in, which must be the line’s (plan 0246). Required: a unit that is not the line’s answers 409 `line_unit_mismatch` and changes nothing, and the client reads the line again."
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 99999,
+            "description": "What to take off the line: the `extra.countable` the raise answered. A positive whole number, at most `expect`."
+          },
+          "expect": {
+            "type": "number",
+            "minimum": 0,
+            "description": "The line quantity the raise answered. The line must still hold it when the count is written, or the count answers 409 `stale_quantity` with the current amount and writes nothing. It has no ceiling, because it is what the line holds and not what the count writes."
+          }
+        },
+        "required": [
+          "unit",
+          "amount",
+          "expect"
         ]
       },
       "SetApprovalDto": {
@@ -31832,6 +32245,52 @@
           "from"
         ]
       },
+      "BuyForListBasketRowDto": {
+        "type": "object",
+        "properties": {
+          "targetListId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The covered list the buy is for. You must hold WRITE on it yourself (403 otherwise), and a list the basket does not cover answers 404."
+          },
+          "lineId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "That list’s line of the product, the `lineId` of `GET :id/products/:itemId/lists`, when it has one. It must be on `targetListId` and hold the row’s product. A line that is already an entry of the row answers 409 `basket_line_already_in_row`: buy on it with the settle. Left out, the list’s line of the product is found as the list’s own add finds it, and made at quantity 0 when there is none."
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 99999,
+            "description": "Units bought. The line’s quantity stays at 0: what the list asks for does not move, and the buy is recorded against the line."
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "UNIT",
+              "GRAM",
+              "MILLILITER"
+            ],
+            "description": "The unit the number was made in, which must be the line’s (plan 0246). Required: a unit that is not the line’s answers 409 `line_unit_mismatch` and changes nothing, and the client reads the line again."
+          },
+          "priceScopeId": {
+            "type": "string",
+            "format": "uuid",
+            "deprecated": true,
+            "description": "Not read, as on the settle (plan 0202): the gateway chooses the price itself, as the basket’s owner."
+          },
+          "supermarketLocationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The one shop you are standing in, when you chose one, as on the settle. On a basket started at a shop, a different one answers 409 `basket_shop_locked`."
+          }
+        },
+        "required": [
+          "targetListId",
+          "quantity",
+          "unit"
+        ]
+      },
       "ChangeBasketLinesProductDto": {
         "type": "object",
         "properties": {
@@ -31911,8 +32370,7 @@
           "quantity": {
             "type": "number",
             "minimum": 0,
-            "maximum": 99999,
-            "description": "What that list asks for from now on. Zero is allowed."
+            "description": "The list's whole ask from now on: what the line still holds plus what this basket's buys met of it (the entry's `asked`), never what is left after them (plan 0274). Zero is allowed. An ask below what the buys met leaves the line at 0 and turns the difference into units bought above the ask. It has no ceiling of its own, because the ask is the line plus what was bought toward it: core refuses an ask whose line would end above 99999."
           },
           "unit": {
             "type": "string",
@@ -31926,7 +32384,11 @@
           "from": {
             "type": "number",
             "minimum": 0,
-            "description": "What the line asks for as you drew it. It has no ceiling, because it is what the line holds and not what the demand writes: a line stored above the ceiling is moved down with its own amount here (plan 0262)."
+            "description": "The entry's `left` as you drew it: what the line itself held, not the ask. A write that landed since moves it and the demand is refused with `stale_quantity`. It has no ceiling, because it is what the line holds and not what the demand writes: a line stored above the ceiling is moved down with its own amount here (plan 0262)."
+          },
+          "reportExtra": {
+            "type": "boolean",
+            "description": "Report the units bought above the ask that this raise moved into the ask, and what an answer of Count the extra would take off the line."
           }
         },
         "required": [
@@ -31934,6 +32396,42 @@
           "quantity",
           "unit",
           "from"
+        ]
+      },
+      "CountBasketRowExtraDto": {
+        "type": "object",
+        "properties": {
+          "lineId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The list line whose raise is counted, as on the demand. It is the `rowKey` of the path."
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "UNIT",
+              "GRAM",
+              "MILLILITER"
+            ],
+            "description": "The unit the number was made in, which must be the line’s (plan 0246). Required: a unit that is not the line’s answers 409 `line_unit_mismatch` and changes nothing, and the client reads the line again."
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 99999,
+            "description": "What to take off the line: the `extra.countable` the demand answered. A positive whole number, at most `expect`."
+          },
+          "expect": {
+            "type": "number",
+            "minimum": 0,
+            "description": "The entry's `left` the demand answered: the line's quantity. A write that landed since moves it, and the count answers 409 `stale_quantity` with the current amount and writes nothing. It has no ceiling, because it is what the line holds."
+          }
+        },
+        "required": [
+          "lineId",
+          "unit",
+          "amount",
+          "expect"
         ]
       },
       "RenameBasketRowDto": {
@@ -32036,6 +32534,10 @@
           "newLine": {
             "type": "boolean",
             "description": "The person chose a new line over the lines that hold a product under this typed name (plan 0228). A free text line of the same name still meets the add, because a list holds one free text line per name. A free text add only: true beside itemIds or a productGroupId answers 400 under newLine, because a second line of one product in one unit is what plan 0260 prevents (the owner, 2026-11-16)."
+          },
+          "reportExtra": {
+            "type": "boolean",
+            "description": "Report the units bought above the ask that this raise moved into the ask, and what an answer of Count the extra would take off the line."
           }
         },
         "required": [
@@ -32579,6 +33081,13 @@
             "maximum": 1000,
             "description": "How many units the pack holds (plan 0162). Null, or absent, for a product that is not a pack."
           },
+          "pieceCount": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 2,
+            "maximum": 10000,
+            "description": "How many pieces the whole product holds, counted across its pack (plan 0278): a bag of 35 g holds 50 candies, two such bags 100. It sits beside `packCount`, which counts the units a shopper uses one at a time; this counts small pieces whose number matters more than their weight, and is never a wash count, a serving count or the sheets of a roll. A whole number from 2 to 10000, or null. Only a product with a fixed `unitSize` in `GRAM` or `MILLILITER` and no `approxWeight` holds one, and it is above `packCount` when that is set; anything else is refused with `item_piece_count_not_allowed`. An edit that clears the size, changes the unit or raises the pack count to it sends null here with it. No harvest run writes it."
+          },
           "categoryIds": {
             "minItems": 1,
             "maxItems": 10,
@@ -32701,6 +33210,11 @@
             "type": "integer",
             "nullable": true
           },
+          "pieceCount": {
+            "type": "integer",
+            "nullable": true,
+            "description": "The piece count the product holds, or null for none, compared as a number (plan 0278). No harvest run writes it."
+          },
           "categorySlugs": {
             "maxItems": 10,
             "description": "The slugs of the product’s categories, compared in order.",
@@ -32770,6 +33284,13 @@
             "minimum": 2,
             "maximum": 1000,
             "description": "Set or correct the pack count, or clear it with null (plan 0162). The only write that changes a count that is set: a harvest run fills a null count and never overwrites one."
+          },
+          "pieceCount": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 2,
+            "maximum": 10000,
+            "description": "How many pieces the whole product holds, counted across its pack (plan 0278): a bag of 35 g holds 50 candies, two such bags 100. It sits beside `packCount`, which counts the units a shopper uses one at a time; this counts small pieces whose number matters more than their weight, and is never a wash count, a serving count or the sheets of a roll. A whole number from 2 to 10000, or null. Only a product with a fixed `unitSize` in `GRAM` or `MILLILITER` and no `approxWeight` holds one, and it is above `packCount` when that is set; anything else is refused with `item_piece_count_not_allowed`. An edit that clears the size, changes the unit or raises the pack count to it sends null here with it. No harvest run writes it."
           },
           "categoryIds": {
             "minItems": 1,
@@ -32921,6 +33442,13 @@
             "minimum": 2,
             "maximum": 1000,
             "description": "Set or correct the pack count, or clear it with null (plan 0162). The only write that changes a count that is set: a harvest run fills a null count and never overwrites one."
+          },
+          "pieceCount": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 2,
+            "maximum": 10000,
+            "description": "How many pieces the whole product holds, counted across its pack (plan 0278): a bag of 35 g holds 50 candies, two such bags 100. It sits beside `packCount`, which counts the units a shopper uses one at a time; this counts small pieces whose number matters more than their weight, and is never a wash count, a serving count or the sheets of a roll. A whole number from 2 to 10000, or null. Only a product with a fixed `unitSize` in `GRAM` or `MILLILITER` and no `approxWeight` holds one, and it is above `packCount` when that is set; anything else is refused with `item_piece_count_not_allowed`. An edit that clears the size, changes the unit or raises the pack count to it sends null here with it. No harvest run writes it."
           },
           "categoryIds": {
             "minItems": 1,
@@ -34580,6 +35108,71 @@
           }
         }
       },
+      "SourceEntryObservedDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "brand": {
+            "type": "string",
+            "nullable": true
+          },
+          "ean": {
+            "type": "string",
+            "nullable": true
+          },
+          "sizeFormat": {
+            "type": "string",
+            "nullable": true
+          },
+          "unitSize": {
+            "type": "number",
+            "nullable": true
+          },
+          "sizeUnit": {
+            "type": "string",
+            "enum": [
+              "GRAM",
+              "KILOGRAM",
+              "MILLILITER",
+              "LITER",
+              "UNIT"
+            ],
+            "nullable": true
+          },
+          "packCount": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 2,
+            "maximum": 1000
+          },
+          "soldByWeight": {
+            "type": "boolean"
+          },
+          "approxWeight": {
+            "type": "number",
+            "nullable": true
+          },
+          "packaging": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "name",
+          "brand",
+          "ean",
+          "sizeFormat",
+          "unitSize",
+          "sizeUnit",
+          "packCount",
+          "soldByWeight",
+          "approxWeight",
+          "packaging"
+        ]
+      },
       "SourceEntryExpectationDto": {
         "type": "object",
         "properties": {
@@ -34595,12 +35188,19 @@
           "lastSeenAt": {
             "type": "string",
             "format": "date-time",
-            "description": "Exactly the string the queue listing printed for this row. A row observed again since then fails the check."
+            "description": "Exactly the string the queue listing printed for this row. When present, a row observed again since then fails the check, whatever it says. At least one of this and `observed` is present."
+          },
+          "observed": {
+            "description": "The fields the decision was made on, exactly as the queue listing printed them, every one present with null where the row holds nothing. When present, each field is compared with the row under the route’s lock, and a field that differs fails the operation with `EXPECT_MISMATCH` naming it. A row a later walk saw again but that says the same passes. Prices are not compared. At least one of this and `lastSeenAt` is present.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SourceEntryObservedDto"
+              }
+            ]
           }
         },
         "required": [
-          "status",
-          "lastSeenAt"
+          "status"
         ]
       },
       "SourceEntryDecisionDto": {
@@ -37936,6 +38536,15 @@
             "minimum": 2,
             "maximum": 1000
           },
+          "pieceCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 2,
+            "maximum": 10000,
+            "description": "How many pieces the whole product holds, counted across its pack, beside the pack count (plan 0278): a bag of 35 g holds 50 candies. Null when nobody counted them. A person sets it, and no harvest run writes it."
+          },
           "categories": {
             "type": "array",
             "items": {
@@ -38004,6 +38613,7 @@
           "eans",
           "unitSize",
           "packCount",
+          "pieceCount",
           "categories",
           "defaultUnit",
           "productGroupId",
@@ -38175,6 +38785,10 @@
             "type": "integer",
             "minimum": 0
           },
+          "asked": {
+            "type": "integer",
+            "minimum": 0
+          },
           "boughtElsewhere": {
             "type": "integer",
             "minimum": 0
@@ -38239,6 +38853,7 @@
           "version",
           "left",
           "bought",
+          "asked",
           "boughtElsewhere",
           "state",
           "approvalStatus",
@@ -38272,6 +38887,13 @@
           },
           "addOutcome": {
             "$ref": "#/components/schemas/enums.AddLineOutcome"
+          },
+          "extra": {
+            "$ref": "#/components/schemas/list.AbsorbedExtra"
+          },
+          "counted": {
+            "type": "integer",
+            "minimum": 1
           }
         },
         "required": [
@@ -40453,6 +41075,15 @@
             "minimum": 2,
             "maximum": 1000
           },
+          "pieceCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 2,
+            "maximum": 10000,
+            "description": "How many pieces the whole product holds, counted across its pack, beside the pack count (plan 0278): a bag of 35 g holds 50 candies. Null when nobody counted them. A person sets it, and no harvest run writes it."
+          },
           "categories": {
             "type": "array",
             "items": {
@@ -40504,6 +41135,7 @@
           "eans",
           "unitSize",
           "packCount",
+          "pieceCount",
           "categories",
           "defaultUnit",
           "productGroupId"
@@ -47554,6 +48186,181 @@
         ],
         "additionalProperties": false
       },
+      "list.AbsorbedExtra": {
+        "type": "object",
+        "properties": {
+          "above": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "countable": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "buyers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/list.ExtraBuyer"
+            }
+          }
+        },
+        "required": [
+          "above",
+          "countable",
+          "buyers"
+        ],
+        "additionalProperties": false
+      },
+      "list.AddLineQuantityResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/enums.LineUnit"
+          },
+          "itemIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "itemSetHash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "productGroupId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "groupItemIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "favoriteItemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preferredSupermarketId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "named": {
+            "type": "boolean"
+          },
+          "position": {
+            "type": "integer"
+          },
+          "approvalStatus": {
+            "$ref": "#/components/schemas/enums.LineApprovalStatus"
+          },
+          "createdByUserId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "approvedByUserId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer"
+          },
+          "boughtCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastSettlementOutcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.SettlementOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "claimed": {
+            "type": "boolean"
+          },
+          "claimedByUserId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "commentCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "extra": {
+            "$ref": "#/components/schemas/list.AbsorbedExtra"
+          }
+        },
+        "required": [
+          "id",
+          "listId",
+          "content",
+          "quantity",
+          "unit",
+          "itemIds",
+          "itemSetHash",
+          "productGroupId",
+          "groupItemIds",
+          "favoriteItemId",
+          "preferredSupermarketId",
+          "named",
+          "position",
+          "approvalStatus",
+          "createdByUserId",
+          "approvedByUserId",
+          "version",
+          "boughtCount",
+          "lastSettlementOutcome",
+          "claimed",
+          "claimedByUserId",
+          "commentCount",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
       "list.AddLineResult": {
         "type": "object",
         "properties": {
@@ -47572,6 +48379,9 @@
               "$ref": "#/components/schemas/list.LineView"
             },
             "maxItems": 10
+          },
+          "extra": {
+            "$ref": "#/components/schemas/list.AbsorbedExtra"
           }
         },
         "required": [
@@ -47687,6 +48497,173 @@
           "recording",
           "transcription",
           "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "list.CountLineExtraResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/enums.LineUnit"
+          },
+          "itemIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "itemSetHash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "productGroupId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "groupItemIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "favoriteItemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preferredSupermarketId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "named": {
+            "type": "boolean"
+          },
+          "position": {
+            "type": "integer"
+          },
+          "approvalStatus": {
+            "$ref": "#/components/schemas/enums.LineApprovalStatus"
+          },
+          "createdByUserId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "approvedByUserId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer"
+          },
+          "boughtCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastSettlementOutcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.SettlementOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "claimed": {
+            "type": "boolean"
+          },
+          "claimedByUserId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "commentCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "counted": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "id",
+          "listId",
+          "content",
+          "quantity",
+          "unit",
+          "itemIds",
+          "itemSetHash",
+          "productGroupId",
+          "groupItemIds",
+          "favoriteItemId",
+          "preferredSupermarketId",
+          "named",
+          "position",
+          "approvalStatus",
+          "createdByUserId",
+          "approvedByUserId",
+          "version",
+          "boughtCount",
+          "lastSettlementOutcome",
+          "claimed",
+          "claimedByUserId",
+          "commentCount",
+          "createdAt",
+          "updatedAt",
+          "counted"
+        ],
+        "additionalProperties": false
+      },
+      "list.ExtraBuyer": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "userId"
         ],
         "additionalProperties": false
       },
@@ -48688,6 +49665,9 @@
           "absorbedLineId": {
             "type": "string",
             "minLength": 1
+          },
+          "extra": {
+            "$ref": "#/components/schemas/list.AbsorbedExtra"
           }
         },
         "required": [
@@ -49128,6 +50108,10 @@
               "client_too_old",
               "basket_finished",
               "basket_shop_locked",
+              "basket_line_already_in_row",
+              "basket_row_has_no_product",
+              "basket_product_has_no_name",
+              "catalog_unavailable",
               "stale_quantity",
               "account_locked",
               "postal_code_unknown",
@@ -49163,6 +50147,7 @@
               "item_kilogram_has_size",
               "item_approx_weight_beside_size",
               "item_quantity_step_not_allowed",
+              "item_piece_count_not_allowed",
               "item_merged",
               "item_merge_two_articles_one_chain",
               "item_merge_format_differs",

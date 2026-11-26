@@ -39,11 +39,13 @@
   white-space: nowrap;
 }
 
-// The head block (velista 0189, decisions B and C): "en Casa", the viewers and the stale
-// band, then the field. An item of the host's column and not a row of the scroller, so
-// the field is reachable whatever the scroll, which is the one thing the foot gave it.
-// The column's inline padding and its top padding, so the block and the rows line up,
-// and the column's gap between the group line and the field: the mock's 12px.
+// The head block (velista 0189, decisions B and C): the viewers and the stale band, then
+// the field. The group ("en Casa") is the line under the page header's title since
+// velista 0205, so with nobody else here and a live list the field is the block's first
+// item. An item of the host's column and not a row of the scroller, so the field is
+// reachable whatever the scroll, which is the one thing the foot gave it. The column's
+// inline padding and its top padding, so the block and the rows line up, and the
+// column's gap between the head block and the field: the mock's 12px.
 .page-top {
   display: flex;
   flex: none;

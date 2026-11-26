@@ -60,6 +60,29 @@ import {
  * that says so (a run stopped after it, or an answer that timed out), so every
  * run that is given recorded lists confirms their planned lines by reading
  * the product ({@link reconcileReview}).
+ *
+ * **A second selection (backend plan 0279, release task 0009).** The data
+ * proved that the products of a sum (`35+18 lavados`, `30+6lav`) and of El
+ * Jamón's short word (`40lav`, `60lv`) hold the count too. Under
+ * `--selection sum-and-short-word` those two shapes qualify a product by the
+ * same rule ({@link selects}), and nothing else does: `40 lavados` is task
+ * 0007's. The two selections are disjoint by row, not by product: no printed
+ * text qualifies under both, but a product bound to a `40 lavados` row and a
+ * `40lav` row is counted by both tasks until one of them corrects it, and the
+ * other then finds it has no size. Neither shape prints a pack, so no pack
+ * count is cleared. The notes then keep `pack-of-units` and
+ * `mercadona-per-wash` only, because the other two kinds are now
+ * corrections. With no `--selection`, the command answers exactly what it
+ * answered before.
+ *
+ * **The hold of the second selection (owner decision 156b, 2026-11-26).** A
+ * product the selection qualifies is not corrected when another ACTIVE row
+ * bound to it states the same number as a count of units
+ * ({@link statesUnitCount}): El Jamón prints `10lav`, the product holds 10
+ * `UNIT`, and DEZA states `10 ud`. A chain then confirms the 10 as a real
+ * count (a capsule product, one capsule per wash). Such a product is counted
+ * as `confirmed-units`, noted under that kind with the confirming row's chain
+ * and text, and never written. The default selection has no hold.
  */
 
 /** The chain whose per wash packs are noted and never corrected. */
@@ -105,14 +128,22 @@ export function readWashFormat(text: string | null): WashFormat | null {
   return { count: pack === null ? quantity : pack * quantity, pack };
 }
 
-/** What a note says about a row the task does not correct. */
+/**
+ * What a note says about a row the task does not correct. `confirmed-units`
+ * is the second selection's hold ({@link statesUnitCount}), which `--count`
+ * prints on its own line and only under that selection.
+ */
 export type NoteKind =
   | 'pack-of-units'
   | 'short-wash-word'
   | 'sum'
-  | 'mercadona-per-wash';
+  | 'mercadona-per-wash'
+  | 'confirmed-units';
 
-/** The kinds in the order `--count` prints them. */
+/** The kind of note the hold of the second selection makes. */
+export const CONFIRMED_UNITS = 'confirmed-units' as const;
+
+/** The kinds in the order `--count` prints them, under every selection. */
 export const NOTE_KINDS: readonly NoteKind[] = [
   'pack-of-units',
   'short-wash-word',
@@ -158,7 +189,7 @@ const WASH_SUM = /^(\d+)\s*\+\s*(\d+)(?:\s*lavados?| ?(?:lav|lv))\.?$/i;
 
 /** The kind of note a row's printed text has, and the size it would state. */
 export interface NoteFormat {
-  kind: Exclude<NoteKind, 'mercadona-per-wash'>;
+  kind: Exclude<NoteKind, 'mercadona-per-wash' | 'confirmed-units'>;
   /** The `UNIT` count a product made from the row would hold. */
   count: number;
 }
@@ -184,6 +215,92 @@ export function readNoteFormat(text: string | null): NoteFormat | null {
     return { kind: 'sum', count: Number(sum[1]) + Number(sum[2]) };
   }
   return null;
+}
+
+/**
+ * Which products a run selects. `printed-count` is task 0007's (plan 0271,
+ * section 1), the default. `sum-and-short-word` is task 0009's (plan 0279,
+ * section 1).
+ */
+export type WashSelection = 'printed-count' | 'sum-and-short-word';
+
+/** Every selection `--selection` accepts. */
+export const WASH_SELECTIONS: readonly WashSelection[] = [
+  'printed-count',
+  'sum-and-short-word',
+];
+
+/** Whether a selection holds back a product a row confirms as units. */
+const HOLDS_CONFIRMED_UNITS: Record<WashSelection, boolean> = {
+  'printed-count': false,
+  'sum-and-short-word': true,
+};
+
+/** The note kinds a selection corrects, and so never notes. */
+const CORRECTED_KINDS: Record<WashSelection, ReadonlySet<NoteKind>> = {
+  'printed-count': new Set<NoteKind>(),
+  'sum-and-short-word': new Set<NoteKind>(['sum', 'short-wash-word']),
+};
+
+/**
+ * The count a row's printed size qualifies a product with under a selection,
+ * or null. `printed-count` reads {@link readWashFormat}. `sum-and-short-word`
+ * reads only a sum or a short word of {@link readNoteFormat}, which print no
+ * pack.
+ */
+export function readSelectedFormat(
+  text: string | null,
+  selection: WashSelection
+): WashFormat | null {
+  if (selection === 'printed-count') {
+    return readWashFormat(text);
+  }
+  const note = readNoteFormat(text);
+  return note !== null && CORRECTED_KINDS[selection].has(note.kind)
+    ? { count: note.count, pack: null }
+    : null;
+}
+
+/**
+ * A count of pieces as a row stores its printed size: a whole number, at most
+ * spaces, then `u`, `ud`, `uds`, `unid`, `unids`, `unidad` or `unidades`, and
+ * at most a full stop (`10 ud`, `10 uds.`), or the bare word with no number,
+ * which is how Mercadona stores it (`ud`, the number in `unitSize`). No other
+ * word: `10 dosis`, `10 cápsulas` and `40 toallitas` are a count too, but a
+ * dose can be a wash, so they confirm nothing.
+ */
+const UNIT_COUNT_FORMAT =
+  /^(?:(\d+)\s*)?(?:u|ud|uds|unid|unids|unidad|unidades)\.?$/i;
+
+/**
+ * The hold of the second selection (owner decision 156b, plan 0279 section
+ * 1.5): whether `row`, another ACTIVE bound row of the product, states `count`
+ * as a count of units. Stored row fields only, never a name: all of
+ *
+ * - its trimmed `sizeFormat` is a count of pieces ({@link UNIT_COUNT_FORMAT}),
+ *   and the number it prints, if it prints one, is `count`. A wash text
+ *   (`10 lavados`, `10lav`), a sum and a volume (`1.6 L`) never match;
+ * - its stored size is `count` in `UNIT` (`unitSize`, `sizeUnit`), the unit of
+ *   counted pieces, as DEZA, El Jamón, DIA and Carrefour store `10 ud` and
+ *   Mercadona stores `ud` beside the number;
+ * - it states no pack (`packCount` null), so the count is the whole of it;
+ * - its latest price label is not `lv`: a chain that prices the row per wash
+ *   says its count is washes (`mercadona-per-wash`).
+ *
+ * A row outside ACTIVE, or bound to no product, is never read
+ * ({@link SELECT_STATED_ROWS_SQL}), so it confirms nothing.
+ */
+export function statesUnitCount(row: StatedRow, count: number): boolean {
+  const match = UNIT_COUNT_FORMAT.exec((row.sizeFormat ?? '').trim());
+  return (
+    match !== null &&
+    (match[1] === undefined || Number(match[1]) === count) &&
+    row.sizeUnit === UnitOfMeasure.UNIT &&
+    row.unitSize !== null &&
+    row.unitSize === count &&
+    row.packCount === null &&
+    row.label !== 'lv'
+  );
 }
 
 /**
@@ -280,11 +397,14 @@ export interface WashSizesPorts {
 /**
  * `recorded` names the file that holds what earlier runs saved: the
  * ConfigMap as `kubectl get -o json` prints it, or nothing when there is none.
+ * `selection` is absent unless `--selection` named one, and absent means
+ * `printed-count`.
  */
-export type WashSizesOptions =
+export type WashSizesOptions = { selection?: WashSelection } & (
   | { mode: 'count' }
   | { mode: 'review'; file: string; recorded: string | null }
-  | { mode: 'write'; max: number; file: string; recorded: string | null };
+  | { mode: 'write'; max: number; file: string; recorded: string | null }
+);
 
 /**
  * A refusal the command words itself. Its message names no product, so it is
@@ -326,35 +446,63 @@ export interface WashSizesPlan {
   unread: number;
   /** Products that a qualifying row names and catalog has not or has merged. */
   held: number;
+  /**
+   * Products the second selection qualifies and holds back, because another
+   * row states the count as units ({@link statesUnitCount}). Always 0 under
+   * `printed-count`, which has no hold.
+   */
+  confirmed: number;
+  /** The selection the plan was made under, which decides the count lines. */
+  selection: WashSelection;
   notes: Note[];
 }
 
 /**
  * Reads `--count`, `--review <file>`, or `--max <n> --review <file>`, the
- * last two with an optional `--recorded <file|->`. Anything else is refused,
- * so a typo never becomes a run without a ceiling.
+ * last two with an optional `--recorded <file|->`, each with an optional
+ * `--selection <name>` of {@link WASH_SELECTIONS}. Anything else is refused,
+ * so a typo never becomes a run without a ceiling, or a run of the other
+ * task's selection.
  */
 export function parseWashSizesArgs(argv: string[]): WashSizesOptions {
   const usage =
     'usage: node wash-sizes.js --count | --review <file> | ' +
-    '--max <n> --review <file>, each list with [--recorded <file|->]';
-  if (argv.length === 1 && argv[0] === '--count') {
-    return { mode: 'count' };
-  }
+    '--max <n> --review <file>, each list with [--recorded <file|->], ' +
+    `each with [--selection ${WASH_SELECTIONS.join('|')}]`;
   const values: Record<string, string> = {};
-  for (let i = 0; i < argv.length; i += 2) {
+  let count = false;
+  for (let i = 0; i < argv.length; ) {
     const flag = argv[i];
+    if (flag === '--count') {
+      if (count) {
+        throw new WashSizesRefusal(usage);
+      }
+      count = true;
+      i += 1;
+      continue;
+    }
     const value = argv[i + 1];
     if (
-      !['--max', '--review', '--recorded'].includes(flag) ||
+      !['--max', '--review', '--recorded', '--selection'].includes(flag) ||
       flag in values ||
       value === undefined ||
       value.startsWith('--') ||
-      (flag === '--max' && !/^\d+$/.test(value))
+      (flag === '--max' && !/^\d+$/.test(value)) ||
+      (flag === '--selection' &&
+        !(WASH_SELECTIONS as readonly string[]).includes(value))
     ) {
       throw new WashSizesRefusal(usage);
     }
     values[flag] = value;
+    i += 2;
+  }
+  const named = values['--selection'] as WashSelection | undefined;
+  const selection = named === undefined ? {} : { selection: named };
+  if (count) {
+    if (Object.keys(values).some((flag) => flag !== '--selection')) {
+      throw new WashSizesRefusal(usage);
+    }
+    return { mode: 'count', ...selection };
   }
   const file = values['--review'];
   if (file === undefined) {
@@ -362,9 +510,15 @@ export function parseWashSizesArgs(argv: string[]): WashSizesOptions {
   }
   const recorded = values['--recorded'] ?? null;
   if (values['--max'] === undefined) {
-    return { mode: 'review', file, recorded };
+    return { mode: 'review', file, recorded, ...selection };
   }
-  return { mode: 'write', max: Number(values['--max']), file, recorded };
+  return {
+    mode: 'write',
+    max: Number(values['--max']),
+    file,
+    recorded,
+    ...selection,
+  };
 }
 
 /** The products that bear a wash row, then every row the plan reads. */
@@ -422,17 +576,22 @@ function selects(item: ItemView, count: number): boolean {
 
 /**
  * The selection of section 1, the counts of section 6 and the note. Pure: the
- * same rows and products always answer the same plan.
+ * same rows and products always answer the same plan. `selection` decides
+ * which printed sizes qualify a product ({@link readSelectedFormat}) and
+ * which kinds are noted; with none it is task 0007's.
  */
 export function planWashSizes(
   rows: StatedRow[],
-  items: Map<string, ItemView>
+  items: Map<string, ItemView>,
+  selection: WashSelection = 'printed-count'
 ): WashSizesPlan {
   const plan: WashSizesPlan = {
     corrections: [],
     byChain: new Map(),
     unread: 0,
     held: 0,
+    confirmed: 0,
+    selection,
     notes: [],
   };
   const byItem = new Map<string, StatedRow[]>();
@@ -444,7 +603,10 @@ export function planWashSizes(
 
   for (const [itemId, onItem] of byItem) {
     const washRows = onItem
-      .map((row) => ({ row, wash: readWashFormat(row.sizeFormat) }))
+      .map((row) => ({
+        row,
+        wash: readSelectedFormat(row.sizeFormat, selection),
+      }))
       .filter(
         (pair): pair is { row: StatedRow; wash: WashFormat } =>
           pair.wash !== null
@@ -470,6 +632,19 @@ export function planWashSizes(
     );
     if (matching.length === 0) {
       continue;
+    }
+    if (HOLDS_CONFIRMED_UNITS[selection]) {
+      const confirming = onItem.filter((row) =>
+        statesUnitCount(row, Number(item.unitSize))
+      );
+      if (confirming.length > 0) {
+        plan.confirmed += 1;
+        const statedSizes = statedSizesOf(onItem);
+        for (const row of confirming) {
+          plan.notes.push({ kind: CONFIRMED_UNITS, item, row, statedSizes });
+        }
+        continue;
+      }
     }
     const washFormats = new Map<string, string[]>();
     for (const { row } of matching) {
@@ -511,7 +686,7 @@ export function planWashSizes(
       continue;
     }
     const kind = noteKindOf(row, item);
-    if (kind !== null) {
+    if (kind !== null && !CORRECTED_KINDS[selection].has(kind)) {
       plan.notes.push({
         kind,
         item,
@@ -570,7 +745,11 @@ export function statedSizeOf(row: StatedRow): string {
   return `${row.unitSize} ${text}`;
 }
 
-/** The count lines both shell files read (section 6). Numbers only. */
+/**
+ * The count lines both shell files read (section 6). Numbers only. A
+ * selection with a hold prints `confirmed-units` after `held`; the default
+ * prints exactly the lines it printed before.
+ */
 export function countLines(plan: WashSizesPlan): string[] {
   return [
     ...[...plan.byChain.entries()]
@@ -581,6 +760,9 @@ export function countLines(plan: WashSizesPlan): string[] {
     `content ${plan.corrections.filter((c) => c.content).length}`,
     `unread ${plan.unread}`,
     `held ${plan.held}`,
+    ...(HOLDS_CONFIRMED_UNITS[plan.selection]
+      ? [`${CONFIRMED_UNITS} ${plan.confirmed}`]
+      : []),
     ...NOTE_KINDS.map(
       (kind) => `${kind} ${plan.notes.filter((n) => n.kind === kind).length}`
     ),
@@ -648,7 +830,10 @@ export function reviewList(
 /**
  * The notes: one line per noted row, which the task does not correct,
  * grouped by kind, then as the review list. The size columns are the
- * product's as it stands.
+ * product's as it stands. A `confirmed-units` line is the row that confirms
+ * the count: its `chain` and its `row_size_format`, rendered as
+ * `stated_sizes` renders it ({@link statedSizeOf}: Mercadona's `ud` is
+ * `10 ud`), say which chain states the count and how.
  */
 export function notesList(notes: Note[]): string {
   const lines = notes.map(({ kind, item, row, statedSizes }) => ({
@@ -662,7 +847,9 @@ export function notesList(notes: Note[]): string {
       item.unitSize === null ? '' : String(item.unitSize),
       item.defaultUnit,
       item.packCount === null ? '' : String(item.packCount),
-      String(row.sizeFormat ?? '').trim(),
+      kind === CONFIRMED_UNITS
+        ? statedSizeOf(row)
+        : String(row.sizeFormat ?? '').trim(),
       statedSizes.join('; '),
       row.entryId,
     ],
@@ -679,16 +866,29 @@ export function notesPathOf(reviewPath: string): string {
 export const REVIEW_KEY = 'review.tsv';
 export const NOTES_KEY = 'notes.tsv';
 
-/** The ConfigMap `post.sh` saves the lists in, as kubectl names it. */
-export const REVIEW_CONFIGMAP = 'configmap/release-task-0007-review';
+/**
+ * The ConfigMap each selection's `post.sh` saves the lists in, as kubectl
+ * names it. Each task has its own, so neither writes over the other's list,
+ * and a refusal of a recorded list names the one the run was given.
+ */
+export const REVIEW_CONFIGMAPS: Record<WashSelection, string> = {
+  'printed-count': 'configmap/release-task-0007-review',
+  'sum-and-short-word': 'configmap/release-task-0009-review',
+};
+
+/** Task 0007's ConfigMap, the one a run with no selection names. */
+export const REVIEW_CONFIGMAP = REVIEW_CONFIGMAPS['printed-count'];
 
 /** The key an earlier shape of this task kept the Mercadona note under. */
 const OLD_NOTE_KEY = 'mercadona-per-wash.tsv';
 
 /** The words that end every refusal of a recorded list. */
-const RECORDED_REMEDY =
-  `Delete ${REVIEW_CONFIGMAP}, or restore the header of this task as the ` +
-  'first line of each key, and run again.';
+function recordedRemedy(configMap: string): string {
+  return (
+    `Delete ${configMap}, or restore the header of this task as the ` +
+    'first line of each key, and run again.'
+  );
+}
 
 /** What earlier runs saved in the ConfigMap, by key. */
 export interface RecordedLists {
@@ -700,9 +900,12 @@ export interface RecordedLists {
  * The lists earlier runs saved, read out of the ConfigMap as
  * `kubectl get configmap -o json` prints it. Empty text means there is no
  * ConfigMap yet. Anything else that cannot be read is refused, and the
- * refusal quotes none of it.
+ * refusal quotes none of it, and names `configMap`.
  */
-export function readRecorded(text: string): RecordedLists {
+export function readRecorded(
+  text: string,
+  configMap: string = REVIEW_CONFIGMAP
+): RecordedLists {
   if (text.trim() === '') {
     return { review: '', notes: '' };
   }
@@ -714,14 +917,15 @@ export function readRecorded(text: string): RecordedLists {
   }
   if (!data || typeof data !== 'object') {
     throw new WashSizesRefusal(
-      `Refused, and nothing was changed: ${REVIEW_CONFIGMAP} cannot be ` +
-        `read as a ConfigMap. ${RECORDED_REMEDY}`
+      `Refused, and nothing was changed: ${configMap} cannot be ` +
+        `read as a ConfigMap. ${recordedRemedy(configMap)}`
     );
   }
   if (OLD_NOTE_KEY in data) {
     throw new WashSizesRefusal(
-      `Refused, and nothing was changed: ${REVIEW_CONFIGMAP} holds the key ` +
-        `${OLD_NOTE_KEY} of an earlier shape of this task. ${RECORDED_REMEDY}`
+      `Refused, and nothing was changed: ${configMap} holds the key ` +
+        `${OLD_NOTE_KEY} of an earlier shape of this task. ` +
+        recordedRemedy(configMap)
     );
   }
   const value = (key: string) => {
@@ -783,12 +987,14 @@ export const NOTES_SHAPE: ListShape = {
  * size it recorded, so a product corrected by a run that failed later is
  * never dropped by the next one, and merging the same lines twice changes
  * nothing. The one replacement is the shape's own ({@link REVIEW_SHAPE}).
- * One header, the same order as the list.
+ * One header, the same order as the list. A refusal of the recorded list
+ * names `configMap`.
  */
 export function mergeList(
   shape: ListShape,
   recorded: string,
-  next: string
+  next: string,
+  configMap: string = REVIEW_CONFIGMAP
 ): string {
   const lines = new Map<string, Line>();
   for (const [source, text] of [
@@ -803,8 +1009,8 @@ export function mergeList(
       throw new WashSizesRefusal(
         source === 'recorded'
           ? `Refused, and nothing was changed: the key ${shape.key} of ` +
-              `${REVIEW_CONFIGMAP} does not start with the header of this ` +
-              `task. ${RECORDED_REMEDY}`
+              `${configMap} does not start with the header of this ` +
+              `task. ${recordedRemedy(configMap)}`
           : `Refused, and nothing was changed: the ${shape.key} this run ` +
               'wrote does not start with the header of this task.'
       );
@@ -838,7 +1044,9 @@ export async function runWashSizes(
     ports.catalog,
     rows.map((row) => row.itemId)
   );
-  const plan = planWashSizes(rows, items);
+  const selection = options.selection ?? 'printed-count';
+  const configMap = REVIEW_CONFIGMAPS[selection];
+  const plan = planWashSizes(rows, items, selection);
   for (const line of countLines(plan)) {
     ports.log(line);
   }
@@ -849,18 +1057,19 @@ export async function runWashSizes(
   // while nothing has changed.
   const recorded =
     options.recorded === null
-      ? readRecorded('')
-      : readRecorded(await ports.files.read(options.recorded));
+      ? readRecorded('', configMap)
+      : readRecorded(await ports.files.read(options.recorded), configMap);
   // A recorded list of another shape refuses here, before any write, and not
   // when the lists are written after the updates.
-  mergeList(REVIEW_SHAPE, recorded.review, '');
-  mergeList(NOTES_SHAPE, recorded.notes, '');
+  mergeList(REVIEW_SHAPE, recorded.review, '', configMap);
+  mergeList(NOTES_SHAPE, recorded.notes, '', configMap);
   // Whether there is anything to save is decided on the lists as they were
   // recorded, before the reconcile reads catalog.
   const plannedBefore = plannedIdsOf(recorded.review).length;
   const reconciled: RecordedLists = {
     ...recorded,
-    review: (await reconcileReview(ports.catalog, recorded.review)).text,
+    review: (await reconcileReview(ports.catalog, recorded.review, configMap))
+      .text,
   };
   if (options.mode === 'review') {
     // Nothing is written to a database, so every line this run adds is
@@ -871,7 +1080,8 @@ export async function runWashSizes(
       options.file,
       reviewList(plan.corrections),
       plan.notes,
-      reconciled
+      reconciled,
+      configMap
     );
     ports.log(`review ${plan.corrections.length}`);
     ports.log(
@@ -926,7 +1136,8 @@ export async function runWashSizes(
     options.file,
     reviewList(listed, done),
     plan.notes,
-    reconciled
+    reconciled,
+    configMap
   );
   ports.log(`corrected ${done.size}`);
   ports.log(`skipped ${skipped}`);
@@ -967,11 +1178,22 @@ async function writeLists(
   file: string,
   review: string,
   notes: Note[],
-  recorded: RecordedLists
+  recorded: RecordedLists,
+  configMap: string
 ): Promise<RecordedLists> {
   // Both merged before either is written, so a refusal writes neither.
-  const reviewText = mergeList(REVIEW_SHAPE, recorded.review, review);
-  const notesText = mergeList(NOTES_SHAPE, recorded.notes, notesList(notes));
+  const reviewText = mergeList(
+    REVIEW_SHAPE,
+    recorded.review,
+    review,
+    configMap
+  );
+  const notesText = mergeList(
+    NOTES_SHAPE,
+    recorded.notes,
+    notesList(notes),
+    configMap
+  );
   await ports.files.write(file, reviewText);
   await ports.files.write(notesPathOf(file), notesText);
   return { review: reviewText, notes: notesText };
@@ -1020,7 +1242,8 @@ export function confirmsCorrection(item: ItemView | undefined): boolean {
  */
 export async function reconcileReview(
   catalog: CatalogPort,
-  review: string
+  review: string,
+  configMap: string = REVIEW_CONFIGMAP
 ): Promise<{ text: string; turned: number }> {
   const planned = linesOf(review).filter(
     (cells) => cells[OUTCOME] === 'planned'
@@ -1049,7 +1272,10 @@ export async function reconcileReview(
       cells,
     }))
   );
-  return { text: mergeList(REVIEW_SHAPE, review, next), turned: turned.length };
+  return {
+    text: mergeList(REVIEW_SHAPE, review, next, configMap),
+    turned: turned.length,
+  };
 }
 
 /**

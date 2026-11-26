@@ -30,8 +30,10 @@ export function toTripView(row: TripRow): TripView {
  *
  * ## A basket row
  *
- * `left` is `max(0, asked - bought)`: buying more than was asked leaves nothing,
- * not a negative amount. The outcome is read in this order:
+ * `left` is `max(0, asked - applied)`, where `applied` is the units of the
+ * basket's buys that met the ask (plan 0274): buying more than was asked leaves
+ * nothing, not a negative amount, and the units above the ask take nothing off
+ * a raise of the line made after them. The outcome is read in this order:
  *
  * | Outcome         | When                                                     |
  * | --------------- | -------------------------------------------------------- |
@@ -71,7 +73,10 @@ export function toTripRowView(kind: TripKind, row: TripLineRow): TripRowView {
   }
 
   const asked = Number(row.asked ?? 0);
-  const left = Math.max(0, asked - bought);
+  // What was asked less what the buys met of it (plan 0274), as the basket
+  // read says: units bought above the ask are not owed back by a raise of the
+  // line after them. Absent `applied` is every unit bought, the old rule.
+  const left = Math.max(0, asked - Number(row.applied ?? bought));
   return {
     lineId: row.lineId,
     asked,

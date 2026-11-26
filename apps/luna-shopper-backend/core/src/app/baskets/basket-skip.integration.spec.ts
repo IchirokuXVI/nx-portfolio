@@ -632,9 +632,9 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
       // basket's skip. It lowers `left` and nothing else.
       await dataSource.query(
         `INSERT INTO "line_settlements"
-           ("lineId", "listId", "outcome", "quantity", "settledByUserId",
-            "settledAt", "basketId")
-         VALUES ($1::uuid, $2::uuid, 'BOUGHT', 1, $3::uuid, now(), NULL)`,
+           ("lineId", "listId", "outcome", "quantity", "applied",
+            "settledByUserId", "settledAt", "basketId")
+         VALUES ($1::uuid, $2::uuid, 'BOUGHT', 1, 1, $3::uuid, now(), NULL)`,
         [row.id, listId, ids.shopper]
       );
       await dataSource.getRepository(ListLine).update(row.id, { quantity: 2 });

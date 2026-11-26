@@ -171,11 +171,17 @@ export class BasketSettleService {
           continue;
         }
 
+        // How many of the units met what the line asked (plan 0274, section
+        // 2): never more than the line held before the buy. The rest are above
+        // the ask, and the read keeps the ask by counting these alone.
+        let applied = 0;
         if (req.outcome === SettlementOutcome.BOUGHT && allocated > 0) {
           // Floored at zero, and the settlement keeps what was actually bought
-          // (plan 0047, section 4.2).
+          // (plan 0047, section 4.2). The line goes down by what was applied,
+          // which is the same number the floor gave.
           const before = zoneLine.quantity;
-          zoneLine.quantity = Math.max(0, before - allocated);
+          applied = Math.min(allocated, before);
+          zoneLine.quantity = before - applied;
           zoneLine.version += 1;
           await zoneLines.save(zoneLine);
           // One change row for each line the buy lowered, in this transaction
@@ -208,6 +214,8 @@ export class BasketSettleService {
             itemId,
             outcome: req.outcome,
             quantity: req.outcome === SettlementOutcome.BOUGHT ? allocated : 0,
+            // 0 for a close, which holds no units.
+            applied,
             // What `quantity` counts, the line's (plan 0246, section 3.5).
             unit: zoneLine.unit ?? 'UNIT',
             // The participant, always, including for the owner

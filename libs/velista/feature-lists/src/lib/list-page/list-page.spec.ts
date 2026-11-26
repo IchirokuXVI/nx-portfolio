@@ -65,11 +65,14 @@ import {
   type TripServiceI,
 } from '@portfolio/velista/data-access';
 import type {
+  AbsorbedExtra,
+  AddLineOptions,
   CatalogItem,
   CatalogSuggestion,
   DueLine,
   Line,
   LineRowVm,
+  LineUnit,
   ListAccessEntry,
   ListPermission,
   Membership,
@@ -82,6 +85,9 @@ import type {
 } from '@portfolio/velista/models';
 import {
   DEFAULT_LIST_VIEW_STATE,
+  EXTRA_ASK_FLASH_MS,
+  QUANTITY_CLEAR_LOCK_MAX_MS,
+  QUANTITY_REEL_PX_PER_UNIT,
   QUANTITY_STEP_QUIET_MS,
 } from '@portfolio/velista/models';
 import {
@@ -93,16 +99,23 @@ import {
   StorageKeys,
 } from '@portfolio/velista/platform';
 import {
+  AnchoredPopover,
   DueLineRow,
+  ExtraAskHost,
   LineComposer,
   LineList,
+  LineRow,
   ListHeader,
+  PageHeader,
   TOOK_DURATION_MS,
   TripGroup,
+  type LineComposerSubmit,
+  type SuggestionHolding,
 } from '@portfolio/velista/ui';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BehaviorSubject } from 'rxjs';
+import { compile } from 'sass';
 import { LineSheetEvents } from '../line-detail-sheet/line-sheet-events';
 import { ListPage } from './list-page';
 
@@ -249,6 +262,8 @@ interface Options {
   readonly linesError?: unknown;
   /** What the read of the group failed with, on a group that is not cached (velista 0156). */
   readonly zoneError?: unknown;
+  /** The groups the zone store holds, when not the one group of this list. */
+  readonly zones?: readonly MyZone[];
   /** A sheet URL over the page: the route has a child (velista 0156). */
   readonly sheetOpen?: boolean;
   /** What `GET /v1/lists/:id/access` answers (velista `0152`). Nobody by default. */
@@ -261,6 +276,8 @@ async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<ListPage>;
   lines: FakeLineStore;
   lists: FakeListStore;
+  /** The zone store the page reads the group's name from. */
+  zones: ReturnType<typeof fakeZoneStore>;
   realtime: RealtimeMemory;
   storage: Map<string, string>;
   router: {
@@ -294,7 +311,9 @@ async function render(options: Options = {}): Promise<{
 
   const zones =
     options.zoneError === undefined
-      ? fakeZoneStore({ zones: [zone(options.role ?? 'MEMBER')] })
+      ? fakeZoneStore({
+          zones: options.zones ?? [zone(options.role ?? 'MEMBER')],
+        })
       : failedZoneStore(options.zoneError);
   const lists = fakeListStore({
     lists: options.lists ?? [
@@ -385,6 +404,24 @@ async function render(options: Options = {}): Promise<{
                   nextCursor: null,
                 }),
                 ...options.lineWrites,
+                // A row's raise reports the extra (velista `0208`). A spec that
+                // answers only the plain write answers it with no report.
+                ...(options.lineWrites?.addQuantity !== undefined &&
+                options.lineWrites.raiseReportingExtra === undefined
+                  ? {
+                      raiseReportingExtra: async (
+                        lineId: string,
+                        delta: number,
+                        unit: LineUnit
+                      ) => ({
+                        line: await (
+                          options.lineWrites
+                            ?.addQuantity as LineServiceI['addQuantity']
+                        )(lineId, delta, unit),
+                        extra: null,
+                      }),
+                    }
+                  : {}),
               } as Partial<LineServiceI>,
             },
           ]),
@@ -464,6 +501,7 @@ async function render(options: Options = {}): Promise<{
     fixture,
     lines,
     lists,
+    zones,
     realtime,
     storage,
     router,
@@ -596,6 +634,14 @@ function filterAction(fixture: ComponentFixture<ListPage>) {
 function filterBadge(fixture: ComponentFixture<ListPage>): number | null {
   const badge = filterAction(fixture)?.querySelector('.badge');
   return badge == null ? null : Number(badge.textContent);
+}
+
+/** The view picker's button (velista `0202`). */
+function viewAction(fixture: ComponentFixture<ListPage>) {
+  return query(
+    fixture,
+    'lib-page-header lib-view-picker button[libPageHeaderAction][aria-label="view.title"]'
+  );
 }
 
 function settingsAction(fixture: ComponentFixture<ListPage>) {
@@ -1054,7 +1100,7 @@ describe('ListPage', () => {
       expect(settingsAction(fixture)).toBeNull();
     });
 
-    it('puts the filter before the settings', async () => {
+    it('puts the view button first, then the filter, then the settings (velista 0202)', async () => {
       const { fixture } = await render({ permissions: ADMIN });
 
       const actions = Array.from(
@@ -1063,7 +1109,17 @@ describe('ListPage', () => {
         )
       );
 
-      expect(actions).toEqual([filterAction(fixture), settingsAction(fixture)]);
+      expect(actions).toEqual([
+        viewAction(fixture),
+        filterAction(fixture),
+        settingsAction(fixture),
+      ]);
+      expect(
+        viewAction(fixture)?.querySelector('lib-view-icon')
+      ).not.toBeNull();
+      expect(
+        filterAction(fixture)?.querySelector('lib-filter-icon')
+      ).not.toBeNull();
       expect(query(fixture, 'lib-list-tools')).toBeNull();
     });
 
@@ -1154,7 +1210,7 @@ describe('ListPage', () => {
 
         jest.advanceTimersByTime(1);
         expect(writes(lines.calls)).toEqual([
-          { kind: 'quantity', lineId: 'ln-1', delta: 75 },
+          { kind: 'quantity', lineId: 'ln-1', delta: 75, reportExtra: true },
         ]);
       });
 
@@ -1204,6 +1260,60 @@ describe('ListPage', () => {
         ]);
       });
 
+      it('writes a reel step at once, in one write (velista 0203)', async () => {
+        const { fixture, lines } = await render({
+          lines: [line('ln-1', { quantity: 950, unit: 'GRAM' })],
+        });
+        jest.useFakeTimers();
+
+        fixture.componentInstance.reelQuantity({
+          lineId: 'ln-1',
+          step: { from: 950, to: 1100, repeat: false },
+        });
+
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-1', delta: 150, reportExtra: true },
+        ]);
+        expect(fixture.componentInstance.quantityRuns.pending().size).toBe(0);
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        expect(writes(lines.calls)).toHaveLength(1);
+      });
+
+      it('does not lock a row a reel took to 0: the reel has no trash (velista 0203)', async () => {
+        const { fixture, lines } = await render({
+          lines: [line('ln-1', { quantity: 3 })],
+        });
+        jest.useFakeTimers();
+
+        fixture.componentInstance.reelQuantity({
+          lineId: 'ln-1',
+          step: { from: 3, to: 0, repeat: false },
+        });
+
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-1', delta: -3 },
+        ]);
+        expect(fixture.componentInstance.clearing().size).toBe(0);
+      });
+
+      it('passes the reel of a compact row up to the page', async () => {
+        const { fixture, lines } = await render({
+          lines: [line('ln-1', { quantity: 2 })],
+        });
+        jest.useFakeTimers();
+        const row = fixture.debugElement.query(By.directive(LineRow))
+          .componentInstance as LineRow;
+
+        row.quantityReeled.emit({
+          lineId: 'ln-1',
+          step: { from: 2, to: 5, repeat: false },
+        });
+
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-1', delta: 3, reportExtra: true },
+        ]);
+      });
+
       it("writes the line's open run before its sheet opens", async () => {
         const { fixture, lines, router } = await render({
           lines: [line('ln-1', { quantity: 2 })],
@@ -1215,7 +1325,7 @@ describe('ListPage', () => {
 
         // Sent at once, before the sheet reads the line, and not again after.
         expect(writes(lines.calls)).toEqual([
-          { kind: 'quantity', lineId: 'ln-1', delta: 1 },
+          { kind: 'quantity', lineId: 'ln-1', delta: 1, reportExtra: true },
         ]);
         expect(router.navigate).toHaveBeenCalledWith(
           ['sheet', 'lines', 'ln-1', 'detail'],
@@ -1225,24 +1335,547 @@ describe('ListPage', () => {
         expect(writes(lines.calls)).toHaveLength(1);
       });
 
-      it('keeps the row and writes nothing for a minus to 0 and a plus inside the quiet beat (velista 0192)', async () => {
+      it('writes the trash at once, with every press of the run before it (velista 0199)', async () => {
         const { fixture, lines } = await render({
-          lines: [line('ln-1', { quantity: 1 })],
+          lines: [line('ln-1', { quantity: 3 })],
         });
         jest.useFakeTimers();
         const page = fixture.componentInstance;
 
-        page.stepQuantity(press(1, 0));
-        fixture.detectChanges();
-        expect(page.drawnLines().map((row) => row.id)).toEqual(['ln-1']);
-
-        page.stepQuantity(press(0, 1));
-        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
-        fixture.detectChanges();
-
+        page.stepQuantity(press(3, 2));
+        page.stepQuantity(press(2, 1));
         expect(writes(lines.calls)).toEqual([]);
-        expect(page.drawnLines().map((row) => row.id)).toEqual(['ln-1']);
+
+        // The trash: the press from 1 to 0. Written in the same task, no beat.
+        page.stepQuantity(press(1, 0));
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-1', delta: -3 },
+        ]);
+
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        expect(writes(lines.calls)).toHaveLength(1);
+      });
+
+      it('waits the quiet beat for a press to 1 (velista 0199)', async () => {
+        const { fixture, lines } = await render({
+          lines: [line('ln-1', { quantity: 2 })],
+        });
+        jest.useFakeTimers();
+
+        fixture.componentInstance.stepQuantity(press(2, 1));
+        expect(writes(lines.calls)).toEqual([]);
+
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-1', delta: -1 },
+        ]);
+      });
+    });
+
+    describe('the trash locks the row until its write answers (velista 0199)', () => {
+      const trash = (lineId: string, from = 1) => ({
+        lineId,
+        step: { from, to: 0, repeat: false },
+      });
+      const LINES = [
+        line('ln-1', { quantity: 2, position: 1 }),
+        line('ln-2', { content: 'Bananas', quantity: 1, position: 2 }),
+        line('ln-3', { quantity: 3, position: 3 }),
+      ];
+      const rowOf = (fixture: ComponentFixture<ListPage>, id: string) =>
+        (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(
+          `li.line[data-line-id="${id}"]`
+        );
+      const turns = async () => {
+        for (let turn = 0; turn < 20; turn += 1) {
+          await Promise.resolve();
+        }
+      };
+
+      /**
+       * The real `LineStore` over a service whose quantity writes are held until the
+       * spec answers them: the store patches the amount before the request goes out,
+       * and snaps it back with the failed note when the request fails.
+       */
+      const three = async () => {
+        const sent: { lineId: string; delta: number }[] = [];
+        let answer: (ok: boolean) => void = () => undefined;
+        const answered = new Promise<boolean>((resolve) => (answer = resolve));
+        const rendered = await render({
+          lineRead: LINES,
+          lineWrites: {
+            addQuantity: async (lineId, delta) => {
+              sent.push({ lineId, delta });
+              const held = LINES.find((one) => one.id === lineId) as Line;
+              if (!(await answered)) {
+                throw new Error('offline');
+              }
+              return {
+                ...held,
+                quantity: held.quantity + delta,
+                version: held.version + 1,
+              };
+            },
+          },
+        });
+        await rendered.fixture.whenStable();
+        rendered.fixture.detectChanges();
+        return {
+          ...rendered,
+          sent,
+          release: () => answer(true),
+          fail: () => answer(false),
+        };
+      };
+
+      afterEach(() => jest.useRealTimers());
+
+      it('keeps the row drawn in To buy at 0, locked, while the write is out', async () => {
+        const { fixture, sent, release } = await three();
+        jest.useFakeTimers();
+        const page = fixture.componentInstance;
+
+        page.stepQuantity(trash('ln-2'));
+        fixture.detectChanges();
+
+        // Sent in the press's own task: the trash never waits the quiet beat.
+        expect(sent).toEqual([{ lineId: 'ln-2', delta: -1 }]);
+        expect(page.clearing().has('ln-2')).toBe(true);
+        expect(page.drawnLines().map((row) => row.id)).toEqual([
+          'ln-1',
+          'ln-2',
+          'ln-3',
+        ]);
+        const row = rowOf(fixture, 'ln-2')?.querySelector<HTMLElement>('.row');
+        expect(row?.classList).toContain('clearing');
+        expect(row?.getAttribute('aria-busy')).toBe('true');
+        expect(row?.getAttribute('aria-disabled')).toBe('true');
+        expect(
+          rowOf(fixture, 'ln-2')
+            ?.querySelector('lib-quantity-stepper')
+            ?.getAttribute('data-value')
+        ).toBe('0');
         expect(page.announcement()).toBe('');
+
+        release();
+        await turns();
+      });
+
+      it('ignores a second press on the locked row', async () => {
+        const { fixture, sent, release } = await three();
+        jest.useFakeTimers();
+        const page = fixture.componentInstance;
+
+        page.stepQuantity(trash('ln-2'));
+        fixture.detectChanges();
+        rowOf(fixture, 'ln-2')
+          ?.querySelector<HTMLElement>('.step.plus')
+          ?.click();
+        page.stepQuantity({
+          lineId: 'ln-2',
+          step: { from: 0, to: 1, repeat: false },
+        });
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+
+        expect(sent).toEqual([{ lineId: 'ln-2', delta: -1 }]);
+        release();
+        await turns();
+      });
+
+      it('hides the row after the answer and moves focus to the next row', async () => {
+        const { fixture, release } = await three();
+        jest.useFakeTimers();
+        rowOf(fixture, 'ln-2')
+          ?.querySelector<HTMLElement>('.step.minus')
+          ?.focus();
+
+        fixture.componentInstance.stepQuantity(trash('ln-2'));
+        fixture.detectChanges();
+        expect(rowOf(fixture, 'ln-2')).not.toBeNull();
+
+        release();
+        await turns();
+        fixture.detectChanges();
+        fixture.detectChanges();
+
+        expect(fixture.componentInstance.clearing().size).toBe(0);
+        expect(rowOf(fixture, 'ln-2')).toBeNull();
+        expect(document.activeElement).toBe(
+          rowOf(fixture, 'ln-3')?.querySelector('.step.minus')
+        );
+        expect(fixture.componentInstance.announcement()).toBe(
+          'list.line.hiddenAtZero'
+        );
+      });
+
+      it('draws the row back at its stored amount, unlocked, when the write failed', async () => {
+        const { fixture, fail } = await three();
+        jest.useFakeTimers();
+
+        fixture.componentInstance.stepQuantity(trash('ln-2'));
+        fixture.detectChanges();
+
+        fail();
+        await turns();
+        fixture.detectChanges();
+
+        expect(fixture.componentInstance.clearing().size).toBe(0);
+        const row = rowOf(fixture, 'ln-2')?.querySelector<HTMLElement>('.row');
+        expect(row?.classList).not.toContain('clearing');
+        expect(row?.getAttribute('aria-disabled')).toBeNull();
+        expect(
+          rowOf(fixture, 'ln-2')
+            ?.querySelector('lib-quantity-stepper')
+            ?.getAttribute('data-value')
+        ).toBe('1');
+        expect(
+          rowOf(fixture, 'ln-2')?.querySelector('.notice.failed')
+        ).not.toBeNull();
+        expect(fixture.componentInstance.announcement()).toBe('');
+      });
+
+      it('locks the row in a search too, and leaves it drawn at 0 after the answer', async () => {
+        const { fixture, release } = await three();
+        const page = fixture.componentInstance;
+        page.onComposerQuery('banan');
+        fixture.detectChanges();
+        jest.useFakeTimers();
+
+        page.stepQuantity(trash('ln-2'));
+        fixture.detectChanges();
+        expect(
+          rowOf(fixture, 'ln-2')?.querySelector('.row')?.classList
+        ).toContain('clearing');
+
+        release();
+        await turns();
+        fixture.detectChanges();
+
+        expect(page.clearing().size).toBe(0);
+        expect(page.drawnLines().map((row) => [row.id, row.quantity])).toEqual([
+          ['ln-2', 0],
+        ]);
+        expect(
+          rowOf(fixture, 'ln-2')?.querySelector('.row')?.classList
+        ).not.toContain('clearing');
+        expect(page.announcement()).toBe('');
+      });
+
+      describe('the lock has a ceiling (the owner, 2026-11-23)', () => {
+        const stepperValue = (
+          fixture: ComponentFixture<ListPage>,
+          id = 'ln-2'
+        ) =>
+          rowOf(fixture, id)
+            ?.querySelector('lib-quantity-stepper')
+            ?.getAttribute('data-value');
+        const rowEl = (fixture: ComponentFixture<ListPage>, id = 'ln-2') =>
+          rowOf(fixture, id)?.querySelector<HTMLElement>('.row');
+        const locked = (fixture: ComponentFixture<ListPage>, id = 'ln-2') =>
+          rowEl(fixture, id)?.classList.contains('clearing');
+
+        /**
+         * The real `LineStore` over a server that answers each quantity write when the
+         * spec says so, in the order the spec says: a write that succeeds applies its
+         * delta to the server's line and moves its version by one.
+         */
+        const held = async () => {
+          const server = new Map(
+            LINES.map((one) => [one.id, { ...one }] as const)
+          );
+          const calls: {
+            lineId: string;
+            delta: number;
+            answer: (ok: boolean) => void;
+          }[] = [];
+          const rendered = await render({
+            lineRead: LINES,
+            lineWrites: {
+              addQuantity: async (lineId, delta) => {
+                let answer: (ok: boolean) => void = () => undefined;
+                const answered = new Promise<boolean>(
+                  (resolve) => (answer = resolve)
+                );
+                calls.push({ lineId, delta, answer });
+                if (!(await answered)) {
+                  throw new Error('offline');
+                }
+                const now = server.get(lineId) as Line;
+                const next = {
+                  ...now,
+                  quantity: Math.max(0, now.quantity + delta),
+                  version: now.version + 1,
+                };
+                server.set(lineId, next);
+                return next;
+              },
+            },
+          });
+          await rendered.fixture.whenStable();
+          rendered.fixture.detectChanges();
+          return {
+            ...rendered,
+            sent: () => calls.map(({ lineId, delta }) => ({ lineId, delta })),
+            release: (index: number, ok: boolean) => calls[index].answer(ok),
+            answer: async (index: number, ok: boolean) => {
+              calls[index].answer(ok);
+              await turns();
+              rendered.fixture.detectChanges();
+              rendered.fixture.detectChanges();
+            },
+          };
+        };
+
+        const pastCeiling = (fixture: ComponentFixture<ListPage>) => {
+          jest.advanceTimersByTime(QUANTITY_CLEAR_LOCK_MAX_MS);
+          fixture.detectChanges();
+        };
+
+        it('is two minutes', () => {
+          expect(QUANTITY_CLEAR_LOCK_MAX_MS).toBe(120_000);
+        });
+
+        it('keeps the row locked until the ceiling', async () => {
+          const { fixture, answer } = await held();
+          jest.useFakeTimers();
+
+          fixture.componentInstance.stepQuantity(trash('ln-2'));
+          jest.advanceTimersByTime(QUANTITY_CLEAR_LOCK_MAX_MS - 1);
+          fixture.detectChanges();
+
+          expect(locked(fixture)).toBe(true);
+          expect(rowEl(fixture)?.getAttribute('aria-disabled')).toBe('true');
+          await answer(0, true);
+        });
+
+        it('ends the lock at the ceiling and keeps the row drawn at 0 in its place, with no notice', async () => {
+          const { fixture, sent, answer } = await held();
+          jest.useFakeTimers();
+          const page = fixture.componentInstance;
+
+          page.stepQuantity(trash('ln-2'));
+          pastCeiling(fixture);
+
+          expect(page.clearing().size).toBe(0);
+          expect(locked(fixture)).toBe(false);
+          expect(rowEl(fixture)?.getAttribute('aria-disabled')).toBeNull();
+          // Still saving, because the write is still out.
+          expect(rowEl(fixture)?.getAttribute('aria-busy')).toBe('true');
+          expect(stepperValue(fixture)).toBe('0');
+          expect(page.drawnLines().map((row) => row.id)).toEqual([
+            'ln-1',
+            'ln-2',
+            'ln-3',
+          ]);
+          expect(rowOf(fixture, 'ln-2')?.querySelector('.notice')).toBeNull();
+          // The request is not cancelled, and nothing else is sent.
+          expect(sent()).toEqual([{ lineId: 'ln-2', delta: -1 }]);
+          await answer(0, true);
+        });
+
+        it('takes a plus after the ceiling as an ordinary step from 0', async () => {
+          const { fixture, sent, answer } = await held();
+          jest.useFakeTimers();
+          const page = fixture.componentInstance;
+
+          page.stepQuantity(trash('ln-2'));
+          pastCeiling(fixture);
+          page.stepQuantity({
+            lineId: 'ln-2',
+            step: { from: 0, to: 1, repeat: false },
+          });
+          fixture.detectChanges();
+          expect(stepperValue(fixture)).toBe('1');
+
+          jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+          fixture.detectChanges();
+
+          expect(stepperValue(fixture)).toBe('1');
+          expect(sent()).toEqual([
+            { lineId: 'ln-2', delta: -1 },
+            { lineId: 'ln-2', delta: 1 },
+          ]);
+          await answer(0, true);
+          await answer(1, true);
+        });
+
+        it('hides the row on a late success and leaves focus where the person is', async () => {
+          const { fixture, answer } = await held();
+          jest.useFakeTimers();
+          const page = fixture.componentInstance;
+          rowOf(fixture, 'ln-2')
+            ?.querySelector<HTMLElement>('.step.minus')
+            ?.focus();
+
+          page.stepQuantity(trash('ln-2'));
+          pastCeiling(fixture);
+          const elsewhere = rowOf(fixture, 'ln-1')?.querySelector<HTMLElement>(
+            '.step.plus'
+          );
+          elsewhere?.focus();
+
+          await answer(0, true);
+
+          expect(rowOf(fixture, 'ln-2')).toBeNull();
+          expect(page.drawnLines().map((row) => row.id)).toEqual([
+            'ln-1',
+            'ln-3',
+          ]);
+          expect(document.activeElement).toBe(elsewhere);
+        });
+
+        it('applies a late success after a raise as the store applies two writes in flight', async () => {
+          const { fixture, answer } = await held();
+          jest.useFakeTimers();
+          const page = fixture.componentInstance;
+
+          page.stepQuantity(trash('ln-2'));
+          pastCeiling(fixture);
+          page.stepQuantity({
+            lineId: 'ln-2',
+            step: { from: 0, to: 1, repeat: false },
+          });
+          jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+          fixture.detectChanges();
+
+          // The trash's answer lands first. The two writes share the store's one
+          // overlay for the line's quantity, so this answer drops the raise's overlay
+          // and draws the server's 0 until the raise answers. That is the store's
+          // handling of any two writes of one line in flight, not this page's.
+          await answer(0, true);
+          expect(rowOf(fixture, 'ln-2')).toBeNull();
+
+          // The raise was sent against the version the line had before the trash
+          // answered, so the server's line is two versions on and the store reports
+          // it as overwritten, at the amount the person raised it to.
+          await answer(1, true);
+          expect(stepperValue(fixture)).toBe('1');
+          expect(
+            rowOf(fixture, 'ln-2')?.querySelector('.notice.overwritten')
+          ).not.toBeNull();
+        });
+
+        it("shows the store's own failed notice on a late failure", async () => {
+          const { fixture, answer } = await held();
+          jest.useFakeTimers();
+          const page = fixture.componentInstance;
+
+          page.stepQuantity(trash('ln-2'));
+          pastCeiling(fixture);
+          await answer(0, false);
+
+          expect(locked(fixture)).toBe(false);
+          expect(stepperValue(fixture)).toBe('1');
+          expect(
+            rowOf(fixture, 'ln-2')?.querySelector('.notice.failed')
+          ).not.toBeNull();
+          expect(page.announcement()).toBe('');
+        });
+
+        it('keeps two lines being cleared apart', async () => {
+          const { fixture, answer } = await held();
+          jest.useFakeTimers();
+          const page = fixture.componentInstance;
+
+          page.stepQuantity(trash('ln-2'));
+          jest.advanceTimersByTime(QUANTITY_CLEAR_LOCK_MAX_MS / 2);
+          page.stepQuantity(trash('ln-1', 2));
+          jest.advanceTimersByTime(QUANTITY_CLEAR_LOCK_MAX_MS / 2);
+          fixture.detectChanges();
+          expect(locked(fixture, 'ln-2')).toBe(false);
+          expect(locked(fixture, 'ln-1')).toBe(true);
+
+          await answer(0, true);
+          expect(rowOf(fixture, 'ln-2')).toBeNull();
+          expect(locked(fixture, 'ln-1')).toBe(true);
+
+          pastCeiling(fixture);
+          expect(locked(fixture, 'ln-1')).toBe(false);
+          expect(stepperValue(fixture, 'ln-1')).toBe('0');
+          await answer(1, true);
+          expect(rowOf(fixture, 'ln-1')).toBeNull();
+        });
+
+        it('clears the timer when the write answers before the ceiling', async () => {
+          const { fixture, answer } = await held();
+          jest.useFakeTimers();
+          const page = fixture.componentInstance;
+
+          page.stepQuantity(trash('ln-2'));
+          expect(page['_locks'].has('ln-2')).toBe(true);
+          await answer(0, true);
+
+          expect(page['_locks'].size).toBe(0);
+          pastCeiling(fixture);
+          expect(page.clearing().size).toBe(0);
+          expect(page['_lingering']().size).toBe(0);
+          expect(rowOf(fixture, 'ln-2')).toBeNull();
+        });
+
+        it('lets no answer of an older trash touch a newer one', async () => {
+          const { fixture, answer } = await held();
+          jest.useFakeTimers();
+          const page = fixture.componentInstance;
+
+          page.stepQuantity(trash('ln-2'));
+          pastCeiling(fixture);
+          page.stepQuantity({
+            lineId: 'ln-2',
+            step: { from: 0, to: 1, repeat: false },
+          });
+          jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+          await answer(1, true);
+          page.stepQuantity(trash('ln-2'));
+          fixture.detectChanges();
+          expect(locked(fixture)).toBe(true);
+
+          // The first trash answers late, while the second is still out.
+          await answer(0, true);
+          expect(page.clearing().has('ln-2')).toBe(true);
+          expect(page['_locks'].has('ln-2')).toBe(true);
+
+          await answer(2, true);
+          expect(page.clearing().size).toBe(0);
+          expect(page['_lingering']().size).toBe(0);
+          expect(page['_locks'].size).toBe(0);
+        });
+
+        it('only ends the lock in a search', async () => {
+          const { fixture, answer } = await held();
+          const page = fixture.componentInstance;
+          page.onComposerQuery('banan');
+          fixture.detectChanges();
+          jest.useFakeTimers();
+
+          page.stepQuantity(trash('ln-2'));
+          pastCeiling(fixture);
+
+          expect(locked(fixture)).toBe(false);
+          expect(
+            page.drawnLines().map((row) => [row.id, row.quantity])
+          ).toEqual([['ln-2', 0]]);
+          await answer(0, true);
+          expect(
+            page.drawnLines().map((row) => [row.id, row.quantity])
+          ).toEqual([['ln-2', 0]]);
+        });
+
+        it('clears the timer when the page goes away', async () => {
+          const { fixture, release } = await held();
+          jest.useFakeTimers();
+
+          const page = fixture.componentInstance;
+          page.stepQuantity(trash('ln-2'));
+          expect(page['_locks'].has('ln-2')).toBe(true);
+          fixture.destroy();
+
+          expect(page['_locks'].size).toBe(0);
+          // Past the ceiling, nothing fires on the page that went away.
+          jest.advanceTimersByTime(QUANTITY_CLEAR_LOCK_MAX_MS);
+          expect(page['_lingering']().size).toBe(0);
+          release(0, true);
+          await turns();
+        });
       });
     });
 
@@ -1263,8 +1896,10 @@ describe('ListPage', () => {
         (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(
           `li.line[data-line-id="${id}"]`
         );
-      const settle = (fixture: ComponentFixture<ListPage>) => {
-        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      // The trash's write answers before its row is hidden (velista 0199), so the
+      // answer is awaited too.
+      const settle = async (fixture: ComponentFixture<ListPage>) => {
+        await jest.advanceTimersByTimeAsync(QUANTITY_STEP_QUIET_MS);
         fixture.detectChanges();
         fixture.detectChanges();
       };
@@ -1276,7 +1911,7 @@ describe('ListPage', () => {
         jest.useFakeTimers();
 
         fixture.componentInstance.stepQuantity(lower('ln-2', 1));
-        settle(fixture);
+        await settle(fixture);
 
         expect(rowOf(fixture, 'ln-2')).toBeNull();
         expect(lines.calls).toEqual([
@@ -1296,7 +1931,7 @@ describe('ListPage', () => {
           ?.focus();
 
         fixture.componentInstance.stepQuantity(lower('ln-2', 1));
-        settle(fixture);
+        await settle(fixture);
 
         expect(document.activeElement).toBe(
           rowOf(fixture, 'ln-3')?.querySelector('.step.minus')
@@ -1311,7 +1946,7 @@ describe('ListPage', () => {
           ?.focus();
 
         fixture.componentInstance.stepQuantity(lower('ln-3', 3));
-        settle(fixture);
+        await settle(fixture);
 
         expect(document.activeElement).toBe(
           rowOf(fixture, 'ln-2')?.querySelector('.step.minus')
@@ -1328,7 +1963,7 @@ describe('ListPage', () => {
           ?.focus();
 
         fixture.componentInstance.stepQuantity(lower('ln-1', 1));
-        settle(fixture);
+        await settle(fixture);
 
         expect(document.activeElement).toBe(
           (fixture.nativeElement as HTMLElement).querySelector(
@@ -1346,7 +1981,7 @@ describe('ListPage', () => {
         other?.focus();
 
         fixture.componentInstance.stepQuantity(lower('ln-2', 1));
-        settle(fixture);
+        await settle(fixture);
 
         expect(document.activeElement).toBe(other);
       });
@@ -1382,10 +2017,10 @@ describe('ListPage', () => {
        * Lowers ln-2 to 0, raises it again through the search, and lowers it a second
        * time, so the same sentence waits for its gap in an emptied region.
        */
-      const repeatWaiting = (fixture: ComponentFixture<ListPage>) => {
+      const repeatWaiting = async (fixture: ComponentFixture<ListPage>) => {
         const page = fixture.componentInstance;
         page.stepQuantity(lower('ln-2', 1));
-        settle(fixture);
+        await settle(fixture);
         expect(region(fixture)).toBe('list.line.hiddenAtZero');
 
         page.onComposerQuery('banan');
@@ -1401,9 +2036,12 @@ describe('ListPage', () => {
         expect(page.announcement()).toBe('list.line.hiddenAtZero');
 
         page.stepQuantity(lower('ln-2', 1));
-        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
         // Emptied in the render that takes the row away and filled a moment later,
-        // so a screen reader hears a change.
+        // so a screen reader hears a change. The trash is written at once (velista
+        // 0199): only its answer is awaited, and no timer runs.
+        for (let turn = 0; turn < 10; turn += 1) {
+          await Promise.resolve();
+        }
         fixture.detectChanges();
         fixture.detectChanges();
         expect(region(fixture)).toBe('');
@@ -1413,7 +2051,7 @@ describe('ListPage', () => {
         const { fixture } = await three();
         jest.useFakeTimers();
 
-        repeatWaiting(fixture);
+        await repeatWaiting(fixture);
         jest.advanceTimersByTime(1_000);
         fixture.detectChanges();
         expect(region(fixture)).toBe('list.line.hiddenAtZero');
@@ -1423,7 +2061,7 @@ describe('ListPage', () => {
         const { fixture } = await three();
         jest.useFakeTimers();
 
-        repeatWaiting(fixture);
+        await repeatWaiting(fixture);
         fixture.destroy();
         jest.advanceTimersByTime(1_000);
 
@@ -1435,7 +2073,7 @@ describe('ListPage', () => {
         jest.useFakeTimers();
         const page = fixture.componentInstance;
         page.stepQuantity(lower('ln-1', 2));
-        settle(fixture);
+        await settle(fixture);
         expect(page.announcement()).toBe('list.line.hiddenAtZero');
 
         // Both runs are written on the same beat: the first is the same sentence
@@ -1443,7 +2081,7 @@ describe('ListPage', () => {
         const set = jest.spyOn(page['_announcement'], 'set');
         page.stepQuantity(lower('ln-2', 1));
         page.stepQuantity(lower('ln-3', 3));
-        settle(fixture);
+        await settle(fixture);
         const said = set.mock.calls.length;
         expect(page.announcement()).toBe('list.line.hiddenAtZero');
 
@@ -1459,7 +2097,7 @@ describe('ListPage', () => {
           .mockResolvedValue({ state: 'failed', added: 0 } as never);
         const page = fixture.componentInstance;
 
-        repeatWaiting(fixture);
+        await repeatWaiting(fixture);
         await page.loadOlderTrips();
         expect(page.announcement()).toBe('list.trips.olderFailed');
 
@@ -1480,7 +2118,7 @@ describe('ListPage', () => {
         jest.useFakeTimers();
 
         fixture.componentInstance.stepQuantity(lower('ln-1', 1));
-        settle(fixture);
+        await settle(fixture);
 
         expect(query(fixture, '.state-title')?.textContent?.trim()).toBe(
           'list.view.none'
@@ -1616,12 +2254,12 @@ describe('ListPage', () => {
           ?.focus();
 
         fixture.componentInstance.stepQuantity(lower('ln-2', 1));
-        settle(fixture);
+        await settle(fixture);
         expect(rowOf(fixture, 'ln-2')).not.toBeNull();
         expect(fixture.componentInstance.announcement()).toBe('');
 
         release();
-        for (let turn = 0; turn < 5; turn += 1) {
+        for (let turn = 0; turn < 10; turn += 1) {
           await Promise.resolve();
         }
         fixture.detectChanges();
@@ -1699,7 +2337,7 @@ describe('ListPage', () => {
         jest.useFakeTimers();
 
         page.stepQuantity(lower('ln-2', 1));
-        settle(fixture);
+        await settle(fixture);
 
         expect(page.drawnLines().map((row) => [row.id, row.quantity])).toEqual([
           ['ln-2', 0],
@@ -1738,7 +2376,7 @@ describe('ListPage', () => {
           content: 'Milk',
           quantity: 2,
           // Typed words say the page can ask which line (velista 0170).
-          options: { askIfAmbiguous: true },
+          options: { askIfAmbiguous: true, reportExtra: true },
         },
       ]);
     });
@@ -1753,7 +2391,7 @@ describe('ListPage', () => {
           kind: 'add',
           content: 'Milk',
           quantity: 1,
-          options: { askIfAmbiguous: true },
+          options: { askIfAmbiguous: true, reportExtra: true },
         },
       ]);
     });
@@ -1781,7 +2419,7 @@ describe('ListPage', () => {
           kind: 'add',
           content: 'Milk',
           quantity: 1,
-          options: { askIfAmbiguous: true },
+          options: { askIfAmbiguous: true, reportExtra: true },
         },
       ]);
     });
@@ -1803,7 +2441,7 @@ describe('ListPage', () => {
           quantity: 1,
           itemIds: ['item-a'],
           named: false,
-          options: { askIfAmbiguous: true },
+          options: { askIfAmbiguous: true, reportExtra: true },
         },
       ]);
     });
@@ -1833,6 +2471,7 @@ describe('ListPage', () => {
     ];
     const ITEM_A: CatalogItem = {
       id: 'item-a',
+      pieceCount: null,
       quantityStep: null,
       name: { es: 'Leche entera', en: 'Whole milk' },
       brand: 'Hacendado',
@@ -2617,7 +3256,7 @@ describe('ListPage', () => {
       expect(lines.calls.at(-1)).toEqual({
         kind: 'add',
         content: 'Leche entera',
-        options: { intoLineId: 'ln-other' },
+        options: { intoLineId: 'ln-other', reportExtra: true },
       });
       expect(choiceRows()).toHaveLength(0);
 
@@ -2689,7 +3328,7 @@ describe('ListPage', () => {
       expect(lines.calls.at(-1)).toEqual({
         kind: 'add',
         content: 'Leche entera',
-        options: { intoLineId: 'ln-other' },
+        options: { intoLineId: 'ln-other', reportExtra: true },
       });
       expect(choiceRows()).toHaveLength(0);
       // The add's own failure, never the list being gone, drawn under the field
@@ -2722,7 +3361,7 @@ describe('ListPage', () => {
       expect(lines.calls.at(-1)).toEqual({
         kind: 'add',
         content: 'Leche entera',
-        options: { intoLineId: 'ln-whole' },
+        options: { intoLineId: 'ln-whole', reportExtra: true },
       });
       expect([...fixture.componentInstance.tookLines()]).toEqual(['ln-whole']);
       expect(fixture.componentInstance.announcement()).toBe(
@@ -2777,7 +3416,7 @@ describe('ListPage', () => {
 
       expect(lines.calls.at(-1)).toMatchObject({
         itemIds: ['item-a'],
-        options: { askIfAmbiguous: true },
+        options: { askIfAmbiguous: true, reportExtra: true },
       });
       // Two lines, and no "A new line" for a product.
       expect(choiceRows()).toHaveLength(2);
@@ -3327,6 +3966,82 @@ describe('ListPage', () => {
   });
 });
 
+/**
+ * Velista `0205`: the group is the line under the page header's title, and the head
+ * block above the field no longer draws it.
+ */
+describe('ListPage and the group under the title (velista 0205)', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  function subtitle(fixture: ComponentFixture<ListPage>) {
+    return fixture.debugElement
+      .query(By.directive(PageHeader))
+      .componentInstance.subtitle() as string | null;
+  }
+
+  it('passes "in <group>" as the subtitle of the page header', async () => {
+    const { fixture } = await render();
+
+    // The testing translator answers with the key; the next spec reads the name.
+    expect(subtitle(fixture)).toBe('list.header.inGroup');
+    expect(
+      query(fixture, 'lib-page-header .heading p.subtitle')?.textContent?.trim()
+    ).toBe('list.header.inGroup');
+    expect(query(fixture, 'lib-page-header h1')?.textContent?.trim()).toBe(
+      'Weekly shop'
+    );
+  });
+
+  it('reserves an empty line while the group is not known, then fills it', async () => {
+    const { fixture, zones } = await render({ zones: [] });
+
+    expect(subtitle(fixture)).toBe('');
+    const title = query(fixture, 'lib-page-header h1');
+    expect(query(fixture, 'lib-page-header p.subtitle')).not.toBeNull();
+
+    const t = jest.spyOn(TestBed.inject(RokuTranslatorService), 't');
+    zones.upsert(zone());
+    fixture.detectChanges();
+
+    expect(subtitle(fixture)).toBe('list.header.inGroup');
+    const call = t.mock.calls.find(([key]) => key === 'list.header.inGroup');
+    expect(call?.[3]).toEqual({ name: 'Flat 3B' });
+    // The same h1 in the same stack: nothing was redrawn around the title.
+    expect(query(fixture, 'lib-page-header h1')).toBe(title);
+  });
+
+  it('draws no subtitle where there is no list to name a group for', async () => {
+    const { fixture } = await render({
+      zoneError: new GatewayError({
+        code: 'forbidden',
+        status: 403,
+        correlationId: 'cid-403',
+      }),
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(subtitle(fixture)).toBeNull();
+    expect(query(fixture, 'lib-page-header .subtitle')).toBeNull();
+  });
+
+  it('draws no group line in the head block', async () => {
+    const { fixture } = await render();
+
+    const top = query(fixture, '.page-top');
+    expect(top?.querySelector('.in-group')).toBeNull();
+    expect(top?.textContent).not.toContain('list.header.inGroup');
+  });
+
+  it('leaves the head block empty above the field with nobody else here', async () => {
+    const { fixture } = await render();
+
+    const block = query(fixture, '.page-top lib-list-header');
+    expect(block?.classList).toContain('empty');
+    expect(block?.textContent?.trim()).toBe('');
+  });
+});
+
 /** The header the page handed down, which is where its presence joins are observable. */
 function header(fixture: ComponentFixture<ListPage>) {
   return fixture.debugElement
@@ -3355,6 +4070,7 @@ describe('ListPage: searching and viewing one category', () => {
   ): CatalogItem {
     return {
       id,
+      pieceCount: null,
       quantityStep: null,
       name: { es: id, en: id },
       brand: null,
@@ -3522,6 +4238,10 @@ describe('ListPage: searching and viewing one category', () => {
 
     // Nothing on: no badge, and the plain name.
     expect(filterBadge(fixture)).toBeNull();
+    expect(filterAction(fixture)?.classList).not.toContain('is-on');
+    expect(
+      filterAction(fixture)?.querySelector('lib-filter-icon')
+    ).not.toBeNull();
     expect(filterAction(fixture)?.getAttribute('aria-label')).toBe(
       'basket.view.open'
     );
@@ -3529,6 +4249,8 @@ describe('ListPage: searching and viewing one category', () => {
     view.setOrder('alpha');
     fixture.detectChanges();
     expect(filterBadge(fixture)).toBe(1);
+    // The funnel in the quiet amber (velista 0202).
+    expect(filterAction(fixture)?.classList).toContain('is-on');
     // The name carries the count too, for whoever cannot see the badge.
     expect(filterAction(fixture)?.getAttribute('aria-label')).toBe(
       'basket.view.openCount'
@@ -4438,7 +5160,8 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
         lineId: 'eggs',
         step: { from: 1, to: 0, repeat: false },
       });
-      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      // The trash is written at once and its row goes with the answer (velista 0199).
+      await jest.advanceTimersByTimeAsync(QUANTITY_STEP_QUIET_MS);
       fixture.detectChanges();
       fixture.detectChanges();
     } finally {
@@ -4476,7 +5199,8 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
         lineId: 'eggs',
         step: { from: 1, to: 0, repeat: false },
       });
-      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      // The trash is written at once and its row goes with the answer (velista 0199).
+      await jest.advanceTimersByTimeAsync(QUANTITY_STEP_QUIET_MS);
       fixture.detectChanges();
       fixture.detectChanges();
     } finally {
@@ -4530,6 +5254,20 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
 
     expect(fixture.componentInstance.dueAddsOnStep).toBe(false);
     expect(lines.calls.filter((call) => call.kind === 'quantity')).toEqual([]);
+  });
+
+  it('sends no flag for an add of a due row, and asks nothing (velista 0207, spec 18)', async () => {
+    const { fixture, lines } = await suggested();
+    lines.answerNextRaise({
+      extra: { above: 1, countable: 1, buyers: [{ userId: null }] },
+    });
+
+    addButton(fixture, 'eggs').click();
+    await settle(fixture);
+
+    const raised = lines.calls.filter((call) => call.kind === 'quantity');
+    expect(raised).toEqual([{ kind: 'quantity', lineId: 'eggs', delta: 1 }]);
+    expect(fixture.componentInstance.extraAsk()).toBeNull();
   });
 
   it('brings the row back when the write fails (test 6)', async () => {
@@ -4625,6 +5363,7 @@ describe('ListPage: the lines a suggestion card names (velista 0101)', () => {
     kind: 'item',
     item: {
       id: 'item-oat',
+      pieceCount: null,
       quantityStep: null,
       name: { es: 'Bebida de avena', en: 'Oat drink' },
       brand: 'Oatly',
@@ -5248,9 +5987,9 @@ describe('the history names a price per kilo with its slash', () => {
   }
 });
 
-describe('ListPage: compact rows (velista 0191)', () => {
+describe('ListPage: the two views (velista 0191, 0202)', () => {
   const COMPACT = new Map([
-    [StorageKeys.listRows, JSON.stringify({ version: 1, layout: 'compact' })],
+    [StorageKeys.listRows, JSON.stringify({ version: 2, layout: 'compact' })],
   ]);
   const ROWS = [
     line('ln-milk', { content: 'Leche', position: 1 }),
@@ -5265,13 +6004,57 @@ describe('ListPage: compact rows (velista 0191)', () => {
     );
   }
 
-  it('draws the row of today with no choice on the device', async () => {
+  it('draws the default view, the row of 0191, with no choice on the device', async () => {
     const { fixture } = await render({ lines: ROWS });
 
     expect(lineRows(fixture)).toHaveLength(2);
     expect(
+      lineRows(fixture).every((row) => row.classList.contains('facts-row'))
+    ).toBe(true);
+    expect(
       lineRows(fixture).some((row) => row.classList.contains('compact'))
     ).toBe(false);
+  });
+
+  it('reads a record of version 1 as the default view', async () => {
+    const { fixture } = await render({
+      lines: ROWS,
+      storage: new Map([
+        [
+          StorageKeys.listRows,
+          JSON.stringify({ version: 1, layout: 'compact' }),
+        ],
+      ]),
+    });
+
+    expect(
+      lineRows(fixture).some((row) => row.classList.contains('compact'))
+    ).toBe(false);
+  });
+
+  it('sets the view from the header picker, and the rows follow', async () => {
+    const { fixture, storage } = await render({ lines: ROWS });
+    document.body.append(fixture.nativeElement as HTMLElement);
+
+    viewAction(fixture)?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    document
+      .querySelector<HTMLElement>('[role="menuitemradio"][data-view="compact"]')
+      ?.click();
+    fixture.detectChanges();
+
+    expect(TestBed.inject(ListRowsStore).layout()).toBe('compact');
+    expect(JSON.parse(storage.get(StorageKeys.listRows) ?? 'null')).toEqual({
+      version: 2,
+      layout: 'compact',
+    });
+    expect(
+      lineRows(fixture).every((row) => row.classList.contains('compact'))
+    ).toBe(true);
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    (fixture.nativeElement as HTMLElement).remove();
   });
 
   it('draws every row compact when the device chose it', async () => {
@@ -5314,13 +6097,12 @@ describe('ListPage: compact rows (velista 0191)', () => {
   });
 
   it('hands a run to its write in one task, so the row is never neither (2026-11-12)', async () => {
-    // The compact row hides its price while the line has an open run or a write in
+    // The default row hides its price while the line has an open run or a write in
     // flight. The real store over a write that never answers: at the quiet beat the
     // run leaves `pending` and the write is marked in flight before anything draws.
     const { fixture } = await render({
       lineRead: [line('ln-1', { quantity: 2 })],
       lineWrites: { addQuantity: () => new Promise<Line>(() => undefined) },
-      storage: new Map(COMPACT),
     });
     await fixture.whenStable();
     fixture.detectChanges();
@@ -5360,5 +6142,1542 @@ describe('ListPage: compact rows (velista 0191)', () => {
     expect(
       lineRows(fixture).some((row) => row.classList.contains('compact'))
     ).toBe(false);
+  });
+
+  /**
+   * Velista `0203`, the review of PR #1086: a reel left open after a drag sends its
+   * step only when it closes, and leaving the page closes it by tearing it down. The
+   * step has to reach the page's runs then, or the number the person watched move is
+   * never written.
+   */
+  it('writes the step of a reel still open after a drag when the page is left', async () => {
+    const { fixture, lines } = await render({
+      lines: [line('ln-milk', { content: 'Leche', quantity: 2 })],
+      storage: new Map(COMPACT),
+    });
+    const writes = (calls: readonly unknown[]) =>
+      calls.filter((call) => (call as { kind?: string }).kind === 'quantity');
+    jest.useFakeTimers();
+    const pointer = (type: string, clientX: number): Event => {
+      const event = new MouseEvent(type, { bubbles: true, clientX });
+      Object.defineProperty(event, 'pointerId', { value: 1 });
+      Object.defineProperty(event, 'isPrimary', { value: true });
+      Object.defineProperty(event, 'buttons', {
+        value: type === 'pointerup' ? 0 : 1,
+      });
+      return event;
+    };
+    const reel = (fixture.nativeElement as HTMLElement).querySelector(
+      'lib-line-row lib-quantity-reel'
+    ) as HTMLElement;
+
+    reel.dispatchEvent(pointer('pointerdown', 0));
+    reel.dispatchEvent(pointer('pointermove', -2 * QUANTITY_REEL_PX_PER_UNIT));
+    reel.dispatchEvent(pointer('pointerup', -2 * QUANTITY_REEL_PX_PER_UNIT));
+    fixture.detectChanges();
+    expect(writes(lines.calls)).toEqual([]);
+
+    fixture.destroy();
+
+    // The reel's close reaches the page before the page's own teardown hook, so
+    // the step goes as a row's raise does, with the flag (velista `0208`); its
+    // answer finds the page gone and asks nothing.
+    expect(writes(lines.calls)).toEqual([
+      { kind: 'quantity', lineId: 'ln-milk', delta: 2, reportExtra: true },
+    ]);
+    jest.useRealTimers();
+  });
+});
+
+/**
+ * Velista `0207` and `0208`: every raise of a zone list row takes the units bought
+ * above the ask into the ask (backend `0276`) and rises by the whole amount set; the
+ * row reports it, and when the report offers something to count the page asks
+ * whether the extra counts, in a popover pointed at the row's amount control. What
+ * stands when nobody answers is the amount set, which the raise already wrote; only
+ * "Count the extra" writes.
+ */
+describe('ListPage: a raise asks whether the extra already bought counts (velista 0207, 0208)', () => {
+  const MARTA = 'u-marta';
+  const EXTRA: AbsorbedExtra = {
+    above: 1,
+    countable: 1,
+    buyers: [{ userId: MARTA }],
+  };
+  const COMPACT = new Map([
+    [StorageKeys.listRows, JSON.stringify({ version: 2, layout: 'compact' })],
+  ]);
+  const ROWS = [
+    line('ln-eggs', { content: 'Huevos', quantity: 1, position: 1 }),
+    line('ln-milk', { content: 'Leche', quantity: 2, position: 2 }),
+  ];
+
+  const press = (lineId: string, from: number, to: number) => ({
+    lineId,
+    step: { from, to, repeat: false },
+  });
+
+  const turns = async () => {
+    for (let turn = 0; turn < 20; turn += 1) {
+      await Promise.resolve();
+    }
+  };
+
+  const settle = async (fixture: ComponentFixture<ListPage>) => {
+    await turns();
+    fixture.detectChanges();
+    await turns();
+    fixture.detectChanges();
+  };
+
+  const writes = (calls: readonly unknown[]) =>
+    calls.filter((call) => (call as { kind?: string }).kind === 'quantity');
+
+  const counts = (calls: readonly unknown[]) =>
+    calls.filter((call) => (call as { kind?: string }).kind === 'countExtra');
+
+  const rowOf = (fixture: ComponentFixture<ListPage>, id: string) =>
+    (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(
+      `li.line[data-line-id="${id}"]`
+    );
+
+  const popover = (fixture: ComponentFixture<ListPage>) =>
+    fixture.debugElement.query(By.directive(AnchoredPopover))
+      ?.componentInstance as AnchoredPopover | undefined;
+
+  const stored = (lines: FakeLineStore, id: string) =>
+    lines.linesIn(LIST_ID).find((one) => one.id === id)?.quantity;
+
+  const drawn = (fixture: ComponentFixture<ListPage>, id: string) =>
+    rowOf(fixture, id)
+      ?.querySelector('lib-quantity-stepper')
+      ?.getAttribute('data-value');
+
+  /** A press of the row's plus, written after the quiet beat. */
+  function raise(
+    fixture: ComponentFixture<ListPage>,
+    lineId: string,
+    from: number,
+    to: number
+  ): void {
+    jest.useFakeTimers();
+    try {
+      fixture.componentInstance.stepQuantity(press(lineId, from, to));
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+    } finally {
+      jest.useRealTimers();
+    }
+  }
+
+  /**
+   * The eggs, at 1, raised to `to` with the report staged: the line holds `to`
+   * after the raise, Y, unless the answer names another amount.
+   */
+  async function asked(
+    options: {
+      readonly extra?: AbsorbedExtra;
+      readonly to?: number;
+      readonly quantity?: number;
+      readonly storage?: Map<string, string>;
+    } = {}
+  ) {
+    const rendered = await render({
+      lines: ROWS,
+      names: { [MARTA]: 'Marta' },
+      storage: options.storage ?? new Map(),
+    });
+    await settle(rendered.fixture);
+    rendered.lines.answerNextRaise({
+      extra: options.extra ?? EXTRA,
+      ...(options.quantity === undefined ? {} : { quantity: options.quantity }),
+    });
+    raise(rendered.fixture, 'ln-eggs', 1, options.to ?? 2);
+    await settle(rendered.fixture);
+    return rendered;
+  }
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  describe('the flag (0208 spec 1)', () => {
+    it('goes with a run that raises, and not with one that lowers', async () => {
+      const { fixture, lines } = await render({ lines: ROWS });
+      raise(fixture, 'ln-eggs', 1, 3);
+      raise(fixture, 'ln-milk', 2, 1);
+
+      expect(writes(lines.calls)).toEqual([
+        { kind: 'quantity', lineId: 'ln-eggs', delta: 2, reportExtra: true },
+        { kind: 'quantity', lineId: 'ln-milk', delta: -1 },
+      ]);
+    });
+
+    it('goes with the reel of the compact view', async () => {
+      const { fixture, lines } = await render({
+        lines: ROWS,
+        storage: COMPACT,
+      });
+      fixture.componentInstance.reelQuantity(press('ln-eggs', 1, 4));
+
+      expect(writes(lines.calls)).toEqual([
+        { kind: 'quantity', lineId: 'ln-eggs', delta: 3, reportExtra: true },
+      ]);
+    });
+
+    it('never goes with the write of a page that goes away, where nobody is left to ask', async () => {
+      const { fixture, lines } = await render({ lines: ROWS });
+      jest.useFakeTimers();
+      fixture.componentInstance.stepQuantity(press('ln-eggs', 1, 2));
+      fixture.destroy();
+
+      expect(writes(lines.calls)).toEqual([
+        { kind: 'quantity', lineId: 'ln-eggs', delta: 1 },
+      ]);
+    });
+
+    it('goes with the write of a page that is hidden', async () => {
+      const { fixture, lines } = await render({ lines: ROWS });
+      jest.useFakeTimers();
+      fixture.componentInstance.stepQuantity(press('ln-milk', 2, 3));
+      jest.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+
+      expect(writes(lines.calls)).toEqual([
+        { kind: 'quantity', lineId: 'ln-milk', delta: 1, reportExtra: true },
+      ]);
+    });
+
+    it('never goes with a card change that names no card, which has nothing to point at', async () => {
+      const { fixture, lines } = await render({ lines: ROWS });
+      jest.useFakeTimers();
+      fixture.componentInstance.changeHolding({
+        holding: { lineId: 'ln-eggs' },
+        from: 1,
+        to: 2,
+        repeat: false,
+      } as unknown as Parameters<ListPage['changeHolding']>[0]);
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+
+      expect(writes(lines.calls)).toEqual([
+        { kind: 'quantity', lineId: 'ln-eggs', delta: 1 },
+      ]);
+    });
+  });
+
+  describe('when it asks (0208 spec 3)', () => {
+    it('asks nothing when the report offers nothing to count, also with extra above', async () => {
+      for (const extra of [
+        { above: 0, countable: 0, buyers: [] },
+        { above: 2, countable: 0, buyers: [{ userId: MARTA }] },
+      ]) {
+        const { fixture } = await asked({ extra });
+
+        expect(fixture.componentInstance.extraAsk()).toBeNull();
+        expect(popover(fixture)).toBeUndefined();
+        TestBed.resetTestingModule();
+      }
+    });
+
+    it('asks about Y, the amount the line holds, and Z, Y less what is countable', async () => {
+      const { fixture, lines } = await asked({
+        extra: { above: 3, countable: 3, buyers: [{ userId: MARTA }] },
+        to: 4,
+      });
+
+      expect(stored(lines, 'ln-eggs')).toBe(4);
+      expect(fixture.componentInstance.extraAsk()?.quantity).toBe(4);
+      const words = fixture.componentInstance.extraWords();
+      expect(words?.question).toContain('list.extra.boughtBy');
+      expect(words?.question).toContain('list.extra.ask');
+      expect(words?.question).not.toContain('list.extra.askEnough');
+      expect(words?.keep.words).toBe('list.extra.count');
+      expect(words?.keep.amount).not.toBeNull();
+    });
+
+    it('asks whether that is enough when Z is 0', async () => {
+      const { fixture } = await asked({
+        extra: { above: 3, countable: 2, buyers: [{ userId: MARTA }] },
+        to: 2,
+      });
+
+      const words = fixture.componentInstance.extraWords();
+      expect(words?.question).toContain('list.extra.askEnough');
+      expect(words?.keep).toEqual({ words: 'list.extra.enough', amount: null });
+    });
+
+    it('asks nothing for a report it cannot use: more countable than the line holds', async () => {
+      const { fixture } = await asked({
+        extra: { above: 5, countable: 5, buyers: [] },
+        to: 2,
+      });
+
+      expect(fixture.componentInstance.extraAsk()).toBeNull();
+    });
+
+    it('opens a pointer on the stepper of the default view, keeping the row in sight', async () => {
+      const { fixture } = await asked();
+      const shown = popover(fixture);
+      const row = rowOf(fixture, 'ln-eggs');
+
+      expect(shown?.pointer()).toBe(true);
+      expect(shown?.frame()).toBe('choice');
+      expect(shown?.align()).toBe('end');
+      expect(shown?.keepInSight()).toBe(row?.querySelector('[data-line-row]'));
+      // Held against the mark beside the row, laid over the stepper.
+      expect(shown?.origin()).toBe(
+        row?.querySelector(':scope > [data-ask-anchor]')
+      );
+      expect(fixture.componentInstance.extraAsk()?.anchor).toBe(
+        row?.querySelector('lib-quantity-stepper')
+      );
+    });
+
+    it('lays the mark over the control and draws the dialog outside the row, which is a button', async () => {
+      const rendered = await render({
+        lines: ROWS,
+        names: { [MARTA]: 'Marta' },
+      });
+      const { fixture, lines } = rendered;
+      await settle(fixture);
+      const item = rowOf(fixture, 'ln-eggs') as HTMLElement;
+      const control = item.querySelector('lib-quantity-stepper') as HTMLElement;
+      jest.spyOn(item, 'getBoundingClientRect').mockReturnValue({
+        top: 300,
+        left: 0,
+        width: 390,
+        height: 64,
+      } as DOMRect);
+      jest.spyOn(control, 'getBoundingClientRect').mockReturnValue({
+        top: 312,
+        left: 262,
+        width: 112,
+        height: 40,
+      } as DOMRect);
+      lines.answerNextRaise({ extra: EXTRA });
+      raise(fixture, 'ln-eggs', 1, 2);
+      await settle(fixture);
+
+      const mark = item.querySelector<HTMLElement>(
+        ':scope > [data-ask-anchor]'
+      );
+      expect(mark?.style.top).toBe('12px');
+      expect(mark?.style.left).toBe('262px');
+      expect(mark?.style.width).toBe('112px');
+      expect(mark?.style.height).toBe('40px');
+
+      const dialog = document.querySelector('[role="dialog"]');
+      expect(dialog?.querySelector('lib-extra-ask')).not.toBeNull();
+      expect(dialog?.closest('[role="button"]')).toBeNull();
+      expect(item.querySelector('[role="button"] lib-extra-ask')).toBeNull();
+    });
+
+    it('points at the reel in the compact view', async () => {
+      const { fixture } = await asked({ storage: COMPACT });
+
+      expect(popover(fixture)?.origin()).toBe(
+        rowOf(fixture, 'ln-eggs')?.querySelector(':scope > [data-ask-anchor]')
+      );
+      expect(fixture.componentInstance.extraAsk()?.anchor).toBe(
+        rowOf(fixture, 'ln-eggs')?.querySelector('lib-quantity-reel')
+      );
+    });
+
+    it.each(['line', 'filter'] as const)(
+      'asks nothing over the %s sheet opened inside the quiet beat, and the amount set stands',
+      async (sheet) => {
+        const { fixture, lines, activatedRoute } = await render({
+          lines: ROWS,
+          names: { [MARTA]: 'Marta' },
+        });
+        await settle(fixture);
+        lines.answerNextRaise({ extra: EXTRA });
+        lines.holdRaises();
+        jest.useFakeTimers();
+        fixture.componentInstance.stepQuantity(press('ln-eggs', 1, 2));
+        // The tap on the row, or on the filter, flushes the run and opens the sheet,
+        // a child route of the page.
+        if (sheet === 'line') {
+          fixture.componentInstance.openLine('ln-eggs');
+        } else {
+          fixture.componentInstance.openFilter();
+        }
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        jest.useRealTimers();
+        (activatedRoute as { firstChild: unknown }).firstChild = {
+          snapshot: {},
+        };
+        fixture.componentInstance.onSheetOpened();
+        lines.releaseRaises();
+        await settle(fixture);
+
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-eggs', delta: 1, reportExtra: true },
+        ]);
+        expect(counts(lines.calls)).toEqual([]);
+        expect(fixture.componentInstance.extraAsk()).toBeNull();
+        expect(popover(fixture)).toBeUndefined();
+        expect(document.querySelector('lib-extra-ask')).toBeNull();
+        expect(stored(lines, 'ln-eggs')).toBe(2);
+      }
+    );
+
+    it('drops an open question when a sheet opens over the page, sending nothing', async () => {
+      const { fixture, lines } = await asked();
+      const before = writes(lines.calls).length;
+
+      fixture.componentInstance.onSheetOpened();
+      await settle(fixture);
+
+      expect(fixture.componentInstance.extraAsk()).toBeNull();
+      expect(writes(lines.calls)).toHaveLength(before);
+      expect(counts(lines.calls)).toEqual([]);
+      expect(stored(lines, 'ln-eggs')).toBe(2);
+    });
+
+    it('drops the question of a run that a newer run of the same line followed', async () => {
+      const { fixture, lines } = await render({
+        lines: ROWS,
+        names: { [MARTA]: 'Marta' },
+      });
+      await settle(fixture);
+      lines.answerNextRaise({ extra: EXTRA });
+      lines.holdRaises();
+      raise(fixture, 'ln-eggs', 1, 2);
+      raise(fixture, 'ln-eggs', 2, 3);
+      lines.releaseRaises();
+      await settle(fixture);
+
+      // The second answer offers nothing to count and asks nothing; the first is stale.
+      expect(writes(lines.calls)).toHaveLength(2);
+      expect(fixture.componentInstance.extraAsk()).toBeNull();
+    });
+
+    it('waits for the reel to close before it asks, and asks then', async () => {
+      const { fixture, lines } = await render({
+        lines: ROWS,
+        names: { [MARTA]: 'Marta' },
+        storage: COMPACT,
+      });
+      await settle(fixture);
+      lines.answerNextRaise({ extra: EXTRA });
+      lines.holdRaises();
+      fixture.componentInstance.reelQuantity(press('ln-eggs', 1, 2));
+      const reel = rowOf(fixture, 'ln-eggs')?.querySelector(
+        'lib-quantity-reel'
+      );
+      reel?.classList.add('open');
+      lines.releaseRaises();
+      await settle(fixture);
+
+      expect(fixture.componentInstance.extraAsk()).toBeNull();
+
+      reel?.classList.remove('open');
+      fixture.componentInstance.onReelOpened({
+        lineId: 'ln-eggs',
+        open: false,
+      });
+      await settle(fixture);
+
+      expect(fixture.componentInstance.extraAsk()?.lineId).toBe('ln-eggs');
+    });
+
+    it('drops the waiting question when the reel closes on a new step', async () => {
+      const { fixture, lines } = await render({
+        lines: ROWS,
+        names: { [MARTA]: 'Marta' },
+        storage: COMPACT,
+      });
+      await settle(fixture);
+      lines.answerNextRaise({ extra: EXTRA });
+      lines.holdRaises();
+      fixture.componentInstance.reelQuantity(press('ln-eggs', 1, 2));
+      const reel = rowOf(fixture, 'ln-eggs')?.querySelector(
+        'lib-quantity-reel'
+      );
+      reel?.classList.add('open');
+      lines.releaseRaises();
+      await settle(fixture);
+
+      fixture.componentInstance.reelQuantity(press('ln-eggs', 2, 3));
+      reel?.classList.remove('open');
+      fixture.componentInstance.onReelOpened({
+        lineId: 'ln-eggs',
+        open: false,
+      });
+      await settle(fixture);
+
+      expect(fixture.componentInstance.extraAsk()).toBeNull();
+    });
+  });
+
+  describe('the control while it is open (0208 spec 8)', () => {
+    it('shows the amount the person stepped to, which the store holds, and no second number', async () => {
+      const { fixture, lines } = await asked();
+
+      expect(stored(lines, 'ln-eggs')).toBe(2);
+      expect(drawn(fixture, 'ln-eggs')).toBe('2');
+      expect(fixture.componentInstance.extraAsk()?.quantity).toBe(2);
+    });
+
+    it('never holds a row for the question', async () => {
+      const { fixture } = await asked();
+      const held = (
+        fixture.componentInstance as unknown as {
+          _held: () => ReadonlySet<string>;
+        }
+      )._held();
+      expect(held.has('ln-eggs')).toBe(false);
+    });
+  });
+
+  describe('"Still need" (0208 spec 4)', () => {
+    it('sends nothing and leaves Y', async () => {
+      const { fixture, lines } = await asked();
+      const before = writes(lines.calls).length;
+
+      fixture.componentInstance.answerStillNeed();
+      await settle(fixture);
+
+      expect(writes(lines.calls)).toHaveLength(before);
+      expect(counts(lines.calls)).toEqual([]);
+      expect(fixture.componentInstance.extraAsk()).toBeNull();
+      expect(stored(lines, 'ln-eggs')).toBe(2);
+      expect(drawn(fixture, 'ln-eggs')).toBe('2');
+    });
+
+    it('remembers nothing: the next raise reports again and asks only if the answer offers something', async () => {
+      const { fixture, lines } = await asked();
+      fixture.componentInstance.answerStillNeed();
+      await settle(fixture);
+
+      // The extra is inside the ask now, so the server reports nothing countable.
+      raise(fixture, 'ln-eggs', 2, 3);
+      await settle(fixture);
+      expect(writes(lines.calls).at(-1)).toEqual({
+        kind: 'quantity',
+        lineId: 'ln-eggs',
+        delta: 1,
+        reportExtra: true,
+      });
+      expect(fixture.componentInstance.extraAsk()).toBeNull();
+
+      // Somebody bought above the ask again: the next raise asks.
+      lines.answerNextRaise({ extra: EXTRA });
+      raise(fixture, 'ln-eggs', 3, 4);
+      await settle(fixture);
+      expect(fixture.componentInstance.extraAsk()?.lineId).toBe('ln-eggs');
+    });
+  });
+
+  describe('"Count the extra" (0208 spec 5)', () => {
+    it('sends the count of what was countable, expecting Y, and shows Z at once', async () => {
+      const { fixture, lines } = await asked();
+      lines.holdCounts();
+
+      fixture.componentInstance.answerCount();
+      fixture.detectChanges();
+
+      expect(counts(lines.calls)).toEqual([
+        { kind: 'countExtra', lineId: 'ln-eggs', amount: 1, expect: 2 },
+      ]);
+      expect(fixture.componentInstance.extraAsk()).toBeNull();
+      expect(drawn(fixture, 'ln-eggs')).toBe('1');
+
+      lines.releaseCounts();
+      await settle(fixture);
+      expect(stored(lines, 'ln-eggs')).toBe(1);
+      expect(fixture.componentInstance.extraNotice()).toBeNull();
+      // Never a raise, and no second one.
+      expect(writes(lines.calls)).toHaveLength(1);
+    });
+
+    it('"That\'s enough" counts too, and a line the count takes to 0 leaves To buy as any line at 0', async () => {
+      const { fixture, lines } = await asked({
+        extra: { above: 3, countable: 2, buyers: [{ userId: MARTA }] },
+      });
+      expect(fixture.componentInstance.extraWords()?.keep.amount).toBeNull();
+      // Nothing is said while the question is open.
+      expect(fixture.componentInstance.announcement()).toBe('');
+
+      fixture.componentInstance.answerCount();
+      await settle(fixture);
+
+      expect(counts(lines.calls)).toEqual([
+        { kind: 'countExtra', lineId: 'ln-eggs', amount: 2, expect: 2 },
+      ]);
+      expect(stored(lines, 'ln-eggs')).toBe(0);
+      expect(rowOf(fixture, 'ln-eggs')).toBeNull();
+      expect(fixture.componentInstance.announcement()).toBe(
+        'list.line.hiddenAtZero'
+      );
+    });
+
+    it('on stale_quantity shows the server amount and the stale notice on the control, which closes on the next touch', async () => {
+      const { fixture, lines } = await asked();
+      lines.answerNextCount({ state: 'stale', quantity: 3 });
+
+      fixture.componentInstance.answerCount();
+      await settle(fixture);
+      await settle(fixture);
+
+      expect(stored(lines, 'ln-eggs')).toBe(3);
+      expect(drawn(fixture, 'ln-eggs')).toBe('3');
+      expect(fixture.componentInstance.announcement()).toBe('list.extra.stale');
+      expect(fixture.componentInstance.extraNotice()?.key).toBe(
+        'list.extra.stale'
+      );
+      const shown = popover(fixture);
+      expect(shown?.role()).toBeNull();
+      expect(shown?.pointer()).toBe(true);
+      expect(shown?.origin()).toBe(
+        rowOf(fixture, 'ln-eggs')?.querySelector(':scope > [data-ask-anchor]')
+      );
+      const notice = document.querySelector('lib-extra-ask-notice');
+      expect(notice?.textContent).toContain('list.extra.stale');
+      expect(notice?.querySelector('button')).toBeNull();
+
+      // A press anywhere outside closes it, as does one on the notice itself.
+      shown?.closed.emit('outside');
+      await settle(fixture);
+      expect(fixture.componentInstance.extraNotice()).toBeNull();
+      expect(writes(lines.calls)).toHaveLength(1);
+    });
+
+    it('says the same notice a second time, through the polite region that repeats', async () => {
+      const { fixture, lines } = await asked();
+      lines.answerNextCount({ state: 'stale', quantity: 3 });
+      fixture.componentInstance.answerCount();
+      await settle(fixture);
+      expect(fixture.componentInstance.announcement()).toBe('list.extra.stale');
+      fixture.componentInstance.closeExtraNotice();
+
+      // A second raise over new extra, refused the same way.
+      lines.answerNextRaise({ extra: EXTRA });
+      raise(fixture, 'ln-eggs', 3, 4);
+      await settle(fixture);
+      lines.answerNextCount({ state: 'stale', quantity: 5 });
+      jest.useFakeTimers();
+      fixture.componentInstance.answerCount();
+      await turns();
+      // Emptied first, so the same sentence is a change a screen reader hears.
+      expect(fixture.componentInstance.announcement()).toBe('');
+      jest.advanceTimersByTime(1000);
+      jest.useRealTimers();
+      expect(fixture.componentInstance.announcement()).toBe('list.extra.stale');
+    });
+
+    it('closes the notice on a press on the notice itself', async () => {
+      const { fixture, lines } = await asked();
+      lines.answerNextCount({ state: 'stale', quantity: 3 });
+      fixture.componentInstance.answerCount();
+      await settle(fixture);
+      await settle(fixture);
+
+      document
+        .querySelector('lib-extra-ask-notice')
+        ?.dispatchEvent(new Event('pointerdown'));
+      await settle(fixture);
+      expect(fixture.componentInstance.extraNotice()).toBeNull();
+    });
+
+    it('on any other failure puts Y back and says nothing was counted', async () => {
+      const { fixture, lines } = await asked();
+      lines.answerNextCount({ state: 'failed' });
+
+      fixture.componentInstance.answerCount();
+      await settle(fixture);
+      await settle(fixture);
+
+      expect(stored(lines, 'ln-eggs')).toBe(2);
+      expect(drawn(fixture, 'ln-eggs')).toBe('2');
+      expect(fixture.componentInstance.announcement()).toBe(
+        'list.extra.countFailed'
+      );
+      expect(fixture.componentInstance.extraNotice()?.key).toBe(
+        'list.extra.countFailed'
+      );
+    });
+
+    it('takes the notice down when a sheet opens', async () => {
+      const { fixture, lines } = await asked();
+      lines.answerNextCount({ state: 'failed' });
+      fixture.componentInstance.answerCount();
+      await settle(fixture);
+      await settle(fixture);
+
+      fixture.componentInstance.onSheetOpened();
+      expect(fixture.componentInstance.extraNotice()).toBeNull();
+    });
+  });
+
+  describe('no answer (0208 spec 6)', () => {
+    it.each(['escape', 'outside', 'detach', 'replaced'] as const)(
+      'sends nothing on %s, and the row shows Y',
+      async (how) => {
+        const { fixture, lines } = await asked();
+        const before = writes(lines.calls).length;
+
+        fixture.componentInstance.closeExtraAsk(how);
+        await settle(fixture);
+
+        expect(writes(lines.calls)).toHaveLength(before);
+        expect(counts(lines.calls)).toEqual([]);
+        expect(fixture.componentInstance.extraAsk()).toBeNull();
+        expect(drawn(fixture, 'ln-eggs')).toBe('2');
+      }
+    );
+
+    it('sends nothing when the page is left with the question open', async () => {
+      const { fixture, lines } = await asked();
+      const before = writes(lines.calls).length;
+
+      fixture.destroy();
+
+      expect(writes(lines.calls)).toHaveLength(before);
+      expect(counts(lines.calls)).toEqual([]);
+      expect(stored(lines, 'ln-eggs')).toBe(2);
+    });
+
+    it('a plus while it is open closes it, sends no count, and steps from Y', async () => {
+      const { fixture, lines } = await asked();
+      const before = writes(lines.calls).length;
+      jest.useFakeTimers();
+
+      expect(drawn(fixture, 'ln-eggs')).toBe('2');
+      fixture.componentInstance.stepQuantity(press('ln-eggs', 2, 3));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.extraAsk()).toBeNull();
+      expect(drawn(fixture, 'ln-eggs')).toBe('3');
+
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      jest.useRealTimers();
+      await settle(fixture);
+
+      expect(writes(lines.calls).slice(before)).toEqual([
+        { kind: 'quantity', lineId: 'ln-eggs', delta: 1, reportExtra: true },
+      ]);
+      expect(counts(lines.calls)).toEqual([]);
+      expect(stored(lines, 'ln-eggs')).toBe(3);
+    });
+
+    it('a minus while it is open steps down from Y', async () => {
+      const { fixture, lines } = await asked();
+      const before = writes(lines.calls).length;
+      jest.useFakeTimers();
+
+      fixture.componentInstance.stepQuantity(press('ln-eggs', 2, 1));
+      fixture.detectChanges();
+      expect(fixture.componentInstance.extraAsk()).toBeNull();
+      expect(drawn(fixture, 'ln-eggs')).toBe('1');
+
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      jest.useRealTimers();
+      await settle(fixture);
+
+      expect(writes(lines.calls).slice(before)).toEqual([
+        { kind: 'quantity', lineId: 'ln-eggs', delta: -1 },
+      ]);
+      expect(stored(lines, 'ln-eggs')).toBe(1);
+    });
+
+    it('a reel dialled while it is open stands as the absolute amount', async () => {
+      const { fixture, lines } = await asked({ storage: COMPACT });
+      const before = writes(lines.calls).length;
+
+      // The tape goes up from Y, 2, and comes down on 4.
+      fixture.componentInstance.onReelOpened({ lineId: 'ln-eggs', open: true });
+      expect(fixture.componentInstance.extraAsk()).toBeNull();
+      fixture.componentInstance.reelQuantity(press('ln-eggs', 2, 4));
+      fixture.componentInstance.onReelOpened({
+        lineId: 'ln-eggs',
+        open: false,
+      });
+      await settle(fixture);
+
+      expect(writes(lines.calls).slice(before)).toEqual([
+        { kind: 'quantity', lineId: 'ln-eggs', delta: 2, reportExtra: true },
+      ]);
+      expect(stored(lines, 'ln-eggs')).toBe(4);
+    });
+
+    it('a run that came back to where it started leaves no mark that sends the flag with a card run', async () => {
+      const { fixture, lines } = await render({ lines: ROWS });
+      jest.useFakeTimers();
+      // Plus then minus on the row: nothing is sent.
+      fixture.componentInstance.stepQuantity(press('ln-eggs', 1, 2));
+      fixture.componentInstance.stepQuantity(press('ln-eggs', 2, 1));
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      expect(writes(lines.calls)).toEqual([]);
+
+      // A later run of a change that names no card leaves nothing to point at.
+      fixture.componentInstance.changeHolding({
+        holding: { lineId: 'ln-eggs' },
+        from: 1,
+        to: 2,
+        repeat: false,
+      } as unknown as Parameters<ListPage['changeHolding']>[0]);
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+
+      expect(writes(lines.calls)).toEqual([
+        { kind: 'quantity', lineId: 'ln-eggs', delta: 1 },
+      ]);
+    });
+
+    it('a run the row and a card both stepped sends the flag, the row being part of it', async () => {
+      const { fixture, lines } = await render({ lines: ROWS });
+      jest.useFakeTimers();
+      fixture.componentInstance.stepQuantity(press('ln-eggs', 1, 2));
+      fixture.componentInstance.changeHolding({
+        holding: { lineId: 'ln-eggs' },
+        from: 2,
+        to: 3,
+        repeat: false,
+      } as unknown as Parameters<ListPage['changeHolding']>[0]);
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+
+      expect(writes(lines.calls)).toEqual([
+        { kind: 'quantity', lineId: 'ln-eggs', delta: 2, reportExtra: true },
+      ]);
+    });
+
+    it("a second line's question replaces the first, which keeps Y and sends nothing", async () => {
+      const { fixture, lines } = await asked();
+      lines.answerNextRaise({ extra: EXTRA });
+      raise(fixture, 'ln-milk', 2, 3);
+      await settle(fixture);
+
+      expect(fixture.componentInstance.extraAsk()?.lineId).toBe('ln-milk');
+      expect(stored(lines, 'ln-eggs')).toBe(2);
+      expect(counts(lines.calls)).toEqual([]);
+      expect(
+        fixture.debugElement.queryAll(By.directive(AnchoredPopover))
+      ).toHaveLength(1);
+    });
+  });
+
+  describe('focus (0208 spec 7)', () => {
+    it('starts on "Still need", the answer that changes nothing', async () => {
+      const { fixture } = await asked();
+      await new Promise((resolve) => setTimeout(resolve));
+      fixture.detectChanges();
+
+      const buttons = Array.from(
+        document.querySelectorAll<HTMLButtonElement>('lib-extra-ask .answer')
+      );
+      expect(buttons).toHaveLength(2);
+      expect(document.activeElement).toBe(buttons[0]);
+      expect(fixture.componentInstance.announcement()).toBe('');
+    });
+
+    it('moves focus from the row and from nowhere, as the owner ruled', async () => {
+      const rendered = await render({
+        lines: ROWS,
+        names: { [MARTA]: 'Marta' },
+      });
+      const { fixture, lines } = rendered;
+      await settle(fixture);
+      rowOf(fixture, 'ln-eggs')
+        ?.querySelector<HTMLElement>('[data-line-row]')
+        ?.focus();
+      lines.answerNextRaise({ extra: EXTRA });
+      raise(fixture, 'ln-eggs', 1, 2);
+      await settle(fixture);
+      await new Promise((resolve) => setTimeout(resolve));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.extraAsk()?.takeFocus).toBe(true);
+      expect(document.activeElement).toBe(
+        document.querySelectorAll('lib-extra-ask .answer')[0]
+      );
+    });
+
+    it('leaves focus in a field being typed in, and says the question politely', async () => {
+      const rendered = await render({
+        lines: ROWS,
+        names: { [MARTA]: 'Marta' },
+      });
+      const { fixture, lines } = rendered;
+      await settle(fixture);
+      const field = document.createElement('input');
+      field.type = 'search';
+      (fixture.nativeElement as HTMLElement).append(field);
+      field.focus();
+      lines.answerNextRaise({ extra: EXTRA });
+      raise(fixture, 'ln-eggs', 1, 2);
+      await settle(fixture);
+      await new Promise((resolve) => setTimeout(resolve));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.extraAsk()?.shown).toBe(true);
+      expect(fixture.componentInstance.extraAsk()?.takeFocus).toBe(false);
+      expect(document.activeElement).toBe(field);
+      expect(document.querySelector('lib-extra-ask')).not.toBeNull();
+      expect(fixture.componentInstance.announcement()).toBe(
+        'list.extra.announce'
+      );
+
+      // Escape from the field closes it and leaves focus in the field.
+      fixture.componentInstance.closeExtraAsk('escape');
+      await settle(fixture);
+      expect(document.activeElement).toBe(field);
+      field.remove();
+    });
+  });
+
+  describe('the scroll and the flash (0207 specs 11 and 12)', () => {
+    const box = (top: number, bottom: number) =>
+      ({
+        top,
+        bottom,
+        left: 0,
+        right: 390,
+        width: 390,
+        height: bottom - top,
+      }) as DOMRect;
+
+    async function outOfView(reduced: boolean) {
+      const rendered = await render({
+        lines: ROWS,
+        names: { [MARTA]: 'Marta' },
+      });
+      const { fixture, lines } = rendered;
+      await settle(fixture);
+      const column = (
+        fixture.nativeElement as HTMLElement
+      ).querySelector<HTMLElement>('main.page') as HTMLElement;
+      jest
+        .spyOn(column, 'getBoundingClientRect')
+        .mockReturnValue(box(200, 700));
+      const row = rowOf(fixture, 'ln-eggs')?.querySelector<HTMLElement>(
+        '[data-line-row]'
+      ) as HTMLElement;
+      const rowBox = jest
+        .spyOn(row, 'getBoundingClientRect')
+        .mockReturnValue(box(40, 104));
+      // The scroll brings the row into view.
+      const scrollBy = jest.fn(() => rowBox.mockReturnValue(box(216, 280)));
+      (column as unknown as { scrollBy: jest.Mock }).scrollBy = scrollBy;
+      // The page's ExtraAskHost scrolls it (velista `0208`, target state 10).
+      (
+        fixture.debugElement.injector.get(ExtraAskHost) as unknown as {
+          _reducedMotion: () => boolean;
+        }
+      )._reducedMotion = () => reduced;
+      lines.answerNextRaise({ extra: EXTRA });
+      raise(fixture, 'ln-eggs', 1, 2);
+      await settle(fixture);
+      return { ...rendered, column, scrollBy, rowBox };
+    }
+
+    it('brings a row above the view back with room under it, smoothly, and asks once the scroll ends', async () => {
+      const { fixture, column, scrollBy } = await outOfView(false);
+
+      expect(scrollBy).toHaveBeenCalledWith({ top: -176, behavior: 'smooth' });
+      expect(fixture.componentInstance.extraAsk()?.shown).toBe(false);
+      expect(popover(fixture)).toBeUndefined();
+
+      column.dispatchEvent(new Event('scrollend'));
+      await settle(fixture);
+
+      expect(fixture.componentInstance.extraAsk()?.shown).toBe(true);
+      expect(popover(fixture)).toBeDefined();
+    });
+
+    it('waits one more scroll end for a row the person scrolled away, then drops the question and the amount set stands', async () => {
+      const { fixture, lines, column, rowBox } = await outOfView(false);
+      // The person scrolls by hand while the page brings the row back.
+      rowBox.mockReturnValue(box(800, 864));
+
+      column.dispatchEvent(new Event('scrollend'));
+      await settle(fixture);
+      expect(fixture.componentInstance.extraAsk()?.shown).toBe(false);
+
+      column.dispatchEvent(new Event('scrollend'));
+      await settle(fixture);
+      expect(fixture.componentInstance.extraAsk()).toBeNull();
+      expect(popover(fixture)).toBeUndefined();
+      expect(stored(lines, 'ln-eggs')).toBe(2);
+      expect(counts(lines.calls)).toEqual([]);
+    });
+
+    it('asks after the second scroll end when the person brought the row back', async () => {
+      const { fixture, column, rowBox } = await outOfView(false);
+      rowBox.mockReturnValue(box(800, 864));
+      column.dispatchEvent(new Event('scrollend'));
+      await settle(fixture);
+
+      rowBox.mockReturnValue(box(300, 364));
+      column.dispatchEvent(new Event('scrollend'));
+      await settle(fixture);
+
+      expect(fixture.componentInstance.extraAsk()?.shown).toBe(true);
+    });
+
+    it('jumps under reduced motion and asks at once', async () => {
+      const { fixture, scrollBy } = await outOfView(true);
+
+      expect(scrollBy).toHaveBeenCalledWith({
+        top: -176,
+        behavior: 'instant',
+      });
+      expect(fixture.componentInstance.extraAsk()?.shown).toBe(true);
+    });
+
+    it('flashes the row and the popover for 2.2 s, then stops', async () => {
+      expect(EXTRA_ASK_FLASH_MS).toBe(2200);
+      const { fixture } = await asked();
+      const layer = () =>
+        rowOf(fixture, 'ln-eggs')?.querySelector('[data-line-row]')?.classList;
+
+      expect(fixture.componentInstance.extraFlashing()).toBe(true);
+      expect(popover(fixture)?.accent()).toBe(true);
+      expect(layer()).toContain('flash');
+
+      await new Promise((resolve) => setTimeout(resolve, EXTRA_ASK_FLASH_MS));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.extraFlashing()).toBe(false);
+      expect(popover(fixture)?.accent()).toBe(false);
+      expect(layer()).toContain('asked');
+      expect(layer()).not.toContain('flash');
+    });
+
+    it('holds the frame for the same 2.2 s under reduced motion, which the stylesheets draw still', async () => {
+      const rendered = await render({
+        lines: ROWS,
+        names: { [MARTA]: 'Marta' },
+      });
+      const { fixture, lines } = rendered;
+      await settle(fixture);
+      (
+        fixture.componentInstance as unknown as {
+          _reducedMotion: () => boolean;
+        }
+      )._reducedMotion = () => true;
+      lines.answerNextRaise({ extra: EXTRA });
+      raise(fixture, 'ln-eggs', 1, 2);
+      await settle(fixture);
+      const item = rowOf(fixture, 'ln-eggs');
+
+      expect(fixture.componentInstance.extraFlashing()).toBe(true);
+      expect(item?.classList).toContain('flash');
+      expect(item?.querySelector('[data-line-row]')?.classList).toContain(
+        'flash'
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, EXTRA_ASK_FLASH_MS));
+      fixture.detectChanges();
+      expect(fixture.componentInstance.extraFlashing()).toBe(false);
+
+      // The reduced motion frame: no animation on the item's hairline nor the row's
+      // wash, each held in the accent.
+      const ui = join(__dirname, '../../../../ui/src/lib/list');
+      const list = compile(join(ui, 'line-list.scss')).css;
+      const row = compile(join(ui, 'line-row.scss')).css;
+      expect(list).toMatch(
+        /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.line\.asked\.flash\s*\{[^}]*--anchored-popover-accent:\s*var\(--app-action-quiet-fg\);[^}]*animation:\s*none;/
+      );
+      expect(row).toMatch(
+        /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.row\.asked\.flash::before\s*\{[^}]*opacity:\s*1;[^}]*animation:\s*none;/
+      );
+    });
+  });
+
+  describe('a dropped raise sent again (0208 spec 1)', () => {
+    const dropped = (replay: Record<string, unknown>) => [
+      {
+        page: `list:${LIST_ID}`,
+        subject: overlayKey('ln-eggs', 'quantity'),
+        lineId: 'ln-eggs',
+        key: 'list.dropped.quantity',
+        args: { name: 'Huevos', delta: '+1', unit: 'UNIT' },
+        replay: {
+          kind: 'line-quantity' as const,
+          lineId: 'ln-eggs',
+          delta: 1,
+          unit: 'UNIT' as const,
+          ...replay,
+        },
+      },
+    ];
+
+    it('carries the flag when the dropped write did, and may ask', async () => {
+      const { fixture, lines } = await render({
+        lines: ROWS,
+        names: { [MARTA]: 'Marta' },
+        dropped: dropped({ reportExtra: true }),
+      });
+      await settle(fixture);
+      lines.answerNextRaise({ extra: EXTRA });
+      const id = fixture.componentInstance.droppedNotices()[0].id;
+
+      await fixture.componentInstance.resendDropped(id);
+      await settle(fixture);
+
+      expect(writes(lines.calls)).toEqual([
+        { kind: 'quantity', lineId: 'ln-eggs', delta: 1, reportExtra: true },
+      ]);
+      expect(fixture.componentInstance.extraAsk()?.lineId).toBe('ln-eggs');
+    });
+
+    it('carries no flag when the dropped write had none, nor for the flag of an older build', async () => {
+      for (const replay of [{}, { countExtra: true }]) {
+        const { fixture, lines } = await render({
+          lines: ROWS,
+          dropped: dropped(replay),
+        });
+        await settle(fixture);
+        const id = fixture.componentInstance.droppedNotices()[0].id;
+
+        await fixture.componentInstance.resendDropped(id);
+        await settle(fixture);
+
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-eggs', delta: 1 },
+        ]);
+        TestBed.resetTestingModule();
+      }
+    });
+  });
+
+  /**
+   * Velista `0208`, stage 3 (target states 15 and 16, specs 14 and 15): the zone
+   * list's "Add or find" field. An add that raises a line kept at zero asks on the
+   * raised row, and a catalog card's stepper in the results asks on itself. The
+   * field keeps its focus throughout.
+   */
+  describe('"Add or find" (0208 specs 14 and 15)', () => {
+    const KEPT = [
+      line('ln-eggs', { content: 'Huevos', quantity: 0, position: 1 }),
+      line('ln-milk', { content: 'Leche', quantity: 2, position: 2 }),
+    ];
+    const FOUR: AbsorbedExtra = {
+      above: 3,
+      countable: 1,
+      buyers: [{ userId: MARTA }],
+    };
+
+    const field = (fixture: ComponentFixture<ListPage>) =>
+      (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>(
+        'lib-line-composer input.field'
+      ) as HTMLInputElement;
+
+    const adds = (calls: readonly unknown[]) =>
+      calls.filter((call) => (call as { kind?: string }).kind === 'add') as {
+        readonly options?: AddLineOptions;
+      }[];
+
+    /** Type in the field, which keeps the focus, and press its plus. */
+    async function typeAndSend(
+      fixture: ComponentFixture<ListPage>,
+      text: string
+    ): Promise<void> {
+      const input = field(fixture);
+      input.focus();
+      input.value = text;
+      input.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      (
+        (fixture.nativeElement as HTMLElement).querySelector(
+          'lib-line-composer .send'
+        ) as HTMLButtonElement
+      ).click();
+      fixture.detectChanges();
+    }
+
+    async function raisedByAdd(extra: AbsorbedExtra | null = FOUR) {
+      const rendered = await render({
+        lines: KEPT,
+        names: { [MARTA]: 'Marta' },
+      });
+      await settle(rendered.fixture);
+      // Four asked: the add raises the eggs from 0 to the amount it sets.
+      rendered.lines.answerAddWith({
+        state: 'raised',
+        lineId: 'ln-eggs',
+        extra,
+      });
+      return rendered;
+    }
+
+    it('sends the flag with every add of the field and with a chosen line', async () => {
+      const { fixture, lines } = await raisedByAdd();
+      await typeAndSend(fixture, 'Huevos');
+      await settle(fixture);
+      fixture.componentInstance.addChoice.set({
+        listId: LIST_ID,
+        entry: { content: 'Leche', quantity: undefined } as never,
+        anchor: field(fixture),
+        choice: { lines: [] } as never,
+      });
+      fixture.componentInstance.chooseLine('ln-milk');
+      await settle(fixture);
+
+      expect(adds(lines.calls).map((call) => call.options)).toEqual([
+        { askIfAmbiguous: true, reportExtra: true },
+        { intoLineId: 'ln-milk', reportExtra: true },
+      ]);
+    });
+
+    it('asks on the raised row with Y the line holds, and leaves the focus in the field', async () => {
+      const { fixture } = await raisedByAdd({
+        above: 3,
+        countable: 1,
+        buyers: [{ userId: MARTA }],
+      });
+      await typeAndSend(fixture, 'Huevos');
+      await settle(fixture);
+      await new Promise((resolve) => setTimeout(resolve));
+      fixture.detectChanges();
+
+      const ask = fixture.componentInstance.extraAsk();
+      expect(ask?.lineId).toBe('ln-eggs');
+      expect(ask?.shown).toBe(true);
+      // The add raised the eggs to 1; Z would be 0, the "enough" variant.
+      expect(ask?.quantity).toBe(1);
+      expect(fixture.componentInstance.extraWords()?.keep.words).toBe(
+        'list.extra.enough'
+      );
+      expect(ask?.anchor).toBe(
+        rowOf(fixture, 'ln-eggs')?.querySelector('[data-amount-control]')
+      );
+      // The field keeps the focus, and the question is said, not focused.
+      expect(ask?.takeFocus).toBe(false);
+      expect(document.activeElement).toBe(field(fixture));
+      expect(fixture.componentInstance.extraFlashing()).toBe(true);
+    });
+
+    it('counts through the row like any question, and only "Count the extra" writes', async () => {
+      const { fixture, lines } = await raisedByAdd();
+      await typeAndSend(fixture, 'Huevos');
+      await settle(fixture);
+
+      fixture.componentInstance.answerCount();
+      await settle(fixture);
+
+      expect(counts(lines.calls)).toEqual([
+        { kind: 'countExtra', lineId: 'ln-eggs', amount: 1, expect: 1 },
+      ]);
+    });
+
+    it('asks nothing for a raised row a filter leaves out, and the amount set stands', async () => {
+      const { fixture, lines, view } = await raisedByAdd();
+      view.pickCategory('cat-milk');
+      fixture.detectChanges();
+      await typeAndSend(fixture, 'Huevos');
+      await settle(fixture);
+
+      expect(fixture.componentInstance.extraAsk()).toBeNull();
+      expect(stored(lines, 'ln-eggs')).toBe(1);
+      expect(counts(lines.calls)).toEqual([]);
+    });
+
+    it('asks nothing for an add that made a line or met one already asked for', async () => {
+      for (const answer of [
+        null,
+        { state: 'alreadyOnList' as const, lineIds: ['ln-milk'] },
+      ]) {
+        const { fixture, lines } = await render({
+          lines: KEPT,
+          names: { [MARTA]: 'Marta' },
+        });
+        await settle(fixture);
+        if (answer !== null) {
+          lines.answerAddWith(answer);
+        }
+        await typeAndSend(fixture, answer === null ? 'Pan' : 'Leche');
+        await settle(fixture);
+
+        expect(fixture.componentInstance.extraAsk()).toBeNull();
+        expect(popover(fixture)).toBeUndefined();
+        TestBed.resetTestingModule();
+      }
+    });
+
+    it('asks nothing when the page went before the answer, and never throws or undoes the raise', async () => {
+      const { fixture, lines } = await raisedByAdd();
+      lines.holdAdds();
+      const host = fixture.debugElement.injector.get(ExtraAskHost);
+      const ask = jest.spyOn(host, 'ask');
+      // The add itself, awaited: a render hook on the page that went would reject it.
+      const adding = fixture.componentInstance.add({
+        content: 'Huevos',
+        quantity: undefined,
+      } as LineComposerSubmit);
+
+      fixture.destroy();
+      lines.releaseAdds();
+
+      await expect(adding).resolves.toBeUndefined();
+      await turns();
+      expect(ask).not.toHaveBeenCalled();
+      expect(stored(lines, 'ln-eggs')).toBe(1);
+      expect(counts(lines.calls)).toEqual([]);
+    });
+
+    it('asks nothing for a row raise answered while an add into the same line is still out', async () => {
+      const { fixture, lines } = await raisedByAdd(null);
+      lines.answerNextRaise({ extra: EXTRA });
+      lines.holdRaises();
+      raise(fixture, 'ln-milk', 2, 3);
+      lines.holdAdds();
+      fixture.componentInstance.addChoice.set({
+        listId: LIST_ID,
+        entry: { content: 'Leche', quantity: undefined } as never,
+        anchor: field(fixture),
+        choice: { lines: [] } as never,
+      });
+      void fixture.componentInstance.chooseLine('ln-milk');
+      await turns();
+
+      // The raise answers first, with something to count; the add is newer.
+      lines.releaseRaises();
+      await settle(fixture);
+      await new Promise((resolve) => setTimeout(resolve));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.extraAsk()).toBeNull();
+      lines.releaseAdds();
+      await settle(fixture);
+      expect(counts(lines.calls)).toEqual([]);
+    });
+
+    it('stops an older raise of the line from asking with an add answer that asks nothing', async () => {
+      const rendered = await render({
+        lines: KEPT,
+        names: { [MARTA]: 'Marta' },
+      });
+      const { fixture, lines } = rendered;
+      await settle(fixture);
+      lines.answerNextRaise({ extra: EXTRA });
+      lines.holdRaises();
+      raise(fixture, 'ln-milk', 2, 3);
+      // The add raises the same line and reports nothing to count.
+      lines.answerAddWith({ state: 'raised', lineId: 'ln-milk', extra: null });
+      await typeAndSend(fixture, 'Leche');
+      await settle(fixture);
+
+      lines.releaseRaises();
+      await settle(fixture);
+      await new Promise((resolve) => setTimeout(resolve));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.extraAsk()).toBeNull();
+      expect(counts(lines.calls)).toEqual([]);
+    });
+
+    describe('the guards of an answered add', () => {
+      type Answered = {
+        _noteSent: (lineId: string) => number;
+        _addAnswered: (
+          listId: string,
+          line: Line,
+          extra: AbsorbedExtra,
+          shown: boolean,
+          sent: number
+        ) => void;
+      };
+
+      async function answered() {
+        const rendered = await render({
+          lines: KEPT,
+          names: { [MARTA]: 'Marta' },
+        });
+        await settle(rendered.fixture);
+        const host = rendered.fixture.debugElement.injector.get(ExtraAskHost);
+        const page = rendered.fixture.componentInstance as unknown as Answered;
+        const milk = rendered.lines
+          .linesIn(LIST_ID)
+          .find((one) => one.id === 'ln-milk') as Line;
+        return { ...rendered, ask: jest.spyOn(host, 'ask'), page, milk };
+      }
+
+      it('asks when nothing stands in its way', async () => {
+        const { page, milk, ask } = await answered();
+        page._addAnswered(LIST_ID, milk, FOUR, true, page._noteSent('ln-milk'));
+
+        expect(ask).toHaveBeenCalledTimes(1);
+      });
+
+      it('asks nothing while a run of the line is still open', async () => {
+        const { fixture, page, milk, ask } = await answered();
+        const sent = page._noteSent('ln-milk');
+        jest.useFakeTimers();
+        fixture.componentInstance.stepQuantity(press('ln-milk', 2, 3));
+        page._addAnswered(LIST_ID, milk, FOUR, true, sent);
+        jest.useRealTimers();
+
+        expect(ask).not.toHaveBeenCalled();
+      });
+
+      it('asks nothing once the page has moved to another list', async () => {
+        const { fixture, activatedRoute, page, milk, ask } = await answered();
+        const sent = page._noteSent('ln-milk');
+        // Watched before any line lookup, which a list change empties too.
+        const answering = jest.spyOn(
+          page as unknown as { _extraAnswered: () => void },
+          '_extraAnswered'
+        );
+        activatedRoute.setList('list-2');
+        fixture.detectChanges();
+        page._addAnswered(LIST_ID, milk, FOUR, true, sent);
+
+        expect(answering).not.toHaveBeenCalled();
+        expect(ask).not.toHaveBeenCalled();
+      });
+    });
+
+    it('asks nothing when a run of the raised row went out after the add', async () => {
+      const { fixture, lines } = await raisedByAdd();
+      lines.holdAdds();
+      await typeAndSend(fixture, 'Huevos');
+      // A newer write of the same line, sent while the add was out.
+      (
+        fixture.componentInstance as unknown as {
+          _noteSent: (lineId: string) => number;
+        }
+      )._noteSent('ln-eggs');
+      lines.releaseAdds();
+      await settle(fixture);
+
+      expect(fixture.componentInstance.extraAsk()).toBeNull();
+    });
+
+    describe("a catalog card's stepper in the results (0208 spec 15)", () => {
+      const EGGS: CatalogSuggestion = {
+        kind: 'item',
+        item: {
+          id: 'item-eggs',
+          pieceCount: null,
+          quantityStep: null,
+          name: { es: 'Huevos camperos', en: 'Free range eggs' },
+          brand: 'Hacendado',
+          size: 12,
+          unit: 'UNIT',
+          productGroupId: null,
+          categories: [],
+          offer: null,
+          chainPrices: [],
+          imageUrl: null,
+          packCount: null,
+          unitBasis: null,
+          approxWeight: null,
+        },
+      };
+
+      async function withCard() {
+        const rendered = await render({
+          lines: [
+            line('ln-eggs', {
+              content: 'Huevos',
+              quantity: 1,
+              position: 1,
+              itemIds: ['item-eggs'],
+            }),
+          ],
+          names: { [MARTA]: 'Marta' },
+        });
+        const { fixture } = rendered;
+        await settle(fixture);
+        const input = field(fixture);
+        input.focus();
+        input.value = 'Huevos';
+        input.dispatchEvent(new Event('input'));
+        fixture.componentInstance.suggestions.set([EGGS]);
+        fixture.detectChanges();
+        await settle(fixture);
+        const card = (
+          fixture.nativeElement as HTMLElement
+        ).querySelector<HTMLElement>('.catalog [data-card]') as HTMLElement;
+        const stepper = card.querySelector<HTMLElement>(
+          'li[data-line="ln-eggs"] > lib-quantity-stepper'
+        ) as HTMLElement;
+        return { ...rendered, card, stepper };
+      }
+
+      function stepCard(
+        fixture: ComponentFixture<ListPage>,
+        card: HTMLElement,
+        from: number,
+        to: number
+      ): void {
+        const [holding] = fixture.componentInstance.holdingsOf()(EGGS);
+        jest.useFakeTimers();
+        try {
+          fixture.componentInstance.changeHolding({
+            holding: holding as SuggestionHolding,
+            from,
+            to,
+            repeat: false,
+            cardKey: card.dataset['card'] as string,
+          });
+          jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        } finally {
+          jest.useRealTimers();
+        }
+      }
+
+      it('reports a raise and asks on that card, with the field keeping its focus', async () => {
+        const { fixture, lines, card, stepper } = await withCard();
+        lines.answerNextRaise({ extra: EXTRA });
+
+        stepCard(fixture, card, 1, 2);
+        await settle(fixture);
+
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-eggs', delta: 1, reportExtra: true },
+        ]);
+        const ask = fixture.componentInstance.extraAsk();
+        expect(ask?.shown).toBe(true);
+        expect(ask?.anchor).toBe(stepper);
+        expect(ask?.keepInSight).toBe(card);
+        expect(ask?.side).toBe('below');
+        expect(ask?.quantity).toBe(2);
+        expect(document.activeElement).toBe(field(fixture));
+      });
+
+      it('never reports a lowering', async () => {
+        const { fixture, lines, card } = await withCard();
+        stepCard(fixture, card, 1, 0);
+
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-eggs', delta: -1 },
+        ]);
+      });
+
+      it('asks nothing when the results no longer draw the card, and the amount set stands', async () => {
+        const { fixture, lines, card } = await withCard();
+        lines.answerNextRaise({ extra: EXTRA });
+        lines.holdRaises();
+
+        stepCard(fixture, card, 1, 2);
+        fixture.componentInstance.suggestions.set([]);
+        fixture.detectChanges();
+        lines.releaseRaises();
+        await settle(fixture);
+
+        expect(fixture.componentInstance.extraAsk()).toBeNull();
+        expect(stored(lines, 'ln-eggs')).toBe(2);
+        expect(counts(lines.calls)).toEqual([]);
+      });
+
+      it('asks nothing when the page went before the answer, and keeps the raise', async () => {
+        const { fixture, lines, card } = await withCard();
+        lines.answerNextRaise({ extra: EXTRA });
+        lines.holdRaises();
+        const host = fixture.debugElement.injector.get(ExtraAskHost);
+        const ask = jest.spyOn(host, 'ask');
+
+        stepCard(fixture, card, 1, 2);
+        fixture.destroy();
+        lines.releaseRaises();
+        await turns();
+
+        expect(ask).not.toHaveBeenCalled();
+        expect(stored(lines, 'ln-eggs')).toBe(2);
+      });
+    });
   });
 });

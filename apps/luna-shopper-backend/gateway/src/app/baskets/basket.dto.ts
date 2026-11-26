@@ -32,9 +32,12 @@ import {
 } from 'class-validator';
 import {
   ADD_CHOICE_DOCS,
+  AsSpelledNumber,
+  AtMostExpect,
   LINE_UNIT_DOCS,
   NotBesideNewLine,
   OnTypedNameOnly,
+  ReportExtra,
   RequiredLineUnit,
 } from '../lists/list.dto';
 
@@ -166,6 +169,71 @@ export class SettleBasketRowDto {
 }
 
 /**
+ * A buy of the row's product for a covered list that does not ask for it
+ * (plan 0273).
+ *
+ * The body has no field for the product, a price or a name (plan 0273,
+ * amended on 2026-11-22). The product is the row's, which the server reads
+ * from the row key: a row with no product answers 409
+ * `basket_row_has_no_product`. The gateway reads the price and the name as it
+ * does for a settle, and the name is what a line made here is called: a
+ * product catalog names in no language answers 409
+ * `basket_product_has_no_name` when a line would have to be made, and a
+ * catalog that does not answer then answers 503 `catalog_unavailable`.
+ */
+export class BuyForListBasketRowDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The covered list the buy is for. You must hold WRITE on it yourself (403 otherwise), and a list the basket does not cover answers 404.',
+  })
+  @IsUUID()
+  targetListId!: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'That list’s line of the product, the `lineId` of `GET :id/products/:itemId/lists`, when it has one. It must be on `targetListId` and hold the row’s product. A line that is already an entry of the row answers 409 `basket_line_already_in_row`: buy on it with the settle. Left out, the list’s line of the product is found as the list’s own add finds it, and made at quantity 0 when there is none.',
+  })
+  @IsOptional()
+  @IsUUID()
+  lineId?: string;
+
+  @ApiProperty({
+    minimum: 1,
+    maximum: LINE_QUANTITY_MAX,
+    description:
+      'Units bought. The line’s quantity stays at 0: what the list asks for does not move, and the buy is recorded against the line.',
+  })
+  @IsInt()
+  @Min(1)
+  @Max(LINE_QUANTITY_MAX)
+  quantity!: number;
+
+  @RequiredLineUnit()
+  unit!: LineUnit;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    deprecated: true,
+    description:
+      'Not read, as on the settle (plan 0202): the gateway chooses the price itself, as the basket’s owner.',
+  })
+  @IsOptional()
+  @IsUUID()
+  priceScopeId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The one shop you are standing in, when you chose one, as on the settle. On a basket started at a shop, a different one answers 409 `basket_shop_locked`.',
+  })
+  @IsOptional()
+  @IsUUID()
+  supermarketLocationId?: string;
+}
+
+/**
  * Take part of a row back.
  *
  * One body with a discriminating `target` rather than two routes, because they
@@ -216,12 +284,10 @@ export class SetBasketRowDemandDto {
 
   @ApiProperty({
     minimum: 0,
-    maximum: LINE_QUANTITY_MAX,
-    description: 'What that list asks for from now on. Zero is allowed.',
+    description: `The list's whole ask from now on: what the line still holds plus what this basket's buys met of it (the entry's \`asked\`), never what is left after them (plan 0274). Zero is allowed. An ask below what the buys met leaves the line at 0 and turns the difference into units bought above the ask. It has no ceiling of its own, because the ask is the line plus what was bought toward it: core refuses an ask whose line would end above ${LINE_QUANTITY_MAX}.`,
   })
   @IsInt()
   @Min(0)
-  @Max(LINE_QUANTITY_MAX)
   quantity!: number;
 
   @RequiredLineUnit()
@@ -230,11 +296,55 @@ export class SetBasketRowDemandDto {
   @ApiProperty({
     minimum: 0,
     description:
-      'What the line asks for as you drew it. It has no ceiling, because it is what the line holds and not what the demand writes: a line stored above the ceiling is moved down with its own amount here (plan 0262).',
+      "The entry's `left` as you drew it: what the line itself held, not the ask. A write that landed since moves it and the demand is refused with `stale_quantity`. It has no ceiling, because it is what the line holds and not what the demand writes: a line stored above the ceiling is moved down with its own amount here (plan 0262).",
   })
   @IsInt()
   @Min(0)
   from!: number;
+
+  @ReportExtra()
+  reportExtra?: boolean;
+}
+
+/**
+ * "Count the extra" on a row (plan 0276, section 9): lower the line by what
+ * the raise of this row's demand reported, once the person said the extra
+ * covers the raise. Checked as the demand is, against the basket's owner.
+ */
+export class CountBasketRowExtraDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The list line whose raise is counted, as on the demand. It is the `rowKey` of the path.',
+  })
+  @IsUUID()
+  lineId!: string;
+
+  @RequiredLineUnit()
+  unit!: LineUnit;
+
+  @ApiProperty({
+    minimum: 1,
+    maximum: LINE_QUANTITY_MAX,
+    description:
+      'What to take off the line: the `extra.countable` the demand answered. A positive whole number, at most `expect`.',
+  })
+  @AsSpelledNumber()
+  @IsInt()
+  @Min(1)
+  @Max(LINE_QUANTITY_MAX)
+  @AtMostExpect()
+  amount!: number;
+
+  @ApiProperty({
+    minimum: 0,
+    description:
+      "The entry's `left` the demand answered: the line's quantity. A write that landed since moves it, and the count answers 409 `stale_quantity` with the current amount and writes nothing. It has no ceiling, because it is what the line holds.",
+  })
+  @AsSpelledNumber()
+  @IsInt()
+  @Min(0)
+  expect!: number;
 }
 
 /**
@@ -325,6 +435,10 @@ export class AddBasketLineDto {
   @IsBoolean()
   @OnTypedNameOnly()
   newLine?: boolean;
+
+  // As the list's own add takes it (plan 0276).
+  @ReportExtra()
+  reportExtra?: boolean;
 }
 
 /**

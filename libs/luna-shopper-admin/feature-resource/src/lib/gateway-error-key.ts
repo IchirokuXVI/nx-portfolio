@@ -116,6 +116,13 @@ export function gatewayErrorKey(error: GatewayError | null): string | null {
     // screen that is behind or a request from elsewhere.
     case 'item_quantity_step_not_allowed':
       return 'resource.error.itemQuantityStepNotAllowed';
+    // A piece count beside no size, beside a unit other than grams or
+    // millilitres, or not above the pack count (backend plan 0278, admin
+    // plan 0075). The form hides the field for the first two and warns of
+    // the third, so this is a screen that is behind or a request from
+    // elsewhere.
+    case 'item_piece_count_not_allowed':
+      return 'resource.error.itemPieceCountNotAllowed';
     // The sections of a shop (backend plan 0200, admin plan 0063).
     case 'section_not_found':
       return 'resource.error.sectionNotFound';

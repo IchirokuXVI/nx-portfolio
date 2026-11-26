@@ -210,3 +210,69 @@ describe('the container in the source group (plan 0248)', () => {
     expect(sourceGroupChanged(stored, fields({ packaging: null }))).toBe(false);
   });
 });
+
+describe('a size the source did not state (owner decision 143a)', () => {
+  const unstated = (): SourceEntryFields => {
+    const each = fields();
+    delete each.sizeFormat;
+    delete each.unitSize;
+    delete each.sizeUnit;
+    return each;
+  };
+
+  it('leaves the stored format, size and unit alone, and is no change', () => {
+    const stored = row(6);
+    expect(sourceGroupChanged(stored, unstated())).toBe(false);
+
+    applySourceGroup(stored, unstated());
+
+    expect(stored).toMatchObject({
+      sizeFormat: 'pack de 6 unidades de 1 l.',
+      unitSize: 6,
+      sizeUnit: UnitOfMeasure.LITER,
+    });
+  });
+
+  it('still writes the null a source states, because null is a statement', () => {
+    const stated = fields({ sizeFormat: null, unitSize: null, sizeUnit: null });
+    const stored = row(6);
+    expect(sourceGroupChanged(stored, stated)).toBe(true);
+
+    applySourceGroup(stored, stated);
+
+    expect(stored).toMatchObject({
+      sizeFormat: null,
+      unitSize: null,
+      sizeUnit: null,
+    });
+  });
+});
+
+describe('a category path the source did not state (plan 0169, notes of 2026-11-25)', () => {
+  const holding = (categoryPath: string[]): SourceCatalogEntry =>
+    ({ ...row(null), categoryPath }) as SourceCatalogEntry;
+
+  it('leaves the stored path alone when the observation states none', () => {
+    // El Jamón's page whose breadcrumb was drawn for another product: the
+    // page was read, and its path is not stated.
+    const unstated = fields();
+    delete unstated.categoryPath;
+    const stored = holding(['Frescos', 'Charcutería envasada', 'Fiambres']);
+
+    applySourceGroup(stored, unstated);
+
+    expect(stored.categoryPath).toEqual([
+      'Frescos',
+      'Charcutería envasada',
+      'Fiambres',
+    ]);
+  });
+
+  it('writes a stated path, an empty one included', () => {
+    const stored = holding(['Frescos', 'Fiambres']);
+    applySourceGroup(stored, fields({ categoryPath: ['Bebidas', 'Aguas'] }));
+    expect(stored.categoryPath).toEqual(['Bebidas', 'Aguas']);
+    applySourceGroup(stored, fields({ categoryPath: [] }));
+    expect(stored.categoryPath).toEqual([]);
+  });
+});

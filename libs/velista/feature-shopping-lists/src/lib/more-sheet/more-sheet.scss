@@ -68,6 +68,13 @@
   min-inline-size: 0;
 }
 
+// The View row's current view, at its end (velista 0202): quiet, like the count.
+.value {
+  flex: none;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
 .count {
   flex: none;
   font-size: var(--app-text-xs);

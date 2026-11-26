@@ -105,6 +105,30 @@ describe('foldBasketEntries', () => {
     expect(folded.touchedAt?.toISOString()).toBe('2026-10-14T10:00:00.000Z');
   });
 
+  it('passes applied as asked less left, so a buy above an ask does not raise the row (velista 0201, spec 12)', () => {
+    const act = {
+      participantId: 'p-me',
+      at: '2026-10-14T10:00:00.000Z',
+      outcome: 'BOUGHT',
+    };
+    const asking = row('a', [
+      entry('a', { left: 3 }),
+      entry('b', { listId: 'l-basics', left: 1 }),
+    ]);
+    const [folded] = foldBasketEntries(
+      [asking],
+      [
+        // Asks 3, 4 bought: as backend 0274 answers it.
+        entry('a', { left: 0, bought: 4, asked: 3, state: 'DONE', act }),
+        entry('b', { listId: 'l-basics', left: 1, asked: 1 }),
+      ],
+      ['a', 'b'],
+      SERVED
+    );
+
+    expect(folded).toMatchObject({ asked: 4, bought: 4, left: 1 });
+  });
+
   it('leaves the rows the write did not touch as they were', () => {
     const folded = foldBasketEntries(
       [milk, bread],

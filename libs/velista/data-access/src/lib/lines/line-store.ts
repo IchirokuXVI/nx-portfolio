@@ -17,6 +17,7 @@ import {
   LINES_PAGE_SIZE,
   SETTLEMENTS_PAGE_SIZE,
   shownLineUnit,
+  type AbsorbedExtra,
   type AddLineOptions,
   type AddOutcome,
   type Comment,
@@ -59,6 +60,8 @@ function added(answer: LineAddResult): LineAddOutcome {
     merged: answer.outcome !== 'created',
     outcome: answer.outcome,
     alreadyOnList: answer.alreadyOnList,
+    // Only a raise took anything into the ask (velista `0208`, target state 16).
+    extra: answer.outcome === 'raised' ? (answer.extra ?? null) : null,
   };
 }
 
@@ -103,6 +106,12 @@ export type LineAddOutcome =
        */
       readonly outcome: AddOutcome;
       readonly alreadyOnList: readonly Line[];
+      /**
+       * What a `raised` add sent with `reportExtra` took into the ask (backend
+       * `0276`, velista `0208`), or null: not a raise, no report asked for, or one
+       * this build cannot read.
+       */
+      readonly extra: AbsorbedExtra | null;
     }
   | { readonly state: 'failed'; readonly error: unknown };
 
@@ -816,12 +825,28 @@ export class LineStore {
       favoriteItemId?: string | null;
       preferredSupermarketId?: string | null;
       confirmMerge?: boolean;
+      /**
+       * Ask the answer of a raise of the quantity to report the extra it took into
+       * the ask (backend `0276`, velista `0208`): the line sheet's Save. Sent only
+       * for a raise in the line's own unit and never with `confirmMerge`, so a
+       * merge and a unit change never report.
+       */
+      reportExtra?: boolean;
     }
   ): Promise<LineUpdateOutcome> {
     const before = this._lineById(lineId);
     if (before === null) {
       return { state: 'failed', error: null };
     }
+    const { reportExtra: asked, ...edits } = changes;
+    const reporting =
+      asked === true &&
+      edits.confirmMerge !== true &&
+      edits.unit === undefined &&
+      edits.quantity !== undefined &&
+      edits.quantity > before.quantity &&
+      this._legacyUnit(before) === null;
+    changes = reporting ? { ...edits, reportExtra: true } : edits;
     // Every absolute write states what its number counts (velista `0182`): the
     // line's own unit, unless the caller names another. A line the migration left
     // in `UNIT` is corrected to its product's unit by this write (backend `0246`
@@ -899,7 +924,12 @@ export class LineStore {
     }
 
     this._clearNote(lineId);
-    return { state: 'succeeded', line, absorbedLineId };
+    return {
+      state: 'succeeded',
+      line,
+      absorbedLineId,
+      extra: reporting ? (outcome.value.extra ?? null) : null,
+    };
   }
 
   /**
@@ -935,6 +965,125 @@ export class LineStore {
     delta: number,
     options: { readonly reportDropped?: boolean } = {}
   ): Promise<'succeeded' | 'failed' | 'overwritten'> {
+    return (await this._addQuantity(lineId, delta, options, false)).state;
+  }
+
+  /**
+   * {@link addQuantity} for a raise of a zone list row (velista `0208`), which asks
+   * the answer to report the extra the raise took into the ask (backend `0276`).
+   * The same optimistic write, overlay and dropped write record: the line rises by
+   * the whole delta, which is what the row already shows, so the number never jumps.
+   * A dropped one is recorded with the flag, so "Send it again" reports and may ask.
+   *
+   * `extra` is the answer's, or null when there was no answer this build can read,
+   * the line was corrected to its unit instead, or the write failed. `quantity` is
+   * the answered line's, the amount the report is about, or null with no answer.
+   */
+  async raiseReportingExtra(
+    lineId: string,
+    delta: number,
+    options: { readonly reportDropped?: boolean } = {}
+  ): Promise<{
+    readonly state: 'succeeded' | 'failed' | 'overwritten';
+    readonly extra: AbsorbedExtra | null;
+    readonly quantity: number | null;
+  }> {
+    return this._addQuantity(lineId, delta, options, delta > 0);
+  }
+
+  /**
+   * "Count the extra" (velista `0208`, target state 1; backend `0276`): take `amount`
+   * off the line, which must still hold `expect`, the quantity the raise answered.
+   *
+   * Optimistic, as the stepper's write: the row shows `expect - amount` at once,
+   * under an overlay on `quantity`, and takes the answered line on success. A line
+   * that moved in between is refused with `stale_quantity`, nothing is counted, and
+   * the list is read again so the row shows the server's amount. On any other
+   * failure the line goes back to what it held. No note is put on the row: the page
+   * says the outcome where the question was.
+   *
+   * **Never a dropped write record** (velista `0159`), and never sent again by
+   * itself: a count replayed later would lower a line on numbers the person no
+   * longer sees.
+   */
+  async countExtra(
+    lineId: string,
+    amount: number,
+    expect: number
+  ): Promise<'counted' | 'stale' | 'failed'> {
+    const before = this._lineById(lineId);
+    if (
+      before === null ||
+      !Number.isInteger(amount) ||
+      amount < 1 ||
+      amount > expect ||
+      this._corrections.has(lineId)
+    ) {
+      return 'failed';
+    }
+    const listId = before.listId;
+    const quantity = expect - amount;
+    const send = async () => {
+      const answer = await this._lines.countExtra(
+        lineId,
+        amount,
+        expect,
+        before.unit
+      );
+      return answer.line;
+    };
+
+    // A line that no longer holds what the question was about (a realtime update
+    // landed while it was open) is not patched: the server decides, and its
+    // `stale_quantity` is the answer the page says. Patching would draw Z over a
+    // number nobody asked about.
+    if (before.quantity !== expect) {
+      try {
+        const line = await send();
+        this._patch(listId, lineId, () => line);
+        return 'counted';
+      } catch (error) {
+        if (isStaleQuantity(error) || isUnitMismatch(error)) {
+          await this.refresh(listId);
+          return 'stale';
+        }
+        return 'failed';
+      }
+    }
+
+    const overlay: Overlay<unknown> = {
+      key: overlayKey(lineId, 'quantity'),
+      apply: (current) => ({ ...(current as Line), quantity }) as unknown,
+      fields: ['quantity'],
+    };
+    this._patch(listId, lineId, (line) => ({ ...line, quantity }));
+
+    const outcome = await this._mutations.run(overlay, send);
+
+    if (outcome.state === 'failed') {
+      this._patch(listId, lineId, () => before);
+      if (isStaleQuantity(outcome.error) || isUnitMismatch(outcome.error)) {
+        // The line moved while the question was open: the server's line replaces
+        // the one put back, as for a unit that changed.
+        await this.refresh(listId);
+        return 'stale';
+      }
+      return 'failed';
+    }
+    this._patch(listId, lineId, () => outcome.value);
+    return 'counted';
+  }
+
+  private async _addQuantity(
+    lineId: string,
+    delta: number,
+    options: { readonly reportDropped?: boolean },
+    reportExtra: boolean
+  ): Promise<{
+    readonly state: 'succeeded' | 'failed' | 'overwritten';
+    readonly extra: AbsorbedExtra | null;
+    readonly quantity: number | null;
+  }> {
     // A step during the correction of the line waits for its answer: the row is
     // patched to the new unit already, and a delta in it could reach core before
     // the correction and be refused (backend `0246` section 3.2). A step after a
@@ -942,22 +1091,41 @@ export class LineStore {
     const correcting = this._corrections.get(lineId);
     if (correcting !== undefined) {
       if ((await correcting) === 'failed') {
-        return 'failed';
+        return { state: 'failed', extra: null, quantity: null };
       }
-      return this.addQuantity(lineId, delta, options);
+      return this._addQuantity(lineId, delta, options, reportExtra);
     }
 
     const before = this._lineById(lineId);
     if (before === null || delta === 0) {
-      return 'failed';
+      return { state: 'failed', extra: null, quantity: null };
     }
 
     const legacy = this._legacyUnit(before);
     if (legacy !== null) {
-      return this._correctUnit(before, legacy, delta);
+      return {
+        state: await this._correctUnit(before, legacy, delta),
+        extra: null,
+        quantity: null,
+      };
     }
 
-    return this._write(
+    let extra: AbsorbedExtra | null = null;
+    let quantity: number | null = null;
+    const send = reportExtra
+      ? async () => {
+          const answer = await this._lines.raiseReportingExtra(
+            lineId,
+            delta,
+            before.unit
+          );
+          extra = answer.extra;
+          quantity = answer.line.quantity;
+          return answer.line;
+        }
+      : () => this._lines.addQuantity(lineId, delta, before.unit);
+
+    const state = await this._write(
       lineId,
       before,
       ['quantity'],
@@ -965,7 +1133,7 @@ export class LineStore {
         ...line,
         quantity: Math.max(LINE_QUANTITY_MIN, line.quantity + delta),
       }),
-      () => this._lines.addQuantity(lineId, delta, before.unit),
+      send,
       // Velista `0159`: the reconnect reloads the page and this row's note goes with
       // it, so a delta the network dropped is written down for the next document.
       // The name is the line's own text, which the page swaps for the name it draws.
@@ -984,10 +1152,21 @@ export class LineStore {
             },
             // The unit too, so a resend is offered only while the line still
             // counts in it: 250 g sent again as 250 pieces would be a new order.
-            replay: { kind: 'line-quantity', lineId, delta, unit: before.unit },
+            replay: reportExtra
+              ? {
+                  kind: 'line-quantity',
+                  lineId,
+                  delta,
+                  unit: before.unit,
+                  reportExtra: true,
+                }
+              : { kind: 'line-quantity', lineId, delta, unit: before.unit },
           }
         : undefined
     );
+    return state === 'failed'
+      ? { state, extra: null, quantity: null }
+      : { state, extra, quantity };
   }
 
   /**
@@ -2228,6 +2407,11 @@ export function isForbidden(error: unknown): boolean {
  */
 function isUnitMismatch(error: unknown): boolean {
   return error instanceof GatewayError && error.code === 'line_unit_mismatch';
+}
+
+/** A count of the extra met a line that no longer held the amount (backend `0276`). */
+function isStaleQuantity(error: unknown): boolean {
+  return error instanceof GatewayError && error.code === 'stale_quantity';
 }
 
 /**

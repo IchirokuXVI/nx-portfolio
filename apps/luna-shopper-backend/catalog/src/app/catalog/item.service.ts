@@ -1,4 +1,4 @@
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   APPROX_WEIGHT_FILL_MAX,
@@ -13,6 +13,8 @@ import {
   PACK_COUNT_MAX,
   PACK_COUNT_MIN,
   packCountOf,
+  PIECE_COUNT_MAX,
+  PIECE_COUNT_MIN,
   PriceSourceKind,
   PRODUCT_GROUP_MEMBERS_MAX,
   QUANTITY_STEPS,
@@ -83,6 +85,8 @@ import {
   ITEM_MERGE_INTO_FORMAT_DETAIL,
   ITEM_MERGED_INTO_DETAIL,
   ITEM_MERGED_ITEM_DETAIL,
+  ITEM_PACK_COUNT_DETAIL,
+  ITEM_PIECE_COUNT_DETAIL,
   ITEM_QUANTITY_STEP_DETAIL,
   ITEM_QUANTITY_STEPS_ALLOWED_DETAIL,
   ITEM_UNIT_BECOMES_DETAIL,
@@ -96,6 +100,7 @@ import {
   ItemMergedException,
   ItemMergeFormatDiffersException,
   ItemMergeTwoArticlesOneChainException,
+  ItemPieceCountNotAllowedException,
   ItemQuantityStepNotAllowedException,
   ItemUnitNotBaseException,
   NotFoundException,
@@ -477,6 +482,8 @@ function rankedWhereSql(
  */
 @Injectable()
 export class ItemService {
+  private readonly logger = new Logger(ItemService.name);
+
   constructor(
     @InjectRepository(Item) private readonly items: Repository<Item>,
     @InjectRepository(ProductGroup)
@@ -535,15 +542,18 @@ export class ItemService {
       ...approxWeightOf(req, actor),
       quantityStep: req.quantityStep ?? null,
       packCount: req.packCount ?? null,
+      pieceCount: req.pieceCount ?? null,
       defaultUnit: req.defaultUnit,
       productGroupId: await this.resolveGroup(req.productGroupId ?? null),
     });
     // A base unit, and no size on a kilogram (plan 0237, section 3.3). Then
     // a weight only beside no size (plan 0244, section 3.2), then a step only
-    // on a product sold by the kilo (plan 0261, section 2.2).
+    // on a product sold by the kilo (plan 0261, section 2.2), then pieces
+    // only on a sized product, above its pack (plan 0278, section 2).
     requireBaseUnit(draft, {});
     requireWeightBesideNoSize(draft, {});
     requireStepOnLooseProduct(draft, {});
+    requirePiecesOnSizedProduct(draft, {});
     // The three brand columns, in the one step every write shares (plan 0115,
     // section 4). An unregistered brand is still accepted: refusing it is the
     // curator's decision, not the catalog's.
@@ -661,12 +671,14 @@ export class ItemService {
         ...approxWeightOf(input, actor),
         quantityStep: input.quantityStep ?? null,
         packCount: input.packCount ?? null,
+        pieceCount: input.pieceCount ?? null,
         defaultUnit: input.defaultUnit,
         productGroupId: await this.resolveGroup(input.productGroupId ?? null),
       });
       requireBaseUnit(draft, { index });
       requireWeightBesideNoSize(draft, { index });
       requireStepOnLooseProduct(draft, { index });
+      requirePiecesOnSizedProduct(draft, { index });
       this.applyBrand(draft, input.brand, registered);
       drafts.push({ draft, leaves, input });
     }
@@ -1151,6 +1163,10 @@ export class ItemService {
    * survives every run after it. A pair naming a product that is gone writes
    * nothing and is not counted.
    *
+   * **It never writes a pack count at or above a piece count** (plan 0278,
+   * section 2). Such a product is skipped and logged, not counted in
+   * `written`, so the rest of the call still lands.
+   *
    * The harvester already left out every product whose sources disagree, so a
    * product named twice here is a caller's mistake and is refused whole rather
    * than settled by whichever pair came last.
@@ -1189,19 +1205,45 @@ export class ItemService {
     }
 
     return this.audit.write(actor, async (tx) => {
+      const params = [
+        entries.map((entry) => entry.itemId),
+        entries.map((entry) => entry.packCount),
+      ];
       // `UPDATE ... RETURNING` answers `[rows, rowCount]` through `query()`.
+      // A product a person gave a piece count takes only a pack count below
+      // it (plan 0278, section 2): `item_piece_count_on_sized` refuses the
+      // rest, and one refused row would fail the whole chunk.
       const [rows] = (await tx.manager.query(
         `UPDATE "items" AS i
             SET "packCount" = v."packCount", "updatedAt" = now()
            FROM unnest($1::uuid[], $2::smallint[]) AS v("id", "packCount")
           WHERE i."id" = v."id"
             AND i."packCount" IS NULL
+            AND (i."pieceCount" IS NULL OR v."packCount" < i."pieceCount")
       RETURNING i."id", i."packCount"`,
-        [
-          entries.map((entry) => entry.itemId),
-          entries.map((entry) => entry.packCount),
-        ]
+        params
       )) as [{ id: string; packCount: number }[], number];
+      // The answer has no room for a skip without a contract change, so the
+      // products the piece count kept out are logged for the curator. A merged
+      // product is left out of the log: its survivor is the one curated.
+      const kept = (await tx.manager.query(
+        `SELECT i."id"
+           FROM "items" AS i
+           JOIN unnest($1::uuid[], $2::smallint[]) AS v("id", "packCount")
+             ON i."id" = v."id"
+          WHERE ${itemStateSql('i')}
+            AND i."packCount" IS NULL
+            AND i."pieceCount" IS NOT NULL
+            AND v."packCount" >= i."pieceCount"`,
+        params
+      )) as { id: string }[];
+      if (kept.length > 0) {
+        this.logger.warn(
+          `A pack count fill skipped ${kept.length} product(s) whose piece ` +
+            `count is not above the offered pack count: ` +
+            kept.map((row) => row.id).join(', ')
+        );
+      }
       // Only the one column moved, so the trail records that and nothing
       // else: every other field reads the same on both sides.
       for (const row of rows) {
@@ -3520,6 +3562,11 @@ export class ItemService {
     if (input.packCount !== undefined) {
       row.packCount = input.packCount;
     }
+    // A person's piece count (plan 0278), which only a person writes, so it
+    // names no writer. The rules are checked after every field is applied.
+    if (input.pieceCount !== undefined) {
+      row.pieceCount = input.pieceCount;
+    }
     if (input.defaultUnit !== undefined) {
       row.defaultUnit = input.defaultUnit;
     }
@@ -3940,6 +3987,7 @@ export function expectationMismatches(
     | 'quantityStep'
     | 'defaultUnit'
     | 'packCount'
+    | 'pieceCount'
   >,
   slugs: readonly string[],
   expect: ItemExpectation
@@ -4019,6 +4067,20 @@ export function expectationMismatches(
       expected: expect.packCount,
       actual: row.packCount ?? null,
     });
+  }
+  // Plan 0278, section 3: a smallint, compared as a number as `packCount` is.
+  if (expect.pieceCount !== undefined) {
+    const actual =
+      row.pieceCount === null || row.pieceCount === undefined
+        ? null
+        : Number(row.pieceCount);
+    if (actual !== expect.pieceCount) {
+      mismatches.push({
+        field: 'pieceCount',
+        expected: expect.pieceCount,
+        actual,
+      });
+    }
   }
   if (expect.categorySlugs !== undefined) {
     const expected = expect.categorySlugs ?? [];
@@ -4116,6 +4178,18 @@ function requireBaseUnitOnEdit(row: Item, input: UpdateItemInput): void {
     input.defaultUnit !== undefined
   ) {
     requireStepOnLooseProduct(row, { itemId: row.id });
+  }
+  // Plan 0278, section 2: after every rule above, so their codes still
+  // answer first. It runs for the pack count too: raising it to the piece
+  // count breaks `item_piece_count_on_sized`.
+  if (
+    input.pieceCount !== undefined ||
+    input.unitSize !== undefined ||
+    input.approxWeight !== undefined ||
+    input.defaultUnit !== undefined ||
+    input.packCount !== undefined
+  ) {
+    requirePiecesOnSizedProduct(row, { itemId: row.id });
   }
 }
 
@@ -4218,6 +4292,86 @@ export function requireStepOnLooseProduct(
       },
     }
   );
+}
+
+/**
+ * Refuse a product that would hold a piece count off its bounds, on a product
+ * without a fixed size in `GRAM` or `MILLILITER` (a weight beside no size
+ * included), or not above its pack count (plan 0278, section 2), with
+ * `item_piece_count_not_allowed`.
+ *
+ * It reads the row as it will be saved, as {@link requireStepOnLooseProduct}
+ * does, so an edit that clears the size, changes the unit or raises the pack
+ * count to the piece count is refused unless the same edit sends
+ * `pieceCount: null`. `where` names the product or the position of the entry
+ * in a batch. The checks `item_piece_count_bounds` and
+ * `item_piece_count_on_sized` restate the rules, and this is what answers a
+ * caller before the database would.
+ */
+export function requirePiecesOnSizedProduct(
+  row: Pick<
+    Item,
+    'unitSize' | 'approxWeight' | 'defaultUnit' | 'packCount' | 'pieceCount'
+  >,
+  where: { itemId?: string; index?: number }
+): void {
+  if (row.pieceCount === null || row.pieceCount === undefined) {
+    return;
+  }
+  const pieces = Number(row.pieceCount);
+  const unitSize =
+    row.unitSize === null || row.unitSize === undefined
+      ? null
+      : Number(row.unitSize);
+  const weight =
+    row.approxWeight === null || row.approxWeight === undefined
+      ? null
+      : Number(row.approxWeight);
+  const pack =
+    row.packCount === null || row.packCount === undefined
+      ? null
+      : Number(row.packCount);
+  let broken: string | null = null;
+  if (
+    !Number.isInteger(pieces) ||
+    pieces < PIECE_COUNT_MIN ||
+    pieces > PIECE_COUNT_MAX
+  ) {
+    broken =
+      `A piece count is a whole number from ${PIECE_COUNT_MIN} to ` +
+      `${PIECE_COUNT_MAX}, and ${row.pieceCount} is not.`;
+  } else if (unitSize === null || weight !== null) {
+    broken =
+      'Only a product with a fixed size holds a piece count: no product ' +
+      'sold by the kilo, and no piece with an approximate weight. Send a ' +
+      'null piece count with an edit that clears the size.';
+  } else if (
+    row.defaultUnit !== UnitOfMeasure.GRAM &&
+    row.defaultUnit !== UnitOfMeasure.MILLILITER
+  ) {
+    broken =
+      `A piece count sits beside a size in ${UnitOfMeasure.GRAM} or ` +
+      `${UnitOfMeasure.MILLILITER}, and a ${row.defaultUnit} size is ` +
+      'already a count. Send a null piece count with an edit that changes ' +
+      'the unit.';
+  } else if (pack !== null && pieces <= pack) {
+    broken =
+      `A piece count is above the pack count, and ${pieces} is not above ` +
+      `${pack}: a count equal to it says each unit is one piece, which the ` +
+      'pack count already says. Send a null piece count, or a higher one.';
+  }
+  if (broken === null) {
+    return;
+  }
+  throw new ItemPieceCountNotAllowedException(broken, {
+    details: {
+      ...where,
+      [ITEM_PIECE_COUNT_DETAIL]: row.pieceCount,
+      [ITEM_PACK_COUNT_DETAIL]: pack,
+      [ITEM_UNIT_SIZE_DETAIL]: unitSize,
+      defaultUnit: row.defaultUnit,
+    },
+  });
 }
 
 /**

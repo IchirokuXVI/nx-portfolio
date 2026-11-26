@@ -23,6 +23,7 @@ export {
   ElJamonClient,
   ElJamonHttpError,
   ElJamonSessionError,
+  isElJamonSessionStart,
 } from './lib/eljamon.client';
 export {
   ELJAMON_PAGE_SIZE,

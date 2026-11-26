@@ -264,6 +264,7 @@ describeIntegration('a finished basket holds still (real Postgres)', () => {
         itemId: null,
         outcome: SettlementOutcome.BOUGHT,
         quantity,
+        applied: quantity,
         settledByUserId: null,
         settledByParticipantId: randomUUID(),
         settledAt: new Date(),

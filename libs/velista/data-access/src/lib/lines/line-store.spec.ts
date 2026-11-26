@@ -1,6 +1,11 @@
 import type { Provider } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { AddLineOptions, Line, Page } from '@portfolio/velista/models';
+import type {
+  AbsorbedExtra,
+  AddLineOptions,
+  Line,
+  Page,
+} from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
@@ -102,7 +107,13 @@ function service(seed: readonly Line[]) {
   /** What each absolute update asked for, in order. */
   const updates: Record<string, unknown>[] = [];
   /** What each delta asked for, in order. */
-  const deltas: { delta: number; unit: string }[] = [];
+  const deltas: { delta: number; unit: string; reportExtra?: true }[] = [];
+  /** What the next raise that reports the extra answers it took in (velista `0208`). */
+  let extraNext: AbsorbedExtra | null = null;
+  /** What the next add answers it took in, on any outcome (velista `0208`). */
+  let addExtraNext: AbsorbedExtra | null = null;
+  /** Every count sent, in order (velista `0208`). */
+  const counts: { amount: number; expect: number; unit: string }[] = [];
 
   /** Set while the reads after the first are held open, opened by `releaseFollowUps`. */
   let followUps: Promise<void> | null = null;
@@ -156,6 +167,8 @@ function service(seed: readonly Line[]) {
       options
     ) => {
       addOptions.push(options);
+      const extra = addExtraNext;
+      addExtraNext = null;
       const met = metNext;
       metNext = null;
       if (met !== null) {
@@ -164,6 +177,7 @@ function service(seed: readonly Line[]) {
           merged: metMerged,
           outcome: 'alreadyOnList' as const,
           alreadyOnList: met,
+          extra,
         };
       }
       const raised = raiseNext;
@@ -174,6 +188,7 @@ function service(seed: readonly Line[]) {
           merged: true,
           outcome: 'raised' as const,
           alreadyOnList: [],
+          extra,
         };
       }
       return {
@@ -188,6 +203,7 @@ function service(seed: readonly Line[]) {
         merged: false,
         outcome: 'created' as const,
         alreadyOnList: [],
+        extra,
       };
     },
     updateLine: async (lineId, { confirmMerge: _confirm, ...changes }) => {
@@ -204,6 +220,27 @@ function service(seed: readonly Line[]) {
       units.push(unit);
       deltas.push({ delta, unit });
       return answer(line(lineId, { quantity: 1 + delta, unit, version: 2 }));
+    },
+    raiseReportingExtra: async (lineId, delta, unit) => {
+      units.push(unit);
+      deltas.push({ delta, unit, reportExtra: true });
+      const extra = extraNext;
+      extraNext = null;
+      return {
+        line: await answer(
+          line(lineId, { quantity: 1 + delta, unit, version: 2 })
+        ),
+        extra,
+      };
+    },
+    countExtra: async (lineId, amount, expect, unit) => {
+      counts.push({ amount, expect, unit });
+      return {
+        line: await answer(
+          line(lineId, { quantity: expect - amount, unit, version: 3 })
+        ),
+        counted: amount,
+      };
     },
     settle: async (lineId, outcome, options) => {
       units.push(options.unit);
@@ -277,6 +314,12 @@ function service(seed: readonly Line[]) {
     raiseNext: (value: Line) => {
       raiseNext = value;
     },
+    extraNext: (value: AbsorbedExtra | null) => {
+      extraNext = value;
+    },
+    addExtraNext: (value: AbsorbedExtra | null) => {
+      addExtraNext = value;
+    },
     metNext: (value: readonly Line[], merged = true) => {
       metNext = value;
       metMerged = merged;
@@ -285,6 +328,7 @@ function service(seed: readonly Line[]) {
     units,
     updates,
     deltas,
+    counts,
     /** The rest of a long list stays out until `releaseFollowUps`. */
     holdFollowUps: () => {
       followUps = new Promise<void>((resolve) => {
@@ -550,6 +594,47 @@ describe('LineStore', () => {
       expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['milk', 'bread']);
       expect(store.linesIn(LIST)[0].quantity).toBe(3);
       expect(lines.addOptions).toEqual([{ askIfAmbiguous: true }]);
+    });
+
+    it('hands on what a raise took into the ask, and nothing for any other outcome (velista 0208)', async () => {
+      const EXTRA: AbsorbedExtra = { above: 2, countable: 1, buyers: [] };
+      const { store, lines } = await build([milk()]);
+      await store.load(LIST);
+      const add = () =>
+        store.addLine(
+          LIST,
+          'Leche entera',
+          1,
+          ME,
+          ASKS_FIRST,
+          undefined,
+          undefined,
+          {
+            askIfAmbiguous: true,
+            reportExtra: true,
+          }
+        );
+
+      lines.raiseNext(milk({ quantity: 3, version: 2 }));
+      lines.addExtraNext(EXTRA);
+      expect(await add()).toEqual(
+        expect.objectContaining({ outcome: 'raised', extra: EXTRA })
+      );
+      expect(lines.addOptions.at(-1)).toEqual({
+        askIfAmbiguous: true,
+        reportExtra: true,
+      });
+
+      lines.metNext([milk({ quantity: 3, version: 2 })]);
+      lines.addExtraNext(EXTRA);
+      expect(await add()).toEqual(
+        expect.objectContaining({ outcome: 'alreadyOnList', extra: null })
+      );
+
+      lines.raiseNext(milk({ quantity: 4, version: 3 }));
+      expect(await add()).toEqual(
+        expect.objectContaining({ outcome: 'raised', extra: null })
+      );
     });
 
     it('draws no row before the answer when a loaded line has the typed name', async () => {
@@ -1001,6 +1086,226 @@ describe('LineStore', () => {
           },
         }),
       ]);
+    });
+
+    describe('a raise that reports the extra it took in (velista 0208)', () => {
+      const EXTRA: AbsorbedExtra = {
+        above: 3,
+        countable: 2,
+        buyers: [{ userId: 'u-marta' }],
+      };
+
+      it('patches the row at once to the amount set, keeps it, and answers the report and the quantity', async () => {
+        const { store, lines } = await build([line('a', { quantity: 0 })]);
+        await store.load(LIST);
+        lines.extraNext(EXTRA);
+        lines.holdWrites();
+
+        const raised = store.raiseReportingExtra('a', 2);
+        expect(store.linesIn(LIST)[0].quantity).toBe(2);
+        lines.releaseWrites();
+
+        expect(await raised).toEqual({
+          state: 'succeeded',
+          extra: EXTRA,
+          quantity: 3,
+        });
+        expect(lines.deltas).toEqual([
+          { delta: 2, unit: 'UNIT', reportExtra: true },
+        ]);
+        // The server's line, which rose by the whole delta (backend 0276).
+        expect(store.linesIn(LIST)[0].quantity).toBe(3);
+        expect(store.writeNoteOf('a')).toBeNull();
+      });
+
+      it('sends a lowering without the flag, and answers no report', async () => {
+        const { store, lines } = await build([line('a', { quantity: 3 })]);
+        await store.load(LIST);
+
+        expect(await store.raiseReportingExtra('a', -1)).toEqual({
+          state: 'succeeded',
+          extra: null,
+          quantity: null,
+        });
+        expect(lines.deltas).toEqual([{ delta: -1, unit: 'UNIT' }]);
+      });
+
+      it('snaps back and answers no report when it fails', async () => {
+        const { store, lines } = await build([line('a', { quantity: 2 })]);
+        await store.load(LIST);
+        lines.failNext(new Error('offline'));
+
+        expect(await store.raiseReportingExtra('a', 1)).toEqual({
+          state: 'failed',
+          extra: null,
+          quantity: null,
+        });
+        expect(store.linesIn(LIST)[0].quantity).toBe(2);
+      });
+
+      it('writes down a dropped one with the flag in its replay', async () => {
+        const { store, lines } = await build(
+          [line('a', { content: 'Pan de pueblo', quantity: 1 })],
+          [provideFakeBrowserFacade(new Map())]
+        );
+        await store.load(LIST);
+        lines.failNext(new NetworkError('c1', 'lines.quantity', true));
+
+        await store.raiseReportingExtra('a', 1, { reportDropped: true });
+
+        expect(TestBed.inject(DroppedWrites).take(`list:${LIST}`)).toEqual([
+          expect.objectContaining({
+            replay: {
+              kind: 'line-quantity',
+              lineId: 'a',
+              delta: 1,
+              unit: 'UNIT',
+              reportExtra: true,
+            },
+          }),
+        ]);
+      });
+    });
+
+    describe('"Count the extra" (velista 0208, target state 1)', () => {
+      const refusal = (code: 'stale_quantity' | 'forbidden') =>
+        new GatewayError({
+          code,
+          status: code === 'forbidden' ? 403 : 409,
+          correlationId: 'c-count',
+        });
+
+      it('shows the smaller amount at once and takes the answered line', async () => {
+        const { store, lines } = await build([line('a', { quantity: 4 })]);
+        await store.load(LIST);
+        lines.holdWrites();
+
+        const counted = store.countExtra('a', 3, 4);
+        expect(store.linesIn(LIST)[0].quantity).toBe(1);
+        lines.releaseWrites();
+
+        expect(await counted).toBe('counted');
+        expect(lines.counts).toEqual([{ amount: 3, expect: 4, unit: 'UNIT' }]);
+        expect(store.linesIn(LIST)[0]).toEqual(
+          expect.objectContaining({ quantity: 1, version: 3 })
+        );
+        expect(store.writeNoteOf('a')).toBeNull();
+      });
+
+      it('takes the server line on stale_quantity, and counts nothing', async () => {
+        const { store, lines } = await build([line('a', { quantity: 4 })]);
+        await store.load(LIST);
+        // Somebody lowered the line to 2 meanwhile: the read after the refusal says so.
+        lines.setServed([line('a', { quantity: 2, version: 5 })]);
+        lines.failNext(refusal('stale_quantity'));
+
+        expect(await store.countExtra('a', 3, 4)).toBe('stale');
+        expect(store.linesIn(LIST)[0].quantity).toBe(2);
+        expect(store.writeNoteOf('a')).toBeNull();
+      });
+
+      it.each([
+        ['a refusal', () => refusal('forbidden')],
+        ['the network', () => new Error('offline')],
+      ])('puts the line back on any other failure: %s', async (_, error) => {
+        const { store, lines } = await build([line('a', { quantity: 4 })]);
+        await store.load(LIST);
+        lines.failNext(error());
+
+        expect(await store.countExtra('a', 3, 4)).toBe('failed');
+        expect(store.linesIn(LIST)[0].quantity).toBe(4);
+      });
+
+      it('is never a dropped write record (spec 9)', async () => {
+        const { store, lines } = await build(
+          [line('a', { content: 'Pan de pueblo', quantity: 4 })],
+          [provideFakeBrowserFacade(new Map())]
+        );
+        await store.load(LIST);
+        lines.failNext(new NetworkError('c1', 'lines.extra', true));
+
+        expect(await store.countExtra('a', 3, 4)).toBe('failed');
+        expect(TestBed.inject(DroppedWrites).take(`list:${LIST}`)).toEqual([]);
+      });
+
+      it('sends the count unpatched when the line no longer holds what the question was about', async () => {
+        const { store, lines, realtime } = await build([
+          line('a', { quantity: 4 }),
+        ]);
+        await store.load(LIST);
+        // Somebody raised the line to 5 while the question was open.
+        realtime.emit('line.updated', line('a', { quantity: 5, version: 2 }));
+        expect(store.linesIn(LIST)[0].quantity).toBe(5);
+        lines.holdWrites();
+
+        const counted = store.countExtra('a', 3, 4);
+        // No Z drawn over a number nobody asked about: the server decides.
+        expect(store.linesIn(LIST)[0].quantity).toBe(5);
+        expect(lines.counts).toEqual([{ amount: 3, expect: 4, unit: 'UNIT' }]);
+        lines.failNext(refusal('stale_quantity'));
+        lines.setServed([line('a', { quantity: 5, version: 2 })]);
+        lines.releaseWrites();
+
+        expect(await counted).toBe('stale');
+        expect(store.linesIn(LIST)[0].quantity).toBe(5);
+      });
+
+      it('keeps the count drawn over a realtime update that lands while it is out, and takes the answer', async () => {
+        const { store, lines, realtime } = await build([
+          line('a', { quantity: 4 }),
+        ]);
+        await store.load(LIST);
+        lines.holdWrites();
+
+        const counted = store.countExtra('a', 3, 4);
+        expect(store.linesIn(LIST)[0].quantity).toBe(1);
+        // The echo of the raise, older than the count, arrives while it is out.
+        realtime.emit('line.updated', line('a', { quantity: 4, version: 2 }));
+        expect(store.linesIn(LIST)[0].quantity).toBe(1);
+        lines.releaseWrites();
+
+        expect(await counted).toBe('counted');
+        expect(store.linesIn(LIST)[0]).toEqual(
+          expect.objectContaining({ quantity: 1, version: 3 })
+        );
+      });
+
+      it('lets a save report only a raise of the amount in its own unit (velista 0208, target state 11)', async () => {
+        const { store, lines } = await build([line('a', { quantity: 4 })]);
+        await store.load(LIST);
+
+        await store.updateLine('a', { quantity: 6, reportExtra: true });
+        await store.updateLine('a', { quantity: 2, reportExtra: true });
+        await store.updateLine('a', {
+          quantity: 9,
+          content: 'Pan',
+          confirmMerge: true,
+          reportExtra: true,
+        });
+        await store.updateLine('a', {
+          quantity: 1000,
+          unit: 'GRAM',
+          reportExtra: true,
+        });
+
+        expect(lines.updates.map((sent) => sent.reportExtra)).toEqual([
+          true,
+          undefined,
+          undefined,
+          undefined,
+        ]);
+      });
+
+      it('sends nothing for an amount it cannot count', async () => {
+        const { store, lines } = await build([line('a', { quantity: 4 })]);
+        await store.load(LIST);
+
+        expect(await store.countExtra('a', 0, 4)).toBe('failed');
+        expect(await store.countExtra('a', 5, 4)).toBe('failed');
+        expect(await store.countExtra('gone', 1, 4)).toBe('failed');
+        expect(lines.counts).toEqual([]);
+        expect(store.linesIn(LIST)[0].quantity).toBe(4);
+      });
     });
 
     it('writes down a quantity lost to a timeout with no replay', async () => {

@@ -13,6 +13,7 @@ import {
   ItemEanHeldException,
   ItemEanInvalidException,
   ItemNeedsACategoryException,
+  ItemPieceCountNotAllowedException,
   ItemQuantityStepNotAllowedException,
   NotFoundException,
   ValidationException,
@@ -2077,6 +2078,281 @@ describe('ItemService', () => {
           expect: { quantityStep: 100 },
         })
       ).resolves.toMatchObject({ quantityStep: 100 });
+    });
+  });
+
+  describe('the piece count of a product (plan 0278, section 2)', () => {
+    // Two bags of 35 g holding 100 candies: 70 g, a pack of 2, 100 pieces.
+    const CANDIES = {
+      id: 'i1',
+      name: { es: 'Caramelos' },
+      brand: null,
+      imageUrl: null,
+      sku: null,
+      ean: null,
+      unitSize: '70.0000',
+      approxWeight: null,
+      approxWeightSetBy: null,
+      quantityStep: null,
+      packCount: 2,
+      pieceCount: 100,
+      defaultUnit: UnitOfMeasure.GRAM,
+      productGroupId: null,
+    };
+
+    function items(held: Record<string, unknown> = CANDIES) {
+      return {
+        create: jest.fn((x) => x),
+        save: jest.fn(async (x) => ({ id: 'i1', ...x })),
+        findOne: jest.fn(async () => ({ ...held })),
+        find: jest.fn(async () => [{ ...held }]),
+        // The comparison pair an edit of the size fields rewrites (plan 0245).
+        query: jest.fn(async () => []),
+      } as unknown as jest.Mocked<Repository<Item>>;
+    }
+
+    const create = (extra: Partial<CreateItemInput>) => ({
+      userId: ADMIN,
+      name: { es: 'Caramelos' },
+      categoryIds: ['candies'],
+      defaultUnit: UnitOfMeasure.GRAM,
+      unitSize: 35,
+      ...extra,
+    });
+
+    async function refusal(work: Promise<unknown>) {
+      try {
+        await work;
+      } catch (error) {
+        return error as ItemPieceCountNotAllowedException;
+      }
+      throw new Error('expected a refusal');
+    }
+
+    it('saves a piece count on a sized product in grams or millilitres, and serves it', async () => {
+      const { service } = build({ items: items() });
+      expect(
+        (await service.create(create({ pieceCount: 50 }))).pieceCount
+      ).toBe(50);
+      expect(
+        (
+          await service.create(
+            create({ unitSize: 70, packCount: 2, pieceCount: 100 })
+          )
+        ).pieceCount
+      ).toBe(100);
+      expect(
+        (
+          await service.create(
+            create({
+              defaultUnit: UnitOfMeasure.MILLILITER,
+              unitSize: 250,
+              pieceCount: 20,
+            })
+          )
+        ).pieceCount
+      ).toBe(20);
+    });
+
+    it('is null on a create that names none, and read from the row', async () => {
+      const { service } = build({ items: items() });
+      expect((await service.create(create({}))).pieceCount).toBeNull();
+      expect(
+        (await service.get({ userId: ADMIN, itemId: 'i1' })).pieceCount
+      ).toBe(100);
+    });
+
+    it.each([
+      [
+        'a product sold by the kilo',
+        { defaultUnit: UnitOfMeasure.KILOGRAM, unitSize: null },
+      ],
+      [
+        'a piece with a weight',
+        { defaultUnit: UnitOfMeasure.UNIT, unitSize: null, approxWeight: 580 },
+      ],
+      ['a counted product', { defaultUnit: UnitOfMeasure.UNIT, unitSize: 6 }],
+      ['a pack of as many units', { packCount: 4, pieceCount: 4 }],
+      ['a pack of more units', { packCount: 6, pieceCount: 4 }],
+    ] as const)(
+      'refuses a piece count on %s with the 400 and its details',
+      async (_name, shape) => {
+        const repository = items();
+        const { service } = build({ items: repository });
+        const error = await refusal(
+          service.create(create({ pieceCount: 4, ...shape }))
+        );
+        expect(error).toBeInstanceOf(ItemPieceCountNotAllowedException);
+        expect(error.code).toBe('item_piece_count_not_allowed');
+        expect(error.details).toEqual({
+          pieceCount: 'pieceCount' in shape ? shape.pieceCount : 4,
+          packCount: 'packCount' in shape ? shape.packCount : null,
+          unitSize: 'unitSize' in shape ? shape.unitSize : 35,
+          defaultUnit:
+            'defaultUnit' in shape ? shape.defaultUnit : UnitOfMeasure.GRAM,
+        });
+        expect(repository.save).not.toHaveBeenCalled();
+      }
+    );
+
+    it('refuses a count off its bounds on a sized product', async () => {
+      const { service } = build({ items: items() });
+      for (const pieceCount of [1, 0, 10001, 2.5]) {
+        const error = await refusal(service.create(create({ pieceCount })));
+        expect(error).toBeInstanceOf(ItemPieceCountNotAllowedException);
+        expect(error.details).toMatchObject({ pieceCount });
+      }
+      const error = await refusal(
+        service.update({ userId: ADMIN, itemId: 'i1', pieceCount: 1 })
+      );
+      expect(error).toBeInstanceOf(ItemPieceCountNotAllowedException);
+      expect(error.details).toMatchObject({ itemId: 'i1', pieceCount: 1 });
+    });
+
+    it('names the index of a batch entry', async () => {
+      const { service } = build({ items: items() });
+      const error = await refusal(
+        service.createMany({
+          userId: ADMIN,
+          items: [
+            create({ pieceCount: 50 }),
+            create({ unitSize: null, pieceCount: 50 }),
+          ],
+        })
+      );
+      expect(error).toBeInstanceOf(ItemPieceCountNotAllowedException);
+      expect(error.details).toMatchObject({ index: 1, pieceCount: 50 });
+    });
+
+    it.each([
+      ['a cleared size', { unitSize: null }],
+      ['a change of unit', { defaultUnit: UnitOfMeasure.UNIT, unitSize: 2 }],
+      ['a pack count raised to the piece count', { packCount: 100 }],
+    ] as const)(
+      'refuses %s on a product with pieces without a null count, and saves it with one',
+      async (_name, edit) => {
+        const { service } = build({ items: items() });
+        const error = await refusal(
+          service.update({ userId: ADMIN, itemId: 'i1', ...edit })
+        );
+        expect(error).toBeInstanceOf(ItemPieceCountNotAllowedException);
+        expect(error.details).toMatchObject({ itemId: 'i1', pieceCount: 100 });
+
+        const saved = await service.update({
+          userId: ADMIN,
+          itemId: 'i1',
+          ...edit,
+          pieceCount: null,
+        });
+        expect(saved.pieceCount).toBeNull();
+      }
+    );
+
+    it('refuses the one entry of a batch edit that raises the pack count to the stored piece count', async () => {
+      const BAG = '0b1c2d3e-4f50-4617-8899-aabbccddeef1';
+      const PACK = '0b1c2d3e-4f50-4617-8899-aabbccddeef2';
+      const repository = {
+        ...items(),
+        find: jest.fn(async () => [
+          { ...CANDIES, id: BAG, packCount: null, pieceCount: 50 },
+          { ...CANDIES, id: PACK },
+        ]),
+      } as unknown as jest.Mocked<Repository<Item>>;
+      const { service } = build({ items: repository });
+      const error = await refusal(
+        service.updateMany({
+          userId: ADMIN,
+          items: [
+            // Below the piece count of 100: allowed on its own.
+            { itemId: PACK, packCount: 4 },
+            // The merged state is a pack count of 50 beside 50 pieces.
+            { itemId: BAG, packCount: 50 },
+          ],
+        })
+      );
+      expect(error).toBeInstanceOf(ItemPieceCountNotAllowedException);
+      expect(error.code).toBe('item_piece_count_not_allowed');
+      // An edit names its product, as every edit rule does; the position of
+      // an entry is named by a batch create, whose entries have no id yet.
+      expect(error.details).toMatchObject({
+        itemId: BAG,
+        pieceCount: 50,
+        packCount: 50,
+      });
+      expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    it('lets the existing rules answer first', async () => {
+      const { service } = build({ items: items() });
+      // A weight beside a size is the weight rule's.
+      await expect(
+        service.update({ userId: ADMIN, itemId: 'i1', approxWeight: 70 })
+      ).rejects.toBeInstanceOf(ItemApproxWeightBesideSizeException);
+      // A step on a sized product is the step rule's.
+      await expect(
+        service.update({ userId: ADMIN, itemId: 'i1', quantityStep: 100 })
+      ).rejects.toBeInstanceOf(ItemQuantityStepNotAllowedException);
+      // A size on a kilo is the unit rule's.
+      await expect(
+        service.update({
+          userId: ADMIN,
+          itemId: 'i1',
+          defaultUnit: UnitOfMeasure.KILOGRAM,
+        })
+      ).rejects.toMatchObject({ code: 'item_kilogram_has_size' });
+    });
+
+    it('sets a piece count with an update and audits it', async () => {
+      const { service, audit } = build({
+        items: items({ ...CANDIES, pieceCount: null }),
+      });
+      expect(
+        (await service.update({ userId: ADMIN, itemId: 'i1', pieceCount: 100 }))
+          .pieceCount
+      ).toBe(100);
+      expect(audit.recorded.map((row) => [row.before, row.after])).toEqual([
+        [{ pieceCount: null }, { pieceCount: 100 }],
+      ]);
+    });
+
+    it('leaves the piece count alone on an edit that names nothing of the size', async () => {
+      const { service } = build({ items: items() });
+      const saved = await service.update({
+        userId: ADMIN,
+        itemId: 'i1',
+        sku: 'X-1',
+      });
+      expect(saved.pieceCount).toBe(100);
+    });
+
+    it('compares the piece count an edit expects, as a number', async () => {
+      const { service } = build({ items: items() });
+      await expect(
+        service.update({
+          userId: ADMIN,
+          itemId: 'i1',
+          sku: 'X-1',
+          expect: { pieceCount: null },
+        })
+      ).rejects.toMatchObject({
+        code: 'item_expectation_failed',
+        details: {
+          failures: [
+            {
+              itemId: 'i1',
+              fields: [{ field: 'pieceCount', expected: null, actual: 100 }],
+            },
+          ],
+        },
+      });
+      await expect(
+        service.update({
+          userId: ADMIN,
+          itemId: 'i1',
+          sku: 'X-1',
+          expect: { pieceCount: 100, packCount: 2 },
+        })
+      ).resolves.toMatchObject({ pieceCount: 100 });
     });
   });
 

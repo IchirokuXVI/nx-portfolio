@@ -80,6 +80,28 @@ export const ERROR_CATALOG: Record<
     en: 'This basket was started at a shop, and that shop cannot be changed.',
     es: 'Esta cesta se empezó en una tienda, y esa tienda no se puede cambiar.',
   },
+  // A fact about the row, so the client knows the buy belongs on the line the
+  // row already shows (plan 0273).
+  [ERROR_CODES.BASKET_LINE_ALREADY_IN_ROW]: {
+    en: 'That list already has this product in the basket.',
+    es: 'Esa lista ya tiene este producto en la cesta.',
+  },
+  // Facts about the row and the product, so the client stops offering the
+  // buy for another list (plan 0273).
+  [ERROR_CODES.BASKET_ROW_HAS_NO_PRODUCT]: {
+    en: 'This row has no product, so it cannot be bought for another list.',
+    es: 'Esta fila no tiene producto, así que no se puede comprar para otra lista.',
+  },
+  [ERROR_CODES.BASKET_PRODUCT_HAS_NO_NAME]: {
+    en: 'This product has no name yet, so it cannot be added to that list.',
+    es: 'Este producto aún no tiene nombre, así que no se puede añadir a esa lista.',
+  },
+  // Says what to do, because the person did nothing wrong and the same tap a
+  // moment later is the fix (plan 0273, amended on 2026-11-22).
+  [ERROR_CODES.CATALOG_UNAVAILABLE]: {
+    en: 'We could not reach the product catalog just now. Please try again.',
+    es: 'Ahora mismo no hemos podido consultar el catálogo de productos. Inténtalo de nuevo.',
+  },
   // It carries its number in the message rather than only in a code, because
   // the client's job is to say it: "somebody else moved this, it is 3 now" is
   // actionable and "that failed" is not (plan 0057, section 5).
@@ -249,6 +271,10 @@ export const ERROR_CATALOG: Record<
   [ERROR_CODES.ITEM_QUANTITY_STEP_NOT_ALLOWED]: {
     en: 'Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.',
     es: 'Solo un producto que se vende por kilo tiene un paso, y el paso es uno de los permitidos. Elige un paso permitido o quita el paso.',
+  },
+  [ERROR_CODES.ITEM_PIECE_COUNT_NOT_ALLOWED]: {
+    en: 'Only a product with a fixed size in grams or millilitres has a piece count, from 2 to 10000 and above its pack count. Correct the count, or clear it.',
+    es: 'Solo un producto con un tamaño fijo en gramos o mililitros tiene un número de piezas, de 2 a 10000 y mayor que el número de unidades del pack. Corrige el número o quítalo.',
   },
   [ERROR_CODES.ITEM_MERGED]: {
     en: 'This product was merged into another one. Work on the product it was merged into.',

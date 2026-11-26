@@ -5,7 +5,7 @@ import {
   type LineUnitProduct,
 } from '@portfolio/velista/models';
 import { formatMoney, formatQuantity } from '@portfolio/velista/platform';
-import { productSizeText, type SizeTranslate } from './product-size';
+import { NO_COUNTS, productSizeText, type SizeTranslate } from './product-size';
 
 /**
  * What a line's amount costs with one product, as the caption under a member's
@@ -71,7 +71,10 @@ function amountOf(
     product.unit,
     locale,
     translate,
-    product.approxWeight
+    product.approxWeight,
+    // The caption multiplies the total already, so it prints it alone
+    // (velista `0209`, O3 A).
+    NO_COUNTS
   );
   if (count === null) {
     return formatQuantity(line.quantity, line.unit, locale);

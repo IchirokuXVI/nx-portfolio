@@ -44,6 +44,8 @@ const OFFER: ProductOffer = {
 
 const OIL: CatalogProduct = {
   id: 'item-oil',
+  packCount: null,
+  pieceCount: null,
   quantityStep: null,
   name: { es: 'Aceite de oliva virgen extra', en: 'Extra virgin olive oil' },
   brand: 'Hacendado',
@@ -394,12 +396,33 @@ describe('productRowView', () => {
     });
   });
 
-  it('puts the pack after the brand and the size (velista 0162)', () => {
-    const view = productRowView({ ...OIL, packCount: 4 }, options());
-
-    expect(view.detail).toBe(
-      'Hacendado · list.add.size.LITER {"size":"1"} · list.add.card.pack {"count":4}'
+  it('prints the pack inside the size, with no separate pack word (velista 0209)', () => {
+    const view = productRowView(
+      { ...OIL, size: 2, packCount: 4, pieceCount: null },
+      options()
     );
+
+    expect(view.detail).toContain('list.add.size.packOf');
+    expect(view.detail).not.toContain('list.add.card.pack');
+    expect(view.label).toContain('list.add.size.packOf');
+  });
+
+  it('prints the pieces inside the size (velista 0209)', () => {
+    const view = productRowView(
+      { ...OIL, packCount: null, pieceCount: 100 },
+      options()
+    );
+
+    expect(view.detail).toContain('list.add.size.pieces');
+  });
+
+  it('prints the pack as its own words only with no size (velista 0209)', () => {
+    const view = productRowView(
+      { ...OIL, size: null, packCount: 4, pieceCount: null },
+      options()
+    );
+
+    expect(view.detail).toBe('Hacendado · list.add.card.pack {"count":4}');
   });
 
   it('names the product, then the size, then the price', () => {

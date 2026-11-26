@@ -7,14 +7,19 @@ import {
 import {
   BasketFinishedException,
   ForbiddenException,
+  NotFoundException,
+  StaleQuantityException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import type { ListLine } from '../entities';
+import { DataSource, type EntityManager } from 'typeorm';
+import { LineSettlement, ListLine } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { assertLineUnit, requireLineUnit } from '../lists/line-unit-rules';
 import { LineService } from '../lists/line.service';
 import { ListAccessService } from '../lists/list-access.service';
 import { canChangeDemand } from '../lists/list-acts';
+import { buysOf, rebalanceApplied } from './basket-applied';
+import { basketScopeOf } from './basket-line-facts';
 import {
   BasketWriteContext,
   type OpenBasketWrite,
@@ -26,8 +31,29 @@ import {
  *
  * It replaces `setOriginQuantity`, the demand side of `setOutstanding`, and
  * `BelowSettledException`, whose floor ("fewer than this basket has already
- * bought for this list") cannot be stated at all now that `asked` is
- * `bought + left`: there is no stored number for a purchase to be below.
+ * bought for this list") is not a refusal any more.
+ *
+ * ## An ask below what the buys met (plan 0274, section 5)
+ *
+ * `quantity` is what the list asks from now on, and the ask is the line's
+ * `left` plus the units of this basket's buys that met it (`applied`). So an
+ * ask of `n` below what the buys met cannot be a line quantity: the line goes
+ * to 0, and `applied` is lowered on this basket's standing buys of the line,
+ * newest first, until it adds up to `n`. The units taken off become units
+ * above the ask, which a minus takes first. {@link rebalanceApplied} is that
+ * arithmetic.
+ *
+ * ## An ask raised above what the buys met raises the line (plan 0276)
+ *
+ * The line takes the rest of `n` above what the buys meet, and the raise takes
+ * every unit bought above the ask into the ask under the same lock
+ * (`LineService.absorbExtra`), this basket's own included. So an ask that asks
+ * 3, bought 5, set to 5 writes the line 2 and takes the 2 extra in: the ask
+ * ends at 7. Plan 0274 folded this basket's own extra into the raised ask
+ * instead, and that fold is gone: the absorption replaces it.
+ *
+ * Nothing about it is a refusal: a household that asks for less than was
+ * already bought asks for less, and what was bought stays bought.
  *
  * ## The permission is the owner's, never the actor's
  *
@@ -68,7 +94,10 @@ export class BasketDemandService {
     private readonly lines: LineService,
     // The **owner's** permissions on the entry's list, never the actor's.
     private readonly listAccess: ListAccessService,
-    private readonly events: CoreEventsPublisher
+    private readonly events: CoreEventsPublisher,
+    // The split of this basket's buys between the ask and above it (plan
+    // 0274, section 5). Last, so no positional construction has to shift.
+    private readonly dataSource: DataSource
   ) {}
 
   async setDemand(req: SetBasketRowDemandRequest): Promise<BasketRowResult> {
@@ -100,11 +129,73 @@ export class BasketDemandService {
       );
     }
 
-    const delta = req.quantity - req.from;
-    if (delta === 0) {
+    // What this basket's buys of the line met, read before anything is locked
+    // to know which write this is, and read again under the lock below.
+    const scope = await basketScopeOf(this.dataSource, opened.basket);
+    const planned = rebalanceApplied(
+      await buysOf(this.dataSource.manager, opened.basket.id, entry, scope),
+      req.quantity
+    );
+    const delta = planned.left - req.from;
+    if (delta === 0 && planned.changes.size === 0) {
       // A delta of zero writes nothing and answers the row. `addQuantity`
       // refuses one as a client bug, and from here it is an ordinary no-op: a
       // reel let go where it started.
+      return opened.result([entry.id]);
+    }
+
+    /**
+     * The same arithmetic under the lock the line write holds, and the write of
+     * `applied` it gives. A settle or a revert that landed since the read above
+     * moved either the line or this basket's buys, and the gesture is refused
+     * as `from` refuses it rather than applied to numbers nobody was shown.
+     */
+    const underLock = async (
+      manager: EntityManager,
+      line: ListLine
+    ): Promise<void> => {
+      const now = rebalanceApplied(
+        await buysOf(manager, opened.basket.id, line, scope),
+        req.quantity
+      );
+      if (now.left !== line.quantity + delta) {
+        throw new StaleQuantityException(
+          'Somebody else changed this while you were looking at it',
+          { messageArgs: { current: line.quantity } }
+        );
+      }
+      const settlements = manager.getRepository(LineSettlement);
+      for (const [id, applied] of now.changes) {
+        await settlements.update({ id }, { applied });
+      }
+    };
+
+    if (delta === 0) {
+      // The line keeps its number and only the split of this basket's buys
+      // moves (plan 0274, section 5): an ask set below what the buys met,
+      // with the line already at 0. Nothing changed on the list, so no other
+      // basket's rows moved, and this basket is told alone. It reports
+      // nothing (plan 0276, section 12).
+      await this.dataSource.transaction(async (manager) => {
+        const line = await manager.getRepository(ListLine).findOne({
+          where: { id: entry.id },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!line || line.deletedAt !== null) {
+          throw new NotFoundException('Row not found');
+        }
+        assertLineUnit(line, req.unit);
+        if (line.quantity !== req.from) {
+          throw new StaleQuantityException(
+            'Somebody else changed this while you were looking at it',
+            { messageArgs: { current: line.quantity } }
+          );
+        }
+        await underLock(manager, line);
+      });
+      opened.announceBasketMoved([
+        { listId: entry.listId, lineId: entry.id, recorded: false },
+      ]);
       return opened.result([entry.id]);
     }
 
@@ -112,25 +203,32 @@ export class BasketDemandService {
     // the actor's own. `expect` carries the `from` bargain into the locked read,
     // so a settle that landed between the resolve and the write refuses this
     // rather than overwriting it.
-    await this.lines.addQuantity({
-      userId: opened.basket.ownerUserId,
-      lineId: entry.id,
-      delta,
-      unit: req.unit,
-      expect: req.from,
-      // The change record names the person who moved it and the basket they
-      // moved it from, which is **not** the owner above (plan 0138, section 4):
-      // a guest shopping somebody else's list leaves a change with a participant
-      // and no account.
-      via: opened.via(),
-    });
+    const written = await this.lines.addQuantity(
+      {
+        userId: opened.basket.ownerUserId,
+        lineId: entry.id,
+        delta,
+        unit: req.unit,
+        expect: req.from,
+        // The change record names the person who moved it and the basket they
+        // moved it from, which is **not** the owner above (plan 0138, section
+        // 4): a guest shopping somebody else's list leaves a change with a
+        // participant and no account.
+        via: opened.via(),
+        // A raise answers what it took into the ask when asked (plan 0276).
+        // A lowering answers nothing, whatever the flag says.
+        ...(req.reportExtra === true && delta > 0 ? { reportExtra: true } : {}),
+      },
+      underLock
+    );
 
     // No announcement of its own (plan 0204, section 3). `addQuantity` tells
     // every basket that covers the list what the line reads now, this one
     // included, and says that the marks moved: the other people of this basket
     // are shown the change (plan 0138, section 5). A second announcement here
     // would be the same patch computed twice.
-    return opened.result([entry.id]);
+    const result = await opened.result([entry.id]);
+    return written.extra ? { ...result, extra: written.extra } : result;
   }
 
   /**
@@ -143,10 +241,14 @@ export class BasketDemandService {
    * "a guest can change demand on single entry rows only". The refusal is the
    * one of before, so the route cannot be used to learn which households the
    * redaction withheld.
+   *
+   * Not private: "Count the extra" on a row names its line by the same rule
+   * (plan 0276, section 9), and two copies of it are two rules to keep in
+   * step.
    */
-  private async pick(
+  async pick(
     opened: OpenBasketWrite,
-    req: SetBasketRowDemandRequest
+    req: Pick<SetBasketRowDemandRequest, 'rowKey' | 'lineId'>
   ): Promise<ListLine> {
     if (typeof req.lineId !== 'string' || req.lineId.length === 0) {
       throw new ValidationException('lineId is required', {
@@ -170,9 +272,10 @@ export class BasketDemandService {
    *
    * It is asked again here rather than trusted from the read, for the reason
    * section 5.2 of plan 0051 gives about every value that travelled: the read
-   * happened on another request, and access moves.
+   * happened on another request, and access moves. Not private, for the
+   * reason {@link pick} is not.
    */
-  private async ownerMayChange(
+  async ownerMayChange(
     ownerUserId: string,
     entry: Pick<ListLine, 'listId' | 'approvalStatus'>
   ): Promise<boolean> {
@@ -185,3 +288,11 @@ export class BasketDemandService {
     );
   }
 }
+
+// The arithmetic moved beside the count of plan 0275, which `LineService`
+// imports; named here still for the readers that know it from here.
+export {
+  rebalanceApplied,
+  type DemandBuy,
+  type DemandPlan,
+} from './basket-applied';

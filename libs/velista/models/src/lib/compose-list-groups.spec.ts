@@ -60,6 +60,7 @@ function compose(
     state?: Partial<ListViewState>;
     query?: string;
     due?: readonly string[];
+    clearing?: readonly string[];
   } = {}
 ) {
   const facts = new Map(
@@ -86,6 +87,8 @@ function compose(
     tripsLoading: options.tripsLoading,
     openKeys: new Set(options.open ?? []),
     dueLineIds: options.due,
+    clearingIds:
+      options.clearing === undefined ? undefined : new Set(options.clearing),
   };
   const context: ListViewContext = {
     query: options.query ?? '',
@@ -534,5 +537,52 @@ describe('composeListGroups, the due lines (velista 0089)', () => {
     );
 
     expect(ids(view.due)).toEqual(['yogurt', 'butter']);
+  });
+});
+
+describe('composeListGroups, a line being cleared (velista 0199)', () => {
+  it('keeps the line in To buy where it was, at 0, while its write is out', () => {
+    const view = groups(
+      compose(
+        [
+          { id: 'bread', quantity: 2 },
+          { id: 'milk', quantity: 0 },
+          { id: 'eggs', quantity: 3 },
+        ],
+        { clearing: ['milk'] }
+      )
+    );
+
+    expect(ids(view.toBuy)).toEqual(['bread', 'milk', 'eggs']);
+    expect(view.wantedCount).toBe(3);
+  });
+
+  it('hides it again once it leaves the set', () => {
+    const view = groups(
+      compose(
+        [
+          { id: 'bread', quantity: 2 },
+          { id: 'milk', quantity: 0 },
+        ],
+        { clearing: [] }
+      )
+    );
+
+    expect(ids(view.toBuy)).toEqual(['bread']);
+  });
+
+  it('keeps it while the first heads read is out, and never draws it as a due line', () => {
+    const view = groups(
+      compose(
+        [
+          { id: 'bread', quantity: 2 },
+          { id: 'milk', quantity: 0, boughtCount: 2 },
+        ],
+        { clearing: ['milk'], due: ['milk'], tripsLoading: true }
+      )
+    );
+
+    expect(ids(view.toBuy)).toEqual(['bread', 'milk']);
+    expect(ids(view.due)).toEqual([]);
   });
 });

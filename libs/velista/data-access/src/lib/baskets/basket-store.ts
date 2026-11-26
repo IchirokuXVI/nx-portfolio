@@ -22,6 +22,7 @@ import {
   type BasketAccessEnded,
   type BasketAddLineRequest,
   type BasketAddress,
+  type BasketBuyForListInput,
   type BasketDemandInput,
   type BasketEntryPatch,
   type BasketListRef,
@@ -1124,12 +1125,16 @@ export class BasketStore {
    */
   async settle(
     rowKey: string,
-    body: BasketSettleInput
+    body: BasketSettleInput,
+    lineId?: string
   ): Promise<BasketRowResult | null> {
     // In the row's unit (velista `0182`): a row is one unit, and the store holds it.
     const unit = this.rowFor(rowKey)?.unit ?? 'UNIT';
-    return this._rowWrite(rowKey, (id, target) =>
-      this._service.settle(id, target, { ...body, unit })
+    return this._rowWrite(
+      rowKey,
+      (id, target) => this._service.settle(id, target, { ...body, unit }),
+      true,
+      lineId
     );
   }
 
@@ -1142,11 +1147,58 @@ export class BasketStore {
    */
   async revert(
     rowKey: string,
-    body: BasketRevertRequest
+    body: BasketRevertRequest,
+    lineId?: string
   ): Promise<BasketRowResult | null> {
-    return this._rowWrite(rowKey, (id, target) =>
-      this._service.revert(id, target, body)
+    return this._rowWrite(
+      rowKey,
+      (id, target) => this._service.revert(id, target, body),
+      true,
+      lineId
     );
+  }
+
+  /**
+   * Buy the row's product for a covered list that did not ask for it (backend
+   * `0273`; velista `0201`, target state 7).
+   *
+   * The answer is folded as an add's is: it carries a line this client may not
+   * hold, which joins the row of its product, and the read that follows names it.
+   * On a refusal the store holds the error as for any write. A `conflict` (the
+   * row's product changed under the request) and `basket_line_already_in_row`
+   * (the list is already among the row's lists) are the world having moved, so the
+   * basket is read again first and the error is put back after it.
+   *
+   * Null without a request for a row this store does not hold.
+   */
+  async buyForList(
+    rowKey: string,
+    body: BasketBuyForListInput
+  ): Promise<BasketRowResult | null> {
+    const row = this.rowFor(rowKey);
+    if (row === null) {
+      return null;
+    }
+    return this._write(row.rowKey, async (id) => {
+      try {
+        const result = await this._service.buyForList(id, row.rowKey, {
+          ...body,
+          unit: row.unit,
+        });
+        // A line the client does not hold yet, which only a read names.
+        this._fold(result, [], false);
+        return result;
+      } catch (error) {
+        if (
+          error instanceof GatewayError &&
+          (error.code === 'conflict' ||
+            error.code === 'basket_line_already_in_row')
+        ) {
+          await this.refresh();
+        }
+        throw error;
+      }
+    });
   }
 
   /**
@@ -1278,6 +1330,68 @@ export class BasketStore {
       this._fold(result, [body.lineId]);
       return result;
     });
+  }
+
+  /**
+   * "Count the extra" on one list of a row (velista `0208`, target state 17): the
+   * line's ask goes down by `amount`, expecting the entry to still hold `expect`
+   * as its `left`. The entry's `left` and `asked` go down at once; the answered
+   * line lands on success. A line that moved in between is refused
+   * (`stale_quantity`) and the basket is read again, so the entry shows the
+   * server's amount. Any other failure puts the entry back as it was.
+   *
+   * **Never sent again by itself**, and never a dropped write: a count replayed
+   * later would lower a line on numbers the person no longer sees.
+   */
+  async countExtra(
+    rowKey: string,
+    lineId: string,
+    amount: number,
+    expect: number
+  ): Promise<'counted' | 'stale' | 'failed'> {
+    const row = this.rowFor(lineId) ?? this.rowFor(rowKey);
+    const entry = row?.entries.find((held) => held.lineId === lineId);
+    if (row === null || entry === undefined) {
+      return 'failed';
+    }
+    const before = basketEntryPatchOf(entry);
+    const lowered = {
+      ...before,
+      left: Math.max(0, entry.left - amount),
+      asked: Math.max(0, entry.asked - amount),
+    };
+    this._applyPatch([lineId], [lowered]);
+    const result = await this._write(row.rowKey, async (id) => {
+      const answer = await this._service.countExtra(id, {
+        lineId,
+        unit: entry.unit,
+        amount,
+        expect,
+      });
+      this._fold(answer, [lineId]);
+      return answer;
+    });
+    if (result !== null) {
+      return 'counted';
+    }
+    const error = this._error();
+    // Put back only what this count drew: a newer state of the entry stays. A
+    // stale count was read again by the write, which then holds the server's
+    // entry; a read that failed too left the lowered one, and nothing was counted.
+    const now = this.rowFor(lineId)?.entries.find(
+      (held) => held.lineId === lineId
+    );
+    if (
+      now !== undefined &&
+      now.version === lowered.version &&
+      now.left === lowered.left &&
+      now.asked === lowered.asked
+    ) {
+      this._applyPatch([lineId], [before]);
+    }
+    return error instanceof GatewayError && error.code === 'stale_quantity'
+      ? 'stale'
+      : 'failed';
   }
 
   /**
@@ -1470,13 +1584,22 @@ export class BasketStore {
   private async _rowWrite(
     rowKey: string,
     send: (id: string, target: BasketRowTarget) => Promise<BasketRowResult>,
-    patchable = true
+    patchable = true,
+    lineId?: string
   ): Promise<BasketRowResult | null> {
-    const target = this.targetOf(rowKey);
-    if (target === null) {
+    const whole = this.targetOf(rowKey);
+    if (whole === null) {
       return null;
     }
-    return this._write(target.rowKey, async (id) => {
+    // One line of the row (velista `0201`): the server takes the path's key to be
+    // one of the named lines, so a write on one line is keyed by that line. The
+    // row's own key stays the busy key, so the row is busy while it is out.
+    if (lineId !== undefined && !whole.lineIds.includes(lineId)) {
+      return null;
+    }
+    const target: BasketRowTarget =
+      lineId === undefined ? whole : { rowKey: lineId, lineIds: [lineId] };
+    return this._write(whole.rowKey, async (id) => {
       const result = await send(id, target);
       this._fold(result, target.lineIds, patchable);
       return result;

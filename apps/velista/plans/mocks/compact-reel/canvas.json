@@ -1,0 +1,287 @@
+{
+  "title": "Velista: the compact view and the reel",
+  "lede": "Plans <code>0202</code>, <code>0203</code> and <code>0204</code>. The row of <code>0191</code> with the button stepper becomes the default view; the compact view is the two line row with the reel of <code>0043</code> restored, stepping by today's rule. A picker in the header of the zone list and of the basket chooses between them. Every frame is drawn Day in Spanish and Night in English, at 390 by 844, from the source on <code>dev</code> at <code>e06813139</code> and the reel as it was deleted at <code>d8daa824c^</code>. The lines and prices are sample data. Photos are the Open Food Facts copies from <code>../typeahead/photos</code>, CC BY-SA 3.0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. The design: icon set B and its header button \"2\"; the picker on the zone list header, and on the basket in the tools row and in the basket's menu; the filter button is a funnel, a new icon, on every zone list header and on the basket's tools row; every reel is 52 by 44 with the unit under the number, in every frame and on the open tape; Due rows say only \"Add\". Approved by the owner on 2026-11-22. Round 6 adds the question a raised line asks when units were bought above its ask. Approved by the owner on 2026-11-22; he reviews the wording after the build. Round 7 shows the question on every control that raises a line, with the amount set as the default. Approved by the owner on 2026-11-25. Aligned with plans <code>0276</code> and <code>0208</code> on 2026-11-25: after a raise the extra is always inside the ask; frames 12 to 14 are new and wait for the owner's look.",
+  "artboards": [
+    {
+      "file": "Picker.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1704,
+      "h": 1010,
+      "title": "0202: the picker on the zone list, closed and open"
+    },
+    {
+      "file": "Icons.dc.html",
+      "x": 0,
+      "y": 1100,
+      "w": 1282,
+      "h": 900,
+      "title": "The view button, final; the filter becomes a funnel"
+    },
+    {
+      "file": "Basket.dc.html",
+      "x": 0,
+      "y": 2090,
+      "w": 1260,
+      "h": 520,
+      "title": "The basket page: the picker in the tools row and in the menu, Day, 390 and 360"
+    },
+    {
+      "file": "BasketNight.dc.html",
+      "x": 0,
+      "y": 2700,
+      "w": 1260,
+      "h": 520,
+      "title": "The same, Night"
+    },
+    {
+      "file": "Default.dc.html",
+      "x": 0,
+      "y": 3310,
+      "w": 860,
+      "h": 1010,
+      "title": "The default view: the row of 0191 and the stepper"
+    },
+    {
+      "file": "Compact.dc.html",
+      "x": 920,
+      "y": 3310,
+      "w": 860,
+      "h": 1010,
+      "title": "The compact view: the same lines with the reel, 52 by 44 for every reel"
+    },
+    {
+      "file": "ReelOpen.dc.html",
+      "x": 0,
+      "y": 4410,
+      "w": 1282,
+      "h": 1010,
+      "title": "0203: a reel open mid drag, and the step rule on its tape"
+    },
+    {
+      "file": "Due.dc.html",
+      "x": 1340,
+      "y": 4410,
+      "w": 860,
+      "h": 1010,
+      "title": "0203: due rows in the compact view, the button says only Add"
+    },
+    {
+      "file": "Product.dc.html",
+      "x": 0,
+      "y": 5510,
+      "w": 860,
+      "h": 1010,
+      "title": "0203: the product page's table of lists, compact"
+    },
+    {
+      "file": "Sheet.dc.html",
+      "x": 920,
+      "y": 5510,
+      "w": 860,
+      "h": 1010,
+      "title": "0204: the basket row sheet, compact, green at the ask and amber above it"
+    },
+    {
+      "file": "ReelUnit.dc.html",
+      "x": 0,
+      "y": 6610,
+      "w": 1760,
+      "h": 1270,
+      "title": "The reel, final: 52 by 44, the unit under the number, the open tape and a whole list"
+    },
+    {
+      "file": "OverBought.dc.html",
+      "x": 0,
+      "y": 7970,
+      "w": 2962,
+      "h": 3820,
+      "title": "Round 6: a raised line asks whether the units bought above its ask count"
+    },
+    {
+      "file": "OverBoughtEverywhere.dc.html",
+      "x": 0,
+      "y": 11880,
+      "w": 2962,
+      "h": 7530,
+      "title": "Round 7, final: the question on every control that raises a line, and the amount set stands"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "plans",
+      "x": 0,
+      "y": -330,
+      "w": 520,
+      "text": "WHICH PLAN EACH FRAME ANSWERS.\nPicker, Icons and Basket: velista 0202, section 1, frames 1 and 2.\nDefault and Compact: 0202 frame 3, and 0203 frames 1 and 5. The two boards draw the same ten lines, so the rows can be counted side by side.\nReel open: 0203 frame 2 and spec 2.\nDue rows: 0203 frame 3. Product page: 0203 frame 4.\nRow sheet: 0204, the one frame it asks for, under the rewritten 0200 and 0201.\nEvery zone list frame draws the header of velista 0205: the list's name, and under it \"in Casa\" / \"en Casa\" in the small muted size, both inside the 64 px block. The head block above the search field has no group line."
+    },
+    {
+      "id": "measure",
+      "x": 560,
+      "y": -330,
+      "w": 520,
+      "text": "MEASURED ON THESE FRAMES.\nThe control: the stepper is 155 by 48. The reel is 52 by 44 in every frame, the number over its unit.\nRoom for words at 390: in the compact row the name and its price share 238 px; the same two line row with the stepper left them 135 px.\nRows: the default row is 99 px, the compact row 68 px. Between the search field and the bar there are 629 px, now that the group line sits in the header (velista 0205): six rows and a third of the seventh in the default view, nine and a quarter in the compact one. About 45 percent more rows on a screen."
+    },
+    {
+      "id": "choose",
+      "x": 1120,
+      "y": -330,
+      "w": 560,
+      "text": "DECIDED BY THE OWNER.\nIcon set B, and its header button (\"2\").\nThe picker on the zone list header, and on the basket in the tools row and in the basket's menu (no fourth header action).\nOne size for every reel, 52 by 44 with the unit under the number.\nDue rows say only \"Add\".\nThe funnel replaces the sliders for the filter on the zone list header and on the basket's tools row (board Icons).\nThe words as drawn: \"Normal\" for Default in Spanish, and Compact as a name with \"More rows on the screen\" under it, because one line with a colon wraps at 276 px."
+    },
+    {
+      "id": "staging",
+      "x": 1760,
+      "y": 0,
+      "w": 420,
+      "text": "NO SCREENSHOTS OF TODAY.\nThe staging test account in tmp/velista-user-staging no longer signs in: staging refused it on 2026-11-22 with \"that email and password do not match\". The production copy onto staging of 2026-11-19 probably replaced it. So every frame is drawn from source, and the default view board stands in for today's row."
+    },
+    {
+      "id": "picker",
+      "x": 1760,
+      "y": 330,
+      "w": 420,
+      "text": "THE PICKER.\nThe first header action on the zone list, before the filter, as plan 0202 asks (beside the filter). Its name is \"View\" / \"Vista\". The popover is the choice frame of AnchoredPopover: 276 px, rows to its edges, the raised surface, the hairline and the second elevation. The current row carries the tick in the quiet amber and the heavier weight; that is the only accent."
+    },
+    {
+      "id": "tape",
+      "x": 2260,
+      "y": 4410,
+      "w": 520,
+      "text": "THE TAPE RUNS SIDEWAYS.\nAs the reel of 0043 did: previous, current and next in a row, 56 px tall, growing left from the reel. It covers its own row's name and price; on a 68 px row it stays inside the row and only its shadow reaches the rows above and below. Plan 0203 frame 2 says \"over the next row\"; this is that overlay as it was built. A tape that runs down over the next row would be a new gesture, not a restore.\nA weight writes its words on the tape: 975 g, 1 kg, 1,05 kg. The spec's 925, 950, 975, 1000, 1050 are the same steps in grams."
+    },
+    {
+      "id": "pill",
+      "x": 2260,
+      "y": 4840,
+      "w": 420,
+      "text": "TWO CHANGES TO THE OLD PILL.\nThe restored pill had a minimum width of 52 and grew with its words, so \"1,5 kg\" made a wider reel than \"6\" and the column broke. The box is fixed at 52 by 44 with the unit under the number, so every value fits and the column holds. Everything else is the old stylesheet: the subtle border, 12 px radius, the zero style with no fill.\nThe tape's neighbours print their unit at 11 px, the app's floor."
+    },
+    {
+      "id": "funnel",
+      "x": 1340,
+      "y": 1100,
+      "w": 440,
+      "text": "THE FUNNEL IS A NEW ICON.\nNo funnel exists in libs/velista/ui icons or in libs/shared/ui. This is a new glyph for libs/velista/ui/src/lib/icons/icons.ts, drawn at the 1.8 stroke and round joins of the header's other icons. It replaces the sliders of FilterIcon on every zone list header and on the basket's tools row, the real basket filter button included.\nThe build removes the comment on FilterIcon in icons.ts that chose the sliders over a funnel.\nAn active filter keeps today's mark: the glyph in the quiet amber and the count over its corner. The count badge's distance from the funnel is judged on a device after the build."
+    },
+    {
+      "id": "reelunit",
+      "x": 1820,
+      "y": 6610,
+      "w": 460,
+      "text": "THE REEL, FINAL.\n52 by 44, the unit under the number: number 15 px bold, unit 11 px, the size of the \"/ kg\" beside the price. The build needs two tokens: --app-quantity-width 52 px and --app-quantity-height 44 px.\nThe pill fills the 44 px tap box the reel already had, so the compact row stays 68 px.\nThe widest figure, \"99,95\", is 38.6 px at 15 px bold; the pill's inside is 46 px, so every value fits. A count has no unit and its number sits centred in the same box; its ceiling, 99 999, prints \"100\" over \"K\".\nWith the reel at 52 px the name and its price share 238 px in the compact row.\nThe reel takes snap points: 1000, and on the basket row sheet the list's ask. A drag lands exactly on a snap point even when the step would skip it."
+    },
+    {
+      "id": "sheet",
+      "x": 1840,
+      "y": 5510,
+      "w": 440,
+      "text": "THE ROW SHEET (0204).\nThe colours of 0201 move onto the reel: the resting number and every number on the tape are green when equal to the list's ask and amber above it. Both pass the contrast floor on the raised surface and on the tape: green 5.5 to 1 and amber 4.9 to 1 on Day, both above 8 to 1 on Night.\nThe label is \"<list> · <ask>\", the list name cut first and the ask never. No menu trigger on a row: plan 0200 dropped it. The lists' heading reads \"What you bought\" / \"Lo que has comprado\" (0201), with the text button \"Lists and amounts\" / \"Listas y cantidades\" on its right, which opens the detailed view (0200). \"Bought for another list\" draws reels too, from 0."
+    },
+    {
+      "id": "ob-words",
+      "x": 3020,
+      "y": 7970,
+      "w": 520,
+      "text": "ROUND 6, THE WORDS (A, chosen by the owner).\nThe unit goes on the answers only; the sentence has none. A count: \"ud\" / \"uds\" with no period, \"unit\" / \"units\" in English. A weight keeps its unit everywhere, since a weight is not readable without one.\nES: \"Marta ya compró 1 de más. ¿Sigues necesitando 2 o solo 1?\" Answers: \"Sigo necesitando\" 2 uds, \"Contar lo comprado de más\" 1 ud.\nEN: \"Marta already bought 1 extra. Do you still need 2, or just 1?\" Answers: \"Still need\" 2 units, \"Count the extra\" 1 unit.\nWhen the extra covers it: \"Marta ya compró 1 de más. ¿Sigues necesitando 1 o con eso basta?\" with \"Sigo necesitando\" 1 ud and \"Con eso basta\"; \"Marta already bought 1 extra. Do you still need 1, or is that enough?\" with \"Still need\" 1 unit and \"That's enough\". Nothing says 0.\nA weight: \"Marta ya compró 500 g de más. ¿Sigues necesitando 1,5 kg o solo 1 kg?\" with 1,5 kg and 1 kg; in English 1.5 kg.\nWHO BOUGHT IT (frames 5 and 9 to 12). Two: \"Marta y Luis ya compraron 2 de más.\" / \"Marta and Luis already bought 2 extra.\" Three or more: \"3 personas ya compraron 2 de más.\" / \"3 people already bought 2 extra.\" The person raising it: \"Ya compraste 1 de más.\" / \"You already bought 1 extra.\" No name: \"Alguien ya compró 1 de más.\" / \"Someone already bought 1 extra.\" The question after it is the same in each.\nThe build adds \"ud\" / \"uds\" and \"unit\" / \"units\" as keys with a count, so 1 takes the singular. \"de más\" and \"extra\" avoid a noun, so the Spanish needs no gender for \"huevos\" or \"leche\"."
+    },
+    {
+      "id": "ob-frame",
+      "x": 3020,
+      "y": 8640,
+      "w": 520,
+      "text": "ROUND 6, THE FRAME.\nThe choice frame of AnchoredPopover (276 px, rows to the edges, the raised surface, the hairline, the second elevation) with the add choice's inside: a 15 px 600 title and 48 px rows. No icon and no tint, as the existing popovers have none.\nIt sits wholly above or wholly below the asked row, aligned to the row's end, its pointer's tip 3 to 4 px off the row's edge: below when the row is near the top of the screen (frames 1 and 4), above when it is near the bottom (frames 2, 3 and 5), as AnchoredPopover already flips between its two sides. Measured on this board: none of the 25 popovers, pointer included, overlaps its own row's box or its control, and every pointer's centre is on the control's centre (the stepper's or the reel's).\nFocus starts on the first answer, \"Still need\". Escape, a press outside and the back gesture close it with no answer, so the extra counts (frame 6)."
+    },
+    {
+      "id": "ob-pointer",
+      "x": 3020,
+      "y": 9180,
+      "w": 520,
+      "text": "A RULE FOR EVERY POPOVER THAT REFERS TO ONE CONTROL (the owner).\nIt has a pointer, a small arrow on its edge aimed at that control, so it cannot be taken for another row's. And it never hides what it points at: not the control, and not the row's name, price and picture.\nThis reaches every such popover, the disabled stepper's popover in ../basket-row-buys included.\nAnchoredPopover (libs/velista/ui/src/lib/list/anchored-popover) has no pointer today: it flips between above and below, and that is all. The build adds one: a 12 px square turned 45 degrees, in the popover's own raised surface with its hairline on the two outer sides, so the pointer and the popover read as one shape. Its centre follows the anchor's centre on the side the popover opened."
+    },
+    {
+      "id": "ob-when",
+      "x": 3020,
+      "y": 9640,
+      "w": 520,
+      "text": "WHEN IT SHOWS (the owner, ruled).\nThe popover opens only after the control's quiet beat has passed AND the save request has answered. A run of presses therefore asks once, about the amount the person stopped on.\nBy then the person may have scrolled on. If the row is no longer in view, the page scrolls to it by itself first (frame 8), placing it where the popover fits, then opens the question.\nTo be noticed, the row and the popover flash (frame 7), proposed in numbers: 3 pulses, each 600 ms (240 ms in, 120 ms held, 240 ms out), 200 ms apart, 2.2 s in all. The accent is the quiet amber at quiet strength: the row takes the quiet amber wash (the fill of the bar's current tab, 10 percent) and a 1.5 px outline, and the popover's border and pointer take the quiet amber text colour. No fill on the popover. Under prefers-reduced-motion nothing pulses: the accent frame holds steady for the same 2.2 s and then goes, and the scroll jumps instead of gliding.\nContrast in the accent frame: the smallest muted text (11 px) is 4.8 to 1 on the Day wash and 6.5 to 1 on the Night wash."
+    },
+    {
+      "id": "ob-decided",
+      "x": 3020,
+      "y": 10200,
+      "w": 560,
+      "text": "ROUND 6, DECIDED BY THE OWNER (2026-11-22).\n1. Alternative A: one sentence, then two answers. B and C are off the board.\n2. The unit goes on the answers only: \"2 uds\" / \"2 units\", \"1 ud\" / \"1 unit\", with no period. The sentence prints a count bare. A weight keeps its unit everywhere.\n3. The buyer: one name, two names, a head count from three people, \"you\" when the person raising it bought it (also when a guest bought it and the list's owner, whom the buy names, is that person), \"Alguien\" / \"Someone\" with no name (frames 5 and 9 to 12). He reviews these words after the build.\n4. With no answer, the extra counts. Leaving the page, or closing the popover without an answer, drops the question, and the line keeps the amount still needed after the extra: the smaller amount, or 0 when the extra covers it. \"Still need\" is the answer that changes something (frame 6).\n5. After \"Still need\" the line does not ask again while the person stays on the page. A later raise asks again only while extra units remain that nobody counted.\n6. Only the zone list rows ask: the stepper and the reel. The line page and the line sheet do not ask and do not count the extra.\n7. The stepper and the reel print a count bare, as today. The unit rule is for the popover's answers only."
+    },
+    {
+      "id": "ev-aligned",
+      "x": 3020,
+      "y": 11880,
+      "w": 520,
+      "text": "ALIGNED WITH PLANS 0276 AND 0208 ON 2026-11-25.\nThe owner's rule: after a raise the extra always ends up inside the ask. \"Still need\", also the default with no answer, leaves the larger number; \"Count the extra\" lowers it. Nothing is remembered about an answer. Y is what the control shows after \"Still need\", Z after \"Count the extra\".\n1. Frame 10: the notice says the decided words of list.extra.stale and closes on the next touch.\n2. Frame 8: the caption gives the true reason a later raise asks nothing; note 5 of the decisions below says the same.\n3. New frame 12: \"Lists and amounts\" over this shopping list's own extra, 5 while the write is out, then 7 with the question, then 5 after \"Count the extra\".\n4. New frame 13: the \"enough\" wording, Z = 0.\n5. New frame 14: the list.extra.countFailed notice.\n6. Every other frame's numbers checked against Y and Z and the cases of backend 0276; none contradicted them.\nFrames 12 to 14 are drawn from the owner's decisions of 2026-11-25, to be looked at by the owner."
+    },
+    {
+      "id": "ev-decided",
+      "x": 3020,
+      "y": 12374,
+      "w": 520,
+      "text": "ROUND 7, DECIDED BY THE OWNER (2026-11-25).\n1. The board is final: the question on every control that raises a line, and the amount set stands.\n2. \"Lists and amounts\" asks about every extra, bought through this shopping list or another one. One rule everywhere, with no exception (frame 6).\n3. A line that changed before the answer: \"Count the extra\" is refused and the person is told (frame 10).\n4. An answer that arrives while the control is out of sight but still on the current page: the page scrolls to it and opens the question (frame 11).\n5. After either answer the extra is inside the ask, so a later raise has nothing to ask about; the question returns only when someone buys above the ask again (frame 8).\n6. The shopping list's \"Add or find\" (frame 7) stays marked as likely to be removed."
+    },
+    {
+      "id": "ev-superseded",
+      "x": 3020,
+      "y": 12802,
+      "w": 520,
+      "text": "ROUND 7 REPLACES ONE RULE OF ROUND 6.\nThe default drawn on the round 6 board (its frame 6: no answer and leaving keep the smaller amount) is superseded. The amount set now stands; only \"Count the extra\" lowers the line (velista 0208, ruled by the owner on 2026-11-23).\nThe round 6 board stays the record of the popover's look: the frame, the words, the pointer and the flash."
+    },
+    {
+      "id": "ev-focus",
+      "x": 3020,
+      "y": 13076,
+      "w": 520,
+      "text": "FOCUS.\nWhen the popover opens, focus is on \"Still need\", the answer that changes nothing; frames 1 to 4, 6, 7, 8 and 11 to 13 draw its ring.\nWhen a text field holds focus it keeps it (frame 5): the question opens with no focus move and is announced. The notices of frames 10 and 14 take no focus either; they are announced."
+    },
+    {
+      "id": "ev-place",
+      "x": 3020,
+      "y": 13328,
+      "w": 520,
+      "text": "WHERE IT GOES.\nThe same popover everywhere: 276 px, end aligned, its pointer on the centre of the control.\nMeasured on every frame of this board: no popover overlaps its control, or the row, card or table row it keeps in sight, and every pointer sits within 0.3 px of its control's centre.\nSides: the sheet above the amount row (Saved stays in sight); the line page below (no room above); a catalog card below the card; the product table above the row (every list stays in sight); the zone list below the row (the field is above); \"Lists and amounts\" above the row.\nThe notices of frames 10 and 14 take the place of the question they follow, below the row."
+    },
+    {
+      "id": "ev-basket-open",
+      "x": 3020,
+      "y": 13690,
+      "w": 520,
+      "text": "WHAT \"LISTS AND AMOUNTS\" ASKS ABOUT (velista 0208, question 1, decided).\nEvery extra, bought through this shopping list or through another one. One rule everywhere, with no exception.\nFrame 6 names Marta, who shops on another list; extra bought through this same shopping list asks in the same words, and there the ask rises by the extra too (frame 12)."
+    },
+    {
+      "id": "ev-basket-add",
+      "x": 3020,
+      "y": 13942,
+      "w": 520,
+      "text": "LIKELY TO CHANGE AND BE REMOVED (the owner).\nFrame 7, the shopping list's \"Add or find\": for now the app opens the row's \"Lists and amounts\" and asks there. The plan builds it as one removable piece (velista 0208, target state 19)."
+    },
+    {
+      "id": "ev-onscreen",
+      "x": 3020,
+      "y": 14150,
+      "w": 520,
+      "text": "STILL ON THE PAGE (velista 0208, question 3, decided).\nWhen the answer arrives and the control is still on the current page or its open sheet, it asks. If the control is out of sight, the page scrolls it into view first, flashes it and opens the question (frame 11). If the control is no longer on the page (the sheet was closed, the person left), nothing asks and the amount set stands (frame 9).\nAlternative weighed and not chosen: show the question only while part of the control is still visible, and otherwise take the default."
+    },
+    {
+      "id": "ev-refused",
+      "x": 3020,
+      "y": 14468,
+      "w": 520,
+      "text": "THE LINE CHANGED BEFORE THE ANSWER (frame 10, decided).\nThe count is refused and nothing is counted. The words are list.extra.stale: \"La cantidad cambió mientras tanto, así que no se contó nada.\" / \"The amount changed in the meantime, so nothing was counted.\"\nThe notice uses the popover's frame and pointer, the stepper shows the line's current amount, and the notice closes on the next touch. Any other failure puts the line back and says list.extra.countFailed in the same place (frame 14)."
+    },
+    {
+      "id": "ev-awkward",
+      "x": 3020,
+      "y": 14786,
+      "w": 520,
+      "text": "WHERE THE BUILT SCREENS MAKE IT AWKWARD.\nThe line sheet: the amount row is second, so above it the popover covers most of the name field and reaches past the sheet's top edge.\n\"Lists and amounts\": the first list sits right under the product, so above it the popover hides the title and the product; below it would hide the other lists' asks.\nThe line page: the stepper sits under the header, so only below works."
+    }
+  ]
+}

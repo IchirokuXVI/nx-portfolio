@@ -87,6 +87,7 @@ import {
 } from '@portfolio/velista/models';
 import { toProductCategories } from './category-mappers';
 import {
+  countOf,
   date,
   isRecord,
   mapArray,
@@ -684,6 +685,12 @@ export function toProductOffer(raw: unknown): ProductOffer | null {
     currency: nullableStr(raw['currency']),
     unitPrice: typeof raw['unitPrice'] === 'number' ? raw['unitPrice'] : null,
     unitPriceLabel: nullableStr(raw['unitPriceLabel']),
+    // Null without a unit price, so a basis never names a figure that is not
+    // there; a basis this build cannot read is null too.
+    unitBasis:
+      typeof raw['unitPrice'] === 'number'
+        ? oneOfOrNull(raw['unitBasis'], PRICE_UNIT_BASES)
+        : null,
     comparablePrice: comparable ? comparablePrice : null,
     comparableBasis: comparable ? comparableBasis : null,
     // The server's figure for one piece of a kilo piece (backend `0244`), never
@@ -757,7 +764,8 @@ export function toCatalogItem(
         : null,
     chainPrices: toChainPrices(raw['offers'], chains),
     imageUrl: nullableStr(raw['imageUrl']),
-    packCount: toPackCount(raw['packCount']),
+    packCount: countOf(raw['packCount']),
+    pieceCount: countOf(raw['pieceCount']),
   };
 }
 
@@ -805,17 +813,6 @@ function cheaper(a: ProductOffer, b: ProductOffer): boolean {
     return false;
   }
   return b.price === null || a.price < b.price;
-}
-
-/**
- * How many units the pack holds (backend `0162`): a whole number from 2, or
- * null. Anything else reads as not a pack, because "Pack 1" or "Pack 2,5" drawn
- * beside a product is worse than drawing nothing.
- */
-function toPackCount(raw: unknown): number | null {
-  return typeof raw === 'number' && Number.isInteger(raw) && raw >= 2
-    ? raw
-    : null;
 }
 
 /**

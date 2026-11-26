@@ -140,7 +140,7 @@ test.describe('the owner and a guest', () => {
       ).toBeVisible();
       await expect(entries).not.toContainText('Groceries');
       await expect(
-        dialog.getByRole('button', { name: 'Add it to another list' })
+        dialog.getByRole('button', { name: 'Bought for another list' })
       ).toHaveCount(0);
       await expect(
         dialog.getByRole('button', { name: 'Show line history' })

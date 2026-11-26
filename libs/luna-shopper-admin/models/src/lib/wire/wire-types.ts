@@ -42,6 +42,7 @@ export type AddBasketLineDto = {
   askIfAmbiguous?: boolean;
   intoLineId?: string;
   newLine?: boolean;
+  reportExtra?: boolean;
 };
 
 /**
@@ -101,6 +102,7 @@ export type AddLineDto = {
   askIfAmbiguous?: boolean;
   intoLineId?: string;
   newLine?: boolean;
+  reportExtra?: boolean;
 };
 
 /**
@@ -109,6 +111,7 @@ export type AddLineDto = {
 export type AddLineQuantityDto = {
   delta: number;
   unit: 'UNIT' | 'GRAM' | 'MILLILITER';
+  reportExtra?: boolean;
 };
 
 /**
@@ -260,12 +263,43 @@ export type BasketSourceDto = {
 };
 
 /**
+ * `BuyForListBasketRowDto` in the gateway's OpenAPI document.
+ */
+export type BuyForListBasketRowDto = {
+  targetListId: string;
+  lineId?: string;
+  quantity: number;
+  unit: 'UNIT' | 'GRAM' | 'MILLILITER';
+  priceScopeId?: string;
+  supermarketLocationId?: string;
+};
+
+/**
  * `ChangeBasketLinesProductDto` in the gateway's OpenAPI document.
  */
 export type ChangeBasketLinesProductDto = {
   lineIds: string[];
   itemId: string;
   keep: boolean;
+};
+
+/**
+ * `CountBasketRowExtraDto` in the gateway's OpenAPI document.
+ */
+export type CountBasketRowExtraDto = {
+  lineId: string;
+  unit: 'UNIT' | 'GRAM' | 'MILLILITER';
+  amount: number;
+  expect: number;
+};
+
+/**
+ * `CountLineExtraDto` in the gateway's OpenAPI document.
+ */
+export type CountLineExtraDto = {
+  unit: 'UNIT' | 'GRAM' | 'MILLILITER';
+  amount: number;
+  expect: number;
 };
 
 /**
@@ -332,6 +366,7 @@ export type CreateItemDto = {
   approxWeight?: number | null;
   quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount?: number | null;
+  pieceCount?: number | null;
   categoryIds?: string[];
   categorySlugs?: string[];
   defaultUnit: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
@@ -531,6 +566,7 @@ export type ItemExpectationDto = {
   quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
   packCount?: number | null;
+  pieceCount?: number | null;
   categorySlugs?: string[];
 };
 
@@ -695,6 +731,10 @@ export type ProblemDetails = {
     | 'client_too_old'
     | 'basket_finished'
     | 'basket_shop_locked'
+    | 'basket_line_already_in_row'
+    | 'basket_row_has_no_product'
+    | 'basket_product_has_no_name'
+    | 'catalog_unavailable'
     | 'stale_quantity'
     | 'account_locked'
     | 'postal_code_unknown'
@@ -730,6 +770,7 @@ export type ProblemDetails = {
     | 'item_kilogram_has_size'
     | 'item_approx_weight_beside_size'
     | 'item_quantity_step_not_allowed'
+    | 'item_piece_count_not_allowed'
     | 'item_merged'
     | 'item_merge_two_articles_one_chain'
     | 'item_merge_format_differs'
@@ -982,6 +1023,7 @@ export type SetBasketRowDemandDto = {
   quantity: number;
   unit: 'UNIT' | 'GRAM' | 'MILLILITER';
   from: number;
+  reportExtra?: boolean;
 };
 
 /**
@@ -1138,7 +1180,24 @@ export type SourceEntryDecisionDto = {
  */
 export type SourceEntryExpectationDto = {
   status: 'ACTIVE' | 'CANDIDATE' | 'UNRESOLVED' | 'REJECTED';
-  lastSeenAt: string;
+  lastSeenAt?: string;
+  observed?: SourceEntryObservedDto;
+};
+
+/**
+ * `SourceEntryObservedDto` in the gateway's OpenAPI document.
+ */
+export type SourceEntryObservedDto = {
+  name: string;
+  brand: string | null;
+  ean: string | null;
+  sizeFormat: string | null;
+  unitSize: number | null;
+  sizeUnit: 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'UNIT' | null;
+  packCount: number | null;
+  soldByWeight: boolean;
+  approxWeight: number | null;
+  packaging: string | null;
 };
 
 /**
@@ -1287,6 +1346,7 @@ export type UpdateItemBatchEntryDto = {
   approxWeight?: number | null;
   quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount?: number | null;
+  pieceCount?: number | null;
   categoryIds?: string[];
   categorySlugs?: string[];
   defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
@@ -1308,6 +1368,7 @@ export type UpdateItemDto = {
   approxWeight?: number | null;
   quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount?: number | null;
+  pieceCount?: number | null;
   categoryIds?: string[];
   categorySlugs?: string[];
   defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
@@ -1337,6 +1398,7 @@ export type UpdateLineDto = {
   preferredSupermarketId?: string | null;
   named?: boolean;
   confirmMerge?: boolean;
+  reportExtra?: boolean;
 };
 
 /**
@@ -2454,6 +2516,7 @@ export type BasketBasketProductView = {
   approxWeightSetBy?: 'SOURCE' | 'ADMIN' | null;
   quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount: number | null;
+  pieceCount: number | null;
   categories: CatalogItemCategoryView[];
   defaultUnit: EnumsUnitOfMeasure;
   productGroupId: string | null;
@@ -2507,6 +2570,7 @@ export type BasketBasketRowEntryView = {
   version: number;
   left: number;
   bought: number;
+  asked: number;
   boughtElsewhere: number;
   state: EnumsBasketRowState;
   approvalStatus: EnumsLineApprovalStatus;
@@ -2530,6 +2594,8 @@ export type BasketBasketRowResult = {
   progress: BasketBasketProgress;
   skippedCount?: number;
   addOutcome?: EnumsAddLineOutcome;
+  extra?: ListAbsorbedExtra;
+  counted?: number;
 };
 
 /**
@@ -3120,6 +3186,7 @@ export type CatalogItemView = {
   approxWeightSetBy?: 'SOURCE' | 'ADMIN' | null;
   quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount: number | null;
+  pieceCount: number | null;
   categories: CatalogItemCategoryView[];
   defaultUnit: EnumsUnitOfMeasure;
   productGroupId: string | null;
@@ -5523,6 +5590,46 @@ export type ImpersonationStartImpersonationView = {
 };
 
 /**
+ * `list.AbsorbedExtra` in the gateway's OpenAPI document.
+ */
+export type ListAbsorbedExtra = {
+  above: number;
+  countable: number;
+  buyers: ListExtraBuyer[];
+};
+
+/**
+ * `list.AddLineQuantityResult` in the gateway's OpenAPI document.
+ */
+export type ListAddLineQuantityResult = {
+  id: string;
+  listId: string;
+  content: string;
+  quantity: number;
+  unit: EnumsLineUnit;
+  itemIds: string[];
+  itemSetHash: string | null;
+  productGroupId: string | null;
+  groupItemIds: string[];
+  favoriteItemId: string | null;
+  preferredSupermarketId: string | null;
+  named: boolean;
+  position: number;
+  approvalStatus: EnumsLineApprovalStatus;
+  createdByUserId: string;
+  approvedByUserId: string | null;
+  version: number;
+  boughtCount: number;
+  lastSettlementOutcome: EnumsSettlementOutcome | null;
+  claimed: boolean;
+  claimedByUserId: string | null;
+  commentCount: number | null;
+  createdAt: string;
+  updatedAt: string;
+  extra?: ListAbsorbedExtra;
+};
+
+/**
  * `list.AddLineResult` in the gateway's OpenAPI document.
  */
 export type ListAddLineResult = {
@@ -5530,6 +5637,7 @@ export type ListAddLineResult = {
   merged: boolean;
   outcome: EnumsAddLineOutcome;
   alreadyOnList: ListLineView[];
+  extra?: ListAbsorbedExtra;
 };
 
 /**
@@ -5567,6 +5675,44 @@ export type ListCommentView = {
   recording: ListCommentRecording | null;
   transcription: EnumsCommentTranscription | null;
   createdAt: string;
+};
+
+/**
+ * `list.CountLineExtraResult` in the gateway's OpenAPI document.
+ */
+export type ListCountLineExtraResult = {
+  id: string;
+  listId: string;
+  content: string;
+  quantity: number;
+  unit: EnumsLineUnit;
+  itemIds: string[];
+  itemSetHash: string | null;
+  productGroupId: string | null;
+  groupItemIds: string[];
+  favoriteItemId: string | null;
+  preferredSupermarketId: string | null;
+  named: boolean;
+  position: number;
+  approvalStatus: EnumsLineApprovalStatus;
+  createdByUserId: string;
+  approvedByUserId: string | null;
+  version: number;
+  boughtCount: number;
+  lastSettlementOutcome: EnumsSettlementOutcome | null;
+  claimed: boolean;
+  claimedByUserId: string | null;
+  commentCount: number | null;
+  createdAt: string;
+  updatedAt: string;
+  counted: number;
+};
+
+/**
+ * `list.ExtraBuyer` in the gateway's OpenAPI document.
+ */
+export type ListExtraBuyer = {
+  userId: string | null;
 };
 
 /**
@@ -5851,6 +5997,7 @@ export type ListUpdateLineResult = {
   createdAt: string;
   updatedAt: string;
   absorbedLineId?: string;
+  extra?: ListAbsorbedExtra;
 };
 
 /**

@@ -356,7 +356,7 @@ check_ceilings() {
   printf '  %-48s %8s   at most %s\n' 'items' "$live_items" "$MAX_ITEMS_REPLACED"
   printf '  %-48s %8s   at most %s\n' 'source_catalog_entries' "$live_entries" "$MAX_SOURCE_ENTRIES_REPLACED"
   [ "$live_items" -le "$MAX_ITEMS_REPLACED" ] \
-    || refuse "the live catalog holds $live_items products and the ceiling is $MAX_ITEMS_REPLACED. This restore replaces a catalog, it does not merge into one (backend backlog plan 0019)"
+    || refuse "the live catalog holds $live_items products and the ceiling is $MAX_ITEMS_REPLACED. This restore replaces a catalog, it does not merge into one (to carry local edits, see curation CLI plan 0006)"
   [ "$live_entries" -le "$MAX_SOURCE_ENTRIES_REPLACED" ] \
     || refuse "the live harvester holds $live_entries source_catalog_entries and the ceiling is $MAX_SOURCE_ENTRIES_REPLACED. A higher ceiling is the owner's statement that those rows are to be replaced"
 }

@@ -22,6 +22,7 @@ import {
   toProductOffer,
 } from './mappers';
 import {
+  countOf,
   date,
   isRecord,
   mapArray,
@@ -68,6 +69,8 @@ export function toCatalogProduct(raw: unknown): CatalogProduct | null {
     unit: oneOf(raw['defaultUnit'], UNITS_OF_MEASURE, UNIT_OF_MEASURE_FALLBACK),
     approxWeight: positiveNum(raw['approxWeight']),
     quantityStep: quantityStepOf(raw['quantityStep']),
+    packCount: countOf(raw['packCount']),
+    pieceCount: countOf(raw['pieceCount']),
     categories: toProductCategories(raw['categories']),
     offer,
     // Null with no offer, so a basis can never describe a price that is not there.

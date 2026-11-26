@@ -798,9 +798,13 @@ export async function decide({
 
   // The optimistic check plan 0100 re-asserts on the server, read here at
   // decide time. A stale file then dies on the server with zero writes.
+  // `observed` is the content the decision was made on (plan 0277): on this
+  // cluster both are sent and compared, and a replay to another cluster sends
+  // `observed` alone, which survives a walk that saw the row again unchanged.
   const expect = {
     status: entry.status ?? null,
     lastSeenAt: entry.lastSeenAt ?? null,
+    observed: observedOf(entry),
   };
   const shared = sharedEanIssue(entry, sharedWith);
 
@@ -1371,12 +1375,19 @@ export async function proposeBrands({
  * server decided, and this function passes it through beside `failedStep`,
  * `error` and `orphanedItemIds`. The CLI turns a false verdict into a non zero
  * exit, so a shell replaying a stale file is not told it succeeded.
+ *
+ * **`targetUrl` replaces the header's url, and only the replay passes it**
+ * (curation CLI plan 0006, section 6). It does so only for a file whose every
+ * operation expects the row's content (backend plan 0277) and no
+ * `lastSeenAt`, which is what makes a file decided on one cluster safe to send
+ * to another. Without it a file decided against another url is refused.
  */
 export async function apply({
   mainUrl,
   mainUser,
   mainPassword,
   file,
+  targetUrl = null,
   route = BULK_ENTRY_DECISIONS_PATH,
   makeSession = defaultMakeSession,
   session = null,
@@ -1388,7 +1399,10 @@ export async function apply({
   if (!header) {
     throw new Error(`${file} has no header line. It is not a decisions file.`);
   }
-  if (normalizeUrl(header.mainUrl) !== normalizeUrl(mainUrl)) {
+  if (
+    targetUrl === null &&
+    normalizeUrl(header.mainUrl) !== normalizeUrl(mainUrl)
+  ) {
     throw new Error(
       `${file} was decided against ${header.mainUrl} and you are applying it to ${normalizeUrl(mainUrl)}. Refusing.`
     );
@@ -1417,10 +1431,10 @@ export async function apply({
   const admin =
     session ??
     makeSession({
-      baseUrl: mainUrl,
+      baseUrl: targetUrl ?? mainUrl,
       username: mainUser,
       password: mainPassword,
-      label: 'main',
+      label: targetUrl === null ? 'main' : 'target',
     });
 
   const answer = await admin.fetch(route, {
@@ -1447,6 +1461,29 @@ export async function apply({
     // Products step two created that a step three failure could not delete.
     // Unbound and nobody's, and reported rather than swallowed.
     orphanedItemIds: answer?.orphanedItemIds ?? [],
+  };
+}
+
+/**
+ * The fields of a queue entry a decision is made on (plan 0277, section 1),
+ * exactly as the queue listing printed them, with null where the row holds
+ * nothing. Prices are left out: they move every week and the bind writes the
+ * prices the row holds when the file lands.
+ */
+export function observedOf(entry) {
+  return {
+    name: entry.name,
+    brand: entry.brand ?? null,
+    ean: entry.ean ?? null,
+    sizeFormat: entry.sizeFormat ?? null,
+    unitSize: entry.unitSize ?? null,
+    sizeUnit: entry.sizeUnit ?? null,
+    packCount: entry.packCount ?? null,
+    soldByWeight: entry.soldByWeight ?? false,
+    approxWeight: entry.approxWeight ?? null,
+    // The container the chain printed (decision 154a): the matcher tells a can
+    // from a bottle of one name and size by it.
+    packaging: entry.packaging ?? null,
   };
 }
 

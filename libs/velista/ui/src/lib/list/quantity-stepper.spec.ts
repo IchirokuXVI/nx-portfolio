@@ -1,12 +1,15 @@
 import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import {
   RokuTranslatorService,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
-import { LINE_QUANTITY_MAX, type QuantityStep } from '@portfolio/velista/models';
+import {
+  LINE_QUANTITY_MAX,
+  type QuantityStep,
+} from '@portfolio/velista/models';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { QuantityStepper, REFUSED_SHOWN_MS } from './quantity-stepper';
 
 /**
@@ -146,13 +149,13 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(tos(h)).toEqual([0]);
     });
 
-    it('steps a count by 10 from 1000 and back by 1 below it (S7b)', () => {
+    it('steps a count by 50 from 1000 and back by 1 below it (S7b, velista 0195)', () => {
       const h = render({ value: 999 });
       h.plus.click();
       h.plus.click();
       h.minus.click();
       h.minus.click();
-      expect(tos(h)).toEqual([1000, 1010, 1000, 999]);
+      expect(tos(h)).toEqual([1000, 1050, 1000, 999]);
     });
   });
 
@@ -174,7 +177,7 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(h.plus.getAttribute('aria-disabled')).toBe('true');
       h.plus.click();
       expect(h.steps).toEqual([]);
-      h.set('value', 999_950);
+      h.set('value', 999_900);
       expect(h.plus.getAttribute('aria-disabled')).toBeNull();
     });
 
@@ -183,49 +186,55 @@ describe('QuantityStepper (velista 0188)', () => {
         expect(LINE_QUANTITY_MAX).toBe(99_999);
       });
 
-      it.each(['GRAM', 'MILLILITER'])('stops %s plus at 99 975, and never clamps', (unit) => {
-        const h = render({ value: 99_925, unit });
-        h.plus.click();
-        h.plus.click();
-        expect(tos(h)).toEqual([99_950, 99_975]);
-        expect(h.plus.getAttribute('aria-disabled')).toBe('true');
-        h.plus.click();
-        expect(tos(h)).toEqual([99_950, 99_975]);
-        h.set('value', 99_974);
-        expect(h.plus.getAttribute('aria-disabled')).toBeNull();
-        h.set('value', 99_999);
-        expect(h.plus.getAttribute('aria-disabled')).toBe('true');
-      });
+      it.each(['GRAM', 'MILLILITER'])(
+        'stops %s plus at 99 950, and never clamps',
+        (unit) => {
+          const h = render({ value: 99_850, unit });
+          h.plus.click();
+          h.plus.click();
+          expect(tos(h)).toEqual([99_900, 99_950]);
+          expect(h.plus.getAttribute('aria-disabled')).toBe('true');
+          h.plus.click();
+          expect(tos(h)).toEqual([99_900, 99_950]);
+          h.set('value', 99_949);
+          expect(h.plus.getAttribute('aria-disabled')).toBeNull();
+          h.set('value', 99_999);
+          expect(h.plus.getAttribute('aria-disabled')).toBe('true');
+        }
+      );
 
-      it('stops a count plus where a step of 10 would pass it', () => {
-        const h = render({ value: 99_980 });
+      it('stops a count plus where a step of 50 would pass it', () => {
+        const h = render({ value: 99_900 });
         h.plus.click();
-        expect(tos(h)).toEqual([99_990]);
+        expect(tos(h)).toEqual([99_950]);
         expect(h.plus.getAttribute('aria-disabled')).toBe('true');
         h.plus.click();
-        expect(tos(h)).toEqual([99_990]);
+        expect(tos(h)).toEqual([99_950]);
       });
 
       it('stops a plus hold before the ceiling', () => {
-        const h = render({ value: 99_900, unit: 'GRAM' });
+        const h = render({ value: 99_800, unit: 'GRAM' });
         fire(h.plus, 'pointerdown');
         jest.advanceTimersByTime(5000);
-        expect(tos(h)).toEqual([99_925, 99_950, 99_975]);
-        const count = render({ value: 99_950 });
+        expect(tos(h)).toEqual([99_850, 99_900, 99_950]);
+        const count = render({ value: 99_750 });
         fire(count.plus, 'pointerdown');
         jest.advanceTimersByTime(5000);
-        expect(tos(count)).toEqual([99_960, 99_970, 99_980, 99_990]);
+        expect(tos(count)).toEqual([99_800, 99_850, 99_900, 99_950]);
       });
 
-      it.each(['GRAM', 'UNIT'])('draws a %s line stored above it as it is, plus off and minus on', (unit) => {
-        const h = render({ value: 100_000, unit });
-        expect(h.el.getAttribute('data-value')).toBe('100000');
-        expect(h.el.textContent).toContain('100');
-        expect(h.plus.getAttribute('aria-disabled')).toBe('true');
-        expect(h.minus.getAttribute('aria-disabled')).toBeNull();
-        h.minus.click();
-        expect(tos(h)).toEqual([unit === 'GRAM' ? 99_975 : 99_990]);
-      });
+      it.each(['GRAM', 'UNIT'])(
+        'draws a %s line stored above it as it is, plus off and minus on',
+        (unit) => {
+          const h = render({ value: 100_000, unit });
+          expect(h.el.getAttribute('data-value')).toBe('100000');
+          expect(h.el.textContent).toContain('100');
+          expect(h.plus.getAttribute('aria-disabled')).toBe('true');
+          expect(h.minus.getAttribute('aria-disabled')).toBeNull();
+          h.minus.click();
+          expect(tos(h)).toEqual([99_950]);
+        }
+      );
 
       it('says the ceiling as aria-valuemax and takes End to it, for every unit', () => {
         for (const unit of ['UNIT', 'GRAM', 'MILLILITER']) {
@@ -257,15 +266,151 @@ describe('QuantityStepper (velista 0188)', () => {
     });
   });
 
+  describe('locked, an amount the reader may not change (velista 0200)', () => {
+    /** Every press the host was told of while the stepper was locked. */
+    function disabled(variant: 'row' | 'sheet' | 'sheet-narrow' = 'sheet') {
+      const h = render({ value: 3, locked: true, variant });
+      const pressed: void[] = [];
+      const values: number[] = [];
+      h.fixture.componentInstance.disabledPress.subscribe(() =>
+        pressed.push(undefined)
+      );
+      h.fixture.componentInstance.valueChange.subscribe((value) =>
+        values.push(value)
+      );
+      return { h, pressed, values };
+    }
+
+    it('carries the whole locked state on the host, and a press steps nothing', () => {
+      const { h, values } = disabled();
+      expect(h.el.classList.contains('is-locked')).toBe(true);
+      expect(h.el.classList.contains('is-disabled')).toBe(false);
+      pointerClick(h.plus);
+      pointerClick(h.minus);
+      fire(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(2000);
+      fire(h.plus, 'pointerup');
+      expect(h.steps).toEqual([]);
+      expect(values).toEqual([]);
+    });
+
+    it('draws no disabled attribute, says aria-disabled and stays in the tab order', () => {
+      const { h } = disabled();
+      for (const control of [h.minus, h.plus, field(h)]) {
+        expect(control.hasAttribute('disabled')).toBe(false);
+        expect(control.getAttribute('aria-disabled')).toBe('true');
+        expect(control.tabIndex).toBe(0);
+      }
+      expect(h.el.querySelector('[disabled]')).toBeNull();
+    });
+
+    it('marks the group itself in the row variant', () => {
+      const { h } = disabled('row');
+      expect(
+        h.el.querySelector('[role="group"]')?.getAttribute('aria-disabled')
+      ).toBe('true');
+    });
+
+    it('tells a click, Enter and Space once each, with no step and no value', () => {
+      const { h, pressed, values } = disabled();
+      pointerClick(h.plus);
+      expect(pressed).toHaveLength(1);
+      // Enter and Space on a button reach the button as its own click.
+      keyClick(h.minus);
+      expect(pressed).toHaveLength(2);
+      // The field takes no click from a key, so its keys are told on keydown.
+      const enter = key(h, 'Enter');
+      expect(pressed).toHaveLength(3);
+      expect(enter.defaultPrevented).toBe(true);
+      key(h, ' ');
+      expect(pressed).toHaveLength(4);
+      pointerClick(field(h));
+      expect(pressed).toHaveLength(5);
+      expect(h.steps).toEqual([]);
+      expect(values).toEqual([]);
+    });
+
+    it('tells nothing while it is enabled', () => {
+      const h = render({ value: 3, variant: 'sheet' });
+      const pressed: void[] = [];
+      h.fixture.componentInstance.disabledPress.subscribe(() =>
+        pressed.push(undefined)
+      );
+      pointerClick(h.plus);
+      key(h, 'Enter');
+      expect(pressed).toEqual([]);
+      expect(tos(h)).toEqual([4]);
+    });
+
+    it('names the reason element in aria-describedby on every control', () => {
+      const h = render({
+        value: 3,
+        locked: true,
+        variant: 'sheet',
+        describedBy: 'why-1',
+      });
+      for (const control of [h.minus, h.plus, field(h)]) {
+        expect(control.getAttribute('aria-describedby')).toBe('why-1');
+      }
+    });
+
+    it('draws the bar of minus at 1, never the trash', () => {
+      const h = render({ value: 1, min: 0, locked: true, variant: 'sheet' });
+      expect(h.minus.querySelector('lib-trash-icon')).toBeNull();
+      expect(h.minus.querySelector('.glyph')).not.toBeNull();
+      expect(h.minus.classList.contains('is-clear')).toBe(false);
+    });
+  });
+
+  describe('disabled, a write in flight (as before velista 0200)', () => {
+    it('draws no locked look, names no reason and tells no press', () => {
+      const h = render({
+        value: 3,
+        disabled: true,
+        variant: 'sheet',
+        describedBy: 'why-1',
+      });
+      const pressed: void[] = [];
+      h.fixture.componentInstance.disabledPress.subscribe(() =>
+        pressed.push(undefined)
+      );
+      expect(h.el.classList.contains('is-disabled')).toBe(true);
+      expect(h.el.classList.contains('is-locked')).toBe(false);
+      for (const control of [h.minus, h.plus, field(h)]) {
+        expect(control.getAttribute('aria-disabled')).toBe('true');
+        expect(control.hasAttribute('aria-describedby')).toBe(false);
+      }
+      pointerClick(h.plus);
+      key(h, 'Enter');
+      pointerClick(field(h));
+      expect(pressed).toEqual([]);
+      expect(h.steps).toEqual([]);
+    });
+
+    it('leaves the row group unmarked and the trash at 1, as on dev', () => {
+      const row = render({ value: 3, disabled: true, variant: 'row' });
+      expect(
+        row.el.querySelector('[role="group"]')?.hasAttribute('aria-disabled')
+      ).toBe(false);
+      const one = render({
+        value: 1,
+        min: 0,
+        disabled: true,
+        variant: 'sheet',
+      });
+      expect(one.minus.querySelector('lib-trash-icon')).not.toBeNull();
+    });
+  });
+
   describe('the hold (section 3.3)', () => {
-    it('repeats after 400 ms, then every 300, 255, 217, 184, 157, 133, 113 and 100 ms', () => {
+    it('repeats after 500 ms, then every 300, 244, 198, 161, 131, 106, 86, 70 and 60 ms (velista 0194)', () => {
       const h = render({ value: 0 });
       fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(399);
+      jest.advanceTimersByTime(499);
       expect(h.steps).toEqual([]);
       jest.advanceTimersByTime(1);
       expect(tos(h)).toEqual([1]);
-      const intervals = [300, 255, 217, 184, 157, 133, 113, 100, 100];
+      const intervals = [300, 244, 198, 161, 131, 106, 86, 70, 60, 60, 60];
       for (const [index, interval] of intervals.entries()) {
         jest.advanceTimersByTime(interval - 1);
         expect(h.steps).toHaveLength(index + 1);
@@ -275,10 +420,10 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(h.steps.every((step) => step.repeat)).toBe(true);
     });
 
-    it('is an ordinary press when released before 400 ms', () => {
+    it('is an ordinary press when released before 500 ms', () => {
       const h = render({ value: 2 });
       fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(300);
+      jest.advanceTimersByTime(499);
       fire(h.plus, 'pointerup');
       h.plus.click();
       jest.advanceTimersByTime(2000);
@@ -288,7 +433,7 @@ describe('QuantityStepper (velista 0188)', () => {
     it('adds nothing on the click that ends a hold that repeated', () => {
       const h = render({ value: 2 });
       fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(400);
+      jest.advanceTimersByTime(500);
       fire(h.plus, 'pointerup');
       pointerClick(h.plus);
       expect(tos(h)).toEqual([3]);
@@ -297,7 +442,7 @@ describe('QuantityStepper (velista 0188)', () => {
     it('swallows the click of a hold that a touch browser sends in a later task', () => {
       const h = render({ value: 2 });
       fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(400);
+      jest.advanceTimersByTime(500);
       fire(h.plus, 'pointerup');
       jest.advanceTimersByTime(50);
       pointerClick(h.plus);
@@ -307,7 +452,7 @@ describe('QuantityStepper (velista 0188)', () => {
     it('swallows the release after the finger slid off and back on', () => {
       const h = render({ value: 2 });
       fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(400);
+      jest.advanceTimersByTime(500);
       fire(h.plus, 'pointerleave');
       jest.advanceTimersByTime(200);
       fire(h.plus, 'pointerup');
@@ -318,7 +463,7 @@ describe('QuantityStepper (velista 0188)', () => {
     it('still steps on a keyboard click right after a hold', () => {
       const h = render({ value: 2 });
       fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(400);
+      jest.advanceTimersByTime(500);
       fire(h.plus, 'pointerup');
       keyClick(h.plus);
       expect(tos(h)).toEqual([3, 4]);
@@ -328,7 +473,7 @@ describe('QuantityStepper (velista 0188)', () => {
     it('steps once on a fresh press after a hold', () => {
       const h = render({ value: 2 });
       fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(400);
+      jest.advanceTimersByTime(500);
       fire(h.plus, 'pointerup');
       pointerClick(h.plus);
       fire(h.plus, 'pointerdown');
@@ -337,19 +482,22 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(tos(h)).toEqual([3, 4]);
     });
 
-    it.each(['pointerleave', 'pointercancel'])('stops on %s', (type) => {
-      const h = render({ value: 2 });
-      fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(700);
-      fire(h.plus, type);
-      jest.advanceTimersByTime(3000);
-      expect(tos(h)).toEqual([3, 4]);
-    });
+    it.each(['pointerup', 'pointercancel', 'lostpointercapture'])(
+      'stops on %s',
+      (type) => {
+        const h = render({ value: 2 });
+        fire(h.plus, 'pointerdown');
+        jest.advanceTimersByTime(500 + 300);
+        fire(h.plus, type);
+        jest.advanceTimersByTime(3000);
+        expect(tos(h)).toEqual([3, 4]);
+      }
+    );
 
     it('stops when the page scrolls, and the release after it adds nothing', () => {
       const h = render({ value: 2 });
       fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(400);
+      jest.advanceTimersByTime(500);
       window.dispatchEvent(new Event('scroll'));
       jest.advanceTimersByTime(3000);
       fire(h.plus, 'pointerup');
@@ -360,7 +508,7 @@ describe('QuantityStepper (velista 0188)', () => {
     it('stops when disabled turns true', () => {
       const h = render({ value: 2 });
       fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(400);
+      jest.advanceTimersByTime(500);
       h.set('disabled', true);
       jest.advanceTimersByTime(3000);
       expect(tos(h)).toEqual([3]);
@@ -369,7 +517,7 @@ describe('QuantityStepper (velista 0188)', () => {
     it('stops on destroy', () => {
       const h = render({ value: 2 });
       fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(400);
+      jest.advanceTimersByTime(500);
       h.fixture.destroy();
       jest.advanceTimersByTime(3000);
       expect(tos(h)).toEqual([3]);
@@ -415,7 +563,7 @@ describe('QuantityStepper (velista 0188)', () => {
     ])('keeps the swallow of a stopped hold when %s goes down', (_, extra) => {
       const h = render({ value: 3 });
       fire(h.minus, 'pointerdown');
-      jest.advanceTimersByTime(400 + 300 + 255 + 1000);
+      jest.advanceTimersByTime(500 + 300 + 244 + 1000);
       expect(tos(h)).toEqual([2, 1]);
       const other = new Event('pointerdown', { bubbles: true });
       Object.assign(other, extra);
@@ -434,6 +582,340 @@ describe('QuantityStepper (velista 0188)', () => {
     });
   });
 
+  describe('a held step goes on until the finger lifts (velista 0193)', () => {
+    /** A pointer event with the fields the stepper reads. */
+    const pointer = (
+      target: EventTarget,
+      type: string,
+      fields: Record<string, unknown> = {}
+    ) => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.assign(event, { pointerId: 7, isPrimary: true, button: 0 });
+      Object.assign(event, fields);
+      target.dispatchEvent(event);
+      return event;
+    };
+
+    /** A touch move on the button, as the browser sends it while the finger moves. */
+    const touchMove = (target: EventTarget) => {
+      const event = new Event('touchmove', { bubbles: true, cancelable: true });
+      target.dispatchEvent(event);
+      return event;
+    };
+
+    const selectStart = (target: EventTarget) => {
+      const event = new Event('selectstart', {
+        bubbles: true,
+        cancelable: true,
+      });
+      target.dispatchEvent(event);
+      return event;
+    };
+
+    /** The button's box on the page, which jsdom does not lay out. */
+    const placeAt = (button: HTMLElement) => {
+      button.getBoundingClientRect = () =>
+        ({
+          left: 100,
+          right: 148,
+          top: 200,
+          bottom: 248,
+          width: 48,
+          height: 48,
+          x: 100,
+          y: 200,
+        }) as DOMRect;
+    };
+
+    it('keeps repeating after a pointerleave, and pointerup ends it', () => {
+      const h = render({ value: 2 });
+      pointer(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(500);
+      pointer(h.plus, 'pointerleave');
+      jest.advanceTimersByTime(300 + 244);
+      expect(tos(h)).toEqual([3, 4, 5]);
+      pointer(h.plus, 'pointerup', { clientX: 0, clientY: 0 });
+      pointerClick(h.plus);
+      jest.advanceTimersByTime(3000);
+      expect(tos(h)).toEqual([3, 4, 5]);
+    });
+
+    it('cancels a touch move once the hold repeated, and not before', () => {
+      const h = render({ value: 2 });
+      pointer(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(499);
+      expect(touchMove(h.plus).defaultPrevented).toBe(false);
+      jest.advanceTimersByTime(1);
+      expect(touchMove(h.plus).defaultPrevented).toBe(true);
+      // Also once the repeat stopped on its own: the finger is still down.
+      h.set('disabled', true);
+      jest.advanceTimersByTime(3000);
+      expect(touchMove(h.plus).defaultPrevented).toBe(true);
+    });
+
+    it('lets a swipe before the first repeat scroll, and its cancel steps nothing', () => {
+      const h = render({ value: 2 });
+      pointer(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(150);
+      expect(touchMove(h.plus).defaultPrevented).toBe(false);
+      pointer(h.plus, 'pointercancel');
+      jest.advanceTimersByTime(3000);
+      expect(h.steps).toEqual([]);
+    });
+
+    it('captures the pointer on pointerdown of a button that is not at an end', () => {
+      const h = render({ value: 2 });
+      const capture = jest.fn();
+      h.plus.setPointerCapture = capture;
+      pointer(h.plus, 'pointerdown');
+      expect(capture).toHaveBeenCalledWith(7);
+      const atEnd = jest.fn();
+      h.set('value', 0);
+      h.minus.setPointerCapture = atEnd;
+      pointer(h.minus, 'pointerdown');
+      expect(atEnd).not.toHaveBeenCalled();
+    });
+
+    it('holds on when the capture throws for a pointer that is gone', () => {
+      const h = render({ value: 2 });
+      h.plus.setPointerCapture = () => {
+        throw new DOMException('gone', 'NotFoundError');
+      };
+      pointer(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(500);
+      expect(tos(h)).toEqual([3]);
+    });
+
+    it.each(['mouse', 'pen'])(
+      'steps nothing for a %s press released off the button before the first repeat',
+      (pointerType) => {
+        const h = render({ value: 2 });
+        placeAt(h.plus);
+        pointer(h.plus, 'pointerdown', {
+          pointerType,
+          clientX: 120,
+          clientY: 220,
+        });
+        jest.advanceTimersByTime(200);
+        pointer(h.plus, 'pointerup', {
+          pointerType,
+          clientX: 120,
+          clientY: 300,
+        });
+        pointerClick(h.plus);
+        expect(h.steps).toEqual([]);
+        // A key click is a new gesture and still steps.
+        keyClick(h.plus);
+        expect(tos(h)).toEqual([3]);
+      }
+    );
+
+    it('steps for a touch tap whose contact lands a few pixels past the button', () => {
+      const h = render({ value: 2 });
+      placeAt(h.plus);
+      pointer(h.plus, 'pointerdown', {
+        pointerType: 'touch',
+        clientX: 146,
+        clientY: 246,
+      });
+      jest.advanceTimersByTime(120);
+      pointer(h.plus, 'pointerup', {
+        pointerType: 'touch',
+        clientX: 152,
+        clientY: 251,
+      });
+      pointerClick(h.plus);
+      expect(tos(h)).toEqual([3]);
+    });
+
+    it('steps once for a press that wandered and came back onto the button', () => {
+      const h = render({ value: 2 });
+      placeAt(h.plus);
+      pointer(h.plus, 'pointerdown', { clientX: 120, clientY: 220 });
+      pointer(h.plus, 'pointerleave', { clientX: 120, clientY: 300 });
+      jest.advanceTimersByTime(200);
+      pointer(h.plus, 'pointerup', { clientX: 140, clientY: 240 });
+      pointerClick(h.plus);
+      expect(tos(h)).toEqual([3]);
+    });
+
+    it('steps on the next press after one released off the button', () => {
+      const h = render({ value: 2 });
+      placeAt(h.plus);
+      const mouse = { pointerType: 'mouse', clientY: 220 };
+      pointer(h.plus, 'pointerdown', { ...mouse, clientX: 120 });
+      pointer(h.plus, 'pointerup', { ...mouse, clientX: 400 });
+      pointerClick(h.plus);
+      pointer(h.plus, 'pointerdown', { ...mouse, clientX: 120 });
+      pointer(h.plus, 'pointerup', { ...mouse, clientX: 120 });
+      pointerClick(h.plus);
+      expect(tos(h)).toEqual([3]);
+    });
+
+    it('lets a second finger on the other button keep the hold of the first one', () => {
+      const h = render({ value: 5 });
+      placeAt(h.plus);
+      const first = { pointerId: 1, pointerType: 'touch' };
+      const second = { pointerId: 2, pointerType: 'touch', isPrimary: false };
+      pointer(h.plus, 'pointerdown', { ...first, clientX: 120, clientY: 220 });
+      jest.advanceTimersByTime(500);
+      expect(tos(h)).toEqual([6]);
+      pointer(h.minus, 'pointerdown', second);
+      pointer(h.minus, 'pointerup', { ...second, clientX: 20, clientY: 220 });
+      // Chrome captures a touch on its own, so its capture is lost after the lift.
+      pointer(h.minus, 'lostpointercapture', second);
+      pointerClick(h.minus);
+      // As in velista 0188: the second finger stops the repeat and its click adds
+      // nothing. The first finger's touch is still claimed and selects nothing.
+      jest.advanceTimersByTime(2000);
+      expect(tos(h)).toEqual([6]);
+      expect(touchMove(h.plus).defaultPrevented).toBe(true);
+      expect(touchMove(h.minus).defaultPrevented).toBe(false);
+      expect(selectStart(document.body).defaultPrevented).toBe(true);
+      pointer(h.plus, 'pointerup', { ...first, clientX: 120, clientY: 300 });
+      pointerClick(h.plus);
+      expect(tos(h)).toEqual([6]);
+      expect(touchMove(h.plus).defaultPrevented).toBe(false);
+      expect(selectStart(document.body).defaultPrevented).toBe(false);
+    });
+
+    it('steps both taps of two fingers before the first repeat', () => {
+      const h = render({ value: 5 });
+      placeAt(h.plus);
+      // A pen holds plus, so the off box rule applies to the first pointer.
+      const first = { pointerId: 1, pointerType: 'pen' };
+      const second = { pointerId: 2, pointerType: 'touch', isPrimary: false };
+      pointer(h.plus, 'pointerdown', { ...first, clientX: 120, clientY: 220 });
+      jest.advanceTimersByTime(150);
+      // The second finger's lift is far outside the plus box: it is not measured
+      // against it, and it does not end the first finger's hold.
+      pointer(h.minus, 'pointerdown', second);
+      pointer(h.minus, 'pointerup', { ...second, clientX: 20, clientY: 220 });
+      // Chrome captures a touch on its own, so its capture is lost after the lift.
+      pointer(h.minus, 'lostpointercapture', second);
+      pointerClick(h.minus);
+      expect(tos(h)).toEqual([4]);
+      expect(selectStart(document.body).defaultPrevented).toBe(true);
+      pointer(h.plus, 'pointerup', { ...first, clientX: 130, clientY: 230 });
+      pointerClick(h.plus);
+      expect(tos(h)).toEqual([4, 5]);
+    });
+
+    it('listens for touches on the two buttons from the start, not on the document', () => {
+      const h = render({ value: 2 });
+      const added = jest.spyOn(document, 'addEventListener');
+      try {
+        pointer(h.plus, 'pointerdown');
+        jest.advanceTimersByTime(500);
+        expect(
+          added.mock.calls.filter(([type]) => String(type).startsWith('touch'))
+        ).toEqual([]);
+        // A touch that started elsewhere on the page is never cancelled.
+        expect(touchMove(document.body).defaultPrevented).toBe(false);
+        expect(touchMove(h.minus).defaultPrevented).toBe(false);
+        expect(touchMove(h.plus).defaultPrevented).toBe(true);
+      } finally {
+        added.mockRestore();
+      }
+    });
+
+    it('adds its touch listeners non passive on each button, and removes them on destroy', () => {
+      const added = jest.spyOn(HTMLElement.prototype, 'addEventListener');
+      const removed = jest.spyOn(HTMLElement.prototype, 'removeEventListener');
+      try {
+        const h = render({ value: 2 });
+        const touch = (calls: unknown[][]) =>
+          calls.filter(([type]) => String(type).startsWith('touch'));
+        const adds = touch(added.mock.calls);
+        expect(adds.map(([type, , options]) => [type, options])).toEqual([
+          ['touchstart', { passive: false }],
+          ['touchmove', { passive: false }],
+          ['touchstart', { passive: false }],
+          ['touchmove', { passive: false }],
+        ]);
+        h.fixture.destroy();
+        expect(
+          touch(removed.mock.calls).map(([type, fn]) => [type, fn])
+        ).toEqual(adds.map(([type, fn]) => [type, fn]));
+      } finally {
+        added.mockRestore();
+        removed.mockRestore();
+      }
+    });
+
+    it('prevents a selection during a hold, and not after it ended', () => {
+      const h = render({ value: 2 });
+      expect(selectStart(h.el).defaultPrevented).toBe(false);
+      pointer(h.plus, 'pointerdown');
+      expect(selectStart(document.body).defaultPrevented).toBe(true);
+      jest.advanceTimersByTime(1000);
+      expect(selectStart(h.el).defaultPrevented).toBe(true);
+      pointer(h.plus, 'pointerup');
+      expect(selectStart(h.el).defaultPrevented).toBe(false);
+    });
+
+    it('clears a selection that started during the hold, and keeps one from before', () => {
+      const h = render({ value: 2 });
+      const text = document.createElement('p');
+      text.textContent = 'Plátano de Canarias';
+      document.body.appendChild(text);
+      const selectText = () => {
+        const range = document.createRange();
+        range.selectNodeContents(text);
+        document.getSelection()?.removeAllRanges();
+        document.getSelection()?.addRange(range);
+      };
+      try {
+        pointer(h.plus, 'pointerdown');
+        selectText();
+        jest.advanceTimersByTime(500);
+        expect(document.getSelection()?.isCollapsed ?? true).toBe(true);
+        selectText();
+        pointer(h.plus, 'pointerup');
+        expect(document.getSelection()?.isCollapsed ?? true).toBe(true);
+
+        selectText();
+        pointer(h.plus, 'pointerdown');
+        jest.advanceTimersByTime(500);
+        pointer(h.plus, 'pointerup');
+        expect(document.getSelection()?.toString()).toBe('Plátano de Canarias');
+      } finally {
+        document.getSelection()?.removeAllRanges();
+        text.remove();
+      }
+    });
+
+    it.each([
+      ['pointerup', (h: Harness) => pointer(h.plus, 'pointerup')],
+      ['pointercancel', (h: Harness) => pointer(h.plus, 'pointercancel')],
+      ['destroy', (h: Harness) => h.fixture.destroy()],
+    ])('takes its listeners away on %s', (_, end) => {
+      const h = render({ value: 2 });
+      const plus = h.plus;
+      const added = jest.spyOn(document, 'addEventListener');
+      const removed = jest.spyOn(document, 'removeEventListener');
+      try {
+        pointer(h.plus, 'pointerdown');
+        jest.advanceTimersByTime(500);
+        const listeners = added.mock.calls
+          .filter(([type]) => type === 'selectstart')
+          .map(([type, listener]) => [type, listener]);
+        expect(listeners.map(([type]) => type)).toEqual(['selectstart']);
+        end(h);
+        for (const [type, listener] of listeners) {
+          expect(removed).toHaveBeenCalledWith(type, listener, {
+            capture: true,
+          });
+        }
+        expect(touchMove(plus).defaultPrevented).toBe(false);
+        expect(selectStart(document.body).defaultPrevented).toBe(false);
+      } finally {
+        added.mockRestore();
+        removed.mockRestore();
+      }
+    });
+  });
+
   describe('the row (section 3.4)', () => {
     it('is a group named for its subject, with buttons that name their step', () => {
       const h = render({ value: 750, unit: 'GRAM' });
@@ -449,10 +931,44 @@ describe('QuantityStepper (velista 0188)', () => {
       );
     });
 
-    it('names a count step 1 below 1000 and 10 from it', () => {
+    it('names a count step 1 below 1000 and 50 from it', () => {
       const h = render({ value: 1000 });
       expect(h.minus.getAttribute('aria-label')).toContain('"step":"1"');
-      expect(h.plus.getAttribute('aria-label')).toContain('"step":"10"');
+      expect(h.plus.getAttribute('aria-label')).toContain('"step":"50"');
+    });
+
+    describe('snap points (velista 0195)', () => {
+      it('names the plus with the real difference: 10 g at 990 g, 50 g at 1000 g', () => {
+        const h = render({ value: 990, unit: 'GRAM' });
+        expect(h.plus.getAttribute('aria-label')).toContain('"step":"10 g"');
+        h.set('value', 1000);
+        expect(h.plus.getAttribute('aria-label')).toContain('"step":"50 g"');
+      });
+
+      it('lands on a point the caller passes, and names both presses 15 g', () => {
+        const h = render({ value: 975, unit: 'GRAM', snaps: [990, 1000] });
+        expect(h.plus.getAttribute('aria-label')).toContain('"step":"15 g"');
+        h.plus.click();
+        expect(tos(h)).toEqual([990]);
+        expect(h.minus.getAttribute('aria-label')).toContain('"step":"15 g"');
+        h.minus.click();
+        expect(tos(h)).toEqual([990, 975]);
+      });
+
+      it('stops at 1000 with no snaps input', () => {
+        const h = render({ value: 990, unit: 'GRAM' });
+        h.plus.click();
+        expect(tos(h)).toEqual([1000]);
+        h.set('value', 1025);
+        h.minus.click();
+        expect(tos(h)).toEqual([1000, 1000]);
+      });
+
+      it('never lands on a point under its floor', () => {
+        const h = render({ value: 110, unit: 'GRAM', min: 100, snaps: [90] });
+        h.minus.click();
+        expect(tos(h)).toEqual([100]);
+      });
     });
 
     it('draws the short form with its spoken words, and no focusable cell', () => {
@@ -597,7 +1113,9 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(h.el.querySelector('.symbol')?.textContent).toBe('ml');
       expect(h.steps).toEqual([]);
       key(h, 'Enter');
-      expect(h.steps).toEqual([{ from: 500, to: 1500, repeat: false, typed: true }]);
+      expect(h.steps).toEqual([
+        { from: 500, to: 1500, repeat: false, typed: true },
+      ]);
       expect(field(h).value).toBe('1.5');
       expect(h.el.querySelector('.symbol')?.textContent).toBe('l');
     });
@@ -643,7 +1161,9 @@ describe('QuantityStepper (velista 0188)', () => {
       const h = render({ value: 750, unit: 'GRAM', variant: 'sheet' });
       type(h, '900');
       h.plus.click();
-      expect(h.steps).toEqual([{ from: 750, to: 900, repeat: false, typed: true }]);
+      expect(h.steps).toEqual([
+        { from: 750, to: 900, repeat: false, typed: true },
+      ]);
     });
 
     describe('a typed weight waits for the end of the edit (the owner, 2026-11-17)', () => {
@@ -668,13 +1188,7 @@ describe('QuantityStepper (velista 0188)', () => {
             append(h, one);
             seen.push(state(h));
           }
-          expect(seen).toEqual([
-            '2 g',
-            '25 g',
-            '250 g',
-            '2500 g',
-            '25000 g',
-          ]);
+          expect(seen).toEqual(['2 g', '25 g', '250 g', '2500 g', '25000 g']);
           expect(h.steps).toEqual([]);
           key(h, 'Enter');
           expect(h.steps).toEqual([
@@ -1163,7 +1677,7 @@ describe('QuantityStepper (velista 0188)', () => {
       const h = render({ value: 1000, unit: 'GRAM', step: 100 });
       h.minus.click();
       fire(h.minus, 'pointerdown');
-      jest.advanceTimersByTime(400);
+      jest.advanceTimersByTime(500);
       fire(h.minus, 'pointerup');
       pointerClick(h.minus);
       expect(h.steps).toEqual([
@@ -1182,13 +1696,13 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(tos(sheet)).toEqual([900, 1000]);
     });
 
-    it('moves a press at 1000 by 10 on a step of 5 (S7b, decision F)', () => {
+    it('moves a press at 1000 by 50 on a step of 5 (S7b, decision F, velista 0195)', () => {
       const h = render({ value: 995, unit: 'GRAM', step: 5 });
       h.plus.click();
       h.plus.click();
       h.minus.click();
       h.minus.click();
-      expect(tos(h)).toEqual([1000, 1010, 1000, 995]);
+      expect(tos(h)).toEqual([1000, 1050, 1000, 995]);
     });
 
     it('names the step each button moves', () => {
@@ -1197,11 +1711,11 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(h.plus.getAttribute('aria-label')).toContain('"step":"100 g"');
       h.set('step', 5);
       expect(h.minus.getAttribute('aria-label')).toContain('"step":"5 g"');
-      expect(h.plus.getAttribute('aria-label')).toContain('"step":"10 g"');
+      expect(h.plus.getAttribute('aria-label')).toContain('"step":"50 g"');
     });
 
     it('turns plus off where one step of the product would pass the most', () => {
-      const h = render({ value: 99_950, unit: 'GRAM', step: 100 });
+      const h = render({ value: 99_900, unit: 'GRAM', step: 100 });
       expect(h.plus.getAttribute('aria-disabled')).toBe('true');
       h.set('step', null);
       expect(h.plus.getAttribute('aria-disabled')).toBeNull();
@@ -1227,7 +1741,12 @@ describe('QuantityStepper (velista 0188)', () => {
       });
 
       it('keeps a typed amount under one step on a step of 50', () => {
-        const h = render({ value: 50, unit: 'GRAM', step: 50, variant: 'sheet' });
+        const h = render({
+          value: 50,
+          unit: 'GRAM',
+          step: 50,
+          variant: 'sheet',
+        });
         type(h, '10');
         key(h, 'Enter');
         expect(tos(h)).toEqual([10]);
@@ -1314,14 +1833,14 @@ describe('QuantityStepper (velista 0188)', () => {
         ]);
       });
 
-      it('builds quick presses past 1000 by 10 on a step of 5', () => {
+      it('builds quick presses down across 1000 on a step of 5, stopping on it', () => {
         const h = render(
           { value: 1005, unit: 'GRAM', step: 5 },
           { follow: false }
         );
         h.minus.click();
         h.minus.click();
-        expect(tos(h)).toEqual([995, 990]);
+        expect(tos(h)).toEqual([1000, 995]);
       });
 
       it('stops plus at the most within one task on a step of 100', () => {
@@ -1396,7 +1915,7 @@ describe('QuantityStepper (velista 0188)', () => {
     it('takes a separate press to 0 after a hold ends on it', () => {
       const h = render({ value: 3 });
       fire(h.minus, 'pointerdown');
-      jest.advanceTimersByTime(400 + 300 + 255 + 1000);
+      jest.advanceTimersByTime(500 + 300 + 244 + 1000);
       fire(h.minus, 'pointerup');
       pointerClick(h.minus);
       expect(tos(h)).toEqual([2, 1]);
@@ -1422,6 +1941,75 @@ describe('QuantityStepper (velista 0188)', () => {
       const h = render({ value: 1, readonly: true });
       expect(h.el.querySelectorAll('button')).toHaveLength(0);
       expect(h.el.querySelector('lib-trash-icon')).toBeNull();
+    });
+  });
+
+  /** The owner, 2026-11-23: the basket sheets draw a plain minus where it reaches 0. */
+  describe('trashAtZero', () => {
+    const trash = (h: Harness) => h.minus.querySelector('lib-trash-icon');
+    const bar = (h: Harness) => h.minus.querySelector('.glyph');
+    const variants = ['row', 'sheet', 'sheet-narrow'] as const;
+
+    it.each(variants)(
+      'is on by default, so every other caller keeps the trash (%s)',
+      (variant) => {
+        const h = render({ value: 1, min: 0, variant });
+        expect(h.fixture.componentInstance.trashAtZero()).toBe(true);
+        expect(trash(h)).not.toBeNull();
+        expect(h.minus.classList).toContain('is-clear');
+      }
+    );
+
+    it.each([
+      [1, 'UNIT', 'sheet-narrow'],
+      [1, 'UNIT', 'sheet'],
+      [25, 'GRAM', 'sheet'],
+    ] as const)(
+      'turned off, draws the bar at %s %s in the %s variant',
+      (value, unit, variant) => {
+        const h = render({ value, unit, min: 0, variant, trashAtZero: false });
+        expect(trash(h)).toBeNull();
+        expect(bar(h)).not.toBeNull();
+        expect(h.minus.classList).not.toContain('is-clear');
+      }
+    );
+
+    it('turned off, still steps to 0 from 1', () => {
+      const h = render({
+        value: 1,
+        min: 0,
+        variant: 'sheet-narrow',
+        trashAtZero: false,
+      });
+      pointerClick(h.minus);
+      expect(h.steps).toEqual([{ from: 1, to: 0, repeat: false }]);
+      expect(h.minus.getAttribute('aria-disabled')).toBe('true');
+    });
+
+    it('turned off, names minus with the plain step words, as at any amount', () => {
+      const h = render({
+        value: 1,
+        min: 0,
+        variant: 'sheet-narrow',
+        trashAtZero: false,
+      });
+      expect(h.minus.getAttribute('aria-label')).toBe(
+        'amount.less:{"step":"1","name":"Plátano"}'
+      );
+      h.set('value', 3);
+      expect(h.minus.getAttribute('aria-label')).toBe(
+        'amount.less:{"step":"1","name":"Plátano"}'
+      );
+    });
+
+    it('turned off, leaves the long press from 1 as it is: 0 on release, no repeat', () => {
+      const h = render({ value: 25, unit: 'GRAM', trashAtZero: false });
+      fire(h.minus, 'pointerdown');
+      jest.advanceTimersByTime(3000);
+      expect(h.steps).toEqual([]);
+      fire(h.minus, 'pointerup');
+      pointerClick(h.minus);
+      expect(h.steps).toEqual([{ from: 25, to: 0, repeat: false }]);
     });
   });
 
@@ -1479,7 +2067,7 @@ describe('QuantityStepper (velista 0188)', () => {
     it('builds each repeat of a hold on the one before', () => {
       const h = render({ value: 2 }, { follow: false });
       fire(h.plus, 'pointerdown');
-      jest.advanceTimersByTime(400 + 300 + 255);
+      jest.advanceTimersByTime(500 + 300 + 244);
       expect(h.steps).toEqual([
         { from: 2, to: 3, repeat: true },
         { from: 3, to: 4, repeat: true },
@@ -1554,15 +2142,115 @@ describe('QuantityStepper (velista 0188)', () => {
       // The fit test of velista-luna-e2e measures the narrow field: "99,999" in
       // DejaVu Sans, the system font of the CI runner, is 65.6 px at 17 px, more
       // than 72 less 6 on each side (2026-11-20).
-      const scss = readFileSync(join(__dirname, 'quantity-stepper.scss'), 'utf8');
-      const rule = /([^{}]*)\{[^}]*padding-inline:\s*var\(--app-stepper-cell-pad-sheet\)/.exec(
-        scss
+      const scss = readFileSync(
+        join(__dirname, 'quantity-stepper.scss'),
+        'utf8'
       );
+      const rule =
+        /([^{}]*)\{[^}]*padding-inline:\s*var\(--app-stepper-cell-pad-sheet\)/.exec(
+          scss
+        );
       expect(rule?.[1]).toContain(':host(.variant-sheet) .cell');
       expect(rule?.[1]).not.toContain('variant-sheet-narrow');
       expect(scss).toMatch(
         /:host\(\.variant-sheet-narrow\) \.field-cell:not\(\.is-bare\) \.field \{\s*font-size: var\(--app-stepper-figure-least\);/
       );
+    });
+  });
+
+  describe('a target (velista 0201)', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    const reachOf = (h: Harness) => ({
+      reached: h.el.classList.contains('is-reached'),
+      over: h.el.classList.contains('is-over'),
+    });
+
+    it('colours nothing with a null target, the default (spec 4)', () => {
+      const h = render({ value: 3, variant: 'sheet-narrow' });
+      expect(reachOf(h)).toEqual({ reached: false, over: false });
+    });
+
+    it('is reached at the target, over above it, and plain below it (spec 4)', () => {
+      const h = render({ value: 2, target: 3, variant: 'sheet-narrow' });
+      expect(reachOf(h)).toEqual({ reached: false, over: false });
+      h.set('value', 3);
+      expect(reachOf(h)).toEqual({ reached: true, over: false });
+      h.set('value', 4);
+      expect(reachOf(h)).toEqual({ reached: false, over: true });
+    });
+
+    it('is over for any buy on a target of 0, and plain at 0', () => {
+      const h = render({ value: 0, target: 0, variant: 'sheet-narrow' });
+      expect(reachOf(h)).toEqual({ reached: false, over: false });
+      h.set('value', 1);
+      expect(reachOf(h)).toEqual({ reached: false, over: true });
+    });
+
+    it('colours the number in the success colour and the quiet amber, and nothing else', () => {
+      const scss = readFileSync(
+        join(__dirname, 'quantity-stepper.scss'),
+        'utf8'
+      );
+      expect(scss).toMatch(
+        /:host\(\.is-reached\) \.number,\s*:host\(\.is-reached\) \.cell:not\(\.field-cell\) \{\s*color: var\(--app-status-success-fg\);/
+      );
+      expect(scss).toMatch(
+        /:host\(\.is-over\) \.number,\s*:host\(\.is-over\) \.cell:not\(\.field-cell\) \{\s*color: var\(--app-action-quiet-fg\);/
+      );
+      // No ring and no fill: neither class reaches the outline.
+      expect(scss).not.toMatch(/:host\(\.is-(reached|over)\) \.stepper/);
+    });
+
+    it('says "reached" or "more than asked" after the settled amount', () => {
+      const h = render({ value: 2, target: 3, variant: 'sheet-narrow' });
+      const live = () =>
+        h.el.querySelector('[aria-live="polite"]')?.textContent?.trim() ?? '';
+
+      h.plus.click();
+      jest.advanceTimersByTime(1000);
+      h.fixture.detectChanges();
+      expect(live()).toContain('amount.settled');
+      expect(live()).toMatch(/, amount\.reached$/);
+
+      h.plus.click();
+      jest.advanceTimersByTime(1000);
+      h.fixture.detectChanges();
+      expect(live()).toMatch(/, amount\.over$/);
+    });
+
+    it('lands on an ask of 990 g from 975 g, then on 1000, and back down (spec 8)', () => {
+      const h = render({
+        value: 975,
+        unit: 'GRAM',
+        step: 25,
+        target: 990,
+        snaps: [1000, 990],
+        variant: 'sheet-narrow',
+      });
+      h.plus.click();
+      expect(tos(h)).toEqual([990]);
+      expect(reachOf(h).reached).toBe(true);
+      h.plus.click();
+      expect(tos(h)).toEqual([990, 1000]);
+      expect(reachOf(h).over).toBe(true);
+
+      h.set('value', 1010);
+      h.minus.click();
+      h.minus.click();
+      expect(tos(h).slice(2)).toEqual([1000, 990]);
+    });
+
+    // Known limit, from the review of velista 0195: at or above 1000 a count reads
+    // in short form, and `canStepUp` refuses a plus that does not change that
+    // reading. A snap point less than 5 above the value is such a plus, so with an
+    // ask of 1003 the plus is dead at 1000. Recorded here, not worked around.
+    it('leaves the plus dead at 1000 for a count whose ask is 1003', () => {
+      const h = render({ value: 1000, target: 1003, snaps: [1000, 1003] });
+      expect(h.plus.getAttribute('aria-disabled')).toBe('true');
+      h.plus.click();
+      expect(tos(h)).toEqual([]);
     });
   });
 });

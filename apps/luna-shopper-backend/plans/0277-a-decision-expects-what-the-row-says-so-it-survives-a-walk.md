@@ -1,0 +1,293 @@
+> **PR:** [#1110](https://github.com/IchirokuXVI/nx-portfolio/pull/1110)
+
+# 0277 A decision expects what the row says, so it survives a walk
+
+> Asked for by the owner on 2026-11-25 ("yes, go ahead with it too"), beside curation CLI plan
+> `libs/luna-shopper/tools/curation/cli/plans/0006` (a replay carries local edits to a cluster).
+> Queue rows decided on a local copy of production cannot reach production today: every walk
+> on production after the copy moves `lastSeenAt` of each row it sees, and the decisions route
+> compares `lastSeenAt` by exact equality, so one row seen again refuses the whole file. This
+> plan lets an operation expect the content of the row as it was when decided, instead of the
+> time it was last seen.
+>
+> Every anchor below was read on `origin/dev` at `dc0632aa5` on 2026-11-25. Line numbers are of
+> that commit.
+>
+> Prerequisite reading: plan `0100` (the decisions route), admin plan `0035` (the decisions file
+> in the back office), curation CLI plan `0006` section 6 (the caller this is for), plan `0086`
+> (the queue), and the section "Luna Shopper backend" of `CLAUDE.md` (the OpenAPI document and
+> the wire types).
+
+## Brief for the agent
+
+### Objective
+
+Let each operation of `POST /v1/admin/harvest/entries/decisions` carry `expect.observed`, the
+row's content as the decider read it, compared field by field under the route's lock, as an
+alternative to `expect.lastSeenAt`. Make the curation suggestions decider write it into every
+decided row. Change nothing else about the route.
+
+### Context
+
+- **The check today.** `expect` is `{ status, lastSeenAt }`, both required
+  (`libs/luna-shopper/contracts/src/lib/messages/harvest.messages.ts` lines 2201 to 2215;
+  `SourceEntryExpectationDto`, `apps/luna-shopper-backend/gateway/src/app/harvest/harvest.dto.ts`
+  lines 491 to 511; the schema `sourceEntryExpectation`,
+  `libs/luna-shopper/contracts/src/schemas/messages/harvest.schemas.ts` lines 1835 to 1847).
+  `checkRows` (`apps/luna-shopper-backend/harvester/src/app/harvest/source-entry-batch.service.ts`
+  lines 479 to 527) compares the status, then `row.lastSeenAt.toISOString()` with the string sent
+  (lines 514 to 523). It runs at step 1 and again inside step 3's transaction on rows it has
+  locked again (lines 66 to 76).
+- **Why a walk breaks it.** Every observation sets `lastSeenAt` and `lastRunId`
+  (`harvester/src/app/harvest/source-ingest.ts` lines 1536 and 1623), whether the row's content
+  moved or not. Most rows a walk sees say what they said before.
+- **The rule of plan `0100`.** The contract's comment says a row whose `lastSeenAt` moved "was
+  observed again by a later run and may now say something different from what was decided
+  about" (`harvest.messages.ts` lines 2205 to 2209). `lastSeenAt` is a stand in for that
+  question. Comparing the content answers the question itself: a row that says the same is the
+  row that was decided about, and a row that says something else is refused.
+- **All or nothing.** One failing operation refuses the file at `VALIDATE`, with an error per
+  operation (`refusedAt`, line 163; the class comment, lines 114 to 120). An error is
+  `{ code, detail }` (`BulkOperationError`, `catalog.messages.ts` lines 3359 to 3362).
+- **No reject.** The route carries `accept` and `createItem` only, on purpose
+  (`gateway/src/app/harvest/harvest.controller.ts` lines 738 and 739, and the DTO's `op`
+  description, `harvest.dto.ts` lines 524 to 531).
+- **Who writes `expect`.** The suggestions decider, at decide time, from the queue entry the
+  walk read (`libs/luna-shopper/tools/curation/suggestions/src/commands.mjs` lines 801 to 804),
+  and `buildOperations` copies it into each operation (lines 1469 and 1476). The back office
+  reads a decisions file and passes `expect` through untouched
+  (`libs/luna-shopper-admin/feature-harvest/src/lib/decisions-file.ts` lines 114 and 132). Its
+  type is the wire type (`libs/luna-shopper-admin/data-access/src/lib/harvest/entry-decisions.ts`
+  line 17, `Wire.SourceEntryDecisionDto`).
+- **What a row holds.** `SourceCatalogEntry`
+  (`harvester/src/app/entities/source-catalog-entry.entity.ts`) and its view
+  `toSourceCatalogEntryView` (`harvester/src/app/harvest/harvest.mappers.ts` lines 263 to 300),
+  which is what the queue listing prints and the decider reads.
+
+### Target state
+
+1. An operation's `expect` is `{ status, lastSeenAt?, observed? }`, with at least one of
+   `lastSeenAt` and `observed`. Each one present is compared; both present means both must hold.
+2. `observed` holds the fields of section 1, and a field that differs fails its operation with
+   `EXPECT_MISMATCH` and a `detail` that names each field with the value expected and the value
+   held.
+3. A file written before this plan (with `lastSeenAt` only) answers exactly as today.
+4. The suggestions decider writes `observed` beside `status` and `lastSeenAt` in every decided
+   row.
+5. `openapi.json` and `wire-types.ts` are regenerated by their generators and committed.
+6. Specs of section 5 pass.
+
+### Scope
+
+- `libs/luna-shopper/contracts`: `SourceEntryExpectation` and a new `SourceEntryObserved` in
+  `harvest.messages.ts`; the schema `sourceEntryExpectation` and a new `sourceEntryObserved` in
+  `harvest.schemas.ts`.
+- `apps/luna-shopper-backend/gateway`: `SourceEntryExpectationDto` and a new
+  `SourceEntryObservedDto` in `harvest.dto.ts`; `docs/openapi.json` through its generator.
+- `apps/luna-shopper-backend/harvester`: `checkShape` and `checkRows` in
+  `source-entry-batch.service.ts`, and its spec.
+- `libs/luna-shopper/tools/curation/suggestions/src/commands.mjs` and its test.
+- `libs/luna-shopper-admin/models/src/lib/wire/wire-types.ts` through its generator, and a case in
+  `libs/luna-shopper-admin/feature-harvest/src/lib/decisions-file.spec.ts`.
+- Nothing else. No migration, no new route, no change to the four steps of plan `0100`.
+
+### Constraints
+
+- Compare under the lock that `checkRows` already holds, in both of its runs. No second read
+  outside the transaction.
+- Compare each field exactly as the view prints it, so the value the decider read and the value
+  compared are the same thing.
+- Keep `lastSeenAt` working. Do not deprecate it in this plan.
+- `openapi.json` and `wire-types.ts` are written only by
+  `npx nx run luna-shopper-backend-gateway:openapi` and
+  `npx nx run luna-shopper-admin/models:wire-types`. Never edit or format them by hand.
+- No production id or name in a spec or fixture.
+
+### Action boundaries
+
+- Stop and report before you add a migration, a route, or a dependency, or before you change
+  the answer of a file that carries `lastSeenAt` only.
+- Do not build curation CLI plan `0006`. This plan only gives it the check it needs.
+
+### Progress evidence
+
+`npx nx test` and `npx nx lint` of `luna-shopper-backend-harvester`,
+`luna-shopper-backend-gateway`, `luna-shopper/contracts`, `luna-shopper/curation-suggestions`,
+`luna-shopper-admin/models` and `luna-shopper-admin/feature-harvest`; `git diff --stat` of the
+two generated files; `npx nx build luna-shopper-admin`.
+
+## 1. What `observed` holds
+
+The fields a decision is made on, as `SourceCatalogEntryView` prints them:
+
+| Field | Why it belongs |
+| --- | --- |
+| `name` | the printed name: what the decider matched or named the product from |
+| `brand` | the brand the chain prints, which the matcher and the created product use |
+| `ean` | the barcode: a different barcode is a different article, and plan `0185` gives it to the product |
+| `sizeFormat` | the printed size text, which a person or a model reads |
+| `unitSize`, `sizeUnit` | the size the parser read from it, which a `createItem` falls back to |
+| `packCount` | the pack the row states, which a `createItem` takes when its item leaves it out |
+| `soldByWeight`, `approxWeight` | a piece by the kilo is a different product kind (plan `0244`) |
+| `packaging` | the container the chain prints (plan `0248`), by which the matcher tells a can from a bottle of one name and size (decision 154a) |
+
+Ten fields in all: `packaging` joined the first nine by decision 154a.
+
+Every field is required inside `observed`, with `null` where the row holds nothing. A partial
+`observed` would guard less than it seems to, and a reader of the file could not tell.
+
+**Prices do not belong.** A decision binds a row to a product, and step 4 writes the prices the
+row holds when the file lands, whatever they were at decide time. A price moves every week on
+most chains, so an `observed` with prices would fail like `lastSeenAt` does, for nothing the
+decision depends on.
+
+**Also left out:** `imageUrl` and `url` (a new photo or address changes no judgment; plan
+`0198` follows the row's photo after the bind), `categoryPaths`, `extra`, `timesSeen`,
+`firstSeenAt`, `lastRunId`, `delistedAt` (a delisted row did not change `lastSeenAt` either, so
+this keeps today's answer) and `candidateEntryId`. `categoryPath` is O2.
+
+## 2. The comparison
+
+In `checkRows`, after the status and before or instead of `lastSeenAt`:
+
+- Strings are compared exactly, with no trim or case fold, because the decider read them from
+  the same view. `null` equals only `null`.
+- Numbers are compared as numbers, through the mapper's `toNumber`, so a `numeric` column that
+  arrives as `"53.0000"` equals `53`.
+- Every differing field is named in one `detail`, for example
+  `Source entry <id> says something else now: sizeFormat was "500 g", is "450 g"; ean was null,
+  is "8410000000000".` The code stays `EXPECT_MISMATCH`, so a caller that branches on the code
+  needs no change.
+
+`checkShape` (line 985) fails an operation with `MALFORMED_OPERATION` when its `expect` carries
+neither `lastSeenAt` nor `observed`. The schema keeps `status` required and both others
+optional, and the gateway DTO marks both optional; the harvester is where the rule is enforced,
+as it is for the other combinations (DTO comment, `harvest.dto.ts` lines 513 to 521).
+
+## 3. The contract, the DTO and the generated files
+
+- `SourceEntryExpectation`: `lastSeenAt?: string`, `observed?: SourceEntryObserved`, with the
+  comment of 2201 to 2209 rewritten: the two alternatives, and why content answers the question
+  the timestamp only stood in for.
+- `SourceEntryObserved`: the fields of section 1, typed as in `SourceCatalogEntryView`.
+- The schema: `sourceEntryObserved` with every field required and nullable where the view is;
+  `sourceEntryExpectation` with `required: ['status']`.
+- `SourceEntryObservedDto`, nested under `SourceEntryExpectationDto.observed` with
+  `@ValidateNested`, and `lastSeenAt` with `@IsOptional() @IsDateString()`. Its description says
+  that each field present is compared.
+- Regenerate `openapi.json`, then `wire-types.ts`. `openapi-document.spec.ts` and
+  `wire-types.spec.ts` fail on a stale file.
+
+## 4. Who writes it
+
+- **The suggestions decider** (`commands.mjs` lines 801 to 804) writes
+  `observed: { name, brand, ean, sizeFormat, unitSize, sizeUnit, packCount, soldByWeight,
+  approxWeight, packaging }` from the entry beside `status` and `lastSeenAt`. Same cluster,
+  both are sent and both are compared, which is today's check plus the content. Curation CLI plan `0006`
+  sends `observed` without `lastSeenAt` when it replays a file to another cluster.
+- **The decisions file format** gains the field inside each record's `expect`. A file without
+  it stays valid.
+- **The back office** reads a file and sends `expect` as it is, so it needs no code change. A
+  spec asserts that `observed` reaches the request untouched. The panel's warning for a file
+  decided against another gateway (`decisions-file-panel.ts` lines 498 to 514) stays as it is.
+  See O3.
+- **The groups decider** writes to another route and is not touched.
+
+## 5. Specs
+
+- `source-entry-batch.service.spec.ts`:
+  - `observed` equal, `lastSeenAt` absent, the row seen again by a later walk: applied.
+  - `observed` with one field different (`sizeFormat`), and with two (`ean`, `name`):
+    `EXPECT_MISMATCH` at `VALIDATE`, the `detail` names each field and both values, nothing is
+    written.
+  - `numeric` `unitSize` held as `"53.0000"` against `53`: equal.
+  - Both present: a moved `lastSeenAt` with equal content still refuses; equal `lastSeenAt`
+    with a moved field refuses.
+  - Neither present: `MALFORMED_OPERATION`.
+  - A row whose content changes between step 1 and step 3 (the spec's fake writes it between
+    the two calls): refused at `BIND`, and the created products are deleted, as today.
+  - Every existing case with `lastSeenAt` only passes unchanged.
+- Gateway: a DTO case for `observed` with a missing field (400), and for `expect` with
+  `lastSeenAt` absent (accepted by the DTO).
+- Contracts: the schema accepts `{ status, observed }` and refuses `observed` with a field left
+  out.
+- Suggestions decider: a decided row carries `observed` with the entry's values, and
+  `buildOperations` copies it.
+- Back office: `observed` in a file reaches `request.operations[i].expect`.
+
+## 6. Acceptance criteria
+
+- [ ] A file decided before a walk lands after it, with `observed` and without `lastSeenAt`,
+      when no row it names changed content.
+- [ ] A row whose content changed refuses its file at `VALIDATE` with `EXPECT_MISMATCH` naming
+      the fields.
+- [ ] A file with `lastSeenAt` only answers exactly as before.
+- [ ] `openapi.json` and `wire-types.ts` are current, written by their generators.
+- [ ] The specs of section 5 pass, with lint and `npx nx build luna-shopper-admin`.
+
+## Not in this plan
+
+- **Reject.** It stays out of the route, for the reason of plan `0100`.
+- **A per row outcome.** A stale row still refuses the file (O1).
+- **The replay to another cluster.** That is curation CLI plan `0006` section 6.
+- **Prices in the check.** Section 1.
+
+## Decisions
+
+**D1 (builder, 2026-11-26, O1 A, pending the owner):** a stale row refuses the whole file, as
+today. The route has no `skipStale` flag and no per row outcome.
+
+**D2 (builder, 2026-11-26, O2 A, pending the owner):** `categoryPath` stays out of `observed`.
+
+**D3 (builder, 2026-11-26, O3 A, pending the owner):** the back office stays as it is. It sends
+`expect` as the file holds it and keeps its warning for a file decided against another gateway.
+
+Each A is the smallest build, and the other options can be added later.
+
+**D4 (fix round, 2026-11-26):** section 3 names `@IsOptional() @IsDateString()` for
+`lastSeenAt`. The build uses `@ValidateIf` for undefined alone instead, on `lastSeenAt` and on
+`observed`, so an explicit `null` is a 400 as the contract schema says, and absent is still
+allowed. Every field of `SourceEntryObservedDto` is read as sent (`asSent`, as plan 0193 did for
+body flags), so a value of the wrong JSON type is a 400 rather than a value the pipe converted.
+
+**154a (owner, 2026-11-26, built in [#1116](https://github.com/IchirokuXVI/nx-portfolio/pull/1116)):** `packaging` joins `observed` as its tenth field, required and
+nullable, a string as `SourceCatalogEntryView.packaging` prints it, compared exactly like the
+other text fields. The matcher tells a can from a bottle of one name and size by it
+(`matching.ts`, the sibling key), so a row accepted onto the can product while its packaging
+said "lata" is not bound when a later walk changed it to "botella" and nothing else. A
+decisions file written before this carries nine fields and is refused with a 400; it is decided
+again, or sent with `lastSeenAt` only. The curation replay (CLI plan `0006`, section 6) forwards
+`observed` as the file holds it and lists the ten fields for its completeness gate, so it
+refuses such a file before sending anything.
+
+## Open decisions for the owner
+
+**O1. Does a stale row refuse the whole file, or only itself?**
+
+- **A. The whole file, as today (recommended).** Plan `0100`'s promise holds: a file lands
+  whole or not at all. The answer names every refused operation, so a caller drops those
+  operations with the rows that name their `ref` and sends the rest again, which is what
+  curation CLI plan `0006` section 6 does. It costs one more request per round and no server
+  change.
+- **B. A request flag, `skipStale: true`.** An operation that fails only `EXPECT_MISMATCH` is
+  skipped, with every operation that names its `ref`, and the rest lands. One request, but the
+  route then has two meanings, and a skipped `createItem` cascades inside the server.
+- **C. Always per row.** Breaks the promise every caller of plan `0100` relies on. Not
+  recommended.
+
+**O2. Does `categoryPath` belong in `observed`?** A `createItem` that names no
+`item.categorySlugs` takes its categories from the row's path at apply time.
+
+- **A. Leave it out (recommended).** The suggestions decider always names the categories of a
+  product it creates, so the path does not reach the product. A chain that refiles a row moves
+  its path often, and a check on it would refuse rows for nothing.
+- **B. Require it in `observed` of a `createItem` without `categorySlugs` only.**
+
+**O3. Should the back office send `observed` without `lastSeenAt` for a file decided against
+another gateway?**
+
+- **A. No, leave the back office as it is (recommended).** The cross cluster replay is an
+  operator's act through curation CLI plan `0006`, which reports every class. The back office
+  keeps its warning and sends the file as decided.
+- **B. Yes, when every operation carries `observed`.** One screen could replay a local file to
+  production, with the warning as its only guard.

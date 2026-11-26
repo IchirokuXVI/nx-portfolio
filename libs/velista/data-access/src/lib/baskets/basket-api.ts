@@ -3,7 +3,9 @@ import { inject, Injectable } from '@angular/core';
 import type {
   Basket,
   BasketAddLineRequest,
+  BasketBuyForListRequest,
   BasketChangePage,
+  BasketCountExtraRequest,
   BasketDemandRequest,
   BasketLinkPreview,
   BasketMarks,
@@ -383,12 +385,39 @@ export class BasketApi implements BasketServiceI {
           from: body.from,
           // The line's unit, always (velista `0182`).
           unit: body.unit,
+          // Only as itself (backend `0276`): a rising ask asks what it took in.
+          ...(body.reportExtra === true ? { reportExtra: true } : {}),
         },
         this._participantOptions(basketId, 'basket.demand')
       )
     );
 
     return required(toBasketRowResult(answer), 'basket.demand');
+  }
+
+  /**
+   * "Count the extra" on one line (backend `0276`; velista `0208`, target state
+   * 17), keyed by the line as the demand is. The answer is the line as it now
+   * stands, and `counted`.
+   */
+  async countExtra(
+    basketId: string,
+    body: BasketCountExtraRequest
+  ): Promise<BasketRowResult> {
+    const answer = await firstValueFrom(
+      this._http.post<unknown>(
+        `${this._row(basketId, body.lineId)}/extra`,
+        {
+          lineId: body.lineId,
+          unit: body.unit,
+          amount: body.amount,
+          expect: body.expect,
+        },
+        this._participantOptions(basketId, 'basket.countExtra')
+      )
+    );
+
+    return required(toBasketRowResult(answer), 'basket.countExtra');
   }
 
   /**
@@ -474,6 +503,10 @@ export class BasketApi implements BasketServiceI {
         body.itemIds !== undefined && body.itemIds.length > 0
       )
     );
+    // Only as itself (backend `0276`): an add that raises a line asks what it took in.
+    if (body.reportExtra === true) {
+      request['reportExtra'] = true;
+    }
 
     const answer = await firstValueFrom(
       this._http.post<unknown>(
@@ -484,6 +517,42 @@ export class BasketApi implements BasketServiceI {
     );
 
     return required(toBasketRowResult(answer), 'basket.addLine');
+  }
+
+  /**
+   * Buy the row's product for a list that did not ask for it (backend `0273`).
+   *
+   * Under the participant credential like every write here; the gateway refuses
+   * a guest. `lineId` and the shop are **omitted rather than sent empty**, this
+   * file's rule: the server validates each as a uuid. No price scope and no
+   * product: the gateway prices the row's own product itself.
+   */
+  async buyForList(
+    basketId: string,
+    rowKey: string,
+    body: BasketBuyForListRequest
+  ): Promise<BasketRowResult> {
+    const request: Record<string, unknown> = {
+      targetListId: body.targetListId,
+      quantity: body.quantity,
+      unit: body.unit,
+    };
+    if (body.lineId !== null) {
+      request['lineId'] = body.lineId;
+    }
+    if (body.supermarketLocationId !== undefined) {
+      request['supermarketLocationId'] = body.supermarketLocationId;
+    }
+
+    const answer = await firstValueFrom(
+      this._http.post<unknown>(
+        `${this._row(basketId, rowKey)}/buy-for-list`,
+        request,
+        this._participantOptions(basketId, 'basket.buyForList')
+      )
+    );
+
+    return required(toBasketRowResult(answer), 'basket.buyForList');
   }
 
   /**

@@ -763,7 +763,9 @@
       "wholeGrams": "Los gramos no llevan decimales",
       "wholeMilliliters": "Los mililitros no llevan decimales",
       "decimals": "Como máximo, tres decimales"
-    }
+    },
+    "reached": "lo que se pedía",
+    "over": "más de lo pedido"
   },
   "list": {
     "header": {
@@ -840,7 +842,11 @@
         "KILOGRAM": "{{size}} kg",
         "MILLILITER": "{{size}} ml",
         "LITER": "{{size}} L",
-        "PACK": "{{size}} packs"
+        "PACK": "{{size}} packs",
+        "packOf": "{{total}} ({{count}} × {{each}})",
+        "pieces": "{{size}}, {{count}} piezas",
+        "about": "~{{size}}",
+        "andPack": "{{size}} · {{pack}}"
       },
       "weight": {
         "KILOGRAM": "~{{size}} kg",
@@ -1205,7 +1211,7 @@
       "period": "Cada {{days}} días · última compra {{when}}",
       "periodOne": "Cada día · última compra {{when}}",
       "staple": "En {{with}} de tus últimas {{seen}} listas",
-      "add": "Añadir {{count}}",
+      "add": "Añadir",
       "addLabel": "Añadir {{count}} de {{name}} a la lista",
       "more": "Ver más sugerencias",
       "added": "{{name}} añadido a la lista"
@@ -1221,7 +1227,8 @@
       "pickFor": "Para {{name}}",
       "failed": "Los productos de esta lista no se cargaron.",
       "retry": "Reintentar",
-      "about": "unos {{price}}"
+      "about": "unos {{price}}",
+      "perUnit": "/ u"
     },
     "dropped": {
       "quantity": {
@@ -1230,6 +1237,27 @@
       },
       "resend": "Enviarlo otra vez",
       "dismiss": "Descartar"
+    },
+    "extra": {
+      "boughtBy": "{{name}} ya compró {{amount}} de más.",
+      "boughtByYou": "Ya compraste {{amount}} de más.",
+      "boughtByTwo": "{{first}} y {{second}} ya compraron {{amount}} de más.",
+      "boughtByYouAndOne": "Tú y {{name}} ya comprasteis {{amount}} de más.",
+      "boughtByOneAndSomeone": "{{name}} y otra persona ya compraron {{amount}} de más.",
+      "boughtByYouAndSomeone": "Tú y otra persona ya comprasteis {{amount}} de más.",
+      "boughtByMany": "{{count}} personas ya compraron {{amount}} de más.",
+      "boughtBySomeone": "Alguien ya compró {{amount}} de más.",
+      "ask": "¿Sigues necesitando {{asked}} o solo {{left}}?",
+      "askEnough": "¿Sigues necesitando {{asked}} o con eso basta?",
+      "stillNeed": "Sigo necesitando",
+      "count": "Contar lo comprado de más",
+      "enough": "Con eso basta",
+      "units_one": "{{count}} ud",
+      "units_other": "{{count}} uds",
+      "boughtByNamedAndOthers": "{{names}} y otras personas ya compraron {{amount}} de más.",
+      "announce": "{{question}} Hay dos respuestas junto a la cantidad de la línea: {{stillNeed}}, o {{keep}}.",
+      "stale": "La cantidad cambió mientras tanto, así que no se contó nada.",
+      "countFailed": "No se contó nada. Inténtalo otra vez."
     }
   },
   "account": {
@@ -1328,10 +1356,6 @@
     },
     "tour": {
       "again": "Enséñamela otra vez"
-    },
-    "listRows": {
-      "label": "Filas compactas",
-      "hint": "Las listas muestran el tamaño, el precio y el total en cada fila. Solo en este dispositivo."
     }
   },
   "install": {
@@ -1976,7 +2000,17 @@
     },
     "entries": {
       "otherList": "Otra lista",
-      "asks": "pide {{amount}}"
+      "asks": "pide {{amount}}",
+      "heading": "Lo que has comprado",
+      "otherHeading": "Comprado para otra lista",
+      "boughtLabel": "{{name}}, comprado",
+      "boughtPlain": "Comprado",
+      "bought": "comprado {{amount}}",
+      "buyAlreadyInRow": "Esa lista ya tiene este producto aquí, así que cuéntalo con las listas de arriba.",
+      "buyNoProduct": "Esta fila no tiene producto, así que no se puede comprar para otra lista.",
+      "buyNoName": "Este producto aún no tiene nombre, así que no se puede añadir a esa lista.",
+      "buyCatalogDown": "No se ha guardado. Inténtalo de nuevo en un momento.",
+      "buyChanged": "Alguien acaba de cambiar este producto. Míralo otra vez y vuelve a intentarlo."
     },
     "row": {
       "boughtOf": "{{bought}} de {{asked}}",
@@ -2095,7 +2129,7 @@
       "listLabel": "{{list}}, cantidad de {{name}}: {{amount}}"
     },
     "change": {
-      "oneLabel": "Cambiar el producto en {{name}}",
+      "oneLabel": "Cambiar producto en {{name}}",
       "all": "Cambiar en todas las listas",
       "openLabel": "Hay otro más barato que {{name}}. Cambiar el producto",
       "cheaper": "otro más barato",
@@ -2130,9 +2164,6 @@
       "gotAt_other": "Hoy se han cogido {{count}} a {{- price}}.",
       "gotAtShop_one": "Hoy se ha cogido {{count}} a {{- price}}, en {{- shop}}.",
       "gotAtShop_other": "Hoy se han cogido {{count}} a {{- price}}, en {{- shop}}.",
-      "askedOn_one": "Lo pide 1 lista",
-      "askedOn_other": "Lo piden {{count}} listas",
-      "addElsewhere": "Añadirlo a otra lista",
       "othersLoading": "Mirando tus otras listas",
       "othersFailed": "No se han podido cargar tus otras listas.",
       "othersRetry": "Volver a intentarlo",
@@ -2147,6 +2178,17 @@
       "gotAtShopAmount": "Cogido hoy: {{amount}} a {{- price}}, en {{- shop}}.",
       "gotAllAmount": "Ya lo tengo todo ({{amount}})",
       "gotOtherAmount": "Ya tengo lo que falta ({{amount}})"
+    },
+    "lists": {
+      "open": "Listas y cantidades",
+      "title": "Listas y cantidades",
+      "back": "Volver",
+      "description": "Aquí cambias la cantidad y el producto de cada lista. Lo que has comprado se apunta en la pantalla anterior.",
+      "heading": "Lo que pide cada lista",
+      "bought": "Comprado {{bought}} de {{asked}}",
+      "notInGroup": "Esta lista es de un grupo del que no formas parte. Solo sus miembros pueden cambiar lo que pide.",
+      "ownGroup": "Lo que pide esta lista no se puede cambiar desde esta lista de la compra. Cámbialo en la propia lista.",
+      "changeProduct": "Cambiar producto"
     }
   },
   "getList": {
@@ -2943,5 +2985,11 @@
       "fullPage": "Abrir la página completa",
       "close": "Cerrar"
     }
+  },
+  "view": {
+    "title": "Vista",
+    "default": "Normal",
+    "compact": "Compacta",
+    "compactHint": "Más filas en la pantalla"
   }
 }

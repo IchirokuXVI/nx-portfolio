@@ -101,10 +101,24 @@ export interface SettleChoice {
   paid: SettlementPaid | null;
   /** What the product is called, or null when catalog did not say. */
   itemSnapshot: ItemSnapshot | null;
+  /**
+   * True when a product was asked for and catalog gave no answer about it:
+   * the budget ran out, or the read of the product failed (plan 0273,
+   * amended on 2026-11-22). Absent when catalog answered, and when nothing
+   * was asked. A settle reads it as nothing known; a buy that must make a
+   * line reads it as "try again", since a name is what it needs.
+   */
+  unanswered?: true;
 }
 
 /** Nothing known, which is an ordinary settle. */
 const NOTHING: SettleChoice = { paid: null, itemSnapshot: null };
+
+/** Catalog was asked about the product and gave no answer. */
+const UNANSWERED: SettleChoice = { ...NOTHING, unanswered: true };
+
+/** What {@link SettlePriceService.productAt} answers when catalog did not. */
+const NO_ANSWER = Symbol('no answer');
 
 /** What a change of product needs priced (plan 0202, section 3). */
 export interface RewritePriceInput extends SettlePriceInput {
@@ -197,7 +211,7 @@ export class SettlePriceService {
         );
         // The lookup that lost the race is left to finish and its result is
         // dropped. The buy is written with no price and no name.
-        return NOTHING;
+        return UNANSWERED;
       });
     } finally {
       timer.stop();
@@ -321,6 +335,9 @@ export class SettlePriceService {
       quoted === null ? [] : [quoted],
       'all'
     );
+    if (product === NO_ANSWER) {
+      return UNANSWERED;
+    }
     if (!product) {
       return NOTHING;
     }
@@ -385,6 +402,9 @@ export class SettlePriceService {
       resolved.priceScopeIds,
       'best'
     );
+    if (product === NO_ANSWER) {
+      return UNANSWERED;
+    }
     if (!product) {
       return NOTHING;
     }
@@ -415,10 +435,12 @@ export class SettlePriceService {
     scopes: readonly string[]
   ): Promise<RewriteChoice> {
     // Beside each other, because neither needs the other.
-    const [product, unscoped] = await Promise.all([
+    const [read, unscoped] = await Promise.all([
       scopes.length > 0 ? this.productAt(input.itemId, scopes, 'all') : null,
       input.unscoped ? this.lookup(input) : null,
     ]);
+    // A rewrite reads no answer as nothing known, as it always has.
+    const product = read === NO_ANSWER ? null : read;
     const asked = new Set(scopes);
     const prices: BasketScopePrice[] = [];
     for (const offer of product?.offers ?? []) {
@@ -471,8 +493,8 @@ export class SettlePriceService {
   }
 
   /**
-   * One product, priced at these scopes, or null when catalog does not answer
-   * or does not know it.
+   * One product, priced at these scopes, null when catalog answered and does
+   * not know it, or {@link NO_ANSWER} when the read failed.
    *
    * With no scope the product is read with no price: the read is then for its
    * name alone.
@@ -481,7 +503,7 @@ export class SettlePriceService {
     itemId: string,
     priceScopeIds: readonly string[],
     offers: 'best' | 'all'
-  ): Promise<ItemView | null> {
+  ): Promise<ItemView | null | typeof NO_ANSWER> {
     const req: GetItemsRequest = {
       ids: [itemId],
       ...(priceScopeIds.length > 0
@@ -495,7 +517,7 @@ export class SettlePriceService {
       );
       return found.items.find((item) => item.id === itemId) ?? null;
     } catch {
-      return null;
+      return NO_ANSWER;
     }
   }
 

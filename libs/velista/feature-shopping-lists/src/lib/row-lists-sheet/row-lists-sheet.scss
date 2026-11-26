@@ -1,0 +1,313 @@
+@use '../basket-shared' as shared;
+
+// The detailed view of a row's lists (velista 0200), as the mock's boards draw it:
+// no container and no tint, rows ruled off from each other by a hairline.
+
+// The chevron and the title on one line, which is the shop picker's own head.
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  margin-inline-start: calc(var(--app-space-3) * -1);
+}
+
+.back {
+  @include shared.tap-target;
+
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.back-glyph {
+  font-size: var(--app-icon-md);
+}
+
+.title {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+  text-wrap: balance;
+}
+
+// What the view is for: the sheets' secondary text, no box and no icon.
+.description {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  text-wrap: pretty;
+}
+
+// The row's product: the product card's compact row, a picture of 52 by the two
+// lines of words, the price at the end with the card's unit price line under it.
+// "Change for all lists" under the words.
+.product {
+  display: grid;
+  grid-template-columns: var(--app-product-thumb-size) minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: var(--app-space-4);
+  padding-block: var(--app-space-4);
+
+  &.has-all {
+    padding-block-end: 0;
+  }
+}
+
+.product-picture {
+  --app-line-picture-size: var(--app-product-thumb-size);
+  --app-line-picture-glyph: var(--app-space-7);
+
+  grid-row: 1 / span 2;
+}
+
+.product-what {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+// A long name wraps to two lines here, and is cut after them.
+.product-name {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: var(--app-text-base);
+  line-height: 1.3;
+  color: var(--app-text-primary);
+}
+
+.product-detail {
+  font-size: var(--app-text-sm);
+  line-height: 1.4;
+  color: var(--app-text-secondary);
+}
+
+// The card's price column (product-row.scss `.price`): one pixel between the
+// price and its unit price line, and one above the price.
+.product-price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  padding-block-start: 1px;
+}
+
+.product-amount {
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--app-text-primary);
+}
+
+// The card's unit price line (product-row.scss `.unit`): 12 px, muted.
+.product-unit {
+  font-size: var(--app-text-xs);
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--app-text-muted);
+}
+
+// What a price is per ("/ kg", "/ L"), as the card draws it (product-row.scss
+// `.per`): smaller than its number, muted, close after it.
+.per {
+  margin-inline-start: var(--app-space-hair);
+  font-size: var(--app-text-2xs);
+  font-weight: 400;
+  color: var(--app-text-muted);
+  word-spacing: calc(var(--app-space-hair) * -1);
+}
+
+// The text actions: "Change for all lists" and each list's "Change product", in
+// the quiet action colour, each a full touch target tall.
+.change-all,
+.change {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--app-touch-target);
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  color: var(--app-action-quiet-fg);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.change-all {
+  grid-column: 2 / -1;
+  justify-self: start;
+}
+
+// "Change product" on its own line under "Bought 2 of 3", start aligned with the
+// list's name (the mock's placement A). The touch target reaches over the line
+// above and the row's padding below, so the words sit about 6 px under the line
+// of "Bought".
+.change {
+  align-self: flex-start;
+  margin-block: calc(var(--app-space-3) * -0.75) calc(var(--app-space-3) * -1);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.entries {
+  display: flex;
+  flex-direction: column;
+  margin-block-start: var(--app-space-3);
+}
+
+.rows-head {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--app-touch-target);
+  border-block-end: 1px solid var(--app-border-subtle);
+}
+
+.heading {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  color: var(--app-text-secondary);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+// One list: its reading column and its ask. No product line: a basket row is
+// one product, which the block at the top draws.
+.row {
+  position: relative;
+  padding-block: var(--app-space-3);
+  border-block-end: 1px solid var(--app-border-subtle);
+
+  &:last-child {
+    border-block-end: 0;
+  }
+}
+
+.row-top {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--app-space-4);
+}
+
+.row-label {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.row-name {
+  overflow: hidden;
+  font-size: var(--app-text-base);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-where {
+  overflow: hidden;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// "Bought 2 of 3": plain text, no colour, never cut.
+.row-bought {
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-secondary);
+  white-space: nowrap;
+}
+
+// The ask, top aligned with the reading column and pushed down to its middle.
+.anchor {
+  display: flex;
+  flex: none;
+  margin-block-start: var(--app-space-3);
+}
+
+// A finished trip's ask: the number with its unit, end aligned in the stepper's
+// width, as the row sheet draws a number with no control.
+.ask-number {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  inline-size: calc(
+    var(--app-stepper-button) * 2 + var(--app-stepper-cell-sheet-narrow)
+  );
+  margin-block-start: var(--app-space-3);
+  color: var(--app-text-secondary);
+  text-align: end;
+
+  &.is-measured {
+    inline-size: calc(
+      var(--app-stepper-button) * 2 + var(--app-stepper-cell-sheet)
+    );
+  }
+}
+
+// The popover's host draws nothing of its own, and stays out of the flow.
+lib-anchored-popover {
+  position: absolute;
+}
+
+.why {
+  margin: 0;
+}
+
+.failed {
+  margin: var(--app-space-2) 0 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-status-danger-fg);
+}
+
+.reference {
+  display: block;
+  margin-block-start: var(--app-space-1);
+  font-family: var(--app-font-mono);
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+}
+
+.visually-hidden {
+  @include shared.visually-hidden;
+}

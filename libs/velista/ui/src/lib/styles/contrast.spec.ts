@@ -193,6 +193,62 @@ describe('contrast', () => {
       }
     );
 
+    // Velista `0200`: on the sheet, a list's product line in the quiet amber where it
+    // is not the row's product, and the number of a disabled stepper in muted text.
+    // Named, so a later change to either colour names the detailed view when it fails.
+    it.each(['--app-action-quiet-fg', '--app-text-muted'])(
+      `the detailed view's %s reaches ${TEXT}:1 on the sheet`,
+      (text) => {
+        expect(
+          ratio(text, '--app-surface-raised', theme)
+        ).toBeGreaterThanOrEqual(TEXT);
+      }
+    );
+
+    // Velista `0201`, colours A: a buy stepper's number in the success colour at the
+    // list's ask and in the quiet amber above it, on the stepper's raised surface,
+    // which is the sheet's too. Named, so a change to either names the row sheet.
+    it.each(['--app-status-success-fg', '--app-action-quiet-fg'])(
+      `a buy stepper's %s number reaches ${TEXT}:1 on the stepper`,
+      (text) => {
+        expect(
+          ratio(text, '--app-surface-raised', theme)
+        ).toBeGreaterThanOrEqual(TEXT);
+      }
+    );
+
+    // Velista `0204`: the same two colours on a reel of the row sheet, on its resting
+    // pill (the raised surface) and on its open tape (the overlay), where a number
+    // takes them while it moves. Named, so a change to either names the sheet's reel.
+    describe.each(['--app-surface-raised', '--app-surface-overlay'])(
+      "a buy reel's number on %s",
+      (surface) => {
+        it.each(['--app-status-success-fg', '--app-action-quiet-fg'])(
+          `%s reaches ${TEXT}:1`,
+          (text) => {
+            expect(ratio(text, surface, theme)).toBeGreaterThanOrEqual(TEXT);
+          }
+        );
+      }
+    );
+
+    // Velista `0207`: the flash of a row whose raise asks about the extra already
+    // bought lays the quiet amber wash over the row, and text keeps its colours, so
+    // every text colour of the row, the muted one included, clears the floor on the
+    // wash over the page's ground. Named, so a change to the wash names the flash.
+    it.each([
+      '--app-text-primary',
+      '--app-text-secondary',
+      '--app-text-muted',
+      '--app-action-quiet-fg',
+    ])(`a flashed row's %s reaches ${TEXT}:1 on the wash`, (text) => {
+      const wash = over(
+        colour('--app-action-quiet-bg', theme),
+        colour('--app-surface-ground', theme)
+      );
+      expect(contrast(colour(text, theme), wash)).toBeGreaterThanOrEqual(TEXT);
+    });
+
     // Rule T2: never place white or light text on an action fill. `--app-action-fg`
     // exists so this cannot be gotten wrong by accident, and this is what proves
     // it across every state of the button, not just its resting one.

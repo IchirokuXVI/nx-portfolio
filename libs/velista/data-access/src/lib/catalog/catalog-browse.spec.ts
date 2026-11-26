@@ -108,6 +108,8 @@ describe('CatalogBrowseApi', () => {
             unit: 'LITER',
             approxWeight: null,
             quantityStep: null,
+            packCount: null,
+            pieceCount: null,
             categories: [
               {
                 id: 'cat-milk',
@@ -121,6 +123,7 @@ describe('CatalogBrowseApi', () => {
               currency: 'EUR',
               unitPrice: 0.89,
               unitPriceLabel: 'EUR/L',
+              unitBasis: 'LITER',
               comparablePrice: null,
               comparableBasis: null,
               piecePrice: null,

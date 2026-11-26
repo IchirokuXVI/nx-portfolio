@@ -90,7 +90,9 @@ test.describe('a typed amount and a free text line in grams (2026-11-17)', () =>
     page,
   }) => {
     await openList(page);
-    await row(page).locator('.row').click();
+    // By its name: the middle of a default row with no product is its "Choose a
+    // product" control (velista 0202), which opens the catalog and not the sheet.
+    await row(page).locator('.row').getByText(NAME, { exact: true }).click();
     const dialog = page.getByRole('dialog');
     const stepper = dialog
       .locator('lib-quantity-stepper.variant-sheet')

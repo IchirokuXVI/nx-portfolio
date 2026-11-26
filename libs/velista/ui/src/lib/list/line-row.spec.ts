@@ -1,11 +1,30 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
+  QUANTITY_REEL_CLICK_SHIELD_MS,
+  QUANTITY_REEL_IDLE_MS,
+  QUANTITY_REEL_PX_PER_UNIT,
   type LineRowShownProduct,
   type LineRowVm,
   type QuantityStep,
 } from '@portfolio/velista/models';
+import { join } from 'node:path';
+import { compile } from 'sass';
 import { LineRow } from './line-row';
+
+/**
+ * The rules of a component's stylesheet as the browser gets them: compiled by the
+ * repo's `sass`, as the contrast spec does, so nesting is flattened and a selector is
+ * matched as it ships, not as it is written. jest's Angular preset does not inline a
+ * `styleUrl`, so the component definition holds no style text to read.
+ */
+function compiledRules(file: string): { selector: string; body: string }[] {
+  const css = compile(join(__dirname, file)).css;
+  return [...css.matchAll(/([^{}]*)\{([^{}]*)\}/g)].map((match) => ({
+    selector: match[1].replace(/\s+/g, ' ').trim(),
+    body: match[2],
+  }));
+}
 
 /**
  * Velista plan 0043 section 7, which **replaces** `0012` section 7's row mapping in
@@ -37,9 +56,11 @@ function vm(overrides: Partial<LineRowVm> = {}): LineRowVm {
   };
 }
 
-async function render(
+const render = renderRow;
+
+async function renderRow(
   line: LineRowVm,
-  inputs: { pending?: number | null } = {}
+  inputs: { pending?: number | null; layout?: 'default' | 'compact' } = {}
 ): Promise<ComponentFixture<LineRow>> {
   TestBed.resetTestingModule();
 
@@ -49,6 +70,9 @@ async function render(
 
   const fixture = TestBed.createComponent(LineRow);
   fixture.componentRef.setInput('line', line);
+  // The two line row, which is the compact view since velista 0202. The row of the
+  // default view has its own `describe` below.
+  fixture.componentRef.setInput('layout', inputs.layout ?? 'compact');
   if (inputs.pending !== undefined) {
     fixture.componentRef.setInput('pending', inputs.pending);
   }
@@ -558,6 +582,13 @@ describe('LineRow', () => {
   });
 
   describe('the quantity (velista 0188)', () => {
+    // The stepper is the control of the default view; the compact view's reel has its
+    // own describe (velista 0203).
+    const render = (
+      line: LineRowVm,
+      inputs: { pending?: number | null } = {}
+    ) => renderRow(line, { ...inputs, layout: 'default' });
+
     it('is drawn on every row, zero included', async () => {
       // `0012` drew it only above one, because it was an annotation. It is the
       // control now, and a control that is only sometimes there is not one anybody
@@ -642,6 +673,173 @@ describe('LineRow', () => {
     });
   });
 
+  /** Velista `0203`: the reel is the control of the compact view. */
+  describe('the reel of the compact view (velista 0203)', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    function pointer(type: string, clientX: number): Event {
+      const event = new MouseEvent(type, { bubbles: true, clientX });
+      Object.defineProperty(event, 'pointerId', { value: 1 });
+      Object.defineProperty(event, 'isPrimary', { value: true });
+      // The button is down from the press until the lift, as on a real pointer.
+      Object.defineProperty(event, 'buttons', {
+        value: type === 'pointerup' || type === 'pointercancel' ? 0 : 1,
+      });
+      return event;
+    }
+
+    function reel(fixture: ComponentFixture<LineRow>): HTMLElement {
+      return query(fixture, 'lib-quantity-reel') as HTMLElement;
+    }
+
+    /** A sideways drag on the reel of `steps` steps; leftwards is more. */
+    function drag(fixture: ComponentFixture<LineRow>, steps: number): void {
+      const target = reel(fixture);
+      target.dispatchEvent(pointer('pointerdown', 0));
+      target.dispatchEvent(
+        pointer('pointermove', -steps * QUANTITY_REEL_PX_PER_UNIT)
+      );
+      target.dispatchEvent(
+        pointer('pointerup', -steps * QUANTITY_REEL_PX_PER_UNIT)
+      );
+      fixture.detectChanges();
+    }
+
+    it('says when its tape goes up and comes down, for the question that waits for it (velista 0207)', async () => {
+      const fixture = await render(vm({ quantity: 2 }));
+      const said: { lineId: string; open: boolean }[] = [];
+      fixture.componentInstance.reelOpened.subscribe((event) =>
+        said.push(event)
+      );
+
+      drag(fixture, 1);
+      fixture.detectChanges();
+      expect(said).toEqual([{ lineId: 'ln-1', open: true }]);
+
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      fixture.detectChanges();
+      expect(said).toEqual([
+        { lineId: 'ln-1', open: true },
+        { lineId: 'ln-1', open: false },
+      ]);
+    });
+
+    it('spec 4: draws the reel and no stepper in the compact view, the reverse in the default one', async () => {
+      const compact = await render(vm({ quantity: 2 }));
+      expect(query(compact, 'lib-quantity-reel')).not.toBeNull();
+      expect(query(compact, 'lib-quantity-stepper')).toBeNull();
+
+      const normal = await render(vm({ quantity: 2 }), { layout: 'default' });
+      expect(query(normal, 'lib-quantity-reel')).toBeNull();
+      expect(query(normal, 'lib-quantity-stepper')).not.toBeNull();
+    });
+
+    it('names the amount, reads the stored or the pending amount, and the step', async () => {
+      const fixture = await render(
+        vm({ quantity: 950, unit: 'GRAM', step: 50 }),
+        { pending: 1000 }
+      );
+
+      expect(reel(fixture).getAttribute('aria-label')).toBe('amount.group');
+      expect(reel(fixture).getAttribute('data-value')).toBe('1000');
+    });
+
+    it('is read only for a caller who may not decide', async () => {
+      const fixture = await render(vm({ adjustable: false }));
+
+      expect(reel(fixture).getAttribute('aria-readonly')).toBe('true');
+    });
+
+    it('emits one reeled step when the reel closes, and not as a stepper step', async () => {
+      const fixture = await render(vm({ quantity: 2 }));
+      const reeled: Array<{ lineId: string; step: QuantityStep }> = [];
+      const stepped: unknown[] = [];
+      fixture.componentInstance.quantityReeled.subscribe((s) => reeled.push(s));
+      fixture.componentInstance.quantityStepped.subscribe((s) =>
+        stepped.push(s)
+      );
+
+      drag(fixture, 3);
+      expect(reeled).toEqual([]);
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+
+      expect(reeled).toEqual([
+        { lineId: 'ln-1', step: { from: 2, to: 5, repeat: false } },
+      ]);
+      expect(stepped).toEqual([]);
+    });
+
+    it('does not open the line for a press on the reel', async () => {
+      const fixture = await render(vm({ quantity: 2 }));
+      const opened: string[] = [];
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+      reel(fixture).dispatchEvent(pointer('pointerdown', 0));
+      reel(fixture).dispatchEvent(pointer('pointerup', 0));
+      reel(fixture).click();
+
+      expect(opened).toEqual([]);
+    });
+
+    it('spec 5: a tap on the row while the reel is open closes it and opens nothing', async () => {
+      const fixture = await render(vm({ quantity: 2 }));
+      const opened: string[] = [];
+      const reeled: unknown[] = [];
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+      fixture.componentInstance.quantityReeled.subscribe((s) => reeled.push(s));
+
+      drag(fixture, 1);
+      const name = query(fixture, '.content') as HTMLElement;
+      name.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      name.click();
+
+      expect(opened).toEqual([]);
+      // The close sends what the reel held.
+      expect(reeled).toHaveLength(1);
+
+      // The next tap is the row's again.
+      name.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      name.click();
+      expect(opened).toEqual(['ln-1']);
+    });
+
+    it('spec 5: a tap within the click shield after the reel closed by itself opens nothing', async () => {
+      const fixture = await render(vm({ quantity: 2 }));
+      const opened: string[] = [];
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+      drag(fixture, 1);
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      fixture.detectChanges();
+
+      const name = query(fixture, '.content') as HTMLElement;
+      name.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      name.click();
+      expect(opened).toEqual([]);
+
+      jest.advanceTimersByTime(QUANTITY_REEL_CLICK_SHIELD_MS);
+      name.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      name.click();
+      expect(opened).toEqual(['ln-1']);
+    });
+
+    it('stays locked when a row being cleared in the default view turns compact (velista 0199)', async () => {
+      const fixture = await render(vm({ quantity: 0 }), { layout: 'default' });
+      fixture.componentRef.setInput('clearing', true);
+      fixture.componentRef.setInput('layout', 'compact');
+      fixture.detectChanges();
+      const reeled: unknown[] = [];
+      fixture.componentInstance.quantityReeled.subscribe((s) => reeled.push(s));
+
+      expect(query(fixture, '[data-clearing-layer]')).not.toBeNull();
+      drag(fixture, 2);
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+
+      expect(reeled).toEqual([]);
+    });
+  });
+
   describe('what a tap does', () => {
     it('opens the line rather than ticking it off', async () => {
       const fixture = await render(vm());
@@ -718,12 +916,81 @@ describe('LineRow', () => {
     });
   });
 
+  /**
+   * Velista 0196. jsdom cannot press an element into `:active`, so the compiled
+   * stylesheet is read: the row turns the browser's tap box off, and draws its own
+   * press exactly when the press will open the line.
+   */
+  describe('the press (velista 0196)', () => {
+    const rules = compiledRules('line-row.scss');
+    const pressed = rules.filter((rule) => rule.selector.includes(':active'));
+
+    it('turns off the tap highlight on the row', () => {
+      expect(rules.find((rule) => rule.selector === '.row')?.body).toMatch(
+        /-webkit-tap-highlight-color:\s*transparent;/
+      );
+    });
+
+    it('has one pressed rule, and it sinks the row with no transition', () => {
+      expect(pressed).toHaveLength(1);
+      expect(pressed[0].body).toMatch(
+        /background:\s*var\(--app-surface-sunken\);/
+      );
+      expect(pressed[0].body).not.toContain('transition');
+    });
+
+    it('sinks a row whose tap opens the line, and never an inert or a clearing one', () => {
+      // `.inert` and `.clearing` (velista 0199) are exactly the rows whose
+      // `onRowClick` returns early.
+      expect(pressed[0].selector).toMatch(
+        /^\.row:not\(\.inert,\s*\.clearing\):active:not\(/
+      );
+    });
+
+    it('leaves out a press on the stepper, the reel, a button or the photo viewer, and only those', () => {
+      const excluded = /:not\(:has\(([^()]*(?:\([^()]*\)[^()]*)*)\)\)$/
+        .exec(pressed[0].selector)?.[1]
+        .split(',')
+        .map((term) => term.trim());
+
+      expect(excluded).toEqual([
+        'lib-quantity-stepper:active',
+        'lib-quantity-reel:active',
+        'button:active',
+        'lib-photo-viewer:active',
+      ]);
+    });
+
+    it('sinks the row on a press on a picture with no zoom, which opens the line', () => {
+      expect(pressed[0].selector).not.toContain('lib-product-picture');
+    });
+  });
+
   describe('a write in flight', () => {
     it('is aria-busy and keeps its accessible name', async () => {
       const fixture = await render(vm({ write: 'pending' }));
 
       expect(row(fixture).getAttribute('aria-busy')).toBe('true');
       expect(row(fixture).getAttribute('aria-label')).toBe('Sourdough loaf, 1');
+    });
+
+    // Velista 0197: the row is not dimmed while it saves. jsdom draws no component
+    // style, so the compiled stylesheet is read for a rule that would change its
+    // opacity.
+    it('is not dimmed while it saves (velista 0197)', async () => {
+      const fixture = await render(vm({ write: 'pending' }));
+      const rules = compiledRules('line-row.scss');
+
+      expect(row(fixture).getAttribute('aria-busy')).toBe('true');
+      expect(['', '1']).toContain(getComputedStyle(row(fixture)).opacity);
+      expect(
+        rules.filter(
+          (rule) =>
+            (rule.selector.includes('.in-flight') ||
+              rule.selector === '.row') &&
+            /(^|[;\s])opacity\s*:/.test(rule.body)
+        )
+      ).toEqual([]);
     });
 
     it('is not busy when nothing is outstanding', async () => {
@@ -820,12 +1087,13 @@ describe('LineRow', () => {
     });
   });
   /**
-   * Velista `0191`: the compact row. The same component and view model as the row of
-   * today, drawn in its own branch, so every case here is about what the branch draws
-   * and what it still shares (section 8).
+   * Velista `0191`: the row with three facts, the default view since velista `0202`.
+   * The same component and view model as the two line row of the compact view, drawn
+   * in its own branch, so every case here is about what the branch draws and what it
+   * still shares (section 8).
    */
-  describe('compact layout (velista 0191)', () => {
-    async function compact(
+  describe('the default view (velista 0191, 0202)', () => {
+    async function defaultView(
       line: LineRowVm,
       inputs: { pending?: number | null } = {}
     ): Promise<ComponentFixture<LineRow>> {
@@ -835,7 +1103,7 @@ describe('LineRow', () => {
       }).compileComponents();
       const fixture = TestBed.createComponent(LineRow);
       fixture.componentRef.setInput('line', line);
-      fixture.componentRef.setInput('layout', 'compact');
+      fixture.componentRef.setInput('layout', 'default');
       if (inputs.pending !== undefined) {
         fixture.componentRef.setInput('pending', inputs.pending);
       }
@@ -879,8 +1147,8 @@ describe('LineRow', () => {
       ).map((fact) => fact.textContent?.trim() ?? '');
     }
 
-    it("steps by the product's step the row carries, as the row of today does (velista 0186)", async () => {
-      const fixture = await compact(
+    it("steps by the product's step the row carries, as the two line row does (velista 0186)", async () => {
+      const fixture = await defaultView(
         vm({ quantity: 1000, unit: 'GRAM', step: 100, product: loose() })
       );
       const steps: QuantityStep[] = [];
@@ -890,20 +1158,33 @@ describe('LineRow', () => {
 
       plus(fixture).click();
 
-      expect(row(fixture).classList).toContain('compact');
+      expect(row(fixture).classList).toContain('facts-row');
       expect(steps).toEqual([{ from: 1000, to: 1100, repeat: false }]);
     });
 
-    it('carries .compact and draws none of the row of today', async () => {
-      const fixture = await compact(vm({ product: pack() }));
+    it('carries .facts-row and draws none of the two line row', async () => {
+      const fixture = await defaultView(vm({ product: pack() }));
 
-      expect(row(fixture).classList).toContain('compact');
+      expect(row(fixture).classList).toContain('facts-row');
+      expect(row(fixture).classList).not.toContain('compact');
       expect(query(fixture, '.body')).toBeNull();
       expect(query(fixture, '.line-2')).toBeNull();
     });
 
+    it('draws the three facts in the default view and the two lines in the compact one (velista 0202)', async () => {
+      const facts = await defaultView(vm({ product: pack() }));
+      expect(query(facts, '.facts')).not.toBeNull();
+      expect(query(facts, '.line-2')).toBeNull();
+
+      const twoLines = await render(vm({ product: pack() }));
+      expect(row(twoLines).classList).toContain('compact');
+      expect(row(twoLines).classList).not.toContain('facts-row');
+      expect(query(twoLines, '.line-2')).not.toBeNull();
+      expect(query(twoLines, '.facts')).toBeNull();
+    });
+
     it('draws line 1 as the label, then the brand, then the marks', async () => {
-      const fixture = await compact(
+      const fixture = await defaultView(
         vm({
           content: 'Leche',
           named: true,
@@ -913,7 +1194,7 @@ describe('LineRow', () => {
           indicators: ['bought'],
         })
       );
-      const line1 = query(fixture, '.compact-line-1') as HTMLElement;
+      const line1 = query(fixture, '.facts-line-1') as HTMLElement;
       const children = Array.from(line1.children).map((child) =>
         child.className.split(' ').filter((name) => name !== '')
       );
@@ -921,8 +1202,8 @@ describe('LineRow', () => {
       expect(children[0]).toEqual(expect.arrayContaining(['content', 'label']));
       expect(children[1]).toEqual(['brand']);
       expect(children[2]).toEqual(['marks']);
-      expect(text(fixture, '.compact-line-1 .label')).toBe('Leche');
-      expect(text(fixture, '.compact-line-1 .brand')).toBe('Hacendado');
+      expect(text(fixture, '.facts-line-1 .label')).toBe('Leche');
+      expect(text(fixture, '.facts-line-1 .brand')).toBe('Hacendado');
       // The editor's initial with no word, the comment count, then the status word.
       expect(text(fixture, '.marks .editor-avatar')).toBe('A');
       expect(query(fixture, '.editor-label')).toBeNull();
@@ -935,14 +1216,14 @@ describe('LineRow', () => {
     });
 
     it('draws a pack of two as its size, its price, and the total of two with no mark', async () => {
-      const fixture = await compact(vm({ quantity: 2, product: pack() }));
+      const fixture = await defaultView(vm({ quantity: 2, product: pack() }));
 
       expect(facts(fixture)).toEqual(['1 L', '0,99 €', '1,98 €']);
       expect(query(fixture, '.fact.price')?.textContent).not.toContain('≈');
     });
 
     it('draws both lines for a pack of one, though they say one number', async () => {
-      const fixture = await compact(
+      const fixture = await defaultView(
         vm({
           quantity: 1,
           product: pack({ total: { amount: '0,99 €', estimated: false } }),
@@ -953,7 +1234,7 @@ describe('LineRow', () => {
     });
 
     it('draws a kilo piece as its weight, its piece price and the estimated total', async () => {
-      const fixture = await compact(
+      const fixture = await defaultView(
         vm({
           quantity: 3,
           product: pack({
@@ -969,13 +1250,13 @@ describe('LineRow', () => {
     });
 
     it('draws a product with no brand without a brand', async () => {
-      const fixture = await compact(vm({ product: pack({ brand: null }) }));
+      const fixture = await defaultView(vm({ product: pack({ brand: null }) }));
 
       expect(query(fixture, '.brand')).toBeNull();
     });
 
     it('marks the total of 750 g of a loose product, under its price per kilo', async () => {
-      const fixture = await compact(
+      const fixture = await defaultView(
         vm({ quantity: 750, unit: 'GRAM', product: loose() })
       );
 
@@ -983,7 +1264,7 @@ describe('LineRow', () => {
     });
 
     it('leaves the third line empty at zero, for a loose product and a pack', async () => {
-      const fixture = await compact(
+      const fixture = await defaultView(
         vm({
           quantity: 0,
           unit: 'GRAM',
@@ -994,14 +1275,14 @@ describe('LineRow', () => {
       expect(facts(fixture)).toEqual(['', '2,50 € / kg', '']);
       expect(query(fixture, '.fact.price.none')).toBeNull();
 
-      const packAtZero = await compact(
+      const packAtZero = await defaultView(
         vm({ quantity: 0, product: pack({ total: null }) })
       );
       expect(facts(packAtZero)).toEqual(['1 L', '0,99 €', '']);
     });
 
     it('says No price on the third line, and leaves the second empty, for a product with none', async () => {
-      const fixture = await compact(
+      const fixture = await defaultView(
         vm({ product: pack({ price: null, total: null }) })
       );
 
@@ -1010,7 +1291,7 @@ describe('LineRow', () => {
     });
 
     it('draws a line of several products as the star, the brand and +2 in the brand', async () => {
-      const fixture = await compact(
+      const fixture = await defaultView(
         vm({
           product: pack({
             brand: 'Quesería Artesana de Villalón',
@@ -1019,7 +1300,7 @@ describe('LineRow', () => {
           }),
         })
       );
-      const brand = query(fixture, '.compact-line-1 .brand.multi');
+      const brand = query(fixture, '.facts-line-1 .brand.multi');
 
       expect(brand?.querySelector('.favorite')).not.toBeNull();
       expect(brand?.querySelector('.brand-text')?.textContent).toBe(
@@ -1029,7 +1310,7 @@ describe('LineRow', () => {
     });
 
     it('draws a free text line as the dashed square and Choose a product, two buttons that choose', async () => {
-      const fixture = await compact(
+      const fixture = await defaultView(
         vm({
           content: 'Pan de molde',
           product: { kind: 'none', canChoose: true },
@@ -1043,10 +1324,7 @@ describe('LineRow', () => {
       fixture.componentInstance.opened.subscribe((id) => opened.push(id));
 
       const square = query(fixture, 'button.picture.choose') as HTMLElement;
-      const words = query(
-        fixture,
-        '.facts button.compact-choose'
-      ) as HTMLElement;
+      const words = query(fixture, '.facts button.facts-choose') as HTMLElement;
       expect(square.getAttribute('aria-label')).toBe('list.row.chooseFor');
       expect(words.textContent?.trim()).toBe('list.row.choose');
       tap(square);
@@ -1058,7 +1336,7 @@ describe('LineRow', () => {
     });
 
     it('says No product to a reader who may not choose', async () => {
-      const fixture = await compact(
+      const fixture = await defaultView(
         vm({ product: { kind: 'none', canChoose: false } })
       );
 
@@ -1068,21 +1346,21 @@ describe('LineRow', () => {
     });
 
     it('draws the four bones and the real label while the product loads', async () => {
-      const fixture = await compact(
+      const fixture = await defaultView(
         vm({ content: 'Leche', product: { kind: 'loading' } })
       );
 
       expect(query(fixture, '.picture.bone')).not.toBeNull();
-      expect(query(fixture, '.compact-line-1 .brand-bone')).not.toBeNull();
+      expect(query(fixture, '.facts-line-1 .brand-bone')).not.toBeNull();
       expect(
         fixture.nativeElement.querySelectorAll('.facts > .fact-bone')
       ).toHaveLength(3);
-      expect(text(fixture, '.compact-line-1 .label')).toBe('Leche');
+      expect(text(fixture, '.facts-line-1 .label')).toBe('Leche');
       expect(stepper(fixture)).not.toBeNull();
     });
 
     it('draws a failed product as the label, the plain picture and three empty lines', async () => {
-      const fixture = await compact(
+      const fixture = await defaultView(
         vm({ content: 'Leche', product: { kind: 'unread' } })
       );
 
@@ -1093,7 +1371,7 @@ describe('LineRow', () => {
 
     describe('the accessible name (section 5)', () => {
       it('says the label, the brand, the size, the unit price, the total and the quantity of a pack', async () => {
-        const fixture = await compact(
+        const fixture = await defaultView(
           vm({ content: 'Leche', named: true, quantity: 2, product: pack() })
         );
 
@@ -1103,7 +1381,7 @@ describe('LineRow', () => {
       });
 
       it('says no total at zero', async () => {
-        const fixture = await compact(
+        const fixture = await defaultView(
           vm({ content: 'Leche', quantity: 0, product: pack({ total: null }) })
         );
 
@@ -1113,7 +1391,7 @@ describe('LineRow', () => {
       });
 
       it('says an estimate as about its amount, for a loose product', async () => {
-        const fixture = await compact(
+        const fixture = await defaultView(
           vm({
             content: 'Plátano de Canarias IGP',
             named: false,
@@ -1131,7 +1409,7 @@ describe('LineRow', () => {
       });
 
       it('says the favourite and +N, as the row draws them', async () => {
-        const fixture = await compact(
+        const fixture = await defaultView(
           vm({
             content: 'Queso',
             product: pack({ favorite: true, others: 2 }),
@@ -1144,7 +1422,7 @@ describe('LineRow', () => {
       });
 
       it('says the label and the quantity of a free text line', async () => {
-        const fixture = await compact(
+        const fixture = await defaultView(
           vm({
             content: 'Pan de molde',
             quantity: 2,
@@ -1156,8 +1434,8 @@ describe('LineRow', () => {
       });
     });
 
-    it('draws the decisions and both notices under a compact row', async () => {
-      const decided = await compact(
+    it('draws the decisions and both notices under a default row', async () => {
+      const decided = await defaultView(
         vm({ approvalStatus: 'PENDING', decidable: true, product: pack() })
       );
       expect(
@@ -1165,10 +1443,12 @@ describe('LineRow', () => {
       ).toHaveLength(2);
       expect(row(decided).classList).toContain('awaiting');
 
-      const failed = await compact(vm({ write: 'failed', product: pack() }));
+      const failed = await defaultView(
+        vm({ write: 'failed', product: pack() })
+      );
       expect(text(failed, '.notice.failed')).toBe('list.line.failed');
 
-      const overwritten = await compact(
+      const overwritten = await defaultView(
         vm({ write: 'overwritten', overwrittenBy: 'Ana', product: pack() })
       );
       expect(text(overwritten, '.notice.overwritten')).toBe(
@@ -1176,8 +1456,8 @@ describe('LineRow', () => {
       );
     });
 
-    it('keeps the status words for a screen reader, as the row of today does', async () => {
-      const fixture = await compact(
+    it('keeps the status words for a screen reader, as the two line row does', async () => {
+      const fixture = await defaultView(
         vm({ indicators: ['bought', 'notAvailable'], product: pack() })
       );
       const described = row(fixture).getAttribute('aria-describedby');
@@ -1189,7 +1469,7 @@ describe('LineRow', () => {
     });
 
     it('draws the row stepper bound as in the default layout', async () => {
-      const fixture = await compact(vm({ quantity: 3, product: pack() }), {
+      const fixture = await defaultView(vm({ quantity: 3, product: pack() }), {
         pending: 5,
       });
       const steps: Array<{ lineId: string; step: QuantityStep }> = [];
@@ -1208,12 +1488,14 @@ describe('LineRow', () => {
       ]);
       expect(opened).toEqual([]);
 
-      const reader = await compact(vm({ adjustable: false, product: pack() }));
+      const reader = await defaultView(
+        vm({ adjustable: false, product: pack() })
+      );
       expect(stepper(reader)?.classList).toContain('is-readonly');
     });
 
-    it('opens the line on a tap, as the row of today does', async () => {
-      const fixture = await compact(vm({ product: pack() }));
+    it('opens the line on a tap, as the two line row does', async () => {
+      const fixture = await defaultView(vm({ product: pack() }));
       const opened: string[] = [];
       fixture.componentInstance.opened.subscribe((id) => opened.push(id));
 
@@ -1233,7 +1515,7 @@ describe('LineRow', () => {
       }
 
       it('stands in for the total during an open run, and keeps the price per kilo', async () => {
-        const fixture = await compact(
+        const fixture = await defaultView(
           vm({ quantity: 750, unit: 'GRAM', product: loose() }),
           { pending: 1000 }
         );
@@ -1247,7 +1529,7 @@ describe('LineRow', () => {
       });
 
       it('stands in for the total while the write is in flight', async () => {
-        const fixture = await compact(
+        const fixture = await defaultView(
           vm({
             quantity: 1000,
             unit: 'GRAM',
@@ -1264,7 +1546,7 @@ describe('LineRow', () => {
       });
 
       it('draws the total of the new amount once the write has landed', async () => {
-        const fixture = await compact(
+        const fixture = await defaultView(
           vm({ quantity: 750, unit: 'GRAM', product: loose() }),
           { pending: 1000 }
         );
@@ -1289,7 +1571,7 @@ describe('LineRow', () => {
       it('never draws the old total between the run and its write', async () => {
         // `quantityRuns` clears `pending` and the line store marks the write
         // pending in one task, so both inputs change before the next render.
-        const fixture = await compact(
+        const fixture = await defaultView(
           vm({ quantity: 750, unit: 'GRAM', product: loose() }),
           { pending: 1000 }
         );
@@ -1311,9 +1593,12 @@ describe('LineRow', () => {
       });
 
       it("replaces a pack's total too, and keeps its price", async () => {
-        const fixture = await compact(vm({ quantity: 2, product: pack() }), {
-          pending: 3,
-        });
+        const fixture = await defaultView(
+          vm({ quantity: 2, product: pack() }),
+          {
+            pending: 3,
+          }
+        );
 
         expect(mark(fixture)).not.toBeNull();
         expect(facts(fixture)).toEqual(['1 L', '0,99 €', '']);
@@ -1321,7 +1606,7 @@ describe('LineRow', () => {
       });
 
       it('replaces No price too, while the amount is saved', async () => {
-        const fixture = await compact(
+        const fixture = await defaultView(
           vm({ quantity: 2, product: pack({ price: null, total: null }) }),
           { pending: 3 }
         );
@@ -1331,7 +1616,7 @@ describe('LineRow', () => {
       });
 
       it('leaves the total out of the name while the mark shows', async () => {
-        const fixture = await compact(
+        const fixture = await defaultView(
           vm({
             content: 'Plátano de Canarias IGP',
             quantity: 750,
@@ -1347,22 +1632,27 @@ describe('LineRow', () => {
       });
 
       it('draws no mark on a free text line or a row with no product', async () => {
-        const free = await compact(
+        const free = await defaultView(
           vm({ product: { kind: 'none', canChoose: true }, write: 'pending' }),
           { pending: 3 }
         );
         expect(query(free, '.saving')).toBeNull();
 
-        const loading = await compact(vm({ product: { kind: 'loading' } }), {
-          pending: 3,
-        });
+        const loading = await defaultView(
+          vm({ product: { kind: 'loading' } }),
+          {
+            pending: 3,
+          }
+        );
         expect(query(loading, '.saving')).toBeNull();
 
-        const bare = await compact(vm({ write: 'pending' }), { pending: 3 });
+        const bare = await defaultView(vm({ write: 'pending' }), {
+          pending: 3,
+        });
         expect(query(bare, '.saving')).toBeNull();
       });
 
-      it('draws nothing of it on the row of today', async () => {
+      it('draws nothing of it on the two line row', async () => {
         const fixture = await render(
           vm({ write: 'pending', product: shown() }),
           { pending: 3 }
@@ -1372,5 +1662,242 @@ describe('LineRow', () => {
         expect(text(fixture, '.line-1 .price')).toBe('0,92 €');
       });
     });
+  });
+});
+
+describe('LineRow: a row being cleared (velista 0199)', () => {
+  async function clearing(
+    line: LineRowVm,
+    layout: 'default' | 'compact' = 'compact'
+  ): Promise<ComponentFixture<LineRow>> {
+    const fixture = await render(line);
+    fixture.componentRef.setInput('layout', layout);
+    fixture.componentRef.setInput('clearing', true);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it.each(['default', 'compact'] as const)(
+    'draws the lock and the spinner in the %s layout',
+    async (layout) => {
+      const fixture = await clearing(
+        vm({ quantity: 0, product: shown() }),
+        layout
+      );
+
+      expect(row(fixture).classList).toContain('clearing');
+      expect(row(fixture).getAttribute('aria-busy')).toBe('true');
+      expect(row(fixture).getAttribute('aria-disabled')).toBe('true');
+      const lock = query(fixture, '.row > [data-clearing-lock]');
+      expect(lock?.getAttribute('aria-hidden')).toBe('true');
+      expect(lock?.querySelector('lib-spinner-icon')).not.toBeNull();
+    }
+  );
+
+  it('ignores a click on itself, on its stepper and on the choose button', async () => {
+    const fixture = await clearing(
+      vm({ quantity: 0, product: { kind: 'none', canChoose: true } })
+    );
+    const opened: string[] = [];
+    const steps: QuantityStep[] = [];
+    const chosen: string[] = [];
+    fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+    fixture.componentInstance.quantityStepped.subscribe((event) =>
+      steps.push(event.step)
+    );
+    fixture.componentInstance.chooseProduct.subscribe((id) => chosen.push(id));
+
+    row(fixture).click();
+    query(fixture, '.step.plus')?.dispatchEvent(
+      new MouseEvent('click', { bubbles: true })
+    );
+    (query(fixture, '.choose') as HTMLElement).click();
+    row(fixture).dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })
+    );
+
+    expect(opened).toEqual([]);
+    expect(steps).toEqual([]);
+    expect(chosen).toEqual([]);
+  });
+
+  it('lets Tab, Escape and a key with Alt, Ctrl or Meta held through, and no other', async () => {
+    const fixture = await clearing(vm({ quantity: 0 }));
+    const key = (init: KeyboardEventInit) => {
+      const event = new KeyboardEvent('keydown', {
+        ...init,
+        bubbles: true,
+        cancelable: true,
+      });
+      row(fixture).dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+
+    expect(key({ key: 'Tab' })).toBe(false);
+    expect(key({ key: 'Escape' })).toBe(false);
+    expect(key({ key: 'r', ctrlKey: true })).toBe(false);
+    expect(key({ key: 'ArrowLeft', altKey: true })).toBe(false);
+    expect(key({ key: 'l', metaKey: true })).toBe(false);
+    expect(key({ key: 'Enter' })).toBe(true);
+    expect(key({ key: '+' })).toBe(true);
+  });
+
+  it('is described by a spoken word while it is locked', async () => {
+    const fixture = await clearing(vm({ quantity: 0 }));
+
+    const ids = row(fixture).getAttribute('aria-describedby')?.split(' ') ?? [];
+    expect(ids).toContain('lk-ln-1');
+    const word = query(fixture, '#lk-ln-1');
+    expect(word?.classList).toContain('visually-hidden');
+    expect(word?.closest('[aria-hidden="true"]')).toBeNull();
+  });
+
+  it('draws the layer over the whole host, from tokens only, and the disc with an edge', () => {
+    const rules = compiledRules('line-row.scss');
+    const layer = rules.find((one) => one.selector === '.lock-layer');
+    const lock = rules.find((one) => one.selector === '.lock');
+    const mark = rules.find((one) => one.selector === '.lock-mark');
+    const notice = rules.find((one) => one.selector === '.notice');
+
+    expect(layer?.body).toMatch(/position:\s*absolute;/);
+    expect(layer?.body).toMatch(/inset:\s*0;/);
+    expect(layer?.body).toMatch(/background:\s*var\(--app-scrim\);/);
+    // Drawn in the order of the template, so a notice after it is drawn over it.
+    expect(layer?.body).not.toMatch(/z-index/);
+    expect(notice?.body).toMatch(/position:\s*relative;/);
+    expect(lock?.body).toMatch(/z-index:\s*1;/);
+    expect(mark?.body).toMatch(
+      /border:\s*1px solid var\(--app-border-strong\);/
+    );
+  });
+
+  it('draws the layer after the row and the decisions and before a notice', async () => {
+    const fixture = await clearing(
+      vm({
+        quantity: 0,
+        approvalStatus: 'PENDING',
+        decidable: true,
+        write: 'failed',
+      })
+    );
+    const children = Array.from(
+      (fixture.nativeElement as HTMLElement).children
+    );
+    const at = (selector: string) =>
+      children.findIndex((child) => child.matches(selector));
+
+    expect(at('.row')).toBeGreaterThanOrEqual(0);
+    expect(at('.decisions')).toBeGreaterThan(at('.row'));
+    expect(at('[data-clearing-layer]')).toBeGreaterThan(at('.decisions'));
+    expect(at('.notice.failed')).toBeGreaterThan(at('[data-clearing-layer]'));
+    expect(
+      query(fixture, '[data-clearing-layer]')?.getAttribute('aria-hidden')
+    ).toBe('true');
+  });
+
+  it('stops the decisions under the layer and leaves a notice usable', async () => {
+    const fixture = await clearing(
+      vm({
+        quantity: 0,
+        approvalStatus: 'PENDING',
+        decidable: true,
+        write: 'failed',
+      })
+    );
+    const acted: unknown[] = [];
+    const retried: string[] = [];
+    fixture.componentInstance.act.subscribe((event) => acted.push(event));
+    fixture.componentInstance.retry.subscribe((id) => retried.push(id));
+
+    (query(fixture, '.decision.approve') as HTMLElement).click();
+    (query(fixture, '.notice.failed') as HTMLElement).click();
+
+    expect(acted).toEqual([]);
+    expect(retried).toEqual(['ln-1']);
+  });
+
+  it('answers again once it is no longer clearing', async () => {
+    const fixture = await clearing(vm({ quantity: 1 }));
+    const opened: string[] = [];
+    fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+    fixture.componentRef.setInput('clearing', false);
+    fixture.detectChanges();
+    row(fixture).click();
+
+    expect(opened).toEqual(['ln-1']);
+    expect(query(fixture, '[data-clearing-lock]')).toBeNull();
+    expect(row(fixture).getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it('draws the lock on the sunken surface of a pressed row, from tokens only', () => {
+    const rule = compiledRules('line-row.scss').find(
+      (one) => one.selector === '.row.clearing'
+    );
+
+    expect(rule?.body).toMatch(/background:\s*var\(--app-surface-sunken\);/);
+  });
+});
+
+/**
+ * Velista `0207`: what the row exposes for the page's question about the extra
+ * already bought. Its amount control is marked as the popover's anchor in both
+ * views, the row itself as what the popover keeps in sight, and the flash is the
+ * row's own layer.
+ */
+describe('LineRow: the question about the extra already bought (velista 0207)', () => {
+  it('marks its amount control in both views, and the row', async () => {
+    const compact = await render(vm({ quantity: 2 }));
+    expect(query(compact, '[data-amount-control]')?.tagName.toLowerCase()).toBe(
+      'lib-quantity-reel'
+    );
+    expect(row(compact).hasAttribute('data-line-row')).toBe(true);
+
+    const normal = await render(vm({ quantity: 2 }), { layout: 'default' });
+    expect(query(normal, '[data-amount-control]')?.tagName.toLowerCase()).toBe(
+      'lib-quantity-stepper'
+    );
+  });
+
+  it('draws the layer while asked, and lights it while flashing', async () => {
+    const fixture = await render(vm({ quantity: 2 }), { layout: 'default' });
+    expect(row(fixture).classList).not.toContain('asked');
+
+    fixture.componentRef.setInput('asked', true);
+    fixture.detectChanges();
+    expect(row(fixture).classList).toContain('asked');
+    expect(row(fixture).classList).not.toContain('flash');
+
+    fixture.componentRef.setInput('flashing', true);
+    fixture.detectChanges();
+    expect(row(fixture).classList).toContain('flash');
+  });
+
+  it('pulses three times in 2.2 s, and holds still under reduced motion (spec 12)', () => {
+    const rules = compiledRules('line-row.scss');
+    const body = (selector: string) =>
+      rules.filter((one) => one.selector === selector).map((one) => one.body);
+
+    expect(body('.row.asked::before').join('')).toMatch(
+      /background:\s*var\(--app-action-quiet-bg\);/
+    );
+    expect(body('.row.asked::before').join('')).toMatch(
+      /box-shadow:\s*inset 0 0 0 var\(--app-took-edge-width\) var\(--app-action-quiet-fg\);/
+    );
+    const wash = body('.row.asked.flash::before');
+    expect(wash[0]).toMatch(/animation:\s*ask-wash 2200ms linear both;/);
+    // Reduced motion: no animation, the wash held.
+    expect(wash[1]).toMatch(/animation:\s*none;/);
+    expect(wash[1]).toMatch(/opacity:\s*1;/);
+    // The popover's hairline is no longer the row's: the popover sits beside it.
+    expect(body('.row.asked.flash')).toEqual([]);
+
+    // Three peaks in the keyframes: each pulse in, held and out.
+    const peaks = rules.find((one) =>
+      one.selector.startsWith(
+        '10.909%, 16.364%, 47.273%, 52.727%, 83.636%, 89.091%'
+      )
+    );
+    expect(peaks?.body).toMatch(/opacity:\s*1;/);
   });
 });

@@ -61,6 +61,39 @@ describe("toCatalogProduct: the product's step (velista 0186, backend 0261)", ()
   });
 });
 
+describe('toCatalogProduct: the pack and the pieces (velista 0209, backend 0278)', () => {
+  it('reads both counts', () => {
+    const product = toCatalogProduct({
+      id: 'item-smint',
+      name: { es: 'SMINT', en: 'SMINT' },
+      unitSize: 70,
+      defaultUnit: 'GRAM',
+      packCount: 2,
+      pieceCount: 100,
+    });
+    expect(product?.packCount).toBe(2);
+    expect(product?.pieceCount).toBe(100);
+  });
+
+  it.each([
+    ['an absent field', undefined],
+    ['a string', '4'],
+    ['one', 1],
+    ['a fraction', 2.5],
+  ])('reads %s as no count', (_, value) => {
+    const product = toCatalogProduct({
+      id: 'item-smint',
+      name: { es: 'SMINT', en: 'SMINT' },
+      unitSize: 70,
+      defaultUnit: 'GRAM',
+      packCount: value,
+      pieceCount: value,
+    });
+    expect(product?.packCount).toBeNull();
+    expect(product?.pieceCount).toBeNull();
+  });
+});
+
 /** The basis a unit price is per (backend `0157`, and `0264` for a wash). */
 describe('toCatalogProduct: the unit basis', () => {
   const tablets = {

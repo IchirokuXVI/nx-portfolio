@@ -262,14 +262,24 @@ describe('toBasketRow', () => {
     ).toBe(false);
   });
 
-  /** `bought + left`, which is how backend `0130` section 4 defines it. */
-  it('sums an entry’s asked out of what it bought and what is left', () => {
+  /** `bought + left` from a server before backend `0274`, which meant the sum. */
+  it('sums an entry’s asked out of what it bought and what is left when the wire has none', () => {
     const row = toBasketRow({
       ...ROW,
       entries: [{ ...ENTRY, left: 4, bought: 2 }],
     });
 
     expect(row?.entries[0].asked).toBe(6);
+  });
+
+  // Velista `0201`, spec 9: a buy above the ask keeps the ask (backend `0274`).
+  it('reads an entry’s asked from the wire, in the read and in a write answer', () => {
+    const over = { ...ENTRY, asked: 3, left: 0, bought: 4 };
+
+    expect(toBasketRow({ ...ROW, entries: [over] })?.entries[0].asked).toBe(3);
+    expect(
+      toBasketRowResult({ entries: [over], skippedCount: 0 })?.entries[0].asked
+    ).toBe(3);
   });
 });
 
@@ -588,6 +598,27 @@ describe('toBasket: the weight of a piece (velista 0179)', () => {
     ['zero', 0],
   ])('reads %s as no step', (_, quantityStep) => {
     expect(productOf({ id: 'i-1', quantityStep })?.quantityStep).toBeNull();
+  });
+
+  it('reads the pack and the pieces (velista 0209, backend 0278)', () => {
+    const product = productOf({ id: 'i-1', packCount: 2, pieceCount: 100 });
+    expect(product?.packCount).toBe(2);
+    expect(product?.pieceCount).toBe(100);
+  });
+
+  it.each([
+    ['an absent field', undefined],
+    ['a string', '4'],
+    ['one', 1],
+    ['a fraction', 2.5],
+  ])('reads %s as no pack and no pieces', (_, value) => {
+    const product = productOf({
+      id: 'i-1',
+      packCount: value,
+      pieceCount: value,
+    });
+    expect(product?.packCount).toBeNull();
+    expect(product?.pieceCount).toBeNull();
   });
 });
 

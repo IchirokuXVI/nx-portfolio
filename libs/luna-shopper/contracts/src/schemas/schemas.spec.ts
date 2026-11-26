@@ -65,6 +65,7 @@ import {
   validateMessageResponse,
 } from './index';
 import { BASKET_SCHEMA_IDS } from './messages/basket.schemas';
+import { HARVEST_SCHEMA_IDS } from './messages/harvest.schemas';
 import { PURCHASE_SCHEMA_IDS } from './messages/purchase.schemas';
 import { messageRequestSchemaId, messageResponseSchemaId } from './registry';
 import { validateSchema } from './validator';
@@ -777,6 +778,7 @@ describe('contract schemas', () => {
         version: 4,
         left: 0,
         bought: 0,
+        asked: 0,
         boughtElsewhere: 2,
         state: 'DONE',
         approvalStatus: 'APPROVED',
@@ -819,6 +821,7 @@ describe('contract schemas', () => {
         version: 4,
         left: 1,
         bought: 1,
+        asked: 2,
         boughtElsewhere: 0,
         state: 'PARTLY',
         approvalStatus: 'APPROVED',
@@ -1092,6 +1095,7 @@ describe('contract schemas', () => {
         unit: 'GRAM',
         left: 2,
         bought: 1,
+        asked: 3,
         boughtElsewhere: 0,
         state: 'PARTLY',
         approvalStatus: 'APPROVED',
@@ -1671,6 +1675,7 @@ describe('contract schemas', () => {
               eans: [],
               unitSize: null,
               packCount: null,
+              pieceCount: null,
               categories: [MILK_CATEGORY],
               defaultUnit: 'LITER',
               productGroupId: null,
@@ -1724,6 +1729,7 @@ describe('contract schemas', () => {
           eans: [],
           unitSize: null,
           packCount: null,
+          pieceCount: null,
           categories,
           defaultUnit: 'LITER',
           productGroupId: null,
@@ -2048,6 +2054,7 @@ describe('contract schemas', () => {
           eans: [],
           unitSize: null,
           packCount: null,
+          pieceCount: null,
           categories: [MILK_CATEGORY],
           defaultUnit: 'UNIT',
           productGroupId: null,
@@ -2153,6 +2160,7 @@ describe('contract schemas', () => {
           eans: [],
           unitSize: null,
           packCount: null,
+          pieceCount: null,
           categories: [MILK_CATEGORY],
           defaultUnit: 'KILOGRAM',
           productGroupId: null,
@@ -2206,6 +2214,95 @@ describe('contract schemas', () => {
           items: [{ itemId: 'i', quantityStep: 250 }],
         }).valid
       ).toBe(true);
+    });
+
+    it('a piece count is a whole number from 2 to 10000, or null, on the view and every write (plan 0278)', () => {
+      const product = {
+        id: 'i',
+        name: { en: 'Candies', es: 'Caramelos' },
+        brand: null,
+        imageUrl: null,
+        imageSource: null,
+        imageSupermarketId: null,
+        ownImageUrl: null,
+        images: [],
+        sku: null,
+        ean: null,
+        eans: [],
+        unitSize: 70,
+        packCount: 2,
+        categories: [MILK_CATEGORY],
+        defaultUnit: 'GRAM',
+        productGroupId: null,
+      };
+      const view = (pieceCount: unknown) =>
+        validateMessageResponse('item.get', { ...product, pieceCount }).valid;
+      // Required, as the pack count is: catalog fills it on every view.
+      expect(validateMessageResponse('item.get', product).valid).toBe(false);
+      for (const pieceCount of [null, 2, 100, 10000]) {
+        expect(view(pieceCount)).toBe(true);
+      }
+      for (const pieceCount of [1, 10001, 2.5, '100']) {
+        expect(view(pieceCount)).toBe(false);
+      }
+      // The basket's product spreads the view's fields, so it carries it too.
+      const basketProduct = createContractsAjv().getSchema(
+        'luna://basket/BasketProductView'
+      );
+      expect(
+        basketProduct?.({ ...product, pieceCount: 100, atShop: null })
+      ).toBe(true);
+      expect(basketProduct?.({ ...product, atShop: null })).toBe(false);
+
+      const writes = (pieceCount: unknown) => [
+        validateMessageRequest('item.create', {
+          userId: 'owner',
+          name: { es: 'Caramelos' },
+          categoryIds: ['c'],
+          defaultUnit: 'GRAM',
+          unitSize: 35,
+          pieceCount,
+        }).valid,
+        validateMessageRequest('item.createMany', {
+          userId: 'owner',
+          items: [
+            {
+              name: { es: 'Caramelos' },
+              categoryIds: ['c'],
+              defaultUnit: 'GRAM',
+              unitSize: 35,
+              pieceCount,
+            },
+          ],
+        }).valid,
+        validateMessageRequest('item.update', {
+          userId: 'owner',
+          itemId: 'i',
+          pieceCount,
+        }).valid,
+        validateMessageRequest('item.updateMany', {
+          userId: 'owner',
+          items: [{ itemId: 'i', pieceCount }],
+        }).valid,
+      ];
+      for (const pieceCount of [null, 2, 50, 10000]) {
+        expect(writes(pieceCount)).toEqual([true, true, true, true]);
+      }
+      for (const pieceCount of [1, 10001, 2.5]) {
+        expect(writes(pieceCount)).toEqual([false, false, false, false]);
+      }
+
+      // An expectation compares a value, so it states no bounds.
+      const expecting = (pieceCount: unknown) =>
+        validateMessageRequest('item.update', {
+          userId: 'owner',
+          itemId: 'i',
+          sku: 'X',
+          expect: { pieceCount },
+        }).valid;
+      expect(expecting(null)).toBe(true);
+      expect(expecting(100)).toBe(true);
+      expect(expecting(2.5)).toBe(false);
     });
 
     it('a create and an edit state a weight and who wrote it (plan 0244)', () => {
@@ -2307,6 +2404,7 @@ describe('contract schemas', () => {
               eans: [],
               unitSize: 1,
               packCount: 6,
+              pieceCount: null,
               categories: [MILK_CATEGORY],
               defaultUnit: 'LITER',
               productGroupId: 'g',
@@ -3338,6 +3436,197 @@ describe('a line counts in a unit (plan 0246)', () => {
     expect(validateMessageRequest('line.settle', settle).valid).toBe(false);
   });
 
+  describe('a raise takes the extra into the ask (plan 0276, spec 17)', () => {
+    const delta = { userId: 'u', lineId: 'l', delta: 2, unit: 'UNIT' };
+    const line = {
+      id: 'l',
+      listId: 'li',
+      content: 'Milk',
+      quantity: 1,
+      unit: 'UNIT',
+      itemIds: [],
+      itemSetHash: null,
+      productGroupId: null,
+      groupItemIds: [],
+      favoriteItemId: null,
+      preferredSupermarketId: null,
+      named: true,
+      position: 1,
+      approvalStatus: 'APPROVED',
+      createdByUserId: 'u',
+      approvedByUserId: 'u',
+      version: 2,
+      boughtCount: 4,
+      lastSettlementOutcome: 'BOUGHT',
+      claimed: false,
+      claimedByUserId: null,
+      commentCount: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const extra = {
+      above: 3,
+      countable: 2,
+      buyers: [{ userId: 'u' }, { userId: null }],
+    };
+    const row = {
+      entries: [],
+      progress: { done: 0, unavailable: 0, total: 0, pending: 0 },
+    };
+
+    const requests: [string, Record<string, unknown>][] = [
+      ['line.addQuantity', delta],
+      ['line.update', { userId: 'u', lineId: 'l', quantity: 3 }],
+      ['line.add', { userId: 'u', listId: 'li', content: 'Milk' }],
+      [
+        'basket.line.add',
+        {
+          basketId: 'b',
+          participantId: 'p',
+          userId: 'u',
+          targetListId: 'li',
+          content: 'Milk',
+        },
+      ],
+      [
+        'basket.row.demand',
+        {
+          basketId: 'b',
+          participantId: 'p',
+          rowKey: 'l',
+          lineId: 'l',
+          quantity: 2,
+          unit: 'UNIT',
+          from: 0,
+        },
+      ],
+    ];
+
+    it.each(requests)(
+      '%s takes reportExtra as a boolean and nothing else',
+      (pattern, request) => {
+        for (const reportExtra of [true, false]) {
+          expect(
+            validateMessageRequest(pattern, { ...request, reportExtra }).valid
+          ).toBe(true);
+        }
+        expect(
+          validateMessageRequest(pattern, { ...request, reportExtra: 'true' })
+            .valid
+        ).toBe(false);
+      }
+    );
+
+    it('refuses countExtra on a delta, which no longer exists', () => {
+      expect(
+        validateMessageRequest('line.addQuantity', {
+          ...delta,
+          countExtra: true,
+        }).valid
+      ).toBe(false);
+    });
+
+    it('answers a delta, an edit and an add with and without extra', () => {
+      for (const pattern of ['line.addQuantity', 'line.update']) {
+        expect(validateMessageResponse(pattern, line).valid).toBe(true);
+        expect(validateMessageResponse(pattern, { ...line, extra }).valid).toBe(
+          true
+        );
+        expect(
+          validateMessageResponse(pattern, {
+            ...line,
+            extra: { above: 0, countable: 0, buyers: [] },
+          }).valid
+        ).toBe(true);
+      }
+      const added = {
+        line,
+        merged: true,
+        outcome: 'RAISED',
+        alreadyOnList: [],
+      };
+      expect(validateMessageResponse('line.add', added).valid).toBe(true);
+      expect(
+        validateMessageResponse('line.add', { ...added, extra }).valid
+      ).toBe(true);
+    });
+
+    it('answers a row write with and without extra, and the count with counted', () => {
+      for (const pattern of ['basket.row.demand', 'basket.line.add']) {
+        expect(validateMessageResponse(pattern, row).valid).toBe(true);
+        expect(validateMessageResponse(pattern, { ...row, extra }).valid).toBe(
+          true
+        );
+      }
+      expect(
+        validateMessageResponse('basket.row.countExtra', {
+          ...row,
+          counted: 2,
+        }).valid
+      ).toBe(true);
+    });
+
+    it('refuses an extra that names a participant, misses a field or keeps the old counted', () => {
+      for (const bad of [
+        {
+          above: 1,
+          countable: 1,
+          buyers: [{ userId: 'u', participantId: 'p' }],
+        },
+        { above: 1, buyers: [] },
+        { above: 1, counted: 1, buyers: [] },
+      ]) {
+        expect(
+          validateMessageResponse('line.addQuantity', { ...line, extra: bad })
+            .valid
+        ).toBe(false);
+      }
+    });
+
+    it('takes a count of the line and answers it with counted', () => {
+      const count = {
+        userId: 'u',
+        lineId: 'l',
+        unit: 'UNIT',
+        amount: 2,
+        expect: 4,
+      };
+      expect(validateMessageRequest('line.countExtra', count).valid).toBe(true);
+      for (const missing of ['unit', 'amount', 'expect']) {
+        const partial: Record<string, unknown> = { ...count };
+        delete partial[missing];
+        expect(validateMessageRequest('line.countExtra', partial).valid).toBe(
+          false
+        );
+      }
+      expect(
+        validateMessageRequest('line.countExtra', { ...count, amount: 0 }).valid
+      ).toBe(false);
+      expect(
+        validateMessageRequest('line.countExtra', { ...count, amount: '2' })
+          .valid
+      ).toBe(false);
+      expect(
+        validateMessageResponse('line.countExtra', { ...line, counted: 2 })
+          .valid
+      ).toBe(true);
+      expect(validateMessageResponse('line.countExtra', line).valid).toBe(
+        false
+      );
+      expect(
+        validateMessageRequest('basket.row.countExtra', {
+          basketId: 'b',
+          participantId: 'p',
+          rowKey: 'l',
+          lineId: 'l',
+          unit: 'UNIT',
+          amount: 2,
+          expect: 2,
+        }).valid
+      ).toBe(true);
+    });
+  });
+
   it('a purchase entry states what it bought per unit and whether its spend is an estimate', () => {
     const entry = {
       id: 'e',
@@ -3413,7 +3702,7 @@ describe('a line holds up to 99 999 of its unit (plan 0262, 2026-11-17)', () => 
     expect(valid(100000)).toBe(false);
   });
 
-  it('a basket demand sets a line to the ceiling and not past it', () => {
+  it('a basket demand names the whole ask, which can pass the ceiling (plan 0274)', () => {
     const demand = {
       basketId: 'b',
       participantId: 'p',
@@ -3425,8 +3714,13 @@ describe('a line holds up to 99 999 of its unit (plan 0262, 2026-11-17)', () => 
     const valid = (quantity: number) =>
       validateSchema(BASKET_SCHEMA_IDS.demandRequest, { ...demand, quantity })
         .valid;
+    // The ask is the line plus what this basket's buys met of it, so a line at
+    // the ceiling with units bought toward it asks more than the ceiling. Core
+    // holds the line after the write to the ceiling; the schema does not guess.
     expect(valid(99999)).toBe(true);
-    expect(valid(100000)).toBe(false);
+    expect(valid(100000)).toBe(true);
+    expect(valid(-1)).toBe(false);
+    expect(valid(1.5)).toBe(false);
   });
 
   it('a line stored above the ceiling is named as it is, so it can be stepped down', () => {
@@ -3458,6 +3752,78 @@ describe('a line holds up to 99 999 of its unit (plan 0262, 2026-11-17)', () => 
         unit: 'UNIT',
         quantity: 99999,
         from: 100000,
+      }).valid
+    ).toBe(true);
+  });
+});
+
+describe('a decision may expect what the row says (plan 0277)', () => {
+  const observed = {
+    name: 'Leche semidesnatada',
+    brand: 'Marca',
+    ean: null,
+    sizeFormat: '1 L',
+    unitSize: 1,
+    sizeUnit: 'LITER',
+    packCount: null,
+    soldByWeight: false,
+    approxWeight: null,
+    packaging: 'Brik',
+  };
+  const valid = (expectation: unknown) =>
+    validateSchema(HARVEST_SCHEMA_IDS.sourceEntryExpectation, expectation)
+      .valid;
+
+  it('takes the status with observed, with lastSeenAt, or with both', () => {
+    expect(valid({ status: 'UNRESOLVED', observed })).toBe(true);
+    expect(
+      valid({ status: 'UNRESOLVED', lastSeenAt: '2026-01-01T00:00:00.000Z' })
+    ).toBe(true);
+    expect(
+      valid({
+        status: 'CANDIDATE',
+        lastSeenAt: '2026-01-01T00:00:00.000Z',
+        observed,
+      })
+    ).toBe(true);
+  });
+
+  it('refuses an observed with a field left out, since a partial one guards less', () => {
+    for (const field of Object.keys(observed)) {
+      const partial: Record<string, unknown> = { ...observed };
+      delete partial[field];
+      expect(valid({ status: 'UNRESOLVED', observed: partial })).toBe(false);
+    }
+  });
+
+  it('refuses an expectation with no status', () => {
+    expect(valid({ observed })).toBe(false);
+  });
+
+  it('takes a null packaging and refuses one that is not a string (decision 154a)', () => {
+    expect(
+      valid({
+        status: 'UNRESOLVED',
+        observed: { ...observed, packaging: null },
+      })
+    ).toBe(true);
+    expect(
+      valid({ status: 'UNRESOLVED', observed: { ...observed, packaging: 5 } })
+    ).toBe(false);
+  });
+
+  it('reaches the decisions request inside an operation', () => {
+    expect(
+      validateMessageRequest('sourceEntry.applyDecisions', {
+        userId: 'u',
+        operations: [
+          {
+            op: 'accept',
+            entryId: 'e',
+            itemId: 'i',
+            expect: { status: 'UNRESOLVED', observed },
+          },
+        ],
       }).valid
     ).toBe(true);
   });

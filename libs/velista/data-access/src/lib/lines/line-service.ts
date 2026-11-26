@@ -1,6 +1,7 @@
 import { inject } from '@angular/core';
 import { serviceToken } from '@portfolio/shared/data-access';
 import type {
+  AbsorbedExtra,
   AddLineOptions,
   AddOutcome,
   AlsoOnVm,
@@ -26,6 +27,12 @@ import { LineApi } from './line-api';
 export interface LineUpdateResult {
   readonly line: Line;
   readonly absorbedLineId: string | null;
+  /**
+   * What a save sent with `reportExtra` that raised the quantity took into the ask
+   * (backend `0276`, velista `0208`), or null: no report asked for, none answered,
+   * or one this build cannot read. Absent reads as null.
+   */
+  readonly extra?: AbsorbedExtra | null;
 }
 
 /**
@@ -43,6 +50,11 @@ export interface LineAddResult {
   readonly outcome: AddOutcome;
   /** Empty unless {@link outcome} is `alreadyOnList`. In list position order. */
   readonly alreadyOnList: readonly Line[];
+  /**
+   * What a `raised` add sent with `reportExtra` took into the ask (backend `0276`,
+   * velista `0208`), or null. Absent reads as null.
+   */
+  readonly extra?: AbsorbedExtra | null;
 }
 
 /**
@@ -165,6 +177,12 @@ export interface LineServiceI {
       favoriteItemId?: string | null;
       preferredSupermarketId?: string | null;
       confirmMerge?: boolean;
+      /**
+       * Ask the answer to report the extra a raise of the quantity took into the
+       * ask (backend `0276`, velista `0208`): the line sheet's Save of a larger
+       * amount. Never with `confirmMerge` or a unit change.
+       */
+      reportExtra?: boolean;
     }
   ): Promise<LineUpdateResult>;
 
@@ -183,6 +201,34 @@ export interface LineServiceI {
    * refused with `line_unit_mismatch` and changes nothing.
    */
   addQuantity(lineId: string, delta: number, unit: LineUnit): Promise<Line>;
+
+  /**
+   * {@link addQuantity} with `reportExtra: true` (backend `0276`, velista `0208`). The
+   * line rises by the whole delta, and the raise takes every unit bought above the
+   * ask in open shopping lists into the ask, as every raise does; the flag only adds
+   * the report. Every control that raises a line by a delta calls it.
+   *
+   * `extra` is what the answer says was taken in, or null when the answer carried no
+   * `extra` this build can read, which asks nothing.
+   */
+  raiseReportingExtra(
+    lineId: string,
+    delta: number,
+    unit: LineUnit
+  ): Promise<{ readonly line: Line; readonly extra: AbsorbedExtra | null }>;
+
+  /**
+   * "Count the extra" (`POST /v1/lines/:id/extra`, backend `0276`): take `amount`,
+   * the `countable` a raise answered, off the line, which must still hold `expect`,
+   * the quantity that raise answered. A line that moved in between is refused with
+   * `stale_quantity` and nothing is written.
+   */
+  countExtra(
+    lineId: string,
+    amount: number,
+    expect: number,
+    unit: LineUnit
+  ): Promise<{ readonly line: Line; readonly counted: number | null }>;
 
   /**
    * Say what happened to a line on a trip (`POST /v1/lines/:id/settle`).

@@ -155,6 +155,7 @@ describeIntegration(
           itemId: null,
           outcome,
           quantity: outcome === SettlementOutcome.BOUGHT ? 1 : 0,
+          applied: outcome === SettlementOutcome.BOUGHT ? 1 : 0,
           settledByUserId: byParticipant ? null : (options.userId ?? reader),
           settledByParticipantId: byParticipant
             ? (options.participantId as string)

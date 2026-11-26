@@ -10,27 +10,33 @@
 <div
   (click)="onRowClick()"
   (keydown)="onRowKeydown($event)"
-  [attr.aria-busy]="line().write === 'pending' ? 'true' : null"
+  [attr.aria-busy]="clearing() || line().write === 'pending' ? 'true' : null"
   [attr.aria-describedby]="describedBy()"
+  [attr.aria-disabled]="clearing() ? 'true' : null"
   [attr.aria-label]="accessibleName()"
   [attr.tabindex]="!line().interactive ? null : 0"
+  [class.asked]="asked()"
   [class.awaiting]="line().approvalStatus === 'PENDING'"
+  [class.clearing]="clearing()"
   [class.compact]="compact()"
+  [class.facts-row]="!compact()"
+  [class.flash]="flashing()"
   [class.in-flight]="line().write === 'pending'"
   [class.inert]="!line().interactive"
   [class.settled]="line().settled"
   [class.turned-down]="line().approvalStatus === 'REJECTED'"
   class="row"
   role="button"
+  data-line-row
 >
   <!--
-    **The compact row** (velista 0191): the picture as tall as the text, the label and
-    the brand on line 1, and under them three fact lines beside the stepper. Every fact
-    is decided by `lineRowFacts` and the builder; this branch only draws. The row
-    element above, the stepper below and everything under the row are shared with
-    the row of today.
+    **The row of the default view** (velista 0191, the default since velista 0202):
+    the picture as tall as the text, the label and the brand on line 1, and under
+    them three fact lines beside the stepper. Every fact is decided by `lineRowFacts`
+    and the builder; this branch only draws. The row element above, the stepper below
+    and everything under the row are shared with the two line row of the compact view.
   -->
-  @if (compact()) {
+  @if (!compact()) {
     @switch (line().product?.kind) {
       @case ('shown') {
         @if (shown(); as product) {
@@ -71,7 +77,7 @@
       Line 1: the label, then the brand, then the marks of decision F. The label
       gives way first, then the brand; the marks never do.
     -->
-    <span class="compact-line-1">
+    <span class="facts-line-1">
       <span class="content label">
         @if (highlighted(); as parts) {
           <span>{{ parts.before }}</span
@@ -185,7 +191,7 @@
               (click)="onChoose($event)"
               (keydown)="$event.stopPropagation()"
               (pointerdown)="$event.stopPropagation()"
-              class="compact-choose"
+              class="facts-choose"
               type="button"
             >
               {{ 'list.row.choose' | rokuT }}
@@ -209,7 +215,7 @@
       }
     }
 
-    <!-- Every word that applies, for a screen reader, as the row of today has them. -->
+    <!-- Every word that applies, for a screen reader, as the two line row has them. -->
     @if (statuses().length > 0) {
       <span [id]="'st-' + line().id" class="visually-hidden">
         @for (word of statuses(); track word; let last = $last) {
@@ -398,20 +404,54 @@
   }
 
   <!--
-    **The quantity, on every row, zero included** (velista 0043, section 3.2).
+    **The quantity, on every row, zero included** (velista 0043, section 3.2): the
+    reel in the compact view (velista 0203), the stepper in the default one. Marked
+    `data-amount-control`, which the page's question about the extra already bought
+    points at (velista 0207).
   -->
-  <lib-quantity-stepper
-    (click)="$event.stopPropagation()"
-    (pointerdown)="$event.stopPropagation()"
-    (stepped)="quantityStepped.emit({ lineId: line().id, step: $event })"
-    [name]="line().content"
-    [readonly]="!line().adjustable"
-    [step]="line().step ?? null"
-    [took]="took()"
-    [unit]="line().unit"
-    [value]="amount()"
-    variant="row"
-  />
+  @if (compact()) {
+    <lib-quantity-reel
+      (autoClosed)="onReelAutoClosed()"
+      (click)="$event.stopPropagation()"
+      (pointerdown)="$event.stopPropagation()"
+      (stepped)="onReeled($event)"
+      [label]="'amount.group' | rokuT: { name: line().content }"
+      [readonly]="!line().adjustable"
+      [step]="line().step ?? null"
+      [took]="took()"
+      [unit]="line().unit"
+      [value]="amount()"
+      data-amount-control
+    />
+  } @else {
+    <lib-quantity-stepper
+      (click)="$event.stopPropagation()"
+      (pointerdown)="$event.stopPropagation()"
+      (stepped)="quantityStepped.emit({ lineId: line().id, step: $event })"
+      [name]="line().content"
+      [readonly]="!line().adjustable"
+      [step]="line().step ?? null"
+      [took]="took()"
+      [unit]="line().unit"
+      [value]="amount()"
+      variant="row"
+      data-amount-control
+    />
+  }
+
+  <!--
+    The lock of a row being cleared (velista 0199): a spinner in the middle of the
+    row, over both layouts, and over the layer drawn under the decisions. Hidden
+    from a screen reader, which hears aria-busy and the word the row is described by.
+  -->
+  @if (clearing()) {
+    <span aria-hidden="true" class="lock" data-clearing-lock>
+      <span class="lock-mark"><lib-spinner-icon /></span>
+    </span>
+    <span [id]="'lk-' + line().id" class="visually-hidden">
+      {{ 'basket.line.busy' | rokuT }}
+    </span>
+  }
 </div>
 
 <!--
@@ -436,6 +476,15 @@
       {{ 'list.line.restore' | rokuT }}
     </button>
   </div>
+}
+
+<!--
+  The layer of a row being cleared (velista 0199), over everything the host's lock
+  stops: the row with its borders and the decisions under it. Before the notices, so
+  a notice is drawn over it and stays usable.
+-->
+@if (clearing()) {
+  <span aria-hidden="true" class="lock-layer" data-clearing-layer></span>
 }
 
 <!--

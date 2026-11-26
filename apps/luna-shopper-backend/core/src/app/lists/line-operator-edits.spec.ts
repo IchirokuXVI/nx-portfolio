@@ -10,6 +10,7 @@ import {
 import type { DataSource, EntityManager } from 'typeorm';
 import { fakeAudit, type RecordedChange } from '../audit/core-audit.testing';
 import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
+import { fakeLineClaims } from '../baskets/line-claims.fake';
 import type { ListAccess } from '../entities';
 import {
   LineComment,
@@ -20,7 +21,6 @@ import {
   ShoppingList,
 } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
-import { fakeLineClaims } from '../baskets/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { fakeLineChanges } from './changes/line-change.fake';
 import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
@@ -217,8 +217,14 @@ function build(
   };
 
   const dataSource = {
+    // The covering baskets a raise reads (plan 0276): none here.
+    query: async () => [],
     transaction: async <T>(run: (m: EntityManager) => Promise<T>) =>
-      run({ getRepository: repositoryFor } as unknown as EntityManager),
+      run({
+        getRepository: repositoryFor,
+        // The covering baskets a raise reads (plan 0276): none here.
+        query: async () => [],
+      } as unknown as EntityManager),
   } as unknown as DataSource;
 
   const publisher = {

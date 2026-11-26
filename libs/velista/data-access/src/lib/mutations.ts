@@ -52,6 +52,15 @@ export interface DroppedWriteReplay {
    * which counted pieces.
    */
   readonly unit?: LineUnit;
+  /**
+   * Whether the dropped write was a zone list raise that reported the extra it took
+   * into the ask (velista `0208`), so the write sent again reports it too and may
+   * ask. Absent on every other write. An entry an older build wrote with the flag
+   * of velista `0207` is sent again as a plain raise. "Count the extra" is never recorded
+   * here: a count sent again later would lower a line on numbers the person no
+   * longer sees.
+   */
+  readonly reportExtra?: boolean;
 }
 
 /**
@@ -207,7 +216,9 @@ function isReplay(value: unknown): value is DroppedWriteReplay {
     Number.isInteger(delta) &&
     delta !== 0 &&
     (replay['unit'] === undefined ||
-      LINE_UNITS.includes(replay['unit'] as LineUnit))
+      LINE_UNITS.includes(replay['unit'] as LineUnit)) &&
+    (replay['reportExtra'] === undefined ||
+      typeof replay['reportExtra'] === 'boolean')
   );
 }
 

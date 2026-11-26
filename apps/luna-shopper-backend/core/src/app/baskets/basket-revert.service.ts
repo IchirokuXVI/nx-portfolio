@@ -130,7 +130,10 @@ export class BasketRevertService {
         order: { settledAt: 'DESC', id: 'DESC' },
       });
 
-      /** How many units go back onto each zone line. */
+      /**
+       * How many units go back onto each zone line: the applied units taken,
+       * never the ones above the ask (plan 0274, section 4).
+       */
       const restored = new Map<string, number>();
       const touched = new Map<string, LineSettlement>();
       const mark = async (rowToMark: LineSettlement): Promise<void> => {
@@ -164,6 +167,12 @@ export class BasketRevertService {
             break;
           }
           const take = Math.min(need, candidate.quantity);
+          // Within one buy, its units above the ask go first (plan 0274,
+          // section 4): they never lowered the line, so taking them back gives
+          // the line nothing. Only the applied units taken after them go back
+          // onto it.
+          const aboveTheAsk = candidate.quantity - candidate.applied;
+          const takenApplied = take - Math.min(take, aboveTheAsk);
           await mark(candidate);
           if (take < candidate.quantity) {
             // Plan 0104 section 3.2: the original is reverted in full and what
@@ -180,6 +189,13 @@ export class BasketRevertService {
                 itemId: candidate.itemId,
                 outcome: candidate.outcome,
                 quantity: candidate.quantity - take,
+                // What still stands of the ask it met (plan 0274, section 4).
+                applied: candidate.applied - takenApplied,
+                // The units of the half that stands are the purchase's, as
+                // its estimate is (plan 0246, section 3.5). Left out, the
+                // column default would count a weighed remainder in pieces.
+                unit: candidate.unit,
+                estimated: candidate.estimated,
                 settledByUserId: candidate.settledByUserId,
                 settledByParticipantId: candidate.settledByParticipantId,
                 settledAt: candidate.settledAt,
@@ -209,7 +225,7 @@ export class BasketRevertService {
             );
           }
           const lineId = candidate.lineId as string;
-          restored.set(lineId, (restored.get(lineId) ?? 0) + take);
+          restored.set(lineId, (restored.get(lineId) ?? 0) + takenApplied);
           need -= take;
         }
       }

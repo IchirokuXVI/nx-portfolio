@@ -178,9 +178,11 @@ function build(
     skip: (id, target) => memory.skip(id, target),
     unskip: (id, target) => memory.unskip(id, target),
     setDemand: (id, body) => memory.setDemand(id, body),
+    countExtra: (id, body) => memory.countExtra(id, body),
     changeProduct: (id, body) => memory.changeProduct(id, body),
     productLists: (id, itemId) => memory.productLists(id, itemId),
     addLine: (id, body) => memory.addLine(id, body),
+    buyForList: (id, rowKey, body) => memory.buyForList(id, rowKey, body),
     suggest: (id, query) => memory.suggest(id, query),
     changes: (id, ctx, cursor) => memory.changes(id, ctx, cursor),
     acknowledgeChanges: (id, through) => memory.acknowledgeChanges(id, through),
@@ -3198,6 +3200,8 @@ describe('BasketStore: a buy reaches the other phone at once (velista 0143)', ()
     /** Yoghurt, under a parent the read's products do not use. */
     const YOGHURT: BasketProduct = {
       id: 'item-yoghurt',
+      packCount: null,
+      pieceCount: null,
       quantityStep: null,
       name: { en: 'Natural yoghurt, 4', es: 'Yogur natural, 4' },
       brand: 'Hacendado',
@@ -3323,5 +3327,326 @@ describe('BasketStore: a buy reaches the other phone at once (velista 0143)', ()
       const rows = await twin.getBasketRows('basket-saturday');
       expect(JSON.stringify(rows)).not.toContain('item-yoghurt');
     });
+  });
+});
+
+describe('BasketStore: one list of a row steps what was bought (velista 0201)', () => {
+  it('settles one line, keyed by that line, and keeps the ask of a buy above it', async () => {
+    const sent: unknown[] = [];
+    const memory = new BasketMemory();
+    const { store } = build({
+      getBasket: () => memory.getBasket(),
+      settle: (id, target, body) => {
+        sent.push({ target, body });
+        return memory.settle(id, target, body);
+      },
+    });
+    await store.open('basket-saturday');
+    const milk = rowOf(store, 'Milk');
+    const line = milk.entries[0];
+
+    await store.settle(
+      milk.rowKey,
+      { outcome: 'BOUGHT', quantity: line.left + 1, from: line.left },
+      line.lineId
+    );
+
+    expect(sent).toEqual([
+      {
+        target: { rowKey: line.lineId, lineIds: [line.lineId] },
+        body: {
+          outcome: 'BOUGHT',
+          quantity: line.left + 1,
+          from: line.left,
+          unit: 'UNIT',
+        },
+      },
+    ]);
+    const after = rowOf(store, 'Milk').entries[0];
+    expect(after).toMatchObject({
+      left: 0,
+      bought: line.bought + line.left + 1,
+      asked: line.asked,
+    });
+    expect(rowOf(store, 'Milk').asked).toBe(milk.asked);
+  });
+
+  it('reverts one line, keyed by that line, from its bought', async () => {
+    const sent: unknown[] = [];
+    const memory = new BasketMemory();
+    const { store } = build({
+      getBasket: () => memory.getBasket(),
+      revert: (id, target, body) => {
+        sent.push({ target, body });
+        return memory.revert(id, target, body);
+      },
+    });
+    await store.open('basket-saturday');
+    const milk = rowOf(store, 'Milk');
+    const line = milk.entries[1];
+    await store.settle(
+      milk.rowKey,
+      { outcome: 'BOUGHT', quantity: 1, from: line.left },
+      line.lineId
+    );
+    const bought = rowOf(store, 'Milk').entries[1].bought;
+
+    await store.revert(
+      milk.rowKey,
+      { target: 'UNITS', units: 1, from: bought },
+      line.lineId
+    );
+
+    expect(sent).toEqual([
+      {
+        target: { rowKey: line.lineId, lineIds: [line.lineId] },
+        body: { target: 'UNITS', units: 1, from: bought },
+      },
+    ]);
+    expect(rowOf(store, 'Milk').entries[1]).toMatchObject({
+      bought: bought - 1,
+      left: line.left,
+      asked: line.asked,
+    });
+  });
+
+  it('sends nothing for a line that is not an entry of the row', async () => {
+    const settle = jest.fn();
+    const { store } = build({ settle });
+    await store.open('basket-saturday');
+
+    expect(
+      await store.settle(
+        rowOf(store, 'Milk').rowKey,
+        { outcome: 'BOUGHT', quantity: 1, from: 0 },
+        'zl-unknown'
+      )
+    ).toBeNull();
+    expect(settle).not.toHaveBeenCalled();
+  });
+
+  it("buys for another list in the row's unit, and the list joins the row at an ask of 0", async () => {
+    const sent: unknown[] = [];
+    const memory = new BasketMemory();
+    const { store } = build({
+      getBasket: () => memory.getBasket(),
+      buyForList: (id, rowKey, body) => {
+        sent.push({ rowKey, body });
+        return memory.buyForList(id, rowKey, body);
+      },
+    });
+    await store.open('basket-saturday');
+    const eggs = rowOf(store, 'Eggs');
+    const lists = (await store.productLists(eggs.productId ?? '')) ?? [];
+    const other = lists[0];
+    expect(other).toBeDefined();
+
+    const result = await store.buyForList(eggs.rowKey, {
+      targetListId: other.listId,
+      lineId: other.lineId,
+      quantity: 2,
+    });
+
+    expect(sent).toEqual([
+      {
+        rowKey: eggs.rowKey,
+        body: {
+          targetListId: other.listId,
+          lineId: other.lineId,
+          quantity: 2,
+          unit: 'UNIT',
+        },
+      },
+    ]);
+    expect(result).not.toBeNull();
+    await flush();
+    const joined = rowOf(store, 'Eggs').entries.find(
+      (entry) => entry.listId === other.listId
+    );
+    expect(joined).toMatchObject({ bought: 2, left: 0, asked: 0 });
+  });
+
+  it("reads the basket again when the row's product changed under the buy, and keeps the error", async () => {
+    const memory = new BasketMemory();
+    const getBasket = jest.fn(() => memory.getBasket());
+    const refusal = new GatewayError({
+      code: 'conflict',
+      status: 409,
+      correlationId: 'c-1',
+      detail: 'The row changed',
+    });
+    const { store } = build({
+      getBasket,
+      buyForList: () => Promise.reject(refusal),
+    });
+    await store.open('basket-saturday');
+    const reads = getBasket.mock.calls.length;
+
+    const result = await store.buyForList(rowOf(store, 'Milk').rowKey, {
+      targetListId: 'l-any',
+      lineId: null,
+      quantity: 1,
+    });
+
+    expect(result).toBeNull();
+    expect(store.error()).toBe(refusal);
+    expect(getBasket.mock.calls.length).toBeGreaterThan(reads);
+  });
+});
+
+/**
+ * "Count the extra" on a basket row (velista `0208`, target state 17): the entry
+ * goes down at once, the answered line lands, a refusal shows the server's line,
+ * and any other failure puts the entry back.
+ */
+describe('BasketStore: the extra already bought (velista 0208)', () => {
+  /** Milk bought 2 above its ask, then its ask raised by 2: asks 4 more, 2 left. */
+  async function raisedOverExtra(overrides: Partial<BasketServiceI> = {}) {
+    const built = build(overrides);
+    const milk = (await built.memory.getBasket()).rows.find(
+      (row) => row.content === 'Milk'
+    );
+    const line = milk?.entries[0];
+    if (line === undefined) {
+      throw new Error('the fixture basket lost its milk');
+    }
+    await built.memory.settle(
+      'basket-saturday',
+      { rowKey: line.lineId, lineIds: [line.lineId] },
+      {
+        outcome: 'BOUGHT',
+        quantity: line.left + 2,
+        from: line.left,
+        unit: 'UNIT',
+      }
+    );
+    await built.store.open('basket-saturday');
+    const over = entryOf(built.store, line.lineId);
+    const result = await built.store.setDemand({
+      lineId: line.lineId,
+      quantity: over.asked + 2,
+      from: over.left,
+      reportExtra: true,
+    });
+    return {
+      ...built,
+      lineId: line.lineId,
+      rowKey: rowOf(built.store, 'Milk').rowKey,
+      over,
+      result,
+    };
+  }
+
+  function entryOf(store: BasketStore, lineId: string) {
+    const found = rowOf(store, 'Milk').entries.find(
+      (held) => held.lineId === lineId
+    );
+    if (found === undefined) {
+      throw new Error(`no entry ${lineId}`);
+    }
+    return found;
+  }
+
+  it('answers what a rising demand took into the ask', async () => {
+    const { result, store, lineId, over } = await raisedOverExtra();
+
+    expect(result?.extra).toMatchObject({ above: 2, countable: 2 });
+    expect(entryOf(store, lineId)).toMatchObject({
+      left: 2,
+      asked: over.asked + 4,
+    });
+  });
+
+  it('counts, and the entry takes the answered line', async () => {
+    const { store, lineId, rowKey, over } = await raisedOverExtra();
+
+    expect(await store.countExtra(rowKey, lineId, 2, 2)).toBe('counted');
+    expect(entryOf(store, lineId)).toMatchObject({
+      left: 0,
+      asked: over.asked + 2,
+    });
+  });
+
+  it('lowers the entry at once, before the answer', async () => {
+    let answer: () => void = () => undefined;
+    const holder: { memory?: BasketMemory } = {};
+    const built = await raisedOverExtra({
+      countExtra: (id, body) =>
+        new Promise((resolve, reject) => {
+          answer = () =>
+            (holder.memory as BasketMemory)
+              .countExtra(id, body)
+              .then(resolve, reject);
+        }),
+    });
+    holder.memory = built.memory;
+    const counting = built.store.countExtra(built.rowKey, built.lineId, 2, 2);
+
+    expect(entryOf(built.store, built.lineId)).toMatchObject({
+      left: 0,
+      asked: built.over.asked + 2,
+    });
+    answer();
+    expect(await counting).toBe('counted');
+  });
+
+  it('answers stale for a line that moved, and shows the server line', async () => {
+    const { store, lineId, rowKey, over } = await raisedOverExtra();
+
+    expect(await store.countExtra(rowKey, lineId, 1, 1)).toBe('stale');
+    await flush();
+    expect(entryOf(store, lineId)).toMatchObject({
+      left: 2,
+      asked: over.asked + 4,
+    });
+  });
+
+  it('puts the entry back on a stale count whose read again fails too', async () => {
+    const built = await raisedOverExtra({
+      countExtra: async () => {
+        // The read the refusal asks for fails as well.
+        built.memory.getBasket = async () => {
+          throw new Error('offline');
+        };
+        throw new GatewayError({
+          code: 'stale_quantity',
+          status: 409,
+          correlationId: 'spec',
+          detail: 'moved',
+        });
+      },
+    });
+
+    expect(await built.store.countExtra(built.rowKey, built.lineId, 2, 2)).toBe(
+      'stale'
+    );
+    await flush();
+    expect(entryOf(built.store, built.lineId)).toMatchObject({
+      left: 2,
+      asked: built.over.asked + 4,
+    });
+  });
+
+  it('puts the entry back on any other failure, and is never sent again', async () => {
+    const sent: unknown[] = [];
+    const { store, lineId, rowKey, over } = await raisedOverExtra({
+      countExtra: async (_id, body) => {
+        sent.push(body);
+        throw new GatewayError({
+          code: 'forbidden',
+          status: 403,
+          correlationId: 'spec',
+          detail: 'no',
+        });
+      },
+    });
+
+    expect(await store.countExtra(rowKey, lineId, 2, 2)).toBe('failed');
+    await flush();
+    expect(entryOf(store, lineId)).toMatchObject({
+      left: 2,
+      asked: over.asked + 4,
+    });
+    expect(sent).toHaveLength(1);
   });
 });

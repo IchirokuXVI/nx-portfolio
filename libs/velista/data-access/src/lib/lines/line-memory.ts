@@ -7,6 +7,7 @@ import {
   LINE_ITEM_SET_MAX,
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
+  type AbsorbedExtra,
   type AddLineOptions,
   type AlsoOnPlaceVm,
   type AlsoOnVm,
@@ -262,7 +263,16 @@ export class LineMemory implements LineServiceI {
       listId,
       this._lines(listId).map((held) => (held.id === raised.id ? raised : held))
     );
-    return { line: raised, merged: true, outcome: 'raised', alreadyOnList: [] };
+    return {
+      line: raised,
+      merged: true,
+      outcome: 'raised',
+      alreadyOnList: [],
+      // Zeros, as for a raise by delta: the fixture bought nothing above an ask.
+      ...(options?.reportExtra === true
+        ? { extra: { above: 0, countable: 0, buyers: [] } }
+        : {}),
+    };
   }
 
   /**
@@ -433,6 +443,7 @@ export class LineMemory implements LineServiceI {
       favoriteItemId?: string | null;
       preferredSupermarketId?: string | null;
       confirmMerge?: boolean;
+      reportExtra?: boolean;
     }
   ): Promise<LineUpdateResult> {
     const line = this._lineOrThrow(lineId);
@@ -546,7 +557,18 @@ export class LineMemory implements LineServiceI {
           }
         : {}),
     }));
-    return { line: updated, absorbedLineId: null };
+    // A raise of the quantity in the same unit reports, as on the server (backend
+    // `0276`, section 1). The fixture holds no shopping lists, so nothing was ever
+    // bought above an ask and the report carries zeros, which ask nothing.
+    const raised =
+      changes.reportExtra === true &&
+      updated.unit === line.unit &&
+      updated.quantity > line.quantity;
+    return {
+      line: updated,
+      absorbedLineId: null,
+      extra: raised ? { above: 0, countable: 0, buyers: [] } : null,
+    };
   }
 
   /**
@@ -661,6 +683,62 @@ export class LineMemory implements LineServiceI {
       quantity: current.quantity + delta,
       version: current.version + 1,
     }));
+  }
+
+  /**
+   * {@link addQuantity} with the zone list's flag (backend `0276`). The line rises by
+   * the whole delta, as on the server (its target state 2). The fixture holds no
+   * shopping lists, so nothing was ever bought above an ask and nothing was taken
+   * in: the report carries zeros, as the server's does for a raise with nothing
+   * above (its target state 6). A lowering carries no report.
+   */
+  async raiseReportingExtra(
+    lineId: string,
+    delta: number,
+    unit: LineUnit
+  ): Promise<{ readonly line: Line; readonly extra: AbsorbedExtra | null }> {
+    const line = await this.addQuantity(lineId, delta, unit);
+    return {
+      line,
+      extra: delta > 0 ? { above: 0, countable: 0, buyers: [] } : null,
+    };
+  }
+
+  /**
+   * "Count the extra" (backend `0276`, target state 7): a lowering by `amount`,
+   * refused with `stale_quantity` when the line no longer holds `expect`, under the
+   * permission any lowering of the amount needs. The fixture never reports anything
+   * countable, so only a caller that names its own numbers reaches it.
+   */
+  async countExtra(
+    lineId: string,
+    amount: number,
+    expect: number,
+    unit: LineUnit
+  ): Promise<{ readonly line: Line; readonly counted: number | null }> {
+    const line = this._lineOrThrow(lineId);
+    this._require(line.listId, 'DECIDE');
+    if ((unit ?? 'UNIT') !== (line.unit ?? 'UNIT')) {
+      throw memoryFailure('line_unit_mismatch', 409);
+    }
+    if (
+      !Number.isInteger(amount) ||
+      !Number.isInteger(expect) ||
+      amount < 1 ||
+      amount > expect
+    ) {
+      throw memoryFailure('validation_failed', 400);
+    }
+    if (line.quantity !== expect) {
+      throw memoryFailure('stale_quantity', 409);
+    }
+    this._maybeFail();
+    const counted = this._patch(lineId, (current) => ({
+      ...current,
+      quantity: current.quantity - amount,
+      version: current.version + 1,
+    }));
+    return { line: counted, counted: amount };
   }
 
   /**

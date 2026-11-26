@@ -33,6 +33,8 @@ import {
   PACK_COUNT_FILL_MAX,
   PACK_COUNT_MAX,
   PACK_COUNT_MIN,
+  PIECE_COUNT_MAX,
+  PIECE_COUNT_MIN,
   POSTAL_CODE_PATTERNS,
   PRICE_POLICY_PATTERNS,
   PRICE_SCOPE_PATTERNS,
@@ -408,6 +410,12 @@ const packCountOrNull = (): JsonSchema => ({
   minimum: PACK_COUNT_MIN,
   maximum: PACK_COUNT_MAX,
 });
+/** A piece count (plan 0278): a whole number in the bounds, or null. */
+const pieceCountOrNull = (): JsonSchema => ({
+  type: ['integer', 'null'],
+  minimum: PIECE_COUNT_MIN,
+  maximum: PIECE_COUNT_MAX,
+});
 /** Who wrote a product's approximate weight (plan 0244, section 3.1). */
 const approxWeightSetBy = (): JsonSchema => ({
   type: 'string',
@@ -747,6 +755,13 @@ export const itemViewProperties: Record<string, JsonSchema> = {
   // but not required, so a reader built before it keeps validating.
   quantityStep: quantityStepOrNull(),
   packCount: packCountOrNull(),
+  // Plan 0278: the pieces of the whole product. Required, as the pack count
+  // is: catalog fills it on every view it builds.
+  pieceCount: {
+    ...pieceCountOrNull(),
+    description:
+      'How many pieces the whole product holds, counted across its pack, beside the pack count (plan 0278): a bag of 35 g holds 50 candies. Null when nobody counted them. A person sets it, and no harvest run writes it.',
+  },
   // Plan 0166: position order and never empty, so a reader always has a first.
   categories: {
     ...array(ref(CATALOG_SCHEMA_IDS.itemCategoryView)),
@@ -782,6 +797,7 @@ export const itemViewRequired: string[] = [
   'eans',
   'unitSize',
   'packCount',
+  'pieceCount',
   'categories',
   'defaultUnit',
   'productGroupId',
@@ -1554,6 +1570,10 @@ const createItemRequest = withRule(
       // Plan 0244, section 7.4: recorded in the audit row only.
       createdFromEntry: nonEmptyString(),
       packCount: packCountOrNull(),
+      // Plan 0278. The bounds here; catalog refuses a count on a product
+      // without a fixed size in grams or millilitres, or not above the pack
+      // count, with `item_piece_count_not_allowed`.
+      pieceCount: pieceCountOrNull(),
       // One of the two (plan 0237, section 3.4), which catalog checks.
       categoryIds: categoryIds(),
       categorySlugs: categorySlugs(),
@@ -1582,6 +1602,8 @@ const updateItemFields = {
   // Plan 0261, bounded by catalog as on a create.
   quantityStep: integerOrNull(),
   packCount: packCountOrNull(),
+  // Plan 0278, checked against the size and the pack count by catalog.
+  pieceCount: pieceCountOrNull(),
   // Replaces the whole set. Never empty, because a product always has one.
   categoryIds: categoryIds(),
   // The same set by slug, never with `categoryIds` (plan 0237, section 3.4).
@@ -1605,6 +1627,7 @@ const itemExpectation = object(
     quantityStep: integerOrNull(),
     defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
     packCount: { type: ['integer', 'null'] },
+    pieceCount: integerOrNull(),
     categorySlugs: array(
       nonEmptyString({ maxLength: CATEGORY_SLUG_MAX_LENGTH })
     ),
@@ -1885,6 +1908,7 @@ const createItemInput = withRule(
       quantityStep: integerOrNull(),
       createdFromEntry: nonEmptyString(),
       packCount: packCountOrNull(),
+      pieceCount: pieceCountOrNull(),
       categoryIds: categoryIds(),
       categorySlugs: categorySlugs(),
       defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),

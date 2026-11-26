@@ -302,6 +302,8 @@ export class BasketProductChangeService {
         // purchase did not change. `settledAt` is copied and not restamped,
         // as a revert that splits a row copies it (plan 0104, section 3.2).
         quantity: old.quantity,
+        // How much of it met the ask did not change either (plan 0274).
+        applied: old.applied,
         // The unit is the purchase's too (plan 0246, section 3.5).
         unit: old.unit ?? 'UNIT',
         settledByUserId: old.settledByUserId,

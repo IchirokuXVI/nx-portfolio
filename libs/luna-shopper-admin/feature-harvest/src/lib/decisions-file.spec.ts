@@ -239,6 +239,43 @@ describe('parseDecisionsFile', () => {
     ]);
   });
 
+  it('passes an expect that carries observed through untouched (backend plan 0277)', () => {
+    const observed = {
+      name: 'Leche entera',
+      brand: 'Hacendado',
+      ean: null,
+      sizeFormat: '1 L',
+      unitSize: 1,
+      sizeUnit: 'LITER',
+      packCount: null,
+      soldByWeight: false,
+      approxWeight: null,
+      // The tenth field since decision 154a, passed through like the others.
+      packaging: 'Brik',
+    };
+    const read = parseDecisionsFile(
+      jsonl(
+        HEADER,
+        { ...CREATE_MILK, expect: { ...CREATE_MILK.expect, observed } },
+        { ...LINK_BREAD, expect: { status: 'CANDIDATE', observed } }
+      )
+    );
+    if (!isDecisionsFile(read)) {
+      throw new Error('expected a file');
+    }
+
+    expect(read.request.operations[0].expect).toEqual({
+      status: 'UNRESOLVED',
+      lastSeenAt: NOW,
+      observed,
+    });
+    // A file replayed to another cluster may carry observed alone.
+    expect(read.request.operations[1].expect).toEqual({
+      status: 'CANDIDATE',
+      observed,
+    });
+  });
+
   it('names the line that is not JSON', () => {
     expect(parseDecisionsFile(`${JSON.stringify(HEADER)}\n{oops\n`)).toEqual({
       kind: 'notJson',

@@ -18,6 +18,8 @@ import { ListsModule } from '../lists/lists.module';
 import { ProfilesModule } from '../profiles/profiles.module';
 import { ZonesModule } from '../zones/zones.module';
 import { BasketAccessSweepService } from './basket-access-sweep.service';
+import { BasketBuyForListService } from './basket-buy-for-list.service';
+import { BasketCountExtraService } from './basket-count-extra.service';
 import { BasketCoverageModule } from './basket-coverage.module';
 import { BasketDemandService } from './basket-demand.service';
 import { BasketLineAddService } from './basket-line-add.service';
@@ -137,8 +139,12 @@ import { LineClaimModule } from './line-claim.module';
     BasketRowResolver,
     BasketWriteContext,
     BasketSettleService,
+    // A buy for a list that does not ask, with its line at zero (plan 0273).
+    BasketBuyForListService,
     BasketRevertService,
     BasketDemandService,
+    // "Count the extra" on a row, the demand's sibling (plan 0276).
+    BasketCountExtraService,
     BasketLineAddService,
     BasketRowRenameService,
     // The product of basket lines, changed from the basket (plan 0202). It

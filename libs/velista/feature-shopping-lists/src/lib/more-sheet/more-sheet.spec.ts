@@ -5,13 +5,14 @@ import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
-import { BasketStore } from '@portfolio/velista/data-access';
+import { BasketStore, ListRowsStore } from '@portfolio/velista/data-access';
 import type {
   BasketAddress,
   BasketParticipant,
   BasketPresenceEntry,
 } from '@portfolio/velista/models';
 import {
+  provideFakeBrowserFacade,
   provideVelistaTesting,
   SheetNavigation,
 } from '@portfolio/velista/platform';
@@ -132,6 +133,9 @@ async function render(world: World = {}): Promise<{
     imports: [MoreSheet, RokuTranslatorTestingModule.forTesting()],
     providers: [
       provideVelistaTesting({ basePath: world.basePath ?? '/velista' }),
+      provideFakeBrowserFacade(new Map()),
+      // The device's choice of view (velista 0202), real, over the storage above.
+      ListRowsStore,
       { provide: BasketStore, useValue: basket },
       { provide: SheetNavigation, useValue: sheets },
       {
@@ -186,11 +190,12 @@ const row = (
 
 describe('MoreSheet', () => {
   describe('the rows', () => {
-    it('draws all four for the owner of a trip, in the plan’s order', async () => {
+    it('draws the view and all four for the owner of a trip, in the plan’s order', async () => {
       const owner = person('OWNER');
       const { fixture } = await render({ me: owner, participants: [owner] });
 
       expect(entries(fixture)).toEqual([
+        'view',
         'people',
         'history',
         'create',
@@ -286,14 +291,14 @@ describe('MoreSheet', () => {
     it('are offered to a registered participant', async () => {
       const { fixture } = await render({ me: person('REGISTERED') });
 
-      expect(entries(fixture)).toEqual(['history', 'create']);
+      expect(entries(fixture)).toEqual(['view', 'history', 'create']);
     });
 
     it('are absent for a guest, because both need an account', async () => {
       const guest = person('GUEST');
       const { fixture } = await render({ me: guest, participants: [guest] });
 
-      expect(entries(fixture)).toEqual(['people']);
+      expect(entries(fixture)).toEqual(['view', 'people']);
     });
   });
 
@@ -313,7 +318,7 @@ describe('MoreSheet', () => {
     it('is absent on the basket that is always there', async () => {
       const { fixture } = await render({ kind: 'LIVE' });
 
-      expect(entries(fixture)).toEqual(['history', 'create']);
+      expect(entries(fixture)).toEqual(['view', 'history', 'create']);
     });
 
     it('is absent over a route with no finish sheet, whatever the basket says', async () => {
@@ -321,16 +326,120 @@ describe('MoreSheet', () => {
       // row would lead nowhere, so the table is asked and not only the basket.
       const { fixture } = await render({ finishSheet: false });
 
-      expect(entries(fixture)).toEqual(['history', 'create']);
+      expect(entries(fixture)).toEqual(['view', 'history', 'create']);
     });
   });
 
-  it('draws no row at all for a guest on a basket that names nobody', async () => {
-    // The page draws no menu button for this reader. This is what a cold arrival on
-    // the sheet's own URL finds: a title and nothing to press.
+  it('draws only the view for a guest on a basket that names nobody (velista 0202)', async () => {
+    // The view is a choice about the device, so every reader has it (velista 0202).
+    // Nothing else is offered to this reader.
     const { fixture } = await render({ me: person('GUEST') });
 
-    expect(entries(fixture)).toEqual([]);
+    expect(entries(fixture)).toEqual(['view']);
+  });
+
+  /** Velista `0202`: the View row names the current view and opens the choices. */
+  describe('the view row', () => {
+    it('is first, with its glyph, its word and the current view at its end', async () => {
+      const { fixture } = await render();
+      const view = row(fixture, 'view');
+
+      expect(entries(fixture)[0]).toBe('view');
+      expect(view?.querySelector('lib-view-icon')).not.toBeNull();
+      expect(view?.querySelector('.word')?.textContent).toBe('view.title');
+      expect(view?.querySelector('.value')?.textContent).toBe('view.default');
+
+      TestBed.inject(ListRowsStore).setLayout('compact');
+      fixture.detectChanges();
+
+      expect(view?.querySelector('.value')?.textContent).toBe('view.compact');
+    });
+
+    // The owner, 2026-11-23: the menu closes after a choice, as the tools row's
+    // picker does, and focus goes back to the button that opened the menu.
+    it('opens the same choices, writes the one chosen, closes and gives focus back to the menu button', async () => {
+      // The page's menu button, which has focus when the menu opens.
+      const menuButton = document.createElement('button');
+      document.body.append(menuButton);
+      menuButton.focus();
+      const { fixture, sheets } = await render();
+      document.body.append(fixture.nativeElement as HTMLElement);
+      await fixture.whenStable();
+      const view = row(fixture, 'view') as HTMLButtonElement;
+
+      view.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(view.getAttribute('aria-expanded')).toBe('true');
+      const compact = document.querySelector<HTMLElement>(
+        '[role="menuitemradio"][data-view="compact"]'
+      );
+      expect(
+        document
+          .querySelector('[role="menuitemradio"][data-view="default"]')
+          ?.getAttribute('aria-checked')
+      ).toBe('true');
+
+      compact?.click();
+      fixture.detectChanges();
+
+      expect(TestBed.inject(ListRowsStore).layout()).toBe('compact');
+      expect(document.querySelector('[role="menu"]')).toBeNull();
+      expect(view.querySelector('.value')?.textContent).toBe('view.compact');
+      expect(document.activeElement).toBe(menuButton);
+      expect(sheets.leaveTo).not.toHaveBeenCalled();
+      expect(sheets.dismiss).toHaveBeenCalledTimes(1);
+      expect(sheets.dismiss).toHaveBeenCalledWith(
+        `/velista/en/shopping-lists/${BASKET_ID}`
+      );
+      (fixture.nativeElement as HTMLElement).remove();
+      menuButton.remove();
+    });
+
+    it('closes after the view already drawn is chosen too', async () => {
+      const { fixture, sheets } = await render();
+      document.body.append(fixture.nativeElement as HTMLElement);
+      const view = row(fixture, 'view') as HTMLButtonElement;
+
+      view.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      document
+        .querySelector<HTMLElement>(
+          '[role="menuitemradio"][data-view="default"]'
+        )
+        ?.click();
+      fixture.detectChanges();
+
+      expect(TestBed.inject(ListRowsStore).layout()).toBe('default');
+      expect(sheets.dismiss).toHaveBeenCalledTimes(1);
+      (fixture.nativeElement as HTMLElement).remove();
+    });
+
+    it('stays open when its choices close with no choice', async () => {
+      const { fixture, sheets } = await render();
+      document.body.append(fixture.nativeElement as HTMLElement);
+      const view = row(fixture, 'view') as HTMLButtonElement;
+
+      view.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      document
+        .querySelector<HTMLElement>('[role="menu"]')
+        ?.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+        );
+      fixture.detectChanges();
+
+      expect(document.querySelector('[role="menu"]')).toBeNull();
+      expect(sheets.dismiss).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(view);
+      (fixture.nativeElement as HTMLElement).remove();
+    });
   });
 
   /**
