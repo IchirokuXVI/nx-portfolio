@@ -12,8 +12,8 @@
  * Zero npm dependencies, Node built ins only. Not browser reachable.
  */
 
-import { writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { renameSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import {
   LOCAL_GAP,
   NOT_CARRIED,
@@ -43,6 +43,25 @@ export const MAX_RATE_RETRIES = 3;
 
 /** A lost answer is read back and sent again at most this many times. */
 const MAX_LOST_ROUNDS = 3;
+
+/**
+ * How long one request may take before it counts as a lost answer. Node's own
+ * fetch waits five minutes for the headers. The gateway of a cluster gives up
+ * after 15 seconds and answers 504 itself, so a request that has had no answer
+ * after twice that is hung, and the read back decides what landed.
+ */
+export const REQUEST_TIMEOUT_MS = 30000;
+
+/**
+ * A decisions part refused in rounds that drop none of its rows is stopped
+ * after this many such rounds, so a refusal that names no row of the part
+ * cannot send it forever.
+ */
+export const MAX_IDLE_DECISION_ROUNDS = 2;
+
+/** What the header says while the report is written during a run. */
+export const IN_PROGRESS_NOTE =
+  'The run had not finished when this file was written. In a write run, a line still of class apply and without written was in flight or not yet sent, and its outcome is not known.';
 
 /** The classes of section 4.1, in the order the table checks them. */
 export const CLASS = Object.freeze({
@@ -177,12 +196,21 @@ const realSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * The session cuts a failed body at 500 characters for its message, and the
  * refusal of a batch of a hundred names every product it refused. So the full
  * text is kept here, beside the session, and read back by the client.
+ *
+ * Each request also gets a timeout, which covers reading the body too, so a
+ * hung target becomes a lost answer and not a run that waits for ever.
  */
-export function capturingFetch(base = globalThis.fetch) {
+export function capturingFetch(
+  base = globalThis.fetch,
+  { timeoutMs = REQUEST_TIMEOUT_MS } = {}
+) {
   let last = null;
   return {
-    fetchImpl: async (url, init) => {
-      const response = await base(url, init);
+    fetchImpl: async (url, init = {}) => {
+      const response = await base(url, {
+        ...init,
+        signal: init.signal ?? AbortSignal.timeout(timeoutMs),
+      });
       if (response.ok) {
         last = null;
         return response;
@@ -434,14 +462,21 @@ export function batchEntry(line, { esOnly = false } = {}) {
   return entry;
 }
 
-/** A failure the proxy or the socket gave, where the write may have landed. */
+/**
+ * A failure the proxy or the socket gave, where the write may have landed: a
+ * 502, 503 or 504, no answer at all (a timeout included), or a 2xx answer
+ * whose body could not be read. The server took the request in that last
+ * case, so only a read back can say what it holds.
+ */
 function lostAnswer(error) {
+  const status = error?.status;
   return (
-    error?.status === undefined ||
-    error?.status === null ||
-    error.status === 502 ||
-    error.status === 503 ||
-    error.status === 504
+    status === undefined ||
+    status === null ||
+    (status >= 200 && status < 300) ||
+    status === 502 ||
+    status === 503 ||
+    status === 504
   );
 }
 
@@ -505,8 +540,14 @@ function stopReason(error, { lostRounds = 0, batch = null } = {}) {
   if (lostRounds > MAX_LOST_ROUNDS) {
     return `the target gave no answer ${lostRounds} times for one batch`;
   }
+  if (error?.name === 'TimeoutError') {
+    return `the target gave no answer within ${REQUEST_TIMEOUT_MS / 1000} s`;
+  }
   if (status === null || status === undefined) {
     return 'the target gave no answer';
+  }
+  if (status >= 200 && status < 300) {
+    return `the target answered ${status} with a body that could not be read`;
   }
   if (status === 429) {
     return `the target still answered 429 after ${MAX_RATE_RETRIES} waits`;
@@ -573,19 +614,30 @@ function markWritten(group) {
  *   `already there`.
  * - A 400, 409 or 422 with a problem code splits the batch until the refused
  *   product is alone, and it is `refused`.
- * - A 502, 503, 504 or no answer reads the batch back and sends again what did
- *   not land, at most three times.
- * - A 413 halves the batch size once.
+ * - A 502, 503, 504, no answer, a timeout or a 2xx whose body cannot be read
+ *   reads the batch back and sends again what did not land, at most three
+ *   times.
+ * - A 413 halves the group it refused, once, and no later batch is larger
+ *   than that half.
  * - Anything else stops the run: a 429 after the client's waits, a 401 or 403
  *   after the session's new login, a second 413, any other 5xx, an answer
  *   lost a fourth time. The products of the request in flight are
  *   `not written` (or `already there` when a read back shows they landed),
  *   every product after them is `not sent`, and a `ReplayStopped` is thrown.
+ *
+ * `progress.current` holds the group in flight, so a signal handler can mark
+ * it, and `onAnswer` is called after every answer is sorted.
  */
 export async function writeApply(
   client,
   lines,
-  { batchSize = DEFAULT_BATCH_SIZE, esOnly = false, stderr } = {}
+  {
+    batchSize = DEFAULT_BATCH_SIZE,
+    esOnly = false,
+    stderr,
+    progress = {},
+    onAnswer = null,
+  } = {}
 ) {
   const pending = lines.filter((line) => line.class === CLASS.APPLY);
   const stats = { requests: 0, written: 0 };
@@ -593,9 +645,141 @@ export async function writeApply(
   let halved = false;
   let cursor = 0;
   let lostRounds = 0;
-  let current = null;
   let unchecked = false;
   const queue = [];
+  progress.current = null;
+
+  /** Sends one group and sorts its answer. Throws only to stop the run. */
+  const send = async (group) => {
+    let error;
+    try {
+      await client.request(BATCH_PATH, {
+        method: 'PATCH',
+        body: {
+          items: group.map((line) => batchEntry(line, { esOnly })),
+          requireRegisteredBrands: true,
+        },
+      });
+    } catch (caught) {
+      error = caught;
+    }
+    if (error === undefined) {
+      markWritten(group);
+      stats.written += group.length;
+      return;
+    }
+
+    const problem = error.problem ?? problemOf(error);
+    const failures =
+      problem?.code === 'item_expectation_failed'
+        ? (problem?.details?.failures ?? [])
+        : [];
+    const named = new Map(failures.map((failure) => [failure.itemId, failure]));
+    const hit = group.filter((line) => named.has(line.itemId));
+    if (hit.length > 0) {
+      for (const line of hit) {
+        const failure = named.get(line.itemId);
+        const fields = failedFields(failure);
+        if (refusedAsAlreadyThere(line, failure)) {
+          line.class = CLASS.ALREADY;
+          if (lostRounds > 0) {
+            line.afterLostAnswer = true;
+          }
+        } else {
+          line.class =
+            fields.includes('name') || fields.includes('brand')
+              ? CLASS.IDENTITY
+              : CLASS.CONFLICT;
+        }
+        line.refusedOn = fields;
+        for (const mismatch of failure.fields ?? []) {
+          const spec = line.fields.find(
+            (field) => carriedField(field.field).send === mismatch.field
+          );
+          if (spec) {
+            spec.target = mismatch.actual ?? null;
+          }
+          if (mismatch.field === 'name' || mismatch.field === 'brand') {
+            line.identity.target = {
+              ...(line.identity.target ?? {}),
+              [mismatch.field]:
+                mismatch.field === 'name'
+                  ? nameHalves(mismatch.actual)
+                  : (mismatch.actual ?? null),
+            };
+          }
+        }
+      }
+      queue.unshift(group.filter((line) => !named.has(line.itemId)));
+      return;
+    }
+
+    if (lostAnswer(error)) {
+      lostRounds += 1;
+      let rest;
+      try {
+        rest = await readBack(client, group);
+      } catch (readError) {
+        unchecked = true;
+        throw readError;
+      }
+      if (lostRounds > MAX_LOST_ROUNDS) {
+        throw new ReplayStopped(
+          `the write stopped: ${stopReason(error, { lostRounds })}`,
+          { ...answerOf(error, problem), code: 'no_answer' },
+          error
+        );
+      }
+      stderr?.write(
+        `a batch got no answer (${error.status ?? 'no status'}); ${group.length - rest.length} of its ${group.length} products landed, the rest are sent again\n`
+      );
+      queue.unshift(rest);
+      return;
+    }
+
+    if (contentRefusal(error, problem)) {
+      if (group.length === 1) {
+        const [line] = group;
+        line.class = CLASS.REFUSED;
+        line.code = problem.code;
+        line.message = problem.detail ?? problem.message ?? error.message;
+        return;
+      }
+      const middle = Math.ceil(group.length / 2);
+      queue.unshift(group.slice(0, middle), group.slice(middle));
+      return;
+    }
+
+    // The group that was refused is halved, and no batch after it is larger
+    // than one half. Halving the configured size instead resent a short group
+    // whole, and its second 413 stopped the run.
+    if (error.status === 413 && !halved && group.length > 1) {
+      halved = true;
+      const half = Math.ceil(group.length / 2);
+      size = Math.min(size, half);
+      stderr?.write(
+        `the target answered 413 for a batch of ${group.length}; sending batches of ${size} from now on\n`
+      );
+      queue.unshift(group.slice(0, half), group.slice(half));
+      return;
+    }
+
+    // A server error may still hide a write that committed, so the batch is
+    // read back before its products are called not written.
+    if (error.status >= 500) {
+      try {
+        await readBack(client, group);
+      } catch {
+        unchecked = true;
+      }
+    }
+    throw new ReplayStopped(
+      `the write stopped: ${stopReason(error, { batch: group.length })}`,
+      answerOf(error, problem),
+      error
+    );
+  };
+
   try {
     while (queue.length > 0 || cursor < pending.length) {
       if (queue.length === 0) {
@@ -607,138 +791,13 @@ export async function writeApply(
       if (group.length === 0) {
         continue;
       }
-      current = group;
+      progress.current = group;
       stats.requests += 1;
-      let error;
-      try {
-        await client.request(BATCH_PATH, {
-          method: 'PATCH',
-          body: {
-            items: group.map((line) => batchEntry(line, { esOnly })),
-            requireRegisteredBrands: true,
-          },
-        });
-      } catch (caught) {
-        error = caught;
-      }
-      if (error === undefined) {
-        markWritten(group);
-        stats.written += group.length;
-        current = null;
-        continue;
-      }
-
-      const problem = error.problem ?? problemOf(error);
-      const failures =
-        problem?.code === 'item_expectation_failed'
-          ? (problem?.details?.failures ?? [])
-          : [];
-      const named = new Map(
-        failures.map((failure) => [failure.itemId, failure])
-      );
-      const hit = group.filter((line) => named.has(line.itemId));
-      if (hit.length > 0) {
-        for (const line of hit) {
-          const failure = named.get(line.itemId);
-          const fields = failedFields(failure);
-          if (refusedAsAlreadyThere(line, failure)) {
-            line.class = CLASS.ALREADY;
-            if (lostRounds > 0) {
-              line.afterLostAnswer = true;
-            }
-          } else {
-            line.class =
-              fields.includes('name') || fields.includes('brand')
-                ? CLASS.IDENTITY
-                : CLASS.CONFLICT;
-          }
-          line.refusedOn = fields;
-          for (const mismatch of failure.fields ?? []) {
-            const spec = line.fields.find(
-              (field) => carriedField(field.field).send === mismatch.field
-            );
-            if (spec) {
-              spec.target = mismatch.actual ?? null;
-            }
-            if (mismatch.field === 'name' || mismatch.field === 'brand') {
-              line.identity.target = {
-                ...(line.identity.target ?? {}),
-                [mismatch.field]:
-                  mismatch.field === 'name'
-                    ? nameHalves(mismatch.actual)
-                    : (mismatch.actual ?? null),
-              };
-            }
-          }
-        }
-        queue.unshift(group.filter((line) => !named.has(line.itemId)));
-        continue;
-      }
-
-      if (lostAnswer(error)) {
-        lostRounds += 1;
-        let rest;
-        try {
-          rest = await readBack(client, group);
-        } catch (readError) {
-          unchecked = true;
-          throw readError;
-        }
-        if (lostRounds > MAX_LOST_ROUNDS) {
-          throw new ReplayStopped(
-            `the write stopped: ${stopReason(error, { lostRounds })}`,
-            { ...answerOf(error, problem), code: 'no_answer' },
-            error
-          );
-        }
-        stderr?.write(
-          `a batch got no answer (${error.status ?? 'no status'}); ${group.length - rest.length} of its ${group.length} products landed, the rest are sent again\n`
-        );
-        queue.unshift(rest);
-        continue;
-      }
-
-      if (contentRefusal(error, problem)) {
-        if (group.length === 1) {
-          const [line] = group;
-          line.class = CLASS.REFUSED;
-          line.code = problem.code;
-          line.message = problem.detail ?? problem.message ?? error.message;
-          continue;
-        }
-        const middle = Math.ceil(group.length / 2);
-        queue.unshift(group.slice(0, middle), group.slice(middle));
-        continue;
-      }
-
-      if (error.status === 413 && !halved && group.length > 1) {
-        halved = true;
-        size = Math.ceil(size / 2);
-        stderr?.write(
-          `the target answered 413 for a batch of ${group.length}; sending batches of ${size} from now on\n`
-        );
-        const halves = [];
-        for (let start = 0; start < group.length; start += size) {
-          halves.push(group.slice(start, start + size));
-        }
-        queue.unshift(...halves);
-        continue;
-      }
-
-      // A server error may still hide a write that committed, so the batch is
-      // read back before its products are called not written.
-      if (error.status >= 500) {
-        try {
-          await readBack(client, group);
-        } catch {
-          unchecked = true;
-        }
-      }
-      throw new ReplayStopped(
-        `the write stopped: ${stopReason(error, { batch: group.length })}`,
-        answerOf(error, problem),
-        error
-      );
+      await send(group);
+      progress.current = null;
+      // The report on disk follows every answer, so a stop that leaves no
+      // time for the last write still leaves a record of what landed.
+      onAnswer?.();
     }
   } catch (error) {
     const stop =
@@ -749,7 +808,7 @@ export async function writeApply(
             answerOf(error),
             error
           );
-    for (const line of current ?? []) {
+    for (const line of progress.current ?? []) {
       if (line.class === CLASS.APPLY && !line.written) {
         line.class = CLASS.NOT_WRITTEN;
         line.error = stop.answer;
@@ -758,6 +817,7 @@ export async function writeApply(
         }
       }
     }
+    progress.current = null;
     for (const line of [...queue.flat(), ...pending.slice(cursor)]) {
       if (line.class === CLASS.APPLY && !line.written) {
         line.class = CLASS.NOT_SENT;
@@ -773,6 +833,20 @@ export async function writeApply(
 // ---------------------------------------------------------------------------
 // The passes
 // ---------------------------------------------------------------------------
+
+/** The lines of changes the run stopped before it read on the target. */
+function unreadLines(changes) {
+  return changes.map((change) => {
+    const line = classify(change, undefined);
+    return change.class
+      ? line
+      : {
+          ...line,
+          class: CLASS.NOT_SENT,
+          reason: 'the run stopped before this product was read',
+        };
+  });
+}
 
 /**
  * Sorts every change into its class against the target, and in a write run
@@ -794,6 +868,7 @@ export async function replayChanges({
   stderr,
   lines = [],
   progress = {},
+  onAnswer = null,
 }) {
   progress.entryReads = 0;
   progress.items = new Map();
@@ -821,18 +896,7 @@ export async function replayChanges({
       lines.push(classify(change, item, { esOnly, washRows }));
     }
   } catch (error) {
-    for (const change of changes.slice(index)) {
-      const line = classify(change, undefined);
-      lines.push(
-        change.class
-          ? line
-          : {
-              ...line,
-              class: CLASS.NOT_SENT,
-              reason: 'the run stopped before this product was read',
-            }
-      );
-    }
+    lines.push(...unreadLines(changes.slice(index)));
     throw new ReplayStopped(
       `the run stopped while it read the target: ${stopReason(error)}`,
       answerOf(error),
@@ -842,7 +906,14 @@ export async function replayChanges({
 
   let written = { requests: 0, written: 0 };
   if (write) {
-    written = await writeApply(client, lines, { batchSize, esOnly, stderr });
+    progress.write ??= {};
+    written = await writeApply(client, lines, {
+      batchSize,
+      esOnly,
+      stderr,
+      progress: progress.write,
+      onAnswer,
+    });
   }
   return {
     lines,
@@ -860,11 +931,17 @@ export function countLines(lines) {
   }
   let fieldsSent = 0;
   let written = 0;
+  let landedAfterLostAnswer = 0;
   let sizeLeftToWashTask = 0;
   for (const line of lines) {
     classes[line.class] = (classes[line.class] ?? 0) + 1;
     if (line.written) {
       written += 1;
+    }
+    // Landed through a request whose answer was lost, so the target holds an
+    // audit row for it while `written` does not count it.
+    if (line.afterLostAnswer) {
+      landedAfterLostAnswer += 1;
     }
     if (line.class !== CLASS.WASH && line.washTask) {
       sizeLeftToWashTask += 1;
@@ -875,6 +952,7 @@ export function countLines(lines) {
     products: lines.length,
     classes,
     written,
+    landedAfterLostAnswer,
     fieldsSent,
     sizeLeftToWashTask,
   };
@@ -986,17 +1064,151 @@ export function countsLine(counts) {
   const wash = counts.sizeLeftToWashTask
     ? `; the size of ${counts.sizeLeftToWashTask} more left to the wash task`
     : '';
-  return `${counts.products} products: ${parts.join(', ') || 'none'}${wash}; ${counts.written} written, ${counts.fieldsSent} fields sent`;
+  const landed = counts.landedAfterLostAnswer
+    ? `, ${counts.landedAfterLostAnswer} more landed after a lost answer`
+    : '';
+  return `${counts.products} products: ${parts.join(', ') || 'none'}${wash}; ${counts.written} written${landed}, ${counts.fieldsSent} fields sent`;
+}
+
+/**
+ * Writes a file whole or not at all: a temp file beside it, then a rename
+ * over it. A stop between the two leaves the previous version in place.
+ */
+export function writeFileAtomic(path, text) {
+  const temp = join(dirname(path), `.${basename(path)}.${process.pid}.tmp`);
+  writeFileSync(temp, text, 'utf8');
+  renameSync(temp, path);
 }
 
 /** Writes the report, never to stdout. */
-export function writeReport(
-  path,
-  report,
-  writeFile = (file, text) => writeFileSync(file, text, 'utf8')
-) {
+export function writeReport(path, report, writeFile = writeFileAtomic) {
   writeFile(path, `${JSON.stringify(report, null, 2)}\n`);
   return path;
+}
+
+/**
+ * Keeps the report file in step with a run (plan 0006, section 5).
+ *
+ * `snapshot` writes it after every answer, marked in progress. `close` writes
+ * it once the run ends, and when that write fails it prints the counts and
+ * the error the run stopped on before it throws the write failure, so neither
+ * hides the other. `interrupt` is the signal path: it marks what was in
+ * flight, writes the report synchronously and ends the keeper, so a write the
+ * run makes later changes nothing on disk.
+ *
+ * `complete({ running })` fills the counts and the header; `print(withPath)`
+ * writes the counts lines to stderr.
+ */
+export function reportKeeper({
+  report,
+  reportPath,
+  writeFile,
+  complete,
+  print,
+  stderr,
+}) {
+  let closed = false;
+  const write = () => writeReport(reportPath, report, writeFile);
+  return {
+    get closed() {
+      return closed;
+    },
+    snapshot() {
+      if (closed) {
+        return;
+      }
+      complete({ running: true });
+      try {
+        write();
+      } catch (error) {
+        throw new ReplayStopped(
+          `the run stopped: the report could not be written to ${reportPath} (${error?.message ?? error}), so nothing more is sent`,
+          {
+            status: null,
+            code: 'report_not_written',
+            message: String(error?.message ?? error),
+          },
+          error
+        );
+      }
+    },
+    close(failure) {
+      if (closed) {
+        if (failure) {
+          throw failure;
+        }
+        return report;
+      }
+      closed = true;
+      complete({ running: false });
+      let writeError = null;
+      try {
+        write();
+      } catch (error) {
+        writeError = error;
+      }
+      print(writeError === null);
+      if (writeError !== null) {
+        if (failure) {
+          stderr.write(`${failure?.message ?? failure}\n`);
+        }
+        throw new Error(
+          `the report could not be written to ${reportPath}: ${writeError?.message ?? writeError}`,
+          { cause: failure ?? writeError }
+        );
+      }
+      if (failure) {
+        throw failure;
+      }
+      return report;
+    },
+    interrupt(signal, mark) {
+      if (closed) {
+        return false;
+      }
+      closed = true;
+      const answer = {
+        status: null,
+        code: 'interrupted',
+        message: `the run was stopped with ${signal} while this request was in flight, so whether it landed is not known`,
+      };
+      mark(answer);
+      report.header.stoppedBy = `the run was stopped with ${signal}`;
+      report.header.error = answer;
+      complete({ running: false });
+      try {
+        write();
+      } catch (error) {
+        print(false);
+        stderr.write(
+          `the report could not be written to ${reportPath}: ${error?.message ?? error}\n`
+        );
+        return false;
+      }
+      print(true);
+      return true;
+    },
+  };
+}
+
+/** Marks the products of a stopped write: in flight unknown, the rest not sent. */
+function markProductsInterrupted({ lines, inFlight, write, answer }) {
+  for (const line of inFlight ?? []) {
+    if (line.class === CLASS.APPLY && !line.written) {
+      line.class = CLASS.NOT_WRITTEN;
+      line.error = answer;
+      line.checked = false;
+    }
+  }
+  if (!write) {
+    return;
+  }
+  for (const line of lines) {
+    if (line.class === CLASS.APPLY && !line.written) {
+      line.class = CLASS.NOT_SENT;
+      line.reason = 'the run stopped before this product was sent';
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1025,6 +1237,8 @@ export const DECISION_CLASS = Object.freeze({
   DECIDED_ON_TARGET: 'decided on target',
   DROPPED_WITH_UNIT: 'dropped with its unit',
   REFUSED: 'refused',
+  /** In the part whose answer was lost, and not decided on the target after it. */
+  NOT_WRITTEN: 'not written',
   NOT_SENT: 'not sent',
 });
 
@@ -1141,13 +1355,84 @@ export function dropUnits(records, dropped) {
 }
 
 /**
+ * The rows of a part whose answer was lost, read back on the target and
+ * classed by the state each row is in there.
+ *
+ * Only an `accept` that names a product can be read: its row is listed by
+ * that product's source rows. A row that is no longer pending is
+ * `decided on target`. A row still pending did not land and is `not written`.
+ * Every other row (a `createItem`, an `accept` onto a product the part made,
+ * a row the product does not list, a read that failed) is `not written` with
+ * `checked: false`: its outcome is not known. After one failed read the rest
+ * are not read, so a target that hangs is not asked once a row.
+ */
+export async function readBackDecisions(client, records, answer) {
+  const lines = [];
+  const rowsOf = new Map();
+  let reachable = Boolean(client);
+  const unknown = (record, why) =>
+    decisionLine(record, DECISION_CLASS.NOT_WRITTEN, {
+      code: answer.code,
+      detail: `the answer to this part was lost (${answer.message}), and ${why}`,
+      checked: false,
+    });
+  for (const record of records) {
+    if (record.decision !== 'LINK' || !record.itemId) {
+      lines.push(
+        unknown(record, 'a row with no product of its own cannot be read back')
+      );
+      continue;
+    }
+    if (!reachable) {
+      lines.push(unknown(record, 'the read back failed'));
+      continue;
+    }
+    let rows = rowsOf.get(record.itemId);
+    if (rows === undefined) {
+      try {
+        rows = await readEntries(client, record.itemId);
+      } catch {
+        reachable = false;
+        lines.push(unknown(record, 'the read back failed'));
+        continue;
+      }
+      rowsOf.set(record.itemId, rows);
+    }
+    const row = rows.find((entry) => entry.id === record.entryId);
+    if (!row) {
+      lines.push(
+        unknown(record, 'the product it names does not list this row')
+      );
+    } else if (row.status !== record.expect.status) {
+      lines.push(
+        decisionLine(record, DECISION_CLASS.DECIDED_ON_TARGET, {
+          targetStatus: row.status,
+          afterLostAnswer: true,
+        })
+      );
+    } else {
+      lines.push(
+        decisionLine(record, DECISION_CLASS.NOT_WRITTEN, {
+          code: answer.code,
+          detail: `the answer to this part was lost (${answer.message}), and the row is still ${row.status} on the target`,
+        })
+      );
+    }
+  }
+  return lines;
+}
+
+/**
  * Replays the decisions (section 6): a no twin `accept` is dropped first, then
  * in a write run the rest go in parts of at most the route's cap, and a part
  * refused at `VALIDATE` loses the refused rows and is sent again.
  *
  * `applyFile(path)` is the suggestions decider's `apply` with the target url,
  * `splitParts(records)` its split by the cap, and `writeFile` writes each part
- * beside the report.
+ * beside the report. `client` reads rows back after a lost answer.
+ * `progress.inFlight` holds the rows of the part in flight and
+ * `progress.orphanedItemIds` the products the route could not delete;
+ * `onAnswer` is called after every answer is sorted.
  */
 export async function replayDecisions({
   prepared,
@@ -1158,7 +1443,12 @@ export async function replayDecisions({
   splitParts,
   writeFile = (path, text) => writeFileSync(path, text, 'utf8'),
   lines = [],
+  client = null,
+  progress = {},
+  onAnswer = null,
 }) {
+  progress.inFlight = null;
+  progress.orphanedItemIds ??= [];
   const noTwin = new Map();
   for (const record of prepared.records) {
     if (
@@ -1180,9 +1470,17 @@ export async function replayDecisions({
 
   const parts = first.kept.length === 0 ? [] : splitParts(first.kept);
   let requests = 0;
+  const notSentAfter = (index) => {
+    for (const rest of parts.slice(index + 1)) {
+      lines.push(
+        ...rest.map((record) => decisionLine(record, DECISION_CLASS.NOT_SENT))
+      );
+    }
+  };
   for (let index = 0; index < parts.length; index++) {
     let pending = parts[index];
     let round = 0;
+    let idleRounds = 0;
     while (pending.length > 0) {
       round += 1;
       const path = `${partBase}.part-${index + 1}-of-${parts.length}.round-${round}.jsonl`;
@@ -1193,34 +1491,45 @@ export async function replayDecisions({
           .join('')
       );
       requests += 1;
+      progress.inFlight = pending;
       let answer;
       try {
         answer = await applyFile(path);
       } catch (error) {
-        // The rows of this part were sent and no answer was read, so they
-        // are refused with what is known. The caller reports every later
-        // part as not sent.
         const stop = new ReplayStopped(
           `the decisions stopped: ${stopReason(error)}`,
           answerOf(error),
           error
         );
-        lines.push(
-          ...pending.map((record) =>
-            decisionLine(record, DECISION_CLASS.REFUSED, {
-              code: stop.answer.code,
-              detail: `the run stopped on this part, and whether it landed was not read: ${stop.answer.message}`,
-            })
-          )
-        );
+        if (lostAnswer(error) || error?.status >= 500) {
+          // The part may have landed: what the target holds decides.
+          lines.push(
+            ...(await readBackDecisions(client, pending, stop.answer))
+          );
+        } else {
+          // Refused before anything was written: nothing of the part landed.
+          lines.push(
+            ...pending.map((record) =>
+              decisionLine(record, DECISION_CLASS.REFUSED, {
+                code: stop.answer.code,
+                detail: stop.answer.message,
+              })
+            )
+          );
+        }
+        progress.inFlight = null;
+        // The caller reports every later part as not sent.
         throw stop;
       }
+      progress.inFlight = null;
+      progress.orphanedItemIds.push(...(answer.orphanedItemIds ?? []));
       if (answer.applied) {
         lines.push(
           ...pending.map((record) =>
             decisionLine(record, DECISION_CLASS.APPLIED)
           )
         );
+        onAnswer?.();
         break;
       }
       const refused = new Map();
@@ -1242,18 +1551,35 @@ export async function replayDecisions({
             })
           )
         );
-        for (const rest of parts.slice(index + 1)) {
-          lines.push(
-            ...rest.map((record) =>
-              decisionLine(record, DECISION_CLASS.NOT_SENT)
-            )
-          );
-        }
+        notSentAfter(index);
         return { lines, requests, stopped: true };
       }
       const next = dropUnits(pending, refused);
       lines.push(...next.removed);
       pending = next.kept;
+      idleRounds = next.removed.length === 0 ? idleRounds + 1 : 0;
+      if (idleRounds >= MAX_IDLE_DECISION_ROUNDS) {
+        // The refusal names no row of the part, so sending it again would
+        // meet the same refusal for ever.
+        lines.push(
+          ...pending.map((record) =>
+            decisionLine(record, DECISION_CLASS.REFUSED, {
+              code: 'no_progress',
+              detail: `refused at VALIDATE ${idleRounds} times in a row, naming no row of this part`,
+            })
+          )
+        );
+        notSentAfter(index);
+        throw new ReplayStopped(
+          `the decisions stopped: the target refused one part ${idleRounds} times in a row and named none of its rows`,
+          {
+            status: null,
+            code: 'no_progress',
+            message: 'a refusal at VALIDATE named no row of the part',
+          }
+        );
+      }
+      onAnswer?.();
     }
   }
   return { lines, requests };
@@ -1263,12 +1589,26 @@ export async function replayDecisions({
 // The two commands
 // ---------------------------------------------------------------------------
 
+/** The header fields that say whether the run was still going when written. */
+function stampHeader(header, client, now, running) {
+  header.endedAt = running ? null : now().toISOString();
+  header.requests = client.requests;
+  if (running) {
+    header.inProgress = IN_PROGRESS_NOTE;
+  } else {
+    delete header.inProgress;
+  }
+}
+
 /**
  * `--replay` (sections 3 to 6): the change list, and the decisions file when
- * one is named, against one target. Writes the report whatever happened, and
- * answers it.
+ * one is named, against one target. Writes the report after every answer and
+ * whatever happened, and answers it.
  *
  * `decisions` is `{ file, prepared, applyFile, splitParts }` or null.
+ * `controls.interrupt(signal)` is set for the signal handler of the CLI: it
+ * writes the report over what is known, synchronously, and the run writes
+ * nothing after it.
  */
 export async function runReplay({
   changeFile,
@@ -1284,6 +1624,7 @@ export async function runReplay({
   commit = null,
   now = () => new Date(),
   writeFile,
+  controls = {},
 }) {
   const startedAt = now().toISOString();
   const header = {
@@ -1306,9 +1647,79 @@ export async function runReplay({
     notCarried: null,
     droppedUnchanged: folded.dropped,
   };
-  let failure = null;
-  const progress = {};
+  const progress = { write: {}, decisions: {} };
   const decisionLines = [];
+
+  const complete = ({ running }) => {
+    stampHeader(header, client, now, running);
+    report.entryReads = progress.entryReads ?? 0;
+    if (decisions) {
+      // Every decided row has a line, also when the run stopped before or
+      // inside the decisions.
+      const seen = new Set(decisionLines.map((line) => line.entryId));
+      const unseen = decisions.prepared.records
+        .filter((record) => !seen.has(record.entryId))
+        .map((record) => decisionLine(record, DECISION_CLASS.NOT_SENT));
+      const all = [...decisionLines, ...unseen];
+      report.decisions = {
+        file: decisions.file,
+        counts: countDecisions(all),
+        orphanedItemIds: [...(progress.decisions.orphanedItemIds ?? [])],
+        lines: all,
+      };
+    }
+    report.counts = countLines(report.lines);
+    report.notCarried = notCarriedOf(changeList.header, report.lines);
+  };
+  const print = (withPath) => {
+    stderr.write(`${countsLine(report.counts)}\n`);
+    if (report.decisions) {
+      const parts = Object.entries(report.decisions.counts.classes)
+        .filter(([, count]) => count > 0)
+        .map(([name, count]) => `${name} ${count}`);
+      const orphaned = report.decisions.orphanedItemIds.length;
+      stderr.write(
+        `${report.decisions.counts.rows} decided rows: ${parts.join(', ') || 'none'}${orphaned ? `; ${orphaned} products left orphaned on the target` : ''}\n`
+      );
+    }
+    if (withPath) {
+      stderr.write(`report: ${reportPath}\n`);
+    }
+  };
+  const keeper = reportKeeper({
+    report,
+    reportPath,
+    writeFile,
+    complete,
+    print,
+    stderr,
+  });
+  controls.interrupt = (signal) =>
+    keeper.interrupt(signal, (answer) => {
+      markProductsInterrupted({
+        lines: report.lines,
+        inFlight: progress.write.current,
+        write,
+        answer,
+      });
+      report.lines.push(
+        ...unreadLines(folded.changes.slice(report.lines.length))
+      );
+      const seen = new Set(decisionLines.map((line) => line.entryId));
+      for (const record of progress.decisions.inFlight ?? []) {
+        if (!seen.has(record.entryId)) {
+          decisionLines.push(
+            decisionLine(record, DECISION_CLASS.NOT_WRITTEN, {
+              code: answer.code,
+              detail: answer.message,
+              checked: false,
+            })
+          );
+        }
+      }
+    });
+
+  let failure = null;
   try {
     const result = await replayChanges({
       changes: folded.changes,
@@ -1320,6 +1731,7 @@ export async function runReplay({
       stderr,
       lines: report.lines,
       progress,
+      onAnswer: keeper.snapshot,
     });
     if (decisions) {
       await replayDecisions({
@@ -1331,49 +1743,19 @@ export async function runReplay({
         splitParts: decisions.splitParts,
         writeFile,
         lines: decisionLines,
+        client,
+        progress: progress.decisions,
+        onAnswer: keeper.snapshot,
       });
     }
   } catch (error) {
     failure = error;
-    header.stoppedBy = String(error?.message ?? error);
-    header.error = error?.answer ?? answerOf(error);
-  } finally {
-    header.endedAt = now().toISOString();
-    header.requests = client.requests;
-    report.entryReads = progress.entryReads ?? 0;
-    if (decisions) {
-      // Every decided row has a line, also when the run stopped before or
-      // inside the decisions.
-      const seen = new Set(decisionLines.map((line) => line.entryId));
-      for (const record of decisions.prepared.records) {
-        if (!seen.has(record.entryId)) {
-          decisionLines.push(decisionLine(record, DECISION_CLASS.NOT_SENT));
-        }
-      }
-      report.decisions = {
-        file: decisions.file,
-        counts: countDecisions(decisionLines),
-        lines: decisionLines,
-      };
+    if (!keeper.closed) {
+      header.stoppedBy = String(error?.message ?? error);
+      header.error = error?.answer ?? answerOf(error);
     }
-    report.counts = countLines(report.lines);
-    report.notCarried = notCarriedOf(changeList.header, report.lines);
-    writeReport(reportPath, report, writeFile);
   }
-  stderr.write(`${countsLine(report.counts)}\n`);
-  if (report.decisions) {
-    const parts = Object.entries(report.decisions.counts.classes)
-      .filter(([, count]) => count > 0)
-      .map(([name, count]) => `${name} ${count}`);
-    stderr.write(
-      `${report.decisions.counts.rows} decided rows: ${parts.join(', ') || 'none'}\n`
-    );
-  }
-  stderr.write(`report: ${reportPath}\n`);
-  if (failure) {
-    throw failure;
-  }
-  return report;
+  return keeper.close(failure);
 }
 
 /**
@@ -1433,6 +1815,7 @@ export async function runReplayIdentity({
   commit = null,
   now = () => new Date(),
   writeFile,
+  controls = {},
 }) {
   assertReportTarget(reportFile, previous, targetUrl);
   const changes = identityChanges(previous, { only });
@@ -1453,6 +1836,33 @@ export async function runReplayIdentity({
     counts: null,
     lines: [],
   };
+  const progress = { write: {} };
+  const keeper = reportKeeper({
+    report,
+    reportPath,
+    writeFile,
+    complete: ({ running }) => {
+      stampHeader(report.header, client, now, running);
+      report.counts = countLines(report.lines);
+    },
+    print: (withPath) => {
+      stderr.write(`${countsLine(report.counts)}\n`);
+      if (withPath) {
+        stderr.write(`report: ${reportPath}\n`);
+      }
+    },
+    stderr,
+  });
+  controls.interrupt = (signal) =>
+    keeper.interrupt(signal, (answer) => {
+      markProductsInterrupted({
+        lines: report.lines,
+        inFlight: progress.write.current,
+        write,
+        answer,
+      });
+      report.lines.push(...unreadLines(changes.slice(report.lines.length)));
+    });
   let failure = null;
   try {
     await replayChanges({
@@ -1463,22 +1873,17 @@ export async function runReplayIdentity({
       washCheck: false,
       stderr,
       lines: report.lines,
+      progress,
+      onAnswer: keeper.snapshot,
     });
   } catch (error) {
     failure = error;
-    report.header.stoppedBy = String(error?.message ?? error);
-    report.header.error = error?.answer ?? answerOf(error);
-  } finally {
-    report.header.endedAt = now().toISOString();
-    report.header.requests = client.requests;
-    report.counts = countLines(report.lines);
-    writeReport(reportPath, report, writeFile);
+    if (!keeper.closed) {
+      report.header.stoppedBy = String(error?.message ?? error);
+      report.header.error = error?.answer ?? answerOf(error);
+    }
   }
-  stderr.write(`${countsLine(report.counts)}\nreport: ${reportPath}\n`);
-  if (failure) {
-    throw failure;
-  }
-  return report;
+  return keeper.close(failure);
 }
 
 /** Decided rows per class. */

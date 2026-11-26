@@ -633,6 +633,42 @@ read from `CURATION_TARGET_PASSWORD` set for the one command. A replay refuses
 - The suggestions decider's `apply` takes `targetUrl`; when it is given, the header's url is not
   compared and the request goes to the target.
 
+**Builder choices, review of the write path, 2026-11-26:**
+
+- The report file is written again after every answer of a write, products and decisions parts
+  alike, and once more at the end. Each write goes to a temp file beside the report and is renamed
+  over it. While the run goes on, the header carries `inProgress` and `endedAt` is null.
+- If such a write fails, the run stops before the next request, because a write the record cannot
+  follow should not be made. If the last write fails, stderr prints the counts and the error the
+  run stopped on, then the write failure, and the process exits with an error.
+- SIGINT, SIGTERM and SIGHUP end a replay at once, without waiting for the request in flight: the
+  report is written synchronously with that request as `not written`, `checked: false` and the
+  code `interrupted`, every later product `not sent`, and the process exits with the signal's
+  code (130, 143, 129). SIGHUP is handled too because a closed terminal is the same stop. The run
+  writes nothing after that.
+- Each request times out after 30 seconds, twice the 15 seconds after which the cluster's
+  gateway answers 504 itself. The auth package has no timeout option, so the replay's own fetch
+  wrapper sets the signal. A timeout is a lost answer.
+- A 2xx answer whose body cannot be read is a lost answer: the batch is read back and classed by
+  what the target holds.
+- A product that landed through a lost answer keeps its class and is counted as
+  `landedAfterLostAnswer`, apart from `written`. The README says how to reconcile the two with
+  the target's audit.
+- A 413 halves the group it refused, still once a run, and no later batch is larger than that
+  half.
+- After a lost answer to a decisions part, the rows are read back through the source rows of the
+  product each `accept` names. A row no longer pending is `decided on target` with its
+  `targetStatus`; a row still pending is a new class, `not written`; every row that cannot be read
+  (a `createItem`, an `accept` onto a ref, a row its product does not list, a failed read) is
+  `not written` with `checked: false`. The read back stops asking after one failed read. A thrown
+  4xx still means nothing landed, so those rows stay `refused`. The route is not assumed all or
+  nothing across its steps (it reports `orphanedItemIds`), so nothing is inferred for a row from
+  another row of the part.
+- `orphanedItemIds` of every decisions answer is copied into `decisions.orphanedItemIds` of the
+  report, and stderr counts them.
+- A decisions part refused twice in a row without dropping a row stops the run with an error: its
+  rows are `refused` with the code `no_progress`, the parts after it `not sent`.
+
 ## Open decisions for the owner
 
 **O1. Source of the change list (recommended, owner to confirm).** The local `catalog_audit` is

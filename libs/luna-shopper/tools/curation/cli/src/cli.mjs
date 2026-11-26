@@ -527,6 +527,50 @@ export function installInterrupt({
 }
 
 /**
+ * The signal handler of a replay (plan 0006).
+ *
+ * A replay has no slot to take down and nothing to finish, so the first
+ * signal does all of it at once: `stop(signal)` writes the report over what
+ * is known (the request in flight as not written and not checked, the rest
+ * not sent), and the process ends with the signal's exit code. The request in
+ * flight is not waited for, because a target that hangs is the usual reason
+ * to press Ctrl+C.
+ *
+ * Everything it touches is injected, so a test calls the handler directly.
+ */
+export function installReplayInterrupt({
+  stop,
+  stderr,
+  on = (event, handler) => process.on(event, handler),
+  off = (event, handler) => process.off(event, handler),
+  exit = (code) => process.exit(code),
+}) {
+  let asked = false;
+  const handler = (signal = 'SIGINT') => {
+    if (!asked) {
+      asked = true;
+      stderr.write(
+        `\n${signal}: stopping. The request in flight is reported as not written and not checked, and the report is written.\n`
+      );
+      try {
+        stop(signal);
+      } catch (error) {
+        stderr.write(`${error?.message ?? error}\n`);
+      }
+    }
+    exit(SIGNAL_EXIT[signal] ?? 130);
+  };
+  for (const signal of STOP_SIGNALS) {
+    on(signal, handler);
+  }
+  return () => {
+    for (const signal of STOP_SIGNALS) {
+      off(signal, handler);
+    }
+  };
+}
+
+/**
  * What a resumed run starts from (plan 0005).
  *
  * `curation-run.json` is written when a run opens, so a directory without one
@@ -696,6 +740,7 @@ async function replayMode({
   spawn,
   repoRoot,
   sleep,
+  replayInterrupt,
 }) {
   if (flags['main-password'] !== undefined) {
     throw new Error(
@@ -801,22 +846,61 @@ async function replayMode({
     `${write ? 'write run' : 'dry run'} against ${targetUrl} as ${username}\n`
   );
 
-  if (identityPass) {
-    await runReplayIdentity({
-      reportFile: source,
-      previous: plan.previous,
+  // From here on the report is the record: a signal writes it before the
+  // process ends.
+  const controls = {};
+  const removeInterrupt = replayInterrupt({
+    stop: (signal) => controls.interrupt?.(signal),
+    stderr,
+  });
+  try {
+    if (identityPass) {
+      await runReplayIdentity({
+        reportFile: source,
+        previous: plan.previous,
+        targetUrl,
+        only: plan.only,
+        write,
+        batchSize,
+        reportPath,
+        client,
+        stderr,
+        commit,
+        controls,
+      });
+      return 0;
+    }
+    await replayChangeList({
+      plan,
+      source,
       targetUrl,
-      only: plan.only,
       write,
       batchSize,
       reportPath,
       client,
       stderr,
       commit,
+      controls,
     });
     return 0;
+  } finally {
+    removeInterrupt();
   }
+}
 
+/** The change list and its decisions file, from {@link replayMode}. */
+async function replayChangeList({
+  plan,
+  source,
+  targetUrl,
+  write,
+  batchSize,
+  reportPath,
+  client,
+  stderr,
+  commit,
+  controls,
+}) {
   let decisions = null;
   if (plan.decisions) {
     const suggestions = await import('../../suggestions/src/commands.mjs');
@@ -849,8 +933,8 @@ async function replayMode({
     decisions,
     stderr,
     commit,
+    controls,
   });
-  return 0;
 }
 
 export async function main(
@@ -869,6 +953,7 @@ export async function main(
     askSecret = askSecretLine,
     fetchImpl = globalThis.fetch,
     sleep = null,
+    replayInterrupt = installReplayInterrupt,
   } = {}
 ) {
   const flags = parseArgs(argv);
@@ -892,6 +977,7 @@ export async function main(
       spawn,
       repoRoot,
       sleep,
+      replayInterrupt,
     });
   }
 

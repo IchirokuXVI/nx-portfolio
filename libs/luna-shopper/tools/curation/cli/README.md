@@ -207,13 +207,21 @@ What each answer does:
   rule, a category that does not resolve) is a refusal of the content. The
   batch is split in halves until the refused product is alone. It is
   `refused`, and the other products are written.
-- A 502, 503, 504 or no answer can hide a write that landed. The run reads the
-  batch back, counts what landed as `already there`, and sends the rest again,
-  at most three times.
-- A 413 halves the batch size once.
+- A 502, 503, 504, no answer, no answer within 30 seconds, or a 2xx answer
+  whose body is not JSON can hide a write that landed. The run reads the batch
+  back, counts what landed as `already there`, and sends the rest again, at
+  most three times.
+- A 413 halves the batch it refused, once. No later batch is larger than that
+  half.
 - Anything else stops the run: a 429 after three waits of the time the answer
   names, a 401 or 403 after one new login, a second 413, any other 5xx, or a
   fourth lost answer.
+
+The report file is written again after every answer, so it always holds what
+is known so far. While the run goes on, its header carries `inProgress` and no
+`endedAt`; a line still of class `apply` without `written` was then in flight
+or not yet sent. Each write goes to a temp file beside the report and is then
+renamed over it, so a stop never leaves half a file.
 
 When the run stops, it still writes the report and then exits with an error.
 The report holds every product written before the stop, the products of the
@@ -222,6 +230,33 @@ when a read back shows they landed), and every product after them as
 `not sent`. A `not written` line with `checked: false` could not be read back,
 so the target may hold it. The header names the answer under `error`. Fix the cause and run
 step 3 again: what was written is `already there`, the rest is `apply`.
+
+Ctrl+C (or a `kill`) stops the run at once and does not wait for the request in
+flight. The report is written first: the products of that request are
+`not written` with `checked: false` and the code `interrupted`, every product
+after them is `not sent`, and the process exits with 130 (143 for a `kill`).
+Run step 3 again to see what landed.
+
+If the report itself cannot be written (a full disk, a locked file), the run
+stops before the next batch. stderr then prints the counts, the reason the run
+stopped, and last the write failure, and the process exits with an error. The
+counts on stderr are then the only record: keep them.
+
+### Reconcile the report with the target
+
+The count `written` holds only the products whose batch the target answered
+as written. A product whose answer was lost, and that a read back then found
+landed, or that a resend found `already there`, keeps its class
+`already there` and carries `afterLostAnswer: true`. The summary counts those
+apart, as `landedAfterLostAnswer`, and stderr prints "N more landed after a
+lost answer".
+
+So the products this run changed on the target are `written` plus
+`landedAfterLostAnswer`. They are the products the target's `catalog_audit`
+shows changed by the operator you signed in as, between the header's
+`startedAt` and `endedAt`, unless someone else made the same edit there in the
+meantime. A `not written` line with `checked: false` may be one more: run
+step 3 to see.
 
 ### 5. Dry run again
 
@@ -265,9 +300,22 @@ Add `--decisions <decisions.jsonl>` to steps 3 and 4 to replay a suggestions
 decisions file after the product changes. Every decided row must carry
 `expect.observed` (backend plan 0277), or the file is refused whole. A decision
 whose product the target does not hold is reported `no twin`. A part refused at
-`VALIDATE` loses the refused rows, and the rest is sent again. A queue row that
-you decided by hand in the back office leaves no decisions file, so it is not
-carried.
+`VALIDATE` loses the refused rows, and the rest is sent again. A part refused
+twice in a row without losing a row (the refusal names none of its rows) stops
+the run: its rows are `refused` with the code `no_progress`, and the parts
+after it are `not sent`.
+
+When the answer to a part is lost, the run reads its rows back on the target.
+A row that is no longer pending there is `decided on target`, with the status
+it holds under `targetStatus`. A row still pending is `not written`. A row that
+cannot be read back (a `createItem`, an `accept` onto a product the same part
+creates, a row its product does not list, or a failed read) is `not written`
+with `checked: false`: the target
+may hold it. The products the route created and could not delete again are
+listed under `decisions.orphanedItemIds` of the report, and stderr counts them.
+
+A queue row that you decided by hand in the back office leaves no decisions
+file, so it is not carried.
 
 ### The classes of the report
 

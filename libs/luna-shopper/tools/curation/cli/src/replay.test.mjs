@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { AUDIT_ORIGIN, CHANGE_LIST_KIND, foldChanges } from './changes.mjs';
@@ -8,10 +10,12 @@ import {
   CLASS,
   DECISION_CLASS,
   LOOKUP_PATH,
+  MAX_IDLE_DECISION_ROUNDS,
   ReplayStopped,
   SHORT_WASH_WORD,
   WASH_SUM,
   batchEntry,
+  capturingFetch,
   classify,
   countLines,
   countsLine,
@@ -185,7 +189,9 @@ function serverMismatches(row, expect) {
  * refusal. `lose(sendIndex)` plays a lost answer: `'before'` answers 504 and
  * writes nothing, `'after'` writes the whole batch and then answers 504, and
  * `'late'` answers 504 and writes the whole batch once the next lookup has
- * answered, as a request that committed after the proxy gave up.
+ * answered, as a request that committed after the proxy gave up, and
+ * `'unreadable'` writes the whole batch and answers 200 with a body that is
+ * not JSON, as the session reports it.
  */
 function fakeTarget(items, { entries = {}, refuse = null, lose = null } = {}) {
   const store = new Map(items.map((item) => [item.id, structuredClone(item)]));
@@ -258,6 +264,11 @@ function fakeTarget(items, { entries = {}, refuse = null, lose = null } = {}) {
         commit(init.body.items);
         if (lost === 'after') {
           throw new HttpError(504);
+        }
+        if (lost === 'unreadable') {
+          const error = new HttpError(200);
+          error.body = '<html>ok</html>';
+          throw error;
         }
         return { items: [] };
       }
@@ -1369,5 +1380,445 @@ test('a dry run of decisions sends nothing', async () => {
   assert.deepEqual(
     result.lines.map((line) => line.class),
     [DECISION_CLASS.APPLY]
+  );
+});
+
+// --- The record of a write that stops ---------------------------------------
+
+/** A change list of `count` size edits, as the export writes it. */
+const sizeChangeList = (count) => ({
+  header: { header: true, kind: CHANGE_LIST_KIND, origin: AUDIT_ORIGIN },
+  lines: Array.from({ length: count }, (_, index) => ({
+    itemId: id(index + 1),
+    line: index + 2,
+    action: 'UPDATE',
+    before: { unitSize: 500 },
+    after: { unitSize: 450 },
+    current: {
+      name: { es: `Producto ${index + 1}`, en: `Product ${index + 1}` },
+      brand: 'Marca',
+    },
+  })),
+});
+
+/**
+ * The fake target, with batch `held` kept in flight until `release` is
+ * called. `inFlight` resolves once that batch has been sent.
+ */
+function holdingTarget(items, held, options = {}) {
+  const fake = fakeTarget(items, options);
+  let release;
+  let entered;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const inFlight = new Promise((resolve) => {
+    entered = resolve;
+  });
+  let sends = 0;
+  const client = {
+    get requests() {
+      return fake.client.requests;
+    },
+    async request(path, init) {
+      if (path === BATCH_PATH && ++sends === held) {
+        entered();
+        await gate;
+      }
+      return fake.client.request(path, init);
+    },
+  };
+  return { ...fake, client, inFlight, release };
+}
+
+const reportDir = () => mkdtempSync(join(tmpdir(), 'curation-report-'));
+const readReport = (path) => JSON.parse(readFileSync(path, 'utf8'));
+
+test('the report on disk lists batch 1 as written while batch 2 is in flight', async () => {
+  const target = holdingTarget(products(3), 2);
+  const reportPath = join(reportDir(), 'report.json');
+  const changeList = sizeChangeList(3);
+  const run = runReplay({
+    changeFile: 'changes.jsonl',
+    changeList,
+    folded: foldChanges(changeList),
+    targetUrl: 'http://localhost:43700',
+    write: true,
+    batchSize: 1,
+    reportPath,
+    client: target.client,
+    stderr: sink(),
+  });
+  await target.inFlight;
+  const during = readReport(reportPath);
+  assert.deepEqual(
+    during.lines.map((line) => [line.class, Boolean(line.written)]),
+    [
+      [CLASS.APPLY, true],
+      [CLASS.APPLY, false],
+      [CLASS.APPLY, false],
+    ]
+  );
+  assert.equal(during.counts.written, 1);
+  assert.equal(during.header.endedAt, null);
+  assert.match(during.header.inProgress, /had not finished/);
+  // The temp file of the atomic write is gone once it is renamed.
+  assert.deepEqual(readdirSync(join(reportPath, '..')), ['report.json']);
+
+  target.release();
+  await run;
+  const after = readReport(reportPath);
+  assert.equal(after.counts.written, 3);
+  assert.equal(after.header.inProgress, undefined);
+  assert.notEqual(after.header.endedAt, null);
+});
+
+test('a signal during batch 2 writes the report: batch 1 written, 2 not checked, 3 not sent', async () => {
+  const target = holdingTarget(products(3), 2);
+  const reportPath = join(reportDir(), 'report.json');
+  const changeList = sizeChangeList(3);
+  const controls = {};
+  const stderr = sink();
+  const run = runReplay({
+    changeFile: 'changes.jsonl',
+    changeList,
+    folded: foldChanges(changeList),
+    targetUrl: 'http://localhost:43700',
+    write: true,
+    batchSize: 1,
+    reportPath,
+    client: target.client,
+    stderr,
+    controls,
+  });
+  await target.inFlight;
+  assert.equal(controls.interrupt('SIGINT'), true);
+  const written = readReport(reportPath);
+  assert.deepEqual(
+    written.lines.map((line) => [line.class, Boolean(line.written)]),
+    [
+      [CLASS.APPLY, true],
+      [CLASS.NOT_WRITTEN, false],
+      [CLASS.NOT_SENT, false],
+    ]
+  );
+  assert.equal(written.lines[1].checked, false);
+  assert.equal(written.lines[1].error.code, 'interrupted');
+  assert.equal(written.lines[0].checked, undefined);
+  assert.match(written.header.stoppedBy, /stopped with SIGINT/);
+  assert.equal(written.header.inProgress, undefined);
+  assert.match(stderr.text(), /1 written/);
+  assert.match(stderr.text(), /report: /);
+
+  // What the run does after the signal changes nothing on disk.
+  target.release();
+  await run;
+  assert.deepEqual(readReport(reportPath), written);
+});
+
+test('a signal during the lookup reports every product not sent', async () => {
+  let entered;
+  const inFlight = new Promise((resolve) => {
+    entered = resolve;
+  });
+  const calls = [];
+  // A target that takes the lookup and never answers it.
+  const client = {
+    requests: 0,
+    request: (path) => {
+      calls.push(path);
+      entered();
+      return new Promise(() => undefined);
+    },
+  };
+  const reportPath = join(reportDir(), 'report.json');
+  const changeList = sizeChangeList(2);
+  const controls = {};
+  runReplay({
+    changeFile: 'changes.jsonl',
+    changeList,
+    folded: foldChanges(changeList),
+    targetUrl: 'http://localhost:43700',
+    write: true,
+    batchSize: 1,
+    reportPath,
+    client,
+    stderr: sink(),
+    controls,
+  });
+  await inFlight;
+  controls.interrupt('SIGTERM');
+  const written = readReport(reportPath);
+  assert.deepEqual(
+    written.lines.map((line) => line.class),
+    [CLASS.NOT_SENT, CLASS.NOT_SENT]
+  );
+  assert.deepEqual(calls, [LOOKUP_PATH]);
+});
+
+test('a failed report write prints the counts and the stop, then throws the write failure', async () => {
+  const { client } = fakeTarget(products(2), {
+    refuse: (_entries, send) => {
+      if (send === 2) {
+        throw new HttpError(500, { code: 'internal', detail: 'boom' });
+      }
+    },
+  });
+  const changeList = sizeChangeList(2);
+  const stderr = sink();
+  let snapshots = 0;
+  await assert.rejects(
+    () =>
+      runReplay({
+        changeFile: 'changes.jsonl',
+        changeList,
+        folded: foldChanges(changeList),
+        targetUrl: 'http://localhost:43700',
+        write: true,
+        batchSize: 1,
+        reportPath: 'report.json',
+        client,
+        stderr,
+        writeFile: (_path, text) => {
+          if (JSON.parse(text).header.inProgress) {
+            snapshots += 1;
+            return;
+          }
+          throw new Error('ENOSPC: no space left on device');
+        },
+      }),
+    (error) =>
+      /the report could not be written to report\.json: ENOSPC/.test(
+        error.message
+      ) &&
+      error.cause instanceof ReplayStopped &&
+      error.cause.status === 500
+  );
+  assert.equal(snapshots, 1);
+  const text = stderr.text();
+  const counts = text.indexOf('2 products:');
+  const stop = text.indexOf('the write stopped: the target answered 500');
+  assert.ok(counts >= 0 && stop > counts, text);
+  assert.doesNotMatch(text, /report: /);
+});
+
+test('a report that cannot be written after batch 1 stops the run before batch 2', async () => {
+  const { client, calls } = fakeTarget(products(2));
+  const changeList = sizeChangeList(2);
+  await assert.rejects(
+    () =>
+      runReplay({
+        changeFile: 'changes.jsonl',
+        changeList,
+        folded: foldChanges(changeList),
+        targetUrl: 'http://localhost:43700',
+        write: true,
+        batchSize: 1,
+        reportPath: 'report.json',
+        client,
+        stderr: sink(),
+        writeFile: () => {
+          throw new Error('EBUSY: resource busy or locked');
+        },
+      }),
+    /the report could not be written to report\.json: EBUSY/
+  );
+  assert.equal(patches(calls).length, 1);
+});
+
+test('a 200 whose body is not JSON is a lost answer: read back, and counted apart', async () => {
+  const { client, calls } = fakeTarget(products(2), {
+    lose: (send) => (send === 1 ? 'unreadable' : null),
+  });
+  const { lines } = await replayChanges({
+    changes: sizeChanges(2),
+    client,
+    write: true,
+    stderr: sink(),
+  });
+  assert.equal(patches(calls).length, 1);
+  assert.deepEqual(
+    lines.map((line) => line.class),
+    [CLASS.ALREADY, CLASS.ALREADY]
+  );
+  const counts = countLines(lines);
+  assert.equal(counts.written, 0);
+  assert.equal(counts.landedAfterLostAnswer, 2);
+  assert.match(
+    countsLine(counts),
+    /0 written, 2 more landed after a lost answer/
+  );
+});
+
+test('a resend refused as already there after a lost answer is counted apart from written', async () => {
+  const { client } = fakeTarget(products(2), {
+    lose: (send) => (send === 1 ? 'late' : null),
+  });
+  const { lines } = await replayChanges({
+    changes: sizeChanges(2),
+    client,
+    write: true,
+    stderr: sink(),
+  });
+  const counts = countLines(lines);
+  assert.equal(counts.classes[CLASS.ALREADY], 2);
+  assert.equal(counts.written, 0);
+  assert.equal(counts.landedAfterLostAnswer, 2);
+});
+
+test('a request with no answer in time is a lost answer', async () => {
+  const capture = capturingFetch(
+    (_url, init) =>
+      new Promise((_resolve, reject) => {
+        init.signal.addEventListener('abort', () => reject(init.signal.reason));
+      }),
+    { timeoutMs: 5 }
+  );
+  await assert.rejects(
+    () => capture.fetchImpl('http://localhost:43700/x', { method: 'PATCH' }),
+    (error) => error.name === 'TimeoutError' && error.status === undefined
+  );
+});
+
+test('a 413 halves the group it refused, not the configured size', async () => {
+  const { client, calls } = fakeTarget(products(30), {
+    refuse: (entries) => {
+      if (entries.length > 20) {
+        throw new HttpError(413, { code: 'payload_too_large' });
+      }
+    },
+  });
+  const { lines } = await replayChanges({
+    changes: sizeChanges(30),
+    client,
+    write: true,
+    batchSize: 100,
+    stderr: sink(),
+  });
+  assert.deepEqual(
+    patches(calls).map((call) => call.body.items.length),
+    [30, 15, 15]
+  );
+  assert.ok(lines.every((line) => line.written));
+});
+
+test('a lost answer to a decisions part reads the rows back and classes them by the target', async () => {
+  const { client } = fakeTarget([], {
+    entries: {
+      [id(1)]: [{ id: 'e1', status: 'ACTIVE', itemId: id(1) }],
+      [id(2)]: [{ id: 'e2', status: 'CANDIDATE', itemId: id(2) }],
+      [id(3)]: [],
+    },
+  });
+  const prepared = {
+    header: { header: true, runId: 'r' },
+    records: [
+      linkRow(1, id(1)),
+      linkRow(2, id(2)),
+      linkRow(3, id(3)),
+      createRow(4),
+    ],
+  };
+  const lost = new Error('socket hang up');
+  const lines = [];
+  await assert.rejects(
+    () =>
+      replayDecisions({
+        prepared,
+        items: new Map([1, 2, 3].map((n) => [id(n), {}])),
+        write: true,
+        partBase: 'report.decisions',
+        splitParts: (records) => [records],
+        writeFile: () => undefined,
+        applyFile: async () => {
+          throw lost;
+        },
+        client,
+        lines,
+      }),
+    ReplayStopped
+  );
+  const byEntry = Object.fromEntries(
+    lines.map((line) => [line.entryId, [line.class, line.checked]])
+  );
+  assert.deepEqual(byEntry, {
+    e1: [DECISION_CLASS.DECIDED_ON_TARGET, undefined],
+    e2: [DECISION_CLASS.NOT_WRITTEN, undefined],
+    e3: [DECISION_CLASS.NOT_WRITTEN, false],
+    e4: [DECISION_CLASS.NOT_WRITTEN, false],
+  });
+  assert.equal(lines[0].targetStatus, 'ACTIVE');
+});
+
+test('the products a decisions part left orphaned are copied into the report', async () => {
+  const { client } = fakeTarget([product(1)]);
+  const changeList = sizeChangeList(0);
+  const orphan = id(7);
+  const report = await runReplay({
+    changeFile: 'changes.jsonl',
+    changeList,
+    folded: foldChanges(changeList),
+    targetUrl: 'http://localhost:43700',
+    write: true,
+    batchSize: 1,
+    reportPath: 'report.json',
+    client,
+    stderr: sink(),
+    writeFile: () => undefined,
+    decisions: {
+      file: 'd.jsonl',
+      prepared: {
+        header: { header: true, runId: 'r' },
+        records: [createRow(1)],
+      },
+      splitParts: (records) => [records],
+      applyFile: async () => ({
+        applied: false,
+        failedStep: 'APPLY',
+        error: 'step three failed',
+        results: [],
+        orphanedItemIds: [orphan],
+      }),
+    },
+  });
+  assert.deepEqual(report.decisions.orphanedItemIds, [orphan]);
+});
+
+test('a decisions part refused in rounds that drop nothing stops after the cap', async () => {
+  const sent = [];
+  const lines = [];
+  await assert.rejects(
+    () =>
+      replayDecisions({
+        prepared: {
+          header: { header: true, runId: 'r' },
+          records: [linkRow(1, id(1)), linkRow(2, id(2))],
+        },
+        items: new Map([1, 2].map((n) => [id(n), {}])),
+        write: true,
+        partBase: 'report.decisions',
+        splitParts: (records) => [records],
+        writeFile: () => undefined,
+        applyFile: async (path) => {
+          sent.push(path);
+          return {
+            applied: false,
+            failedStep: 'VALIDATE',
+            results: [
+              { entryId: 'e9', error: { code: 'NOT_FOUND', detail: 'gone' } },
+            ],
+          };
+        },
+        lines,
+      }),
+    /refused one part 2 times in a row and named none of its rows/
+  );
+  assert.equal(sent.length, MAX_IDLE_DECISION_ROUNDS);
+  assert.deepEqual(
+    lines.map((line) => [line.entryId, line.class, line.code]),
+    [
+      ['e1', DECISION_CLASS.REFUSED, 'no_progress'],
+      ['e2', DECISION_CLASS.REFUSED, 'no_progress'],
+    ]
   );
 });
