@@ -633,6 +633,96 @@ read from `CURATION_TARGET_PASSWORD` set for the one command. A replay refuses
 - The suggestions decider's `apply` takes `targetUrl`; when it is given, the header's url is not
   compared and the request goes to the target.
 
+**Builder choices, review of the write path, 2026-11-26:**
+
+- The report file is written again after every answer of a write, products and decisions parts
+  alike, and once more at the end. Each write goes to a temp file beside the report and is renamed
+  over it. While the run goes on, the header carries `inProgress` and `endedAt` is null.
+- If such a write fails, the run stops before the next request, because a write the record cannot
+  follow should not be made. If the last write fails, stderr prints the counts and the error the
+  run stopped on, then the write failure, and the process exits with an error.
+- SIGINT, SIGTERM and SIGHUP end a replay at once, without waiting for the request in flight: the
+  report is written synchronously with that request as `not written`, `checked: false` and the
+  code `interrupted`, every later product `not sent`, and the process exits with the signal's
+  code (130, 143, 129). SIGHUP is handled too because a closed terminal is the same stop. The run
+  writes nothing after that.
+- Each request times out after 30 seconds, twice the 15 seconds after which the cluster's
+  gateway answers 504 itself. The auth package has no timeout option, so the replay's own fetch
+  wrapper sets the signal. A timeout is a lost answer.
+- A 2xx answer whose body cannot be read is a lost answer: the batch is read back and classed by
+  what the target holds.
+- A product that landed through a lost answer keeps its class and is counted as
+  `landedAfterLostAnswer`, apart from `written`. The README says how to reconcile the two with
+  the target's audit.
+- A 413 halves the group it refused, still once a run, and no later batch is larger than that
+  half.
+- After a lost answer to a decisions part, the rows are read back through the source rows of the
+  product each `accept` names. A row no longer pending is `decided on target` with its
+  `targetStatus`; a row still pending is a new class, `not written`; every row that cannot be read
+  (a `createItem`, an `accept` onto a ref, a row its product does not list, a failed read) is
+  `not written` with `checked: false`. The read back stops asking after one failed read. A thrown
+  4xx still means nothing landed, so those rows stay `refused`. The route is not assumed all or
+  nothing across its steps (it reports `orphanedItemIds`), so nothing is inferred for a row from
+  another row of the part.
+- `orphanedItemIds` of every decisions answer is copied into `decisions.orphanedItemIds` of the
+  report, and stderr counts them.
+- A decisions part refused twice in a row without dropping a row stops the run with an error: its
+  rows are `refused` with the code `no_progress`, the parts after it `not sent`.
+
+**Builder choices, fix round of the report, 2026-11-26.** The rule: the report never claims more
+than the tool knows.
+
+- A product sent in a request whose outcome is not known carries `sentInLostRequest: true` until
+  a later answer or read back settles it. An answer that writes it, an expectation failure that
+  names it, and a read back that sees it landed settle it; a content refusal does not, so a
+  `refused` line may keep the flag. Any stop (the write's own catch, a failed report snapshot, a
+  signal) reports such a product `not written` with `checked: false` and a `reason` that says its
+  request was sent and its outcome is not known, never `not sent`.
+- A read back is conclusive only after a 2xx whose body could not be read, because only then had
+  the server finished. After no answer, a timeout, a 502, 503 or 504, and after a plain 500 too, a
+  read back that sees the old values proves nothing: those products are marked as above, so the
+  fourth lost answer and a 5xx stop leave them `not written` with `checked: false`. A read back
+  that sees the new values is still `already there`. The plain 500 is marked too because the
+  existing comment ("a server error may still hide a write that committed") does not justify the
+  opposite: the gateway renders a failure on its side of the broker, such as a reply it stopped
+  waiting for, as a 500 while the catalog service may still write.
+- A 429 after the waits, a 401 or 403 and a second 413 refused the request, so the products in
+  flight on those stay `not written` without `checked: false`, unless an earlier lost request
+  marked them.
+- After a lost answer to a decisions part, a row still pending is `not written` with
+  `checked: false`, except after a 2xx whose body could not be read.
+- The counts carry `outcomeUnknown`, the lines with `checked: false`, for the products and for
+  the decisions. They stay inside `not written` too; no new class was added, because the naming
+  of classes is the owner's. stderr says "N products were sent and their outcome is not known,
+  run the dry run again" when the count is above zero, and the same of rows for the decisions.
+- The rename of the report's temp file is tried again on EPERM, EBUSY and EACCES, five tries in
+  all with a wait of 50, 100, 150 and 200 ms between them, through `Atomics.wait`, so the write
+  stays synchronous in the signal path too. When it still fails the temp file is kept and the
+  error names its full path. The temp file has one name a run, so the next write that succeeds
+  renames it away.
+- A decisions part refused at a step other than `VALIDATE` (or at `VALIDATE` naming no row) is a
+  stopped run like the others: a `ReplayStopped` whose answer has the step as its code, in the
+  header's `stoppedBy` and `error`, and a non zero exit. The message on stderr names the step only;
+  the server's error text is kept in the report, because it may name a row.
+
+**Second fix round of the report, 2026-11-26.** One uniform rule for the flag replaces the
+choices above where they differ.
+
+- The flag is set before every read back, whatever answer led to it: no answer, a timeout, any
+  5xx, and a 2xx whose body could not be read. A 2xx means the server committed, so a read back
+  that fails after it must not leave the products looking unsent. The 2xx shortcut is gone for
+  the products; it stays for the decisions.
+- Only direct evidence about a product clears it: an answer that wrote it, a read back that saw
+  its new values, or an `item_expectation_failed` refusal that names it. A read back that saw the
+  old values clears nothing, after a 2xx too; such a product is sent again and that answer
+  settles it. A content refusal clears nothing either: the server checks the brand, the
+  categories and a merged product before the guard and outside the transaction, so a refusal of
+  the resend says nothing of the earlier request.
+- When the run ends, in any path (the end of the write, a stop, a signal, a failed report write),
+  one function, `markUnsettled`, gives every line that still carries the flag `checked: false`,
+  whatever its class, so it is counted in `outcomeUnknown` and covered by the stderr sentence. A
+  request in flight at a signal is flagged too.
+
 ## Open decisions for the owner
 
 **O1. Source of the change list (recommended, owner to confirm).** The local `catalog_audit` is

@@ -7,6 +7,7 @@ import { AUDIT_ORIGIN, CHANGE_LIST_KIND } from './changes.mjs';
 import {
   REPLAY_PASSWORD_ENV,
   collectFlag,
+  installReplayInterrupt,
   main,
   resolveReplayPassword,
 } from './cli.mjs';
@@ -337,6 +338,87 @@ test('a write through main that stops on batch 2 of 3 still writes the report, a
   assert.doesNotMatch(stderr.text(), /00000000-0000/);
 });
 
+test('a decisions part refused at a step other than VALIDATE fails the run, with the error in the header', async () => {
+  const { dir, file } = changeFile();
+  const decisionsFile = join(dir, 'decisions.jsonl');
+  const expect = {
+    status: 'CANDIDATE',
+    observed: {
+      name: 'Leche',
+      brand: null,
+      ean: null,
+      sizeFormat: '1 l',
+      unitSize: 1000,
+      sizeUnit: 'MILLILITER',
+      packCount: null,
+      soldByWeight: false,
+      approxWeight: null,
+      packaging: null,
+    },
+  };
+  writeFileSync(
+    decisionsFile,
+    [
+      { header: true, runId: 'r', mainUrl: 'http://localhost:3000' },
+      { entryId: 'e1', decision: 'LINK', itemId: ITEM, expect },
+    ]
+      .map((line) => `${JSON.stringify(line)}\n`)
+      .join('')
+  );
+  const gateway = fakeGateway();
+  let decided = 0;
+  const fetchImpl = async (url, init = {}) => {
+    if (new URL(url).pathname === '/v1/admin/harvest/entries/decisions') {
+      decided += 1;
+      return new Response(
+        JSON.stringify({
+          runId: 'r',
+          applied: false,
+          failedStep: 'APPLY',
+          error: 'step three failed',
+          results: [],
+          orphanedItemIds: [],
+        }),
+        { status: 201, headers: { 'content-type': 'application/json' } }
+      );
+    }
+    return gateway.fetchImpl(url, init);
+  };
+  const report = join(dir, 'report.json');
+  await assert.rejects(
+    () =>
+      main(
+        [
+          '--replay',
+          file,
+          '--target-url',
+          TARGET,
+          '--write',
+          '--confirm-host',
+          'localhost',
+          '--decisions',
+          decisionsFile,
+          '--report',
+          report,
+        ],
+        {
+          stderr: sink(),
+          env: { [REPLAY_PASSWORD_ENV]: 'p' },
+          isTty: false,
+          fetchImpl,
+          spawn: async () => ({ code: 1, stdout: '', stderr: '' }),
+          sleep: async () => undefined,
+        }
+      ),
+    /the decisions stopped: the target refused a part at APPLY/
+  );
+  assert.equal(decided, 1);
+  const written = JSON.parse(readFileSync(report, 'utf8'));
+  assert.match(written.header.stoppedBy, /refused a part at APPLY/);
+  assert.equal(written.header.error.code, 'APPLY');
+  assert.equal(written.decisions.lines[0].class, 'refused');
+});
+
 test('--replay-identity refuses a report of another url before it signs in', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'curation-replay-'));
   const report = join(dir, 'report.json');
@@ -503,4 +585,190 @@ test('--export-changes refuses a run without --since before it reads anything', 
       ),
     /--since is required/
   );
+});
+
+/** A change list of three products beside a new report directory. */
+function threeProducts() {
+  const dir = mkdtempSync(join(tmpdir(), 'curation-replay-'));
+  const file = join(dir, 'changes.jsonl');
+  const ids = [1, 2, 3].map((n) => `00000000-0000-4000-8000-00000000000${n}`);
+  writeFileSync(
+    file,
+    [
+      {
+        header: true,
+        kind: CHANGE_LIST_KIND,
+        origin: AUDIT_ORIGIN,
+        otherEntities: {},
+      },
+      ...ids.map((itemId, index) => ({
+        auditId: `a${index}`,
+        action: 'UPDATE',
+        itemId,
+        before: { unitSize: 500 },
+        after: { unitSize: 450 },
+        current: { name: { es: 'Leche', en: 'Milk' }, brand: 'Marca' },
+      })),
+    ]
+      .map((line) => `${JSON.stringify(line)}\n`)
+      .join('')
+  );
+  return { dir, file, ids };
+}
+
+const writeArgs = (file, report) => [
+  '--replay',
+  file,
+  '--target-url',
+  TARGET,
+  '--write',
+  '--confirm-host',
+  'localhost',
+  '--batch-size',
+  '1',
+  '--report',
+  report,
+];
+
+const json = (body, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+
+/** Login, `me`, and a lookup that answers each id at the size `sizeOf` says. */
+function answerCommon(path, init, sizeOf) {
+  if (path === '/v1/admin/auth/login') {
+    return json({ accessToken: 'token' }, 201);
+  }
+  if (path === '/v1/admin/auth/me') {
+    return json({ id: ACTOR });
+  }
+  if (path === '/v1/admin/catalog/items/lookup') {
+    return json(
+      {
+        items: JSON.parse(init.body).ids.map((id) => ({
+          id,
+          name: { es: 'Leche', en: 'Milk' },
+          brand: 'Marca',
+          unitSize: sizeOf(id),
+          defaultUnit: 'MILLILITER',
+          packCount: null,
+          categories: [],
+        })),
+      },
+      201
+    );
+  }
+  return null;
+}
+
+test('SIGINT while batch 2 hangs writes the report and exits 130', async () => {
+  const { dir, file, ids } = threeProducts();
+  let patches = 0;
+  let entered;
+  const inFlight = new Promise((resolve) => {
+    entered = resolve;
+  });
+  const fetchImpl = async (url, init = {}) => {
+    const path = new URL(url).pathname;
+    const common = answerCommon(path, init, () => '500.0000');
+    if (common) {
+      return common;
+    }
+    patches += 1;
+    if (patches === 2) {
+      entered();
+      return new Promise(() => undefined);
+    }
+    return json({ items: [] });
+  };
+  const handlers = new Map();
+  const exits = [];
+  let removed = false;
+  const report = join(dir, 'report.json');
+  const stderr = sink();
+  main(writeArgs(file, report), {
+    stderr,
+    env: { [REPLAY_PASSWORD_ENV]: 'p' },
+    isTty: false,
+    fetchImpl,
+    spawn: async () => ({ code: 1, stdout: '', stderr: '' }),
+    sleep: async () => undefined,
+    replayInterrupt: ({ stop, stderr: err }) =>
+      installReplayInterrupt({
+        stop,
+        stderr: err,
+        on: (signal, handler) => handlers.set(signal, handler),
+        off: () => {
+          removed = true;
+        },
+        exit: (code) => exits.push(code),
+      }),
+  });
+  await inFlight;
+  assert.ok(handlers.has('SIGINT') && handlers.has('SIGTERM'));
+  handlers.get('SIGINT')('SIGINT');
+  assert.deepEqual(exits, [130]);
+  assert.equal(removed, false);
+  const written = JSON.parse(readFileSync(report, 'utf8'));
+  assert.deepEqual(
+    written.lines.map((line) => [line.itemId, line.class, line.checked]),
+    [
+      [ids[0], 'apply', undefined],
+      [ids[1], 'not written', false],
+      [ids[2], 'not sent', undefined],
+    ]
+  );
+  assert.equal(written.lines[0].written, true);
+  assert.match(written.header.stoppedBy, /SIGINT/);
+  assert.match(stderr.text(), /SIGINT: stopping/);
+  assert.match(stderr.text(), /report: /);
+  // A second signal ends the process without writing again.
+  handlers.get('SIGTERM')('SIGTERM');
+  assert.deepEqual(exits, [130, 143]);
+});
+
+test('a 200 whose body is not JSON is read back, and the landed product is counted apart', async () => {
+  const { dir, file, ids } = threeProducts();
+  const landed = new Set();
+  const fetchImpl = async (url, init = {}) => {
+    const path = new URL(url).pathname;
+    const common = answerCommon(path, init, (id) =>
+      landed.has(id) ? '450.0000' : '500.0000'
+    );
+    if (common) {
+      return common;
+    }
+    const sent = JSON.parse(init.body).items;
+    for (const entry of sent) {
+      landed.add(entry.itemId);
+    }
+    // The first product lands and its answer is unreadable; the others
+    // answer JSON.
+    return sent[0].itemId === ids[0]
+      ? new Response('<html>ok</html>', { status: 200 })
+      : json({ items: [] });
+  };
+  const report = join(dir, 'report.json');
+  const stderr = sink();
+  const code = await main(writeArgs(file, report), {
+    stderr,
+    env: { [REPLAY_PASSWORD_ENV]: 'p' },
+    isTty: false,
+    fetchImpl,
+    spawn: async () => ({ code: 1, stdout: '', stderr: '' }),
+    sleep: async () => undefined,
+    replayInterrupt: () => () => undefined,
+  });
+  assert.equal(code, 0);
+  const written = JSON.parse(readFileSync(report, 'utf8'));
+  assert.deepEqual(
+    written.lines.map((line) => line.class),
+    ['already there', 'apply', 'apply']
+  );
+  assert.equal(written.lines[0].afterLostAnswer, true);
+  assert.equal(written.counts.written, 2);
+  assert.equal(written.counts.landedAfterLostAnswer, 1);
+  assert.match(stderr.text(), /2 written, 1 more landed after a lost answer/);
 });
