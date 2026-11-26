@@ -169,6 +169,8 @@ const WHOLE_UNITS: ReadonlySet<string> = new Set(['GRAM', 'MILLILITER']);
  * The size of one unit is the size divided by the pack count. Grams and
  * millilitres print whole, the other units up to three decimals, and a unit
  * size that is not whole at that precision starts with `~`: `185 g (7 x ~26 g)`.
+ * A unit that rounds to zero there, or a size of 0, prints no bracket: `1 g`
+ * for 1 g in a pack of 3.
  * A count of 1, null or absent prints nothing for that count. A product with
  * no size prints what {@link formatSize} prints, since it has no pack to split.
  *
@@ -204,11 +206,17 @@ export function formatProductSize(
     const one = size / pack;
     const digits = WHOLE_UNITS.has(unit) ? 0 : 3;
     const scale = 10 ** digits;
-    const whole = Math.abs(Math.round(one * scale) - one * scale) < 1e-6;
-    const figure = new Intl.NumberFormat(locale, {
-      maximumFractionDigits: digits,
-    }).format(one);
-    text = `${total} (${pack} x ${whole ? '' : APPROX_MARK}${worded(figure)})`;
+    // A unit that prints as zero at this precision says nothing true, and a
+    // size of 0 has no unit to split: the size is printed alone, as velista
+    // prints it. Nothing in the admin words a pack beside a size it does not
+    // divide, so the bracket is left out rather than worded anew.
+    if (Math.round(one * scale) !== 0) {
+      const whole = Math.abs(Math.round(one * scale) - one * scale) < 1e-6;
+      const figure = new Intl.NumberFormat(locale, {
+        maximumFractionDigits: digits,
+      }).format(one);
+      text = `${total} (${pack} x ${whole ? '' : APPROX_MARK}${worded(figure)})`;
+    }
   }
 
   const count = product.pieceCount;

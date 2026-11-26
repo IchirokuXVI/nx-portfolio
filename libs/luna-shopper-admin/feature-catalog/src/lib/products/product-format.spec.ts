@@ -173,6 +173,33 @@ describe('formatProductSize', () => {
     ).toBe('6,000 ml (6 x 1,000 ml)');
   });
 
+  it('keeps a unit that rounds up to one gram as approximate', () => {
+    expect(size({ unitSize: 5, defaultUnit: 'GRAM', packCount: 10 })).toBe(
+      '5 g (10 x ~1 g)'
+    );
+  });
+
+  it('prints the size alone when one unit rounds to zero', () => {
+    expect(size({ unitSize: 1, defaultUnit: 'GRAM', packCount: 3 })).toBe(
+      '1 g'
+    );
+    expect(size({ unitSize: 0.001, defaultUnit: 'LITER', packCount: 3 })).toBe(
+      '0.001 L'
+    );
+  });
+
+  it('prints the size alone when the size is 0', () => {
+    expect(size({ unitSize: 0, defaultUnit: 'GRAM', packCount: 4 })).toBe(
+      '0 g'
+    );
+  });
+
+  it('keeps the pieces after a size printed alone', () => {
+    expect(
+      size({ unitSize: 1, defaultUnit: 'GRAM', packCount: 3, pieceCount: 6 })
+    ).toBe('1 g · 6 pieces');
+  });
+
   it('prints nothing for a count of 1, null or absent', () => {
     expect(
       size({
