@@ -144,6 +144,16 @@ export interface CatalogProduct {
    * unseen.
    */
   readonly quantityStep: number | null;
+  /**
+   * How many units the pack holds, a whole number from 2, or null for a product
+   * that is not a pack (backend `0162`). The size is the whole pack.
+   */
+  readonly packCount: number | null;
+  /**
+   * How many pieces the whole product holds, across its pack, a whole number
+   * from 2, or null (backend `0278`). Only beside a size in grams or millilitres.
+   */
+  readonly pieceCount: number | null;
   /** The aisles the catalog files it under, in its order. Empty when none was readable. */
   readonly categories: readonly ProductCategory[];
   /** The cheapest price at the scopes the read was given, or null. */

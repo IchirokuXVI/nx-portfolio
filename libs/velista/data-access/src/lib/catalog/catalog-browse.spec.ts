@@ -108,6 +108,8 @@ describe('CatalogBrowseApi', () => {
             unit: 'LITER',
             approxWeight: null,
             quantityStep: null,
+            packCount: null,
+            pieceCount: null,
             categories: [
               {
                 id: 'cat-milk',

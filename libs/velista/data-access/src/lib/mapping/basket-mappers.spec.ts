@@ -599,6 +599,27 @@ describe('toBasket: the weight of a piece (velista 0179)', () => {
   ])('reads %s as no step', (_, quantityStep) => {
     expect(productOf({ id: 'i-1', quantityStep })?.quantityStep).toBeNull();
   });
+
+  it('reads the pack and the pieces (velista 0209, backend 0278)', () => {
+    const product = productOf({ id: 'i-1', packCount: 2, pieceCount: 100 });
+    expect(product?.packCount).toBe(2);
+    expect(product?.pieceCount).toBe(100);
+  });
+
+  it.each([
+    ['an absent field', undefined],
+    ['a string', '4'],
+    ['one', 1],
+    ['a fraction', 2.5],
+  ])('reads %s as no pack and no pieces', (_, value) => {
+    const product = productOf({
+      id: 'i-1',
+      packCount: value,
+      pieceCount: value,
+    });
+    expect(product?.packCount).toBeNull();
+    expect(product?.pieceCount).toBeNull();
+  });
 });
 
 describe('toBasket: the shop’s aisles a product is in (velista `0120`)', () => {

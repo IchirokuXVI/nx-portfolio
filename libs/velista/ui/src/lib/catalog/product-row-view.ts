@@ -20,7 +20,8 @@ export type CatalogTranslate = (
 
 /**
  * What a card needs of a product: a browse read's {@link CatalogProduct}, or a
- * suggest read's `CatalogItem`, which also knows its pack.
+ * suggest read's `CatalogItem`. Both carry the pack and the pieces (velista
+ * `0209`).
  */
 export type ProductRowSource = Pick<
   CatalogProduct,
@@ -31,12 +32,11 @@ export type ProductRowSource = Pick<
   | 'size'
   | 'unit'
   | 'approxWeight'
+  | 'packCount'
+  | 'pieceCount'
   | 'offer'
   | 'unitBasis'
-> & {
-  /** How many units the pack holds, from 2, or null. Only the suggest read has it. */
-  readonly packCount?: number | null;
-};
+>;
 
 export interface ProductRowOptions {
   readonly locale: string;
@@ -75,8 +75,9 @@ export const CHAIN_MARKS_SHOWN = 3;
  * What one card says (velista `0162`, section 2), decided once, here, for the
  * catalog tab, Choose a product, a product page's similar products and the search.
  *
- * - The name in the reader's language, and `brand · size · pack` under it, where
- *   the size is the approximate weight of a piece whose weight varies.
+ * - The name in the reader's language, and `brand · size` under it, where the
+ *   size carries the units of the pack and the pieces (velista `0209`), or is the
+ *   approximate weight of a piece whose weight varies.
  * - The chains that sell it, the cheapest named.
  * - The price at the trailing edge, with the price per litre or kilo under it when
  *   it differs, or the age of a stale one. A kilo piece draws its piece price over
@@ -96,13 +97,10 @@ export function productRowView(
     product.unit,
     locale,
     translate,
-    product.approxWeight
+    product.approxWeight,
+    product
   );
-  const pack =
-    product.packCount === null || product.packCount === undefined
-      ? null
-      : translate('list.add.card.pack', { count: product.packCount });
-  const detail = joined([product.brand, size, pack]);
+  const detail = joined([product.brand, size]);
 
   const offer = product.offer;
   const priced = priceWords(offer, product, locale, translate);

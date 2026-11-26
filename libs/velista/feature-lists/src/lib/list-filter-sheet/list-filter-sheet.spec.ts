@@ -35,6 +35,7 @@ function line(id: string, itemIds: string[]): Line {
 function product(id: string, slug: string): CatalogItem {
   return {
     id,
+    pieceCount: null,
     quantityStep: null,
     name: { es: id, en: id },
     brand: null,

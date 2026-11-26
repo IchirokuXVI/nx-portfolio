@@ -62,6 +62,7 @@ describe('lineCategories', () => {
   function product(id: string, ...categories: string[]): CatalogItem {
     return {
       id,
+      pieceCount: null,
       quantityStep: null,
       name: { es: id, en: id },
       brand: null,

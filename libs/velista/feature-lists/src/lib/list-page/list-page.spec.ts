@@ -2471,6 +2471,7 @@ describe('ListPage', () => {
     ];
     const ITEM_A: CatalogItem = {
       id: 'item-a',
+      pieceCount: null,
       quantityStep: null,
       name: { es: 'Leche entera', en: 'Whole milk' },
       brand: 'Hacendado',
@@ -4069,6 +4070,7 @@ describe('ListPage: searching and viewing one category', () => {
   ): CatalogItem {
     return {
       id,
+      pieceCount: null,
       quantityStep: null,
       name: { es: id, en: id },
       brand: null,
@@ -5361,6 +5363,7 @@ describe('ListPage: the lines a suggestion card names (velista 0101)', () => {
     kind: 'item',
     item: {
       id: 'item-oat',
+      pieceCount: null,
       quantityStep: null,
       name: { es: 'Bebida de avena', en: 'Oat drink' },
       brand: 'Oatly',
@@ -7547,6 +7550,7 @@ describe('ListPage: a raise asks whether the extra already bought counts (velist
         kind: 'item',
         item: {
           id: 'item-eggs',
+          pieceCount: null,
           quantityStep: null,
           name: { es: 'Huevos camperos', en: 'Free range eggs' },
           brand: 'Hacendado',

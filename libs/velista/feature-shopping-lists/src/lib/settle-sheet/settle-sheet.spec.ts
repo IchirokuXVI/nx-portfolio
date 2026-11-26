@@ -2332,6 +2332,8 @@ describe('SettleSheet: putting a row off for now', () => {
 describe('SettleSheet: a product row (velista 0139, section 3)', () => {
   const MILK: BasketProduct = {
     id: 'i-whole',
+    packCount: null,
+    pieceCount: null,
     quantityStep: null,
     name: { en: 'Whole milk', es: 'Leche entera' },
     brand: 'Hacendado',
@@ -2423,6 +2425,7 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
     };
     const OTHER_RICE: CatalogItem = {
       id: 'i-rice-2',
+      pieceCount: null,
       quantityStep: 100,
       name: { en: 'Brown rice', es: 'Arroz integral' },
       brand: null,
@@ -3707,6 +3710,8 @@ describe('SettleSheet: the reels of the compact view (velista 0204)', () => {
   describe('Bought for another list', () => {
     const MILK: BasketProduct = {
       id: 'i-whole',
+      packCount: null,
+      pieceCount: null,
       quantityStep: null,
       name: { en: 'Whole milk', es: 'Leche entera' },
       brand: 'Hacendado',

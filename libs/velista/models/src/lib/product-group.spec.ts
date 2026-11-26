@@ -30,6 +30,7 @@ function offer(
 function item(id: string, priced: ProductOffer | null): CatalogItem {
   return {
     id,
+    pieceCount: null,
     quantityStep: null,
     name: { en: id, es: id },
     brand: null,

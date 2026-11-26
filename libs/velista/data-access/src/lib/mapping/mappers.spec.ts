@@ -1120,6 +1120,7 @@ describe('toCatalogItem: the size the catalog was always sending', () => {
       chainPrices: [],
       imageUrl: null,
       packCount: null,
+      pieceCount: null,
       unitBasis: null,
     });
   });
@@ -1672,6 +1673,39 @@ describe("toCatalogItem: the product's step (velista 0186, backend 0261)", () =>
     expect(
       toCatalogItem({ ...loose, quantityStep: value })?.quantityStep
     ).toBeNull();
+  });
+});
+
+describe('toCatalogItem: the pack and the pieces (velista 0209, backend 0278)', () => {
+  it('reads both counts', () => {
+    const product = toCatalogItem({
+      id: 'item-smint',
+      name: { es: 'SMINT', en: 'SMINT' },
+      unitSize: 70,
+      defaultUnit: 'GRAM',
+      packCount: 2,
+      pieceCount: 100,
+    });
+    expect(product?.packCount).toBe(2);
+    expect(product?.pieceCount).toBe(100);
+  });
+
+  it.each([
+    ['an absent field', undefined],
+    ['a string', '4'],
+    ['one', 1],
+    ['a fraction', 2.5],
+  ])('reads %s as no count', (_, value) => {
+    const product = toCatalogItem({
+      id: 'item-smint',
+      name: { es: 'SMINT', en: 'SMINT' },
+      unitSize: 70,
+      defaultUnit: 'GRAM',
+      packCount: value,
+      pieceCount: value,
+    });
+    expect(product?.packCount).toBeNull();
+    expect(product?.pieceCount).toBeNull();
   });
 });
 

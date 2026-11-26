@@ -96,10 +96,6 @@ function itemView(
     chainOf: () => null,
     chains,
   });
-  const pack =
-    item.packCount === null
-      ? null
-      : translate('list.add.card.pack', { count: item.packCount });
 
   return {
     key: `item:${item.id}`,
@@ -119,13 +115,13 @@ function itemView(
         [
           row.name,
           item.brand,
-          pack,
           productSizeText(
             item.size,
             item.unit,
             locale,
             translate,
-            item.approxWeight
+            item.approxWeight,
+            item
           ),
         ]
           .filter((part): part is string => part !== null && part !== '')

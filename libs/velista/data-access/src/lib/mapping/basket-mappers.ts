@@ -45,6 +45,7 @@ import { toAddOutcome } from './add-choice-mappers';
 import { toProductCategories } from './category-mappers';
 import { toLocalizedName, toProductOffer } from './mappers';
 import {
+  countOf,
   date,
   isRecord,
   mapArray,
@@ -628,6 +629,8 @@ function toBasketProduct(raw: unknown): BasketProduct | null {
         unit: nullableStr(raw['defaultUnit']),
         approxWeight: positiveNum(raw['approxWeight']),
         quantityStep: quantityStepOf(raw['quantityStep']),
+        packCount: countOf(raw['packCount']),
+        pieceCount: countOf(raw['pieceCount']),
         // Each offer carries its own `unitBasis`, read by `toProductOffer`, so the
         // unit price line names the basis of the offer it draws, the shop's
         // included. A basket product has no basis of its own.

@@ -274,3 +274,20 @@ O3 decides. Under its recommendation:
   90 g)".
 - **C. Only on the product card and the product page.** Example: the shopping list row says
   "Hacendado · 360 g" with no count.
+
+## Decisions
+
+The owner answered the mock on 2026-11-26 and chose option A each time.
+
+- **O1 A.** A unit weight that is not whole prints rounded with a tilde: "185 g (7 × ~26 g)".
+- **O2 A.** The word for pieces is "pieces" in English and "piezas" in Spanish.
+- **O3 A.** The long form prints everywhere a size names a product, except the default list
+  view's first fact (the row with the stepper, the compact row of `0191` in this plan's words)
+  and the cost caption, which keep the total alone.
+- **Sign A.** The sign is "×", as velista already uses.
+
+What the mock found, kept by stage 2: English groups thousands ("6,000 ml (6 × 1,000 ml)") and
+Spanish does not below 10,000 ("6000 ml (6 × 1000 ml)"), as `Intl` gives them. Inside the
+bracket and around the sign the spaces are no break spaces, so a line wraps before "(" or
+after the comma, never inside "4 × 90 g". The shopping list row keeps its one line layout, cut
+at its end.
