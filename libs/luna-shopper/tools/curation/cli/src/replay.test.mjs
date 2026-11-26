@@ -26,11 +26,13 @@ import {
   batchEntry,
   capturingFetch,
   classify,
+  countDecisions,
   countLines,
   countsLine,
   dropUnits,
   identityChanges,
   makeTargetClient,
+  markDecisionsUnsettled,
   markUnsettled,
   prepareDecisions,
   replayChanges,
@@ -2214,18 +2216,26 @@ test('a lost answer to a decisions part reads the rows back and classes them by 
     ReplayStopped
   );
   const byEntry = Object.fromEntries(
-    lines.map((line) => [line.entryId, [line.class, line.checked]])
+    lines.map((line) => [
+      line.entryId,
+      [line.class, line.checked, line.lastKnownClass],
+    ])
   );
   assert.deepEqual(byEntry, {
-    e1: [DECISION_CLASS.DECIDED_ON_TARGET, undefined],
+    e1: [DECISION_CLASS.DECIDED_ON_TARGET, undefined, undefined],
     // Still pending right after a part with no answer: the part may land
-    // after the read, so the row is not checked.
-    e2: [DECISION_CLASS.NOT_WRITTEN, false],
-    e3: [DECISION_CLASS.NOT_WRITTEN, false],
-    e4: [DECISION_CLASS.NOT_WRITTEN, false],
+    // after the read, so the row's outcome is not known (decision 163a).
+    e2: [DECISION_CLASS.OUTCOME_UNKNOWN, false, DECISION_CLASS.NOT_WRITTEN],
+    e3: [DECISION_CLASS.OUTCOME_UNKNOWN, false, DECISION_CLASS.NOT_WRITTEN],
+    e4: [DECISION_CLASS.OUTCOME_UNKNOWN, false, DECISION_CLASS.NOT_WRITTEN],
   });
   assert.equal(lines[0].targetStatus, 'ACTIVE');
+  // Each row keeps its own detail and code, which say why.
   assert.match(lines[1].detail, /may still land after that read/);
+  assert.match(lines[2].detail, /does not list this row/);
+  assert.match(lines[3].detail, /no product of its own/);
+  assert.equal(lines[3].reason, undefined);
+  assert.equal(countDecisions(lines).outcomeUnknown, 3);
 });
 
 test('a decisions part that timed out, or got a 504, leaves a pending row not checked; a 2xx settles it', async () => {
@@ -2237,10 +2247,10 @@ test('a decisions part that timed out, or got a 504, leaves a pending row not ch
   const gateway = new HttpError(504);
   const unreadable = new HttpError(201);
   unreadable.body = '<html>ok</html>';
-  for (const [lost, checked] of [
-    [timeout, false],
-    [gateway, false],
-    [unreadable, undefined],
+  for (const [lost, klass, checked] of [
+    [timeout, DECISION_CLASS.OUTCOME_UNKNOWN, false],
+    [gateway, DECISION_CLASS.OUTCOME_UNKNOWN, false],
+    [unreadable, DECISION_CLASS.NOT_WRITTEN, undefined],
   ]) {
     const { client } = fakeTarget([], { entries });
     const lines = [];
@@ -2266,10 +2276,200 @@ test('a decisions part that timed out, or got a 504, leaves a pending row not ch
     );
     assert.deepEqual(
       lines.map((line) => [line.class, line.checked]),
-      [[DECISION_CLASS.NOT_WRITTEN, checked]],
+      [[klass, checked]],
       lost.message
     );
   }
+});
+
+/** A run of one CREATE decision whose part gets `applyFile`'s answer. */
+function decisionsRun({
+  applyFile,
+  writeFile,
+  controls = {},
+  stderr = sink(),
+}) {
+  const { client } = fakeTarget([product(1)]);
+  const changeList = sizeChangeList(0);
+  return runReplay({
+    changeFile: 'changes.jsonl',
+    changeList,
+    folded: foldChanges(changeList),
+    targetUrl: 'http://localhost:43700',
+    write: true,
+    batchSize: 1,
+    reportPath: 'report.json',
+    client,
+    stderr,
+    controls,
+    writeFile,
+    decisions: {
+      file: 'd.jsonl',
+      prepared: {
+        header: { header: true, runId: 'r' },
+        records: [createRow(1), createRow(2)],
+      },
+      splitParts: (records) => records.map((record) => [record]),
+      applyFile,
+    },
+  });
+}
+
+test('markDecisionsUnsettled gives an unchecked decision row the class once, and the count follows the class', () => {
+  const row = (n, over) => ({ entryId: `e${n}`, op: 'accept', ...over });
+  const lines = [
+    row(1, { class: DECISION_CLASS.NOT_WRITTEN, checked: false, detail: 'x' }),
+    row(2, { class: DECISION_CLASS.NOT_WRITTEN }),
+    row(3, { class: DECISION_CLASS.APPLIED }),
+    row(4, { class: DECISION_CLASS.REFUSED, code: 'APPLY', checked: false }),
+  ];
+  markDecisionsUnsettled(lines);
+  // A second call, as the report makes on every write, changes nothing.
+  markDecisionsUnsettled(lines);
+  assert.deepEqual(
+    lines.map((line) => [line.class, line.lastKnownClass, line.checked]),
+    [
+      [DECISION_CLASS.OUTCOME_UNKNOWN, DECISION_CLASS.NOT_WRITTEN, false],
+      [DECISION_CLASS.NOT_WRITTEN, undefined, undefined],
+      [DECISION_CLASS.APPLIED, undefined, undefined],
+      [DECISION_CLASS.OUTCOME_UNKNOWN, DECISION_CLASS.REFUSED, false],
+    ]
+  );
+  assert.equal(lines[0].detail, 'x');
+  assert.equal(lines[3].code, 'APPLY');
+  const counts = countDecisions(lines);
+  assert.equal(counts.outcomeUnknown, 2);
+  assert.equal(counts.classes[DECISION_CLASS.OUTCOME_UNKNOWN], 2);
+  assert.equal(counts.classes[DECISION_CLASS.NOT_WRITTEN], 1);
+  // The count is the class: an unchecked row the marking never saw is not
+  // counted as unknown, so class and count cannot disagree.
+  assert.equal(
+    countDecisions([
+      row(5, { class: DECISION_CLASS.NOT_WRITTEN, checked: false }),
+    ]).outcomeUnknown,
+    0
+  );
+});
+
+test('a decisions part stopped on a 5xx is reported outcome unknown, and the count and stderr agree', async () => {
+  let report = null;
+  const stderr = sink();
+  await assert.rejects(
+    () =>
+      decisionsRun({
+        stderr,
+        writeFile: (path, text) => {
+          if (path === 'report.json') {
+            report = JSON.parse(text);
+          }
+        },
+        applyFile: async () => {
+          throw new HttpError(503);
+        },
+      }),
+    ReplayStopped
+  );
+  assert.deepEqual(
+    report.decisions.lines.map((line) => [
+      line.entryId,
+      line.class,
+      line.checked,
+      line.lastKnownClass,
+    ]),
+    [
+      ['e1', DECISION_CLASS.OUTCOME_UNKNOWN, false, DECISION_CLASS.NOT_WRITTEN],
+      ['e2', DECISION_CLASS.NOT_SENT, undefined, undefined],
+    ]
+  );
+  assert.match(
+    report.decisions.lines[0].detail,
+    /answer to this part was lost/
+  );
+  assert.equal(report.decisions.counts.outcomeUnknown, 1);
+  assert.equal(
+    report.decisions.counts.classes[DECISION_CLASS.OUTCOME_UNKNOWN],
+    1
+  );
+  assert.equal(report.decisions.counts.classes[DECISION_CLASS.NOT_WRITTEN], 0);
+  assert.match(
+    stderr.text(),
+    /2 decided rows: outcome unknown 1, not sent 1; 1 rows were sent and their outcome is not known, run the dry run again/
+  );
+});
+
+test('a signal while a decisions part is in flight writes that row as outcome unknown', async () => {
+  let entered;
+  const inFlight = new Promise((resolve) => {
+    entered = resolve;
+  });
+  const controls = {};
+  const stderr = sink();
+  let written = null;
+  decisionsRun({
+    controls,
+    stderr,
+    writeFile: (path, text) => {
+      if (path === 'report.json') {
+        written = JSON.parse(text);
+      }
+    },
+    applyFile: () => {
+      entered();
+      return new Promise(() => undefined);
+    },
+  });
+  await inFlight;
+  assert.equal(controls.interrupt('SIGINT'), true);
+  assert.deepEqual(
+    written.decisions.lines.map((line) => [
+      line.entryId,
+      line.class,
+      line.checked,
+      line.lastKnownClass,
+      line.code,
+    ]),
+    [
+      [
+        'e1',
+        DECISION_CLASS.OUTCOME_UNKNOWN,
+        false,
+        DECISION_CLASS.NOT_WRITTEN,
+        'interrupted',
+      ],
+      ['e2', DECISION_CLASS.NOT_SENT, undefined, undefined, undefined],
+    ]
+  );
+  assert.match(written.decisions.lines[0].detail, /stopped with SIGINT/);
+  assert.equal(written.decisions.counts.outcomeUnknown, 1);
+  assert.match(written.header.stoppedBy, /stopped with SIGINT/);
+  assert.match(
+    stderr.text(),
+    /outcome unknown 1, not sent 1; 1 rows were sent and their outcome is not known/
+  );
+});
+
+test('a report that cannot be written after a lost decisions part still prints the row as outcome unknown', async () => {
+  const stderr = sink();
+  await assert.rejects(
+    () =>
+      decisionsRun({
+        stderr,
+        writeFile: (path, text) => {
+          if (path === 'report.json' && JSON.parse(text).header.stoppedBy) {
+            throw new Error('EBUSY: resource busy or locked');
+          }
+        },
+        applyFile: async () => {
+          throw new Error('socket hang up');
+        },
+      }),
+    /the report could not be written to report\.json: EBUSY/
+  );
+  assert.match(
+    stderr.text(),
+    /2 decided rows: outcome unknown 1, not sent 1; 1 rows were sent and their outcome is not known/
+  );
+  assert.match(stderr.text(), /the decisions stopped/);
 });
 
 test('the products a decisions part left orphaned are copied into the report', async () => {
