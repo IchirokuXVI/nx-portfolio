@@ -587,7 +587,17 @@ read from `CURATION_TARGET_PASSWORD` set for the one command. A replay refuses
   reported with the unguarded fields and never sent. The chain check of section 2.4 runs on every
   field that is not derived.
 - A lost answer (a 502, 503, 504, or no answer) is read back and sent again at most three
-  times; after that the products left are `refused` with the code `no_answer`.
+  times; after that the run stops, and the products left are `not written` with the code
+  `no_answer` (fix round, 2026-11-26).
+- Fix round, 2026-11-26: a refused batch is split only when the answer is a 400, 409 or 422
+  with a problem code. A 429 after the waits, a 401 or 403 after the new login, a second 413
+  (the first halves the batch size once), any other 5xx and a fourth lost answer stop the
+  run. The report is then still written: what was written before the stop, the request it
+  stopped on as `not written` with the answer, the rest as `not sent`, and the process exits
+  with an error.
+- Fix round, 2026-11-26: a product refused by `expect` only because the target already holds
+  the `to` of every field sent is `already there`, not `conflict`. That is what a resend meets
+  when the first send committed after a 504 and the read back came too early.
 - A 429 is waited out for `details.retryAfterSeconds` of the problem document, the number the
   gateway names, or 60 seconds when it names none.
 - The session cuts a failed body at 500 characters, which can cut the failure list of a batch,

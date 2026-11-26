@@ -2,17 +2,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import {
-  AUDIT_ORIGIN,
-  CHANGE_LIST_KIND,
-  foldChanges,
-  sameValue,
-} from './changes.mjs';
+import { AUDIT_ORIGIN, CHANGE_LIST_KIND, foldChanges } from './changes.mjs';
 import {
   BATCH_PATH,
   CLASS,
   DECISION_CLASS,
   LOOKUP_PATH,
+  ReplayStopped,
   SHORT_WASH_WORD,
   WASH_SUM,
   batchEntry,
@@ -25,6 +21,7 @@ import {
   runReplay,
   runReplayIdentity,
   washCount,
+  writeApply,
 } from './replay.mjs';
 
 // Made up ids only: nothing here names a real product or entry.
@@ -71,25 +68,154 @@ class HttpError extends Error {
   }
 }
 
+// --- The fake target ---------------------------------------------------------
+//
+// Its comparison is written from catalog's rules (`expectationMismatches` and
+// `brandKey`, backend `item.service.ts` and contracts `brand-key.ts`), not from
+// the client's `sameValue`, so a test proves the client predicts the server
+// instead of restating itself.
+
+/** Catalog's brand key: accents dropped, lower case, letters and digits only. */
+function serverBrandKey(text) {
+  if (text == null) {
+    return null;
+  }
+  const key = text
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+  return key === '' ? null : key;
+}
+
+function serverTrimmedOrNull(value) {
+  const text = value?.trim();
+  return text ? text : null;
+}
+
 /**
- * A target gateway in memory: the lookup, the source rows and the batch, with
- * the batch's expect compared as catalog compares it. `refuse(entries)` may
- * throw before anything is written, to play a refusal.
+ * Each field an expectation names that the row does not hold, as catalog
+ * finds them: a name half left out expects no name in that language, a brand
+ * by key, `unitSize` and `approxWeight` as numbers because Postgres answers a
+ * `numeric` as a string, the rest strictly, null meaning the row holds nothing.
  */
-function fakeTarget(items, { entries = {}, refuse = null } = {}) {
+function serverMismatches(row, expect) {
+  const mismatches = [];
+  const slugs = (row.categories ?? []).map((category) => category.slug);
+  if (expect.name !== undefined) {
+    const differs = ['en', 'es'].some(
+      (locale) =>
+        serverTrimmedOrNull(expect.name?.[locale]) !==
+        serverTrimmedOrNull(row.name?.[locale])
+    );
+    if (differs) {
+      mismatches.push({
+        field: 'name',
+        expected: expect.name,
+        actual: row.name,
+      });
+    }
+  }
+  if (
+    expect.brand !== undefined &&
+    serverBrandKey(expect.brand) !== serverBrandKey(row.brand)
+  ) {
+    mismatches.push({
+      field: 'brand',
+      expected: expect.brand,
+      actual: row.brand,
+    });
+  }
+  for (const field of ['unitSize', 'approxWeight']) {
+    if (expect[field] !== undefined) {
+      const actual =
+        row[field] === null || row[field] === undefined
+          ? null
+          : Number(row[field]);
+      if (actual !== expect[field]) {
+        mismatches.push({ field, expected: expect[field], actual });
+      }
+    }
+  }
+  for (const field of ['quantityStep', 'packCount']) {
+    if (expect[field] !== undefined && (row[field] ?? null) !== expect[field]) {
+      mismatches.push({
+        field,
+        expected: expect[field],
+        actual: row[field] ?? null,
+      });
+    }
+  }
+  if (
+    expect.defaultUnit !== undefined &&
+    row.defaultUnit !== expect.defaultUnit
+  ) {
+    mismatches.push({
+      field: 'defaultUnit',
+      expected: expect.defaultUnit,
+      actual: row.defaultUnit,
+    });
+  }
+  if (expect.categorySlugs !== undefined) {
+    const expected = expect.categorySlugs ?? [];
+    const same =
+      expected.length === slugs.length &&
+      expected.every((slug, index) => slug === slugs[index]);
+    if (!same) {
+      mismatches.push({
+        field: 'categorySlugs',
+        expected: expect.categorySlugs,
+        actual: [...slugs],
+      });
+    }
+  }
+  return mismatches;
+}
+
+/**
+ * A target gateway in memory: the lookup, the source rows and the batch.
+ *
+ * The batch is all or nothing, as the route is: every expectation is compared
+ * before any edit is written, and one failure refuses the request.
+ * `refuse(entries, sendIndex)` may throw before anything is compared, to play a
+ * refusal. `lose(sendIndex)` plays a lost answer: `'before'` answers 504 and
+ * writes nothing, `'after'` writes the whole batch and then answers 504, and
+ * `'late'` answers 504 and writes the whole batch once the next lookup has
+ * answered, as a request that committed after the proxy gave up.
+ */
+function fakeTarget(items, { entries = {}, refuse = null, lose = null } = {}) {
   const store = new Map(items.map((item) => [item.id, structuredClone(item)]));
   const calls = [];
+  let sends = 0;
+  let late = null;
+  const commit = (batch) => {
+    for (const { itemId, expect: _expect, ...edit } of batch) {
+      const held = store.get(itemId);
+      for (const [field, value] of Object.entries(edit)) {
+        if (field === 'categorySlugs') {
+          held.categories = value.map((slug) => ({ slug }));
+        } else {
+          held[field] = value;
+        }
+      }
+    }
+  };
   const client = {
     requests: 0,
     async request(path, init = {}) {
       client.requests += 1;
       calls.push({ path, method: init.method ?? 'GET', body: init.body });
       if (path === LOOKUP_PATH) {
-        return {
+        const answer = {
           items: init.body.ids
             .filter((key) => store.has(key))
             .map((key) => structuredClone(store.get(key))),
         };
+        if (late) {
+          commit(late);
+          late = null;
+        }
+        return answer;
       }
       const rows = /\/v1\/admin\/harvest\/items\/(.+)\/entries/.exec(path);
       if (rows) {
@@ -99,28 +225,14 @@ function fakeTarget(items, { entries = {}, refuse = null } = {}) {
         };
       }
       if (path === BATCH_PATH) {
-        refuse?.(init.body.items, store);
+        sends += 1;
+        refuse?.(init.body.items, sends);
         const failures = [];
         for (const entry of init.body.items) {
-          const held = store.get(entry.itemId);
-          const fields = [];
-          for (const [field, expected] of Object.entries(entry.expect)) {
-            const actual =
-              field === 'categorySlugs'
-                ? held.categories.map((c) => c.slug)
-                : held[field];
-            const kind =
-              field === 'name'
-                ? 'name'
-                : field === 'brand'
-                  ? 'brand'
-                  : field === 'categorySlugs'
-                    ? 'slugs'
-                    : 'number';
-            if (!sameValue(kind, expected, actual)) {
-              fields.push({ field, expected, actual });
-            }
-          }
+          const fields = serverMismatches(
+            store.get(entry.itemId),
+            entry.expect
+          );
           if (fields.length) {
             failures.push({ itemId: entry.itemId, fields });
           }
@@ -131,15 +243,17 @@ function fakeTarget(items, { entries = {}, refuse = null } = {}) {
             details: { failures },
           });
         }
-        for (const { itemId, expect: _expect, ...edit } of init.body.items) {
-          const held = store.get(itemId);
-          for (const [field, value] of Object.entries(edit)) {
-            if (field === 'categorySlugs') {
-              held.categories = value.map((slug) => ({ slug }));
-            } else {
-              held[field] = value;
-            }
-          }
+        const lost = lose?.(sends) ?? null;
+        if (lost === 'before') {
+          throw new HttpError(504);
+        }
+        if (lost === 'late') {
+          late = structuredClone(init.body.items);
+          throw new HttpError(504);
+        }
+        commit(init.body.items);
+        if (lost === 'after') {
+          throw new HttpError(504);
         }
         return { items: [] };
       }
@@ -148,6 +262,38 @@ function fakeTarget(items, { entries = {}, refuse = null } = {}) {
   };
   return { client, calls, store };
 }
+
+test('the fake compares as catalog does', () => {
+  const row = {
+    name: { es: ' Leche ', en: 'Milk' },
+    brand: 'Hacendado',
+    unitSize: '500.0000',
+    approxWeight: null,
+    quantityStep: null,
+    defaultUnit: 'GRAM',
+    packCount: null,
+    categories: [{ slug: 'a' }, { slug: 'b' }],
+  };
+  assert.deepEqual(
+    serverMismatches(row, {
+      name: { es: 'Leche', en: 'Milk' },
+      brand: 'HACENDADO.',
+      unitSize: 500,
+      approxWeight: null,
+      packCount: null,
+      categorySlugs: ['a', 'b'],
+    }),
+    []
+  );
+  const fields = (expect) =>
+    serverMismatches(row, expect).map((mismatch) => mismatch.field);
+  // a half left out expects no name in that language
+  assert.deepEqual(fields({ name: { es: 'Leche' } }), ['name']);
+  // a numeric string is not a number for a strict field
+  assert.deepEqual(fields({ unitSize: '500' }), ['unitSize']);
+  assert.deepEqual(fields({ categorySlugs: ['b', 'a'] }), ['categorySlugs']);
+  assert.deepEqual(fields({ packCount: 0 }), ['packCount']);
+});
 
 const patches = (calls) => calls.filter((call) => call.path === BATCH_PATH);
 
@@ -364,21 +510,51 @@ test('brand_unregistered in a batch of eight isolates the one product in at most
   assert.equal(lines.filter((line) => line.written).length, 7);
 });
 
-test('a 504 reads the batch again and sends only what did not land', async () => {
-  const items = [1, 2, 3].map((n) => product(n));
-  let lost = true;
-  const { client, calls, store } = fakeTarget(items, {
-    refuse: (entries, held) => {
-      if (lost) {
-        lost = false;
-        // The first product landed before the proxy gave up.
-        held.get(entries[0].itemId).unitSize = 450;
-        throw new HttpError(504);
-      }
-    },
-  });
-  const changes = items.map((item, index) =>
+const sizeChanges = (count) =>
+  Array.from({ length: count }, (_, index) =>
     change(index + 1, [{ field: 'unitSize', from: 500, to: 450 }])
+  );
+const products = (count, over = {}) =>
+  Array.from({ length: count }, (_, index) => product(index + 1, over));
+
+test('a 504 reads the batch again and sends only the batch that did not land', async () => {
+  // Batch 1 lands whole and then loses its answer; batch 2 loses it unwritten.
+  const { client, calls, store } = fakeTarget(products(4), {
+    lose: (send) => (send === 1 ? 'after' : send === 2 ? 'before' : null),
+  });
+  const { lines } = await replayChanges({
+    changes: sizeChanges(4),
+    client,
+    write: true,
+    batchSize: 2,
+    stderr: sink(),
+  });
+  const sent = patches(calls);
+  assert.equal(sent.length, 3);
+  assert.deepEqual(
+    sent[2].body.items.map((entry) => entry.itemId),
+    [id(3), id(4)]
+  );
+  assert.deepEqual(
+    lines.map((line) => line.class),
+    [CLASS.ALREADY, CLASS.ALREADY, CLASS.APPLY, CLASS.APPLY]
+  );
+  assert.equal(lines[0].afterLostAnswer, true);
+  assert.equal(lines[2].written, true);
+  for (const n of [1, 2, 3, 4]) {
+    assert.equal(store.get(id(n)).unitSize, 450);
+  }
+});
+
+test('a write that committed after its 504 is already there, not a conflict', async () => {
+  const { client, calls, store } = fakeTarget(products(2), {
+    lose: (send) => (send === 1 ? 'late' : null),
+  });
+  const changes = [1, 2].map((n) =>
+    change(n, [
+      { field: 'unitSize', from: 500, to: 450 },
+      { field: 'packCount', from: null, to: 6 },
+    ])
   );
   const { lines } = await replayChanges({
     changes,
@@ -386,15 +562,258 @@ test('a 504 reads the batch again and sends only what did not land', async () =>
     write: true,
     stderr: sink(),
   });
-  const sent = patches(calls);
-  assert.equal(sent.length, 2);
+  // Sent, lost, read back too early (old values), sent again, refused by the
+  // expect because the first send had committed by then.
+  assert.equal(patches(calls).length, 2);
   assert.deepEqual(
-    sent[1].body.items.map((entry) => entry.itemId),
-    [id(2), id(3)]
+    lines.map((line) => line.class),
+    [CLASS.ALREADY, CLASS.ALREADY]
   );
-  assert.equal(lines[0].class, CLASS.ALREADY);
   assert.equal(lines[0].afterLostAnswer, true);
-  assert.equal(store.get(id(3)).unitSize, 450);
+  assert.equal(store.get(id(1)).packCount, 6);
+});
+
+test('an expect refusal on one field of two is still a conflict', async () => {
+  const { client, store } = fakeTarget(products(1));
+  const [line] = (
+    await replayChanges({
+      changes: [
+        change(1, [
+          { field: 'unitSize', from: 500, to: 450 },
+          { field: 'packCount', from: null, to: 6 },
+        ]),
+      ],
+      client,
+    })
+  ).lines;
+  // Someone sets the size to the same new value, and nothing else.
+  store.get(id(1)).unitSize = 450;
+  await writeApply(client, [line]);
+  assert.equal(line.class, CLASS.CONFLICT);
+});
+
+test('three lost answers in a row stop the run, and nothing is resent a fourth time', async () => {
+  const { client, calls } = fakeTarget(products(2), {
+    lose: () => 'before',
+  });
+  const lines = [];
+  await assert.rejects(
+    () =>
+      replayChanges({
+        changes: sizeChanges(2),
+        client,
+        write: true,
+        stderr: sink(),
+        lines,
+      }),
+    (error) =>
+      error instanceof ReplayStopped &&
+      /no answer 4 times/.test(error.message) &&
+      error.answer.code === 'no_answer'
+  );
+  // The first send and three resends, each read back.
+  assert.equal(patches(calls).length, 4);
+  assert.equal(calls.filter((call) => call.path === LOOKUP_PATH).length, 5);
+  assert.deepEqual(
+    lines.map((line) => line.class),
+    [CLASS.NOT_WRITTEN, CLASS.NOT_WRITTEN]
+  );
+  assert.equal(lines[0].error.code, 'no_answer');
+});
+
+test('a run that stops on batch 2 of 3 keeps batch 1 written and batch 3 not sent', async () => {
+  const { client, calls, store } = fakeTarget(products(3), {
+    refuse: (_entries, send) => {
+      if (send === 2) {
+        throw new HttpError(500, { code: 'internal', detail: 'boom' });
+      }
+    },
+  });
+  const changeList = {
+    header: { header: true, kind: CHANGE_LIST_KIND, origin: AUDIT_ORIGIN },
+    lines: [1, 2, 3].map((n) => ({
+      itemId: id(n),
+      line: n + 1,
+      action: 'UPDATE',
+      before: { unitSize: 500 },
+      after: { unitSize: 450 },
+      current: {
+        name: { es: `Producto ${n}`, en: `Product ${n}` },
+        brand: 'Marca',
+      },
+    })),
+  };
+  let written = null;
+  const stderr = sink();
+  await assert.rejects(
+    () =>
+      runReplay({
+        changeFile: 'changes.jsonl',
+        changeList,
+        folded: foldChanges(changeList),
+        targetUrl: 'http://localhost:43700',
+        write: true,
+        batchSize: 1,
+        reportPath: 'report.json',
+        client,
+        stderr,
+        writeFile: (_path, text) => {
+          written = JSON.parse(text);
+        },
+      }),
+    ReplayStopped
+  );
+  assert.deepEqual(
+    written.lines.map((line) => [line.class, Boolean(line.written)]),
+    [
+      [CLASS.APPLY, true],
+      [CLASS.NOT_WRITTEN, false],
+      [CLASS.NOT_SENT, false],
+    ]
+  );
+  assert.equal(written.lines[1].error.status, 500);
+  assert.equal(written.lines[1].error.code, 'internal');
+  assert.match(written.header.stoppedBy, /answered 500/);
+  assert.equal(written.header.error.status, 500);
+  assert.equal(written.counts.written, 1);
+  assert.equal(written.counts.classes[CLASS.NOT_SENT], 1);
+  // The batch the server failed on was read back once, and nothing after it
+  // was sent.
+  assert.equal(patches(calls).length, 2);
+  assert.equal(store.get(id(1)).unitSize, 450);
+  assert.equal(store.get(id(2)).unitSize, 500);
+  assert.equal(store.get(id(3)).unitSize, 500);
+  assert.doesNotMatch(stderr.text(), /00000000-0000/);
+});
+
+for (const [status, body] of [
+  [429, { code: 'rate_limited', details: { retryAfterSeconds: 1 } }],
+  [403, { code: 'forbidden' }],
+  [500, { code: 'internal' }],
+]) {
+  test(`a ${status} inside the write stops the run instead of splitting the batch`, async () => {
+    const { client, calls } = fakeTarget(products(8), {
+      refuse: () => {
+        throw new HttpError(status, body);
+      },
+    });
+    const lines = [];
+    await assert.rejects(
+      () =>
+        replayChanges({
+          changes: sizeChanges(8),
+          client,
+          write: true,
+          batchSize: 4,
+          stderr: sink(),
+          lines,
+        }),
+      (error) => error instanceof ReplayStopped && error.status === status
+    );
+    assert.equal(patches(calls).length, 1);
+    assert.deepEqual(
+      lines.map((line) => line.class),
+      [...Array(4).fill(CLASS.NOT_WRITTEN), ...Array(4).fill(CLASS.NOT_SENT)]
+    );
+    assert.equal(lines[0].error.status, status);
+  });
+}
+
+test('a 429 the client waits out three times then stops the write', async () => {
+  const { client: fake } = fakeTarget(products(2));
+  let sends = 0;
+  const session = {
+    async fetch(path, init) {
+      if (path === BATCH_PATH) {
+        sends += 1;
+        throw new HttpError(429, {
+          code: 'rate_limited',
+          details: { retryAfterSeconds: 1 },
+        });
+      }
+      return fake.request(path, init);
+    },
+  };
+  let clock = 0;
+  const client = makeTargetClient({
+    session,
+    stderr: sink(),
+    sleep: async (ms) => {
+      clock += ms;
+    },
+    now: () => clock,
+  });
+  const lines = [];
+  await assert.rejects(
+    () =>
+      replayChanges({
+        changes: sizeChanges(2),
+        client,
+        write: true,
+        stderr: sink(),
+        lines,
+      }),
+    /still answered 429 after 3 waits/
+  );
+  assert.equal(sends, 4);
+  assert.deepEqual(
+    lines.map((line) => line.class),
+    [CLASS.NOT_WRITTEN, CLASS.NOT_WRITTEN]
+  );
+});
+
+test('a 413 halves the batch size once, and a second one stops the run', async () => {
+  const { client, calls } = fakeTarget(products(8), {
+    refuse: (entries) => {
+      if (entries.length > 2) {
+        throw new HttpError(413, { code: 'payload_too_large' });
+      }
+    },
+  });
+  const { lines } = await replayChanges({
+    changes: sizeChanges(8),
+    client,
+    write: true,
+    batchSize: 4,
+    stderr: sink(),
+  });
+  // 4 refused, then 2 + 2, then the next batches of 2: 2 + 2.
+  assert.deepEqual(
+    patches(calls).map((call) => call.body.items.length),
+    [4, 2, 2, 2, 2]
+  );
+  assert.ok(lines.every((line) => line.written));
+
+  const tight = fakeTarget(products(4), {
+    refuse: (entries) => {
+      if (entries.length > 1) {
+        throw new HttpError(413, { code: 'payload_too_large' });
+      }
+    },
+  });
+  await assert.rejects(
+    () =>
+      replayChanges({
+        changes: sizeChanges(4),
+        client: tight.client,
+        write: true,
+        batchSize: 4,
+        stderr: sink(),
+      }),
+    /413 for a batch of 2/
+  );
+  assert.equal(patches(tight.calls).length, 2);
+});
+
+test('the client sends numbers where catalog stores numeric strings', async () => {
+  const { client, store } = fakeTarget([product(1, { unitSize: '500.0000' })]);
+  const { lines } = await replayChanges({
+    changes: sizeChanges(1),
+    client,
+    write: true,
+  });
+  assert.equal(lines[0].written, true);
+  assert.equal(store.get(id(1)).unitSize, 450);
 });
 
 test('a 429 waits the seconds the answer names and sends the same request again', async () => {

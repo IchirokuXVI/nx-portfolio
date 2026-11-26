@@ -187,7 +187,30 @@ The products of class `apply` go through `PATCH /v1/admin/catalog/items/batch`,
 100 a request by default (`--batch-size`, at most 1,000). Each edit carries an
 `expect` of the values it changes and of the product's name and brand. A product
 that moved on the target after the lookup is refused by the server and is
-reported, and the rest of the batch is sent again.
+reported, and the rest of the batch is sent again. A product refused only
+because it already holds every new value is `already there`.
+
+What each answer does:
+
+- A 400, 409 or 422 with a problem code (an unregistered brand, a barcode
+  rule, a category that does not resolve) is a refusal of the content. The
+  batch is split in halves until the refused product is alone. It is
+  `refused`, and the other products are written.
+- A 502, 503, 504 or no answer can hide a write that landed. The run reads the
+  batch back, counts what landed as `already there`, and sends the rest again,
+  at most three times.
+- A 413 halves the batch size once.
+- Anything else stops the run: a 429 after three waits of the time the answer
+  names, a 401 or 403 after one new login, a second 413, any other 5xx, or a
+  fourth lost answer.
+
+When the run stops, it still writes the report and then exits with an error.
+The report holds every product written before the stop, the products of the
+request it stopped on as `not written` with the answer (or `already there`
+when a read back shows they landed), and every product after them as
+`not sent`. A `not written` line with `checked: false` could not be read back,
+so the target may hold it. The header names the answer under `error`. Fix the cause and run
+step 3 again: what was written is `already there`, the rest is `apply`.
 
 ### 5. Dry run again
 
@@ -231,6 +254,8 @@ carried.
 | `conflict`            | a field holds neither the old nor the new value                                                                           |
 | `apply`               | at least one field holds the old value and none holds a third one                                                         |
 | `refused`             | the target refused the write, with its code and message                                                                   |
+| `not written`         | sent in the request the run stopped on, and not on the target after it; the line names the answer                         |
+| `not sent`            | never sent, because the run stopped before it                                                                             |
 
 A dry run cannot predict a refusal of the write itself, such as an
 unregistered brand, because the route has no dry run.

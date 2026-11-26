@@ -224,6 +224,115 @@ test('a write through main sends the batch under an expect', async () => {
   });
 });
 
+test('a write through main that stops on batch 2 of 3 still writes the report, and fails', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'curation-replay-'));
+  const file = join(dir, 'changes.jsonl');
+  const ids = [1, 2, 3].map((n) => `00000000-0000-4000-8000-00000000000${n}`);
+  writeFileSync(
+    file,
+    [
+      {
+        header: true,
+        kind: CHANGE_LIST_KIND,
+        origin: AUDIT_ORIGIN,
+        otherEntities: {},
+      },
+      ...ids.map((itemId, index) => ({
+        auditId: `a${index}`,
+        action: 'UPDATE',
+        itemId,
+        before: { unitSize: 500 },
+        after: { unitSize: 450 },
+        current: { name: { es: 'Leche', en: 'Milk' }, brand: 'Marca' },
+      })),
+    ]
+      .map((line) => `${JSON.stringify(line)}\n`)
+      .join('')
+  );
+  let patches = 0;
+  const json = (body, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    });
+  const fetchImpl = async (url, init = {}) => {
+    const path = new URL(url).pathname;
+    if (path === '/v1/admin/auth/login') {
+      return json({ accessToken: 'token' }, 201);
+    }
+    if (path === '/v1/admin/auth/me') {
+      return json({ id: ACTOR });
+    }
+    if (path === '/v1/admin/catalog/items/lookup') {
+      const asked = JSON.parse(init.body).ids;
+      return json(
+        {
+          items: asked.map((id) => ({
+            id,
+            name: { es: 'Leche', en: 'Milk' },
+            brand: 'Marca',
+            unitSize: id === ids[0] && patches > 0 ? '450.0000' : '500.0000',
+            defaultUnit: 'MILLILITER',
+            packCount: null,
+            categories: [],
+          })),
+        },
+        201
+      );
+    }
+    if (path === '/v1/admin/catalog/items/batch') {
+      patches += 1;
+      return patches === 2
+        ? json({ code: 'internal', detail: 'catalog fell over' }, 500)
+        : json({ items: [] });
+    }
+    return json({ code: 'not_found' }, 404);
+  };
+  const report = join(dir, 'report.json');
+  const stderr = sink();
+  await assert.rejects(
+    () =>
+      main(
+        [
+          '--replay',
+          file,
+          '--target-url',
+          TARGET,
+          '--write',
+          '--batch-size',
+          '1',
+          '--report',
+          report,
+        ],
+        {
+          stderr,
+          env: { [REPLAY_PASSWORD_ENV]: 'p' },
+          isTty: false,
+          fetchImpl,
+          spawn: async () => ({ code: 1, stdout: '', stderr: '' }),
+          sleep: async () => undefined,
+        }
+      ),
+    /the write stopped: the target answered 500 \(internal\)/
+  );
+  assert.equal(patches, 2);
+  const written = JSON.parse(readFileSync(report, 'utf8'));
+  assert.deepEqual(
+    written.lines.map((line) => line.class),
+    ['apply', 'not written', 'not sent']
+  );
+  assert.equal(written.lines[0].written, true);
+  assert.deepEqual(written.lines[1].error, {
+    status: 500,
+    code: 'internal',
+    message: 'catalog fell over',
+  });
+  assert.equal(written.header.error.code, 'internal');
+  assert.match(stderr.text(), /1 written/);
+  assert.match(stderr.text(), /report: /);
+  assert.doesNotMatch(stderr.text(), /00000000-0000/);
+});
+
 test('--replay-identity refuses a report of another url before it signs in', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'curation-replay-'));
   const report = join(dir, 'report.json');

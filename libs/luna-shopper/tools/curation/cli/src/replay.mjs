@@ -56,7 +56,34 @@ export const CLASS = Object.freeze({
   CONFLICT: 'conflict',
   APPLY: 'apply',
   REFUSED: 'refused',
+  /** Sent in the request the run stopped on, and not on the target after it. */
+  NOT_WRITTEN: 'not written',
+  /** Never sent, because the run stopped before it. */
+  NOT_SENT: 'not sent',
 });
+
+/**
+ * The answers a split can narrow down to one product: a refusal that names a
+ * problem with the content of the batch. Any other answer is about the run
+ * (the rate, the operator, the size of the request, the server), and a split
+ * would only send the same refusal again, so the run stops.
+ */
+const CONTENT_REFUSAL_STATUSES = new Set([400, 409, 422]);
+
+/**
+ * The run stopped on an answer it cannot sort per product.
+ *
+ * `answer` is what the report records: the status, the problem code and the
+ * message. The message names no product, because stderr prints it.
+ */
+export class ReplayStopped extends Error {
+  constructor(message, answer, cause) {
+    super(message, { cause });
+    this.name = 'ReplayStopped';
+    this.answer = answer;
+    this.status = answer?.status ?? null;
+  }
+}
 
 /** What a dry run cannot predict, said in every report header. */
 export const DRY_RUN_LIMITS =
@@ -386,12 +413,137 @@ function failedFields(failure) {
   return (failure?.fields ?? []).map((field) => field.field);
 }
 
+/** The fields of a line the batch sends: those that still held `from`. */
+function sentFields(line) {
+  return line.fields.filter((field) => field.holds === 'from');
+}
+
+/**
+ * Whether an expectation failure only says the edit is already there: every
+ * field sent is named, and the target holds its `to`, and nothing else is
+ * named. That is what a resend meets when the first send committed after its
+ * answer was lost, or when someone made the same edit on the target.
+ */
+function refusedAsAlreadyThere(line, failure) {
+  const sent = sentFields(line);
+  const mismatches = failure?.fields ?? [];
+  if (sent.length === 0 || mismatches.length !== sent.length) {
+    return false;
+  }
+  return sent.every((field) => {
+    const spec = carriedField(field.field);
+    const mismatch = mismatches.find((entry) => entry.field === spec.send);
+    return (
+      mismatch !== undefined && sameValue(spec.kind, mismatch.actual, field.to)
+    );
+  });
+}
+
+/** Whether a refusal names a problem with the content, so a split can find it. */
+function contentRefusal(error, problem) {
+  return (
+    CONTENT_REFUSAL_STATUSES.has(error?.status) &&
+    typeof problem?.code === 'string' &&
+    problem.code !== ''
+  );
+}
+
+/** What the report records of the answer a run stopped on. */
+function answerOf(error, problem = error?.problem ?? problemOf(error)) {
+  const status = error?.status ?? null;
+  return {
+    status,
+    code: problem?.code ?? (status === null ? 'no_answer' : `http_${status}`),
+    message:
+      problem?.detail ?? problem?.message ?? String(error?.message ?? error),
+  };
+}
+
+/** Why the run stopped, in words that name no product, for stderr. */
+function stopReason(error, { lostRounds = 0, batch = null } = {}) {
+  const status = error?.status ?? null;
+  if (error instanceof ReplayStopped) {
+    return error.message;
+  }
+  if (lostRounds > MAX_LOST_ROUNDS) {
+    return `the target gave no answer ${lostRounds} times for one batch`;
+  }
+  if (status === null || status === undefined) {
+    return 'the target gave no answer';
+  }
+  if (status === 429) {
+    return `the target still answered 429 after ${MAX_RATE_RETRIES} waits`;
+  }
+  if (status === 401 || status === 403) {
+    return `the target refused the operator with ${status} after a new login`;
+  }
+  if (status === 413) {
+    return `the target answered 413 for a batch of ${batch ?? 'some'} products`;
+  }
+  const code = (error?.problem ?? problemOf(error))?.code;
+  return `the target answered ${status}${code ? ` (${code})` : ''}`;
+}
+
+/**
+ * Reads a batch back after an answer that may hide a write: a product that
+ * holds `to` for every field sent landed and is `already there`. Answers the
+ * products that did not land.
+ */
+async function readBack(client, group) {
+  const items = await lookupItems(
+    client,
+    group.map((line) => line.itemId)
+  );
+  const rest = [];
+  for (const line of group) {
+    const item = items.get(line.itemId);
+    const landed =
+      item &&
+      sentFields(line).every((field) => {
+        const spec = carriedField(field.field);
+        return sameValue(spec.kind, spec.read(item), field.to);
+      });
+    if (landed) {
+      line.class = CLASS.ALREADY;
+      line.afterLostAnswer = true;
+    } else {
+      rest.push(line);
+    }
+  }
+  return rest;
+}
+
+/** Marks a group as written, with each field it sent. */
+function markWritten(group) {
+  for (const line of group) {
+    line.written = true;
+    for (const field of sentFields(line)) {
+      field.sent = true;
+    }
+  }
+}
+
 /**
  * Sends the `apply` lines in batches, and sorts what the target refuses.
  *
- * Mutates the lines: a line that was written gets `written: true` and each
- * sent field `sent: true`; a refused one changes class. Each round removes at
- * least one product or ends the batch, so the loop ends.
+ * Mutates the lines as each answer comes, so what the report holds is true
+ * whenever the run stops: a line that was written gets `written: true` and
+ * each sent field `sent: true`; a refused one changes class.
+ *
+ * Which answer does what:
+ * - `item_expectation_failed` drops the products it names and sends the rest
+ *   again. A product refused only because it already holds every `to` is
+ *   `already there`.
+ * - A 400, 409 or 422 with a problem code splits the batch until the refused
+ *   product is alone, and it is `refused`.
+ * - A 502, 503, 504 or no answer reads the batch back and sends again what did
+ *   not land, at most three times.
+ * - A 413 halves the batch size once.
+ * - Anything else stops the run: a 429 after the client's waits, a 401 or 403
+ *   after the session's new login, a second 413, any other 5xx, an answer
+ *   lost a fourth time. The products of the request in flight are
+ *   `not written` (or `already there` when a read back shows they landed),
+ *   every product after them is `not sent`, and a `ReplayStopped` is thrown.
  */
 export async function writeApply(
   client,
@@ -400,15 +552,27 @@ export async function writeApply(
 ) {
   const pending = lines.filter((line) => line.class === CLASS.APPLY);
   const stats = { requests: 0, written: 0 };
-  for (let start = 0; start < pending.length; start += batchSize) {
-    const queue = [pending.slice(start, start + batchSize)];
-    let lostRounds = 0;
-    while (queue.length > 0) {
+  let size = batchSize;
+  let halved = false;
+  let cursor = 0;
+  let lostRounds = 0;
+  let current = null;
+  let unchecked = false;
+  const queue = [];
+  try {
+    while (queue.length > 0 || cursor < pending.length) {
+      if (queue.length === 0) {
+        queue.push(pending.slice(cursor, cursor + size));
+        cursor += size;
+        lostRounds = 0;
+      }
       const group = queue.shift();
       if (group.length === 0) {
         continue;
       }
+      current = group;
       stats.requests += 1;
+      let error;
       try {
         await client.request(BATCH_PATH, {
           method: 'PATCH',
@@ -417,109 +581,154 @@ export async function writeApply(
             requireRegisteredBrands: true,
           },
         });
-        for (const line of group) {
-          line.written = true;
-          for (const field of line.fields) {
-            if (field.holds === 'from') {
-              field.sent = true;
-            }
-          }
-        }
+      } catch (caught) {
+        error = caught;
+      }
+      if (error === undefined) {
+        markWritten(group);
         stats.written += group.length;
+        current = null;
         continue;
-      } catch (error) {
-        const problem = error.problem ?? problemOf(error);
-        const failures =
-          problem?.code === 'item_expectation_failed'
-            ? (problem?.details?.failures ?? [])
-            : [];
-        const named = new Map(
-          failures.map((failure) => [failure.itemId, failure])
-        );
-        const hit = group.filter((line) => named.has(line.itemId));
-        if (hit.length > 0) {
-          for (const line of hit) {
-            const failure = named.get(line.itemId);
-            const fields = failedFields(failure);
+      }
+
+      const problem = error.problem ?? problemOf(error);
+      const failures =
+        problem?.code === 'item_expectation_failed'
+          ? (problem?.details?.failures ?? [])
+          : [];
+      const named = new Map(
+        failures.map((failure) => [failure.itemId, failure])
+      );
+      const hit = group.filter((line) => named.has(line.itemId));
+      if (hit.length > 0) {
+        for (const line of hit) {
+          const failure = named.get(line.itemId);
+          const fields = failedFields(failure);
+          if (refusedAsAlreadyThere(line, failure)) {
+            line.class = CLASS.ALREADY;
+            if (lostRounds > 0) {
+              line.afterLostAnswer = true;
+            }
+          } else {
             line.class =
               fields.includes('name') || fields.includes('brand')
                 ? CLASS.IDENTITY
                 : CLASS.CONFLICT;
-            line.refusedOn = fields;
-            for (const mismatch of failure.fields ?? []) {
-              const spec = [...line.fields].find(
-                (field) => carriedField(field.field).send === mismatch.field
-              );
-              if (spec) {
-                spec.target = mismatch.actual ?? null;
-              }
-              if (mismatch.field === 'name' || mismatch.field === 'brand') {
-                line.identity.target = {
-                  ...(line.identity.target ?? {}),
-                  [mismatch.field]:
-                    mismatch.field === 'name'
-                      ? nameHalves(mismatch.actual)
-                      : (mismatch.actual ?? null),
-                };
-              }
+          }
+          line.refusedOn = fields;
+          for (const mismatch of failure.fields ?? []) {
+            const spec = line.fields.find(
+              (field) => carriedField(field.field).send === mismatch.field
+            );
+            if (spec) {
+              spec.target = mismatch.actual ?? null;
+            }
+            if (mismatch.field === 'name' || mismatch.field === 'brand') {
+              line.identity.target = {
+                ...(line.identity.target ?? {}),
+                [mismatch.field]:
+                  mismatch.field === 'name'
+                    ? nameHalves(mismatch.actual)
+                    : (mismatch.actual ?? null),
+              };
             }
           }
-          queue.unshift(group.filter((line) => !named.has(line.itemId)));
-          continue;
         }
-        if (lostAnswer(error)) {
-          lostRounds += 1;
-          const items = await lookupItems(
-            client,
-            group.map((line) => line.itemId)
+        queue.unshift(group.filter((line) => !named.has(line.itemId)));
+        continue;
+      }
+
+      if (lostAnswer(error)) {
+        lostRounds += 1;
+        let rest;
+        try {
+          rest = await readBack(client, group);
+        } catch (readError) {
+          unchecked = true;
+          throw readError;
+        }
+        if (lostRounds > MAX_LOST_ROUNDS) {
+          throw new ReplayStopped(
+            `the write stopped: ${stopReason(error, { lostRounds })}`,
+            { ...answerOf(error, problem), code: 'no_answer' },
+            error
           );
-          const rest = [];
-          for (const line of group) {
-            const item = items.get(line.itemId);
-            const landed =
-              item &&
-              line.fields
-                .filter((field) => field.holds === 'from')
-                .every((field) => {
-                  const spec = carriedField(field.field);
-                  return sameValue(spec.kind, spec.read(item), field.to);
-                });
-            if (landed) {
-              line.class = CLASS.ALREADY;
-              line.afterLostAnswer = true;
-            } else {
-              rest.push(line);
-            }
-          }
-          if (lostRounds > MAX_LOST_ROUNDS) {
-            for (const line of rest) {
-              line.class = CLASS.REFUSED;
-              line.code = 'no_answer';
-              line.message = `the target gave no answer ${lostRounds} times: ${error.message}`;
-            }
-            continue;
-          }
-          stderr?.write(
-            `a batch got no answer (${error.status ?? 'no status'}); ${group.length - rest.length} of its ${group.length} products landed, the rest are sent again\n`
+        }
+        stderr?.write(
+          `a batch got no answer (${error.status ?? 'no status'}); ${group.length - rest.length} of its ${group.length} products landed, the rest are sent again\n`
+        );
+        queue.unshift(rest);
+        continue;
+      }
+
+      if (contentRefusal(error, problem)) {
+        if (group.length === 1) {
+          const [line] = group;
+          line.class = CLASS.REFUSED;
+          line.code = problem.code;
+          line.message = problem.detail ?? problem.message ?? error.message;
+          continue;
+        }
+        const middle = Math.ceil(group.length / 2);
+        queue.unshift(group.slice(0, middle), group.slice(middle));
+        continue;
+      }
+
+      if (error.status === 413 && !halved && group.length > 1) {
+        halved = true;
+        size = Math.ceil(size / 2);
+        stderr?.write(
+          `the target answered 413 for a batch of ${group.length}; sending batches of ${size} from now on\n`
+        );
+        const halves = [];
+        for (let start = 0; start < group.length; start += size) {
+          halves.push(group.slice(start, start + size));
+        }
+        queue.unshift(...halves);
+        continue;
+      }
+
+      // A server error may still hide a write that committed, so the batch is
+      // read back before its products are called not written.
+      if (error.status >= 500) {
+        try {
+          await readBack(client, group);
+        } catch {
+          unchecked = true;
+        }
+      }
+      throw new ReplayStopped(
+        `the write stopped: ${stopReason(error, { batch: group.length })}`,
+        answerOf(error, problem),
+        error
+      );
+    }
+  } catch (error) {
+    const stop =
+      error instanceof ReplayStopped
+        ? error
+        : new ReplayStopped(
+            `the write stopped: ${stopReason(error)}`,
+            answerOf(error),
+            error
           );
-          queue.unshift(rest);
-          continue;
+    for (const line of current ?? []) {
+      if (line.class === CLASS.APPLY && !line.written) {
+        line.class = CLASS.NOT_WRITTEN;
+        line.error = stop.answer;
+        if (unchecked) {
+          line.checked = false;
         }
-        if (error.status >= 400 && error.status < 500 && error.status !== 401) {
-          if (group.length === 1) {
-            const [line] = group;
-            line.class = CLASS.REFUSED;
-            line.code = problem?.code ?? `http_${error.status}`;
-            line.message = problem?.detail ?? problem?.message ?? error.message;
-            continue;
-          }
-          const middle = Math.ceil(group.length / 2);
-          queue.unshift(group.slice(0, middle), group.slice(middle));
-          continue;
-        }
-        throw error;
       }
     }
+    for (const line of [...queue.flat(), ...pending.slice(cursor)]) {
+      if (line.class === CLASS.APPLY && !line.written) {
+        line.class = CLASS.NOT_SENT;
+        line.reason = 'the run stopped before this product was sent';
+      }
+    }
+    stop.stats = stats;
+    throw stop;
   }
   return stats;
 }
@@ -531,6 +740,11 @@ export async function writeApply(
 /**
  * Sorts every change into its class against the target, and in a write run
  * sends the `apply` class. Answers the report lines and the request counts.
+ *
+ * `lines` is the caller's array and is filled as each product is judged and
+ * each answer comes, so a caller that catches a throw still holds every
+ * outcome known so far. A product the run did not reach is `not sent`. Any
+ * failure is thrown as a `ReplayStopped`, whose message names no product.
  */
 export async function replayChanges({
   changes,
@@ -541,34 +755,64 @@ export async function replayChanges({
   washCheck = true,
   extraIds = [],
   stderr,
+  lines = [],
+  progress = {},
 }) {
-  const asked = changes
-    .filter((change) => change.class === null)
-    .map((change) => change.itemId);
-  const items = await lookupItems(client, [...asked, ...extraIds]);
+  progress.entryReads = 0;
+  progress.items = new Map();
+  let index = 0;
+  try {
+    const asked = changes
+      .filter((change) => change.class === null)
+      .map((change) => change.itemId);
+    const items = await lookupItems(client, [...asked, ...extraIds]);
+    progress.items = items;
 
-  let entryReads = 0;
-  const lines = [];
-  for (const change of changes) {
-    const item = change.class === null ? items.get(change.itemId) : undefined;
-    let washRows = null;
-    if (
-      washCheck &&
-      item &&
-      !item.mergedInto &&
-      washCandidate(change, item) !== null
-    ) {
-      washRows = await readEntries(client, change.itemId);
-      entryReads += 1;
+    for (; index < changes.length; index++) {
+      const change = changes[index];
+      const item = change.class === null ? items.get(change.itemId) : undefined;
+      let washRows = null;
+      if (
+        washCheck &&
+        item &&
+        !item.mergedInto &&
+        washCandidate(change, item) !== null
+      ) {
+        washRows = await readEntries(client, change.itemId);
+        progress.entryReads += 1;
+      }
+      lines.push(classify(change, item, { esOnly, washRows }));
     }
-    lines.push(classify(change, item, { esOnly, washRows }));
+  } catch (error) {
+    for (const change of changes.slice(index)) {
+      const line = classify(change, undefined);
+      lines.push(
+        change.class
+          ? line
+          : {
+              ...line,
+              class: CLASS.NOT_SENT,
+              reason: 'the run stopped before this product was read',
+            }
+      );
+    }
+    throw new ReplayStopped(
+      `the run stopped while it read the target: ${stopReason(error)}`,
+      answerOf(error),
+      error
+    );
   }
 
   let written = { requests: 0, written: 0 };
   if (write) {
     written = await writeApply(client, lines, { batchSize, esOnly, stderr });
   }
-  return { lines, items, entryReads, written };
+  return {
+    lines,
+    items: progress.items,
+    entryReads: progress.entryReads,
+    written,
+  };
 }
 
 /** Products per class, in the order of the table, and fields sent. */
@@ -824,8 +1068,8 @@ export async function replayDecisions({
   applyFile,
   splitParts,
   writeFile = (path, text) => writeFileSync(path, text, 'utf8'),
+  lines = [],
 }) {
-  const lines = [];
   const noTwin = new Map();
   for (const record of prepared.records) {
     if (
@@ -860,7 +1104,28 @@ export async function replayDecisions({
           .join('')
       );
       requests += 1;
-      const answer = await applyFile(path);
+      let answer;
+      try {
+        answer = await applyFile(path);
+      } catch (error) {
+        // The rows of this part were sent and no answer was read, so they
+        // are refused with what is known. The caller reports every later
+        // part as not sent.
+        const stop = new ReplayStopped(
+          `the decisions stopped: ${stopReason(error)}`,
+          answerOf(error),
+          error
+        );
+        lines.push(
+          ...pending.map((record) =>
+            decisionLine(record, DECISION_CLASS.REFUSED, {
+              code: stop.answer.code,
+              detail: `the run stopped on this part, and whether it landed was not read: ${stop.answer.message}`,
+            })
+          )
+        );
+        throw stop;
+      }
       if (answer.applied) {
         lines.push(
           ...pending.map((record) =>
@@ -953,6 +1218,8 @@ export async function runReplay({
     droppedUnchanged: folded.dropped,
   };
   let failure = null;
+  const progress = {};
+  const decisionLines = [];
   try {
     const result = await replayChanges({
       changes: folded.changes,
@@ -962,11 +1229,11 @@ export async function runReplay({
       esOnly: folded.esOnlyIdentity,
       extraIds: decisions ? decisionItemIds(decisions.prepared) : [],
       stderr,
+      lines: report.lines,
+      progress,
     });
-    report.lines = result.lines;
-    report.entryReads = result.entryReads;
     if (decisions) {
-      const replayed = await replayDecisions({
+      await replayDecisions({
         prepared: decisions.prepared,
         items: result.items,
         write,
@@ -974,19 +1241,32 @@ export async function runReplay({
         applyFile: decisions.applyFile,
         splitParts: decisions.splitParts,
         writeFile,
+        lines: decisionLines,
       });
-      report.decisions = {
-        file: decisions.file,
-        counts: countDecisions(replayed.lines),
-        lines: replayed.lines,
-      };
     }
   } catch (error) {
     failure = error;
     header.stoppedBy = String(error?.message ?? error);
+    header.error = error?.answer ?? answerOf(error);
   } finally {
     header.endedAt = now().toISOString();
     header.requests = client.requests;
+    report.entryReads = progress.entryReads ?? 0;
+    if (decisions) {
+      // Every decided row has a line, also when the run stopped before or
+      // inside the decisions.
+      const seen = new Set(decisionLines.map((line) => line.entryId));
+      for (const record of decisions.prepared.records) {
+        if (!seen.has(record.entryId)) {
+          decisionLines.push(decisionLine(record, DECISION_CLASS.NOT_SENT));
+        }
+      }
+      report.decisions = {
+        file: decisions.file,
+        counts: countDecisions(decisionLines),
+        lines: decisionLines,
+      };
+    }
     report.counts = countLines(report.lines);
     report.notCarried = notCarriedOf(changeList.header, report.lines);
     writeReport(reportPath, report, writeFile);
@@ -1086,18 +1366,19 @@ export async function runReplayIdentity({
   };
   let failure = null;
   try {
-    const result = await replayChanges({
+    await replayChanges({
       changes,
       client,
       write,
       batchSize,
       washCheck: false,
       stderr,
+      lines: report.lines,
     });
-    report.lines = result.lines;
   } catch (error) {
     failure = error;
     report.header.stoppedBy = String(error?.message ?? error);
+    report.header.error = error?.answer ?? answerOf(error);
   } finally {
     report.header.endedAt = now().toISOString();
     report.header.requests = client.requests;
