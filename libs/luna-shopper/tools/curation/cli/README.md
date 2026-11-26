@@ -353,16 +353,23 @@ with an error.
 
 When the answer to a part is lost, the run reads its rows back on the target.
 A row that is no longer pending there is `decided on target`, with the status
-it holds under `targetStatus`. A row still pending is `not written` with
-`checked: false` after a timeout, no answer or a 5xx, because the part may
-still land after the read; only after a 2xx whose body could not be read is it
-plainly `not written`. A row that cannot be read back (a `createItem`, an
-`accept` onto a product the same part creates, a row its product does not
-list, or a failed read) is `not written` with `checked: false`: the target may
-hold it. stderr counts the rows with `checked: false` apart, and the report
-counts them as `decisions.counts.outcomeUnknown`. Run the dry run again to
-settle them. The products the route created and could not delete again are
-listed under `decisions.orphanedItemIds` of the report, and stderr counts them.
+it holds under `targetStatus`. A row still pending is `outcome unknown` after
+a timeout, no answer or a 5xx, because the part may still land after the
+read; only after a 2xx whose body could not be read is it plainly
+`not written`. A row that cannot be read back (a `createItem`, an `accept`
+onto a product the same part creates, a row its product does not list, or a
+failed read) is `outcome unknown` too: the target may hold it. So is every row
+of the part in flight when Ctrl+C (or a `kill`) stops the run, with the code
+`interrupted`. A decision row of class `outcome unknown` has the same meaning
+as a product line of that class: it always carries `checked: false`,
+`lastKnownClass` keeps the class it held before (`not written`), and its
+`code` and `detail` say why its outcome is not known. The report counts these
+rows as `decisions.counts.outcomeUnknown`, which is the count of the class, so
+the two never differ, and stderr says "N rows were sent and their outcome is
+not known, run the dry run again". Run the dry run again to settle them. A
+report written before this class existed shows such a row as `not written`
+with `checked: false`. The products the route created and could not delete
+again are listed under `decisions.orphanedItemIds` of the report, and stderr counts them.
 
 A queue row that you decided by hand in the back office leaves no decisions
 file, so it is not carried.
@@ -382,7 +389,7 @@ file, so it is not carried.
 | `apply`               | at least one field holds the old value and none holds a third one                                                                                                                                                                                    |
 | `refused`             | the target refused the write, with its code and message                                                                                                                                                                                              |
 | `not written`         | sent in the request the run stopped on, and not on the target after it; the line names the answer                                                                                                                                                    |
-| `outcome unknown`     | sent in a request whose outcome nothing later proved: the target may hold it. Always `checked: false`, with the class it held before as `lastKnownClass`; a dry run settles it                                                                       |
+| `outcome unknown`     | sent in a request whose outcome nothing later proved: the target may hold it. Always `checked: false`, with the class it held before as `lastKnownClass`; a dry run settles it. A decision row uses this class too                                   |
 | `not sent`            | never sent, because the run stopped before it                                                                                                                                                                                                        |
 
 A dry run cannot predict a refusal of the write itself, such as an

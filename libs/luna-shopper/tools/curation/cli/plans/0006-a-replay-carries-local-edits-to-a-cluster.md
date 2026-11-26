@@ -612,6 +612,25 @@ agree by construction. The report classes after a write are thus `refused`, `not
 `identity changed` lines, so a report of the old version, where such a line is `not written`
 with `checked: false`, is read as before. The decisions replay keeps its own classes.
 
+**162a (owner, 2026-11-26): a refused line whose outcome is not known.** A `refused` product line
+that still carries `sentInLostRequest` when the run ends becomes `outcome unknown` like any
+other, and so it leaves the `refused` count on purpose: `lastKnownClass` says `refused`, and its
+code and message stay on the line. No second count of such lines is printed.
+
+**163a (owner, 2026-11-26): decision rows share the class.** So that one report says one thing
+one way, a decision row whose part was sent and whose outcome nothing proved gets the class
+`outcome unknown` too, with `checked: false`, its own `code` and `detail`, and the class it held
+before as `lastKnownClass` (`not written`). It is given by the same rule as a product line:
+`markDecisionsUnsettled` and `markUnsettled` both go through one function, and marking twice
+changes nothing. `decisions.counts.outcomeUnknown` is the count of that class, so the two agree
+by construction in every path: the end of the run, a stop on a 5xx or a lost answer, a failed
+report write and a signal. This replaces "The decisions replay keeps its own classes" of 161a
+and, for the decisions, "a row still pending is `not written` with `checked: false`" and "They
+stay inside `not written` too" of the fix round of the report below. The report changes only:
+what is sent, written and resent, the read back, the timeouts and the stop rules stay as they
+were. No pass reads the decisions of an earlier report, so a report of the old version, where
+such a row is `not written` with `checked: false`, is still read as before.
+
 **Builder choices, 2026-11-26:**
 
 - The export runs a plain `SELECT` under `psql -Atq` instead of `COPY ... TO STDOUT`, because the
