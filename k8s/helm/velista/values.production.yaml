@@ -56,7 +56,15 @@ lunaShopperBackend:
     # (backend plan 0231, section 6, step 4). A build from before velista plan
     # 0173 would meet terms_acceptance_missing on register with no screen that
     # understands it, and 0.17.0 is the first release that carries the screen.
-    minClientVersion: '0.17.0'
+    #
+    # Raised to velista 0.20.0 with that release (backend plan 0274, velista plans
+    # 0200 and 0201). The demand route of a basket reads `quantity` as the whole
+    # ask of the list since plan 0274, and no longer as what is left, so an older
+    # build would change an ask without an error. Plan 0246 (M8) asks for the same
+    # raise: an older build adds one gram where it means one kilo. The Android
+    # build on Google Play must be 0.20.0 or newer too, because the 0.19.0 build
+    # cannot update itself over the air (velista plan 0180 came after it).
+    minClientVersion: '0.20.0'
     # Every account accepts the Terms (backend plan 0231, section 5.3). On since
     # velista 0.17.0 shipped the acceptance UI; an existing account is asked on
     # its next load. The gateway refuses to boot with it true and no published
