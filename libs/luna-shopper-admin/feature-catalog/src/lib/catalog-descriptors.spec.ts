@@ -11,6 +11,7 @@ import {
   settleDraft,
   toInput,
   toRecordValue,
+  validateDraft,
   type FieldDescriptor,
   type ResourceRow,
   type Wire,
@@ -1430,6 +1431,89 @@ describe('the pack and piece counts of a product', () => {
       defaultUnit: 'UNIT',
       pieceCount: null,
     });
+  });
+
+  /** One change, settled as the record store settles it, and its body. */
+  const sent = (row: Item, field: string, value: string) => {
+    const draft = draftFor(ITEMS, row, 'edit');
+    const settled = settleDraft(
+      ITEMS,
+      { ...draft, [field]: value },
+      row,
+      field
+    );
+    return toInput(ITEMS, settled, 'edit', draft);
+  };
+
+  it('sends pieceCount null when a typed weight takes the size away', () => {
+    expect(sent(counted('GRAM', 70, 2, 100), 'approxWeight', '50')).toEqual({
+      unitSize: null,
+      approxWeight: 50,
+      pieceCount: null,
+    });
+  });
+
+  it('sends the size and the pieces null when the unit becomes the kilo', () => {
+    expect(
+      sent(counted('GRAM', 70, 2, 100), 'defaultUnit', 'KILOGRAM')
+    ).toEqual({
+      defaultUnit: 'KILOGRAM',
+      unitSize: null,
+      pieceCount: null,
+    });
+  });
+
+  it('keeps the size and sends the pieces null when the unit becomes the litre', () => {
+    expect(sent(counted('GRAM', 70, 2, 100), 'defaultUnit', 'LITER')).toEqual({
+      defaultUnit: 'LITER',
+      pieceCount: null,
+    });
+  });
+
+  it('keeps the pieces when grams become millilitres', () => {
+    expect(
+      sent(counted('GRAM', 70, 2, 100), 'defaultUnit', 'MILLILITER')
+    ).toEqual({ defaultUnit: 'MILLILITER' });
+  });
+
+  it('sends neither count for an edit of the brand', () => {
+    expect(sent(counted('GRAM', 70, 2, 100), 'brand', 'Haribo')).toEqual({
+      brand: 'Haribo',
+    });
+    // A product whose pieces are hidden, holding none.
+    expect(sent(counted('UNIT', 12, 4), 'brand', 'Haribo')).toEqual({
+      brand: 'Haribo',
+    });
+    expect(sent(counted('KILOGRAM', null), 'brand', 'Haribo')).toEqual({
+      brand: 'Haribo',
+    });
+  });
+
+  it.each([
+    ['pieceCount', '1', 'resource.error.tooSmall'],
+    ['pieceCount', '0', 'resource.error.tooSmall'],
+    ['pieceCount', '2.5', 'resource.error.notAnInteger'],
+    ['pieceCount', '10001', 'resource.error.tooLarge'],
+    ['packCount', '1', 'resource.error.tooSmall'],
+    ['packCount', '0', 'resource.error.tooSmall'],
+    ['packCount', '2.5', 'resource.error.notAnInteger'],
+    ['packCount', '1001', 'resource.error.tooLarge'],
+  ])('refuses %s %s', (field, value, key) => {
+    const row = counted('GRAM', 70);
+    const draft = draftFor(ITEMS, row, 'edit');
+    const problems = validateDraft(
+      ITEMS,
+      { ...draft, [field]: value },
+      'edit',
+      draft
+    );
+
+    expect(Object.keys(problems)).toEqual([field]);
+    expect(
+      problems[field]?.map((message) =>
+        message.kind === 'key' ? message.key : message.text
+      )
+    ).toEqual([key]);
   });
 
   it('sends null for an emptied count, which clears it', () => {

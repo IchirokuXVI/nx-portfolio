@@ -198,7 +198,9 @@ export function draftFor<T extends ResourceRow>(
  * sent: choosing "Kilogram" empties the size.
  *
  * Only `changed` excludes. The field it empties is not asked in turn, so two
- * fields that exclude each other cannot empty each other in one change.
+ * fields that exclude each other cannot empty each other in one change. What
+ * is emptied is seen by the `shown` rules after it (admin plan 0075): a typed
+ * weight empties the size, and so the pieces shown only beside a size.
  *
  * It empties and never fills, so the rule at the top of this file holds:
  * nothing here works out one value from another. Only a field the draft holds
@@ -218,27 +220,44 @@ export function settleDraft<T extends ResourceRow>(
     changedField?.excludes !== undefined && !isEmptyValue(draft[changed] ?? '')
       ? changedField.excludes
       : undefined;
-  const held = { ...(row ?? {}), ...draft } as Partial<T>;
-
   let settled: Record<string, DraftValue> | null = null;
-  for (const field of descriptor.fields) {
-    if (!(field.name in draft) || field.name === changed) {
-      continue;
+  // Rounds, each reading the draft as the round before left it, until one
+  // empties nothing (admin plan 0075). A field emptied in one round is seen
+  // empty by every `shown` of the next: a weight empties the size, and the
+  // pieces, shown only beside a size, are emptied in the round after. The
+  // first round is the whole of what one pass did before. Every round only
+  // empties, so the rounds end by themselves; the cap is for a pair of rules
+  // that would not.
+  for (let round = 0; round < SETTLE_ROUNDS; round++) {
+    const current: ResourceDraft = settled ?? draft;
+    const held = { ...(row ?? {}), ...current } as Partial<T>;
+    let emptied = false;
+    for (const field of descriptor.fields) {
+      if (!(field.name in draft) || field.name === changed) {
+        continue;
+      }
+      const hidden = field.shown !== undefined && !field.shown(held);
+      if (field.name !== excluded && !hidden) {
+        continue;
+      }
+      const empty = emptyValue(field);
+      if (sameValue(current[field.name], empty)) {
+        continue;
+      }
+      settled ??= { ...draft };
+      settled[field.name] = empty;
+      emptied = true;
     }
-    const hidden = field.shown !== undefined && !field.shown(held);
-    if (field.name !== excluded && !hidden) {
-      continue;
+    if (!emptied) {
+      break;
     }
-    const empty = emptyValue(field);
-    if (sameValue(draft[field.name], empty)) {
-      continue;
-    }
-    settled ??= { ...draft };
-    settled[field.name] = empty;
   }
 
   return settled ?? draft;
 }
+
+/** The most rounds {@link settleDraft} reads the draft in. */
+const SETTLE_ROUNDS = 8;
 
 /** Whether a control value counts as nothing having been entered. */
 export function isEmptyValue(value: DraftValue): boolean {
