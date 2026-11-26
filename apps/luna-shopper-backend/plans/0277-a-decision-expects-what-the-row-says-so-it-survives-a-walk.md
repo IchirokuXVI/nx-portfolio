@@ -241,6 +241,12 @@ today. The route has no `skipStale` flag and no per row outcome.
 
 Each A is the smallest build, and the other options can be added later.
 
+**D4 (fix round, 2026-11-26):** section 3 names `@IsOptional() @IsDateString()` for
+`lastSeenAt`. The build uses `@ValidateIf` for undefined alone instead, on `lastSeenAt` and on
+`observed`, so an explicit `null` is a 400 as the contract schema says, and absent is still
+allowed. Every field of `SourceEntryObservedDto` is read as sent (`asSent`, as plan 0193 did for
+body flags), so a value of the wrong JSON type is a 400 rather than a value the pipe converted.
+
 ## Open decisions for the owner
 
 **O1. Does a stale row refuse the whole file, or only itself?**

@@ -1316,6 +1316,71 @@ describe('SourceEntryBatchService', () => {
       expect(result.applied).toBe(true);
     });
 
+    it('compares approxWeight as a number, so "250.5000" equals 250.5', async () => {
+      // A piece sold by the kilo with a weight about it: the column is
+      // numeric(12,4), so Postgres hands it back as a string with four places.
+      const rows = [
+        entry({
+          unitSize: null,
+          sizeFormat: null,
+          soldByWeight: true,
+          approxWeight: '250.5000' as unknown as number,
+        }),
+      ];
+      const { service, saved } = build({ rows });
+
+      const result = await service.applyDecisions(
+        request([
+          accept({
+            status: SourceEntryStatus.UNRESOLVED,
+            observed: {
+              ...observed,
+              unitSize: null,
+              sizeFormat: null,
+              soldByWeight: true,
+              approxWeight: 250.5,
+            },
+          }),
+        ])
+      );
+
+      expect(result.applied).toBe(true);
+      expect(saved.map((row) => row.id)).toEqual(['e-1']);
+    });
+
+    it('refuses an operation with no expect at all, before it reads a row', async () => {
+      const { service, manager } = build();
+
+      const result = await service.applyDecisions(
+        request([
+          accept(
+            undefined as unknown as SourceEntryDecisionOperation['expect']
+          ),
+        ])
+      );
+
+      expect(result.applied).toBe(false);
+      expect(result.failedStep).toBe('VALIDATE');
+      expect(result.results[0].error?.code).toBe(
+        BulkOperationErrorCode.MALFORMED_OPERATION
+      );
+      expect(manager.transaction).not.toHaveBeenCalled();
+    });
+
+    it('documents current behaviour: a row whose packaging alone changed is not refused, since packaging is not in observed', async () => {
+      // The owner is deciding whether packaging joins `observed`. Until then a
+      // walk that rewrote only the container the chain states passes the check.
+      const rows = [entry({ packaging: 'botella' })];
+      const { service, saved } = build({ rows });
+
+      const result = await service.applyDecisions(
+        request([accept({ status: SourceEntryStatus.UNRESOLVED, observed })])
+      );
+
+      expect(result.applied).toBe(true);
+      expect(saved.map((row) => row.id)).toEqual(['e-1']);
+    });
+
     it('holds both when both are present', async () => {
       // A moved lastSeenAt refuses, however the content agrees.
       const seenAgain = build({ rows: [entry({ lastSeenAt: LATER })] });

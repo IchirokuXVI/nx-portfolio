@@ -1,4 +1,3 @@
-import { ValidationPipe } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import {
@@ -8,6 +7,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   ERROR_CODES,
+  createValidationPipe,
   enableApiVersioning,
 } from '@portfolio/luna-shopper/platform';
 import type { AddressInfo } from 'node:net';
@@ -122,13 +122,9 @@ async function boot() {
     }
   }
   nest.use(bodyParserProblems(limits));
-  nest.useGlobalPipes(
-    new ValidationPipe({
-      transform: true,
-      whitelist: true,
-      forbidNonWhitelisted: true,
-    })
-  );
+  // The gateway's own pipe, implicit conversion included: the strict types of
+  // plan 0277's `observed` only mean something against the pipe that converts.
+  nest.useGlobalPipes(createValidationPipe());
   await nest.init();
   await nest.listen(0);
   const { port } = nest.getHttpServer().address() as AddressInfo;
@@ -285,6 +281,58 @@ describe('the bulk decision routes', () => {
             },
           ],
         });
+
+        expect(response.status).toBe(400);
+        expect(context.send).not.toHaveBeenCalled();
+      });
+
+      function withExpect(expectation: Record<string, unknown>) {
+        return {
+          operations: [
+            {
+              ...accept(ENTRY),
+              expect: { status: SourceEntryStatus.UNRESOLVED, ...expectation },
+            },
+          ],
+        };
+      }
+
+      it.each([
+        ['soldByWeight', 'false'],
+        ['unitSize', '360'],
+        ['packCount', '4'],
+        ['brand', 5],
+      ])(
+        'refuses observed.%s sent as %p, a value of the wrong JSON type, rather than converting it',
+        async (field, value) => {
+          const response = await post(
+            context.origin,
+            PATH,
+            withExpect({ observed: { ...observed, [field]: value } })
+          );
+
+          expect(response.status).toBe(400);
+          expect(context.send).not.toHaveBeenCalled();
+        }
+      );
+
+      it('refuses an explicit null observed, as the contract schema does', async () => {
+        const response = await post(
+          context.origin,
+          PATH,
+          withExpect({ lastSeenAt: SEEN, observed: null })
+        );
+
+        expect(response.status).toBe(400);
+        expect(context.send).not.toHaveBeenCalled();
+      });
+
+      it('refuses an explicit null lastSeenAt, as the contract schema does', async () => {
+        const response = await post(
+          context.origin,
+          PATH,
+          withExpect({ lastSeenAt: null, observed })
+        );
 
         expect(response.status).toBe(400);
         expect(context.send).not.toHaveBeenCalled();

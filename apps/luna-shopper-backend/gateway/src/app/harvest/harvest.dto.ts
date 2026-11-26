@@ -500,34 +500,45 @@ export class CreateItemFromEntryDto {
  * guard less than it seems to, and a reader of the file could not tell. So
  * each nullable field carries `@ValidateIf` for null alone, and an absent one
  * still fails its validators.
+ *
+ * Every field is read as sent ({@link asSent}): the pipe's implicit
+ * conversion would turn `soldByWeight: "false"` into true and `unitSize:
+ * "360"` into 360, and a check compared on a converted value can pass a row it
+ * should refuse. A value of the wrong JSON type is a 400.
  */
 export class SourceEntryObservedDto {
   @ApiProperty({ minLength: 1 })
+  @Transform(asSent)
   @IsString()
   @MinLength(1)
   name!: string;
 
   @ApiProperty({ type: String, nullable: true })
+  @Transform(asSent)
   @ValidateIf((_, value) => value !== null)
   @IsString()
   brand!: string | null;
 
   @ApiProperty({ type: String, nullable: true })
+  @Transform(asSent)
   @ValidateIf((_, value) => value !== null)
   @IsString()
   ean!: string | null;
 
   @ApiProperty({ type: String, nullable: true })
+  @Transform(asSent)
   @ValidateIf((_, value) => value !== null)
   @IsString()
   sizeFormat!: string | null;
 
   @ApiProperty({ type: Number, nullable: true })
+  @Transform(asSent)
   @ValidateIf((_, value) => value !== null)
   @IsNumber()
   unitSize!: number | null;
 
   @ApiProperty({ enum: SOURCE_SIZE_UNITS, nullable: true })
+  @Transform(asSent)
   @ValidateIf((_, value) => value !== null)
   @IsIn([...SOURCE_SIZE_UNITS])
   sizeUnit!: SourceSizeUnit | null;
@@ -538,6 +549,7 @@ export class SourceEntryObservedDto {
     minimum: PACK_COUNT_MIN,
     maximum: PACK_COUNT_MAX,
   })
+  @Transform(asSent)
   @ValidateIf((_, value) => value !== null)
   @IsInt()
   @Min(PACK_COUNT_MIN)
@@ -545,10 +557,12 @@ export class SourceEntryObservedDto {
   packCount!: number | null;
 
   @ApiProperty()
+  @Transform(asSent)
   @IsBoolean()
   soldByWeight!: boolean;
 
   @ApiProperty({ type: Number, nullable: true })
+  @Transform(asSent)
   @ValidateIf((_, value) => value !== null)
   @IsNumber()
   approxWeight!: number | null;
@@ -563,6 +577,10 @@ export class SourceEntryObservedDto {
  * field of `observed` means the row says something else now. Both are optional
  * here; the harvester refuses an operation that carries neither, as it checks
  * the other combinations of {@link SourceEntryDecisionDto}.
+ *
+ * Optional means absent, not null. `@IsOptional` would let a null through,
+ * which the contract schema refuses, so each of the two skips its validators
+ * only when it is undefined and a null is a 400.
  */
 export class SourceEntryExpectationDto {
   @ApiProperty({ enum: SourceEntryStatus })
@@ -574,7 +592,7 @@ export class SourceEntryExpectationDto {
     description:
       'Exactly the string the queue listing printed for this row. When present, a row observed again since then fails the check, whatever it says. At least one of this and `observed` is present.',
   })
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsDateString()
   lastSeenAt?: string;
 
@@ -583,7 +601,8 @@ export class SourceEntryExpectationDto {
     description:
       'The fields the decision was made on, exactly as the queue listing printed them, every one present with null where the row holds nothing. When present, each field is compared with the row under the route’s lock, and a field that differs fails the operation with `EXPECT_MISMATCH` naming it. A row a later walk saw again but that says the same passes. Prices are not compared. At least one of this and `lastSeenAt` is present.',
   })
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
+  @IsObject()
   @ValidateNested()
   @Type(() => SourceEntryObservedDto)
   observed?: SourceEntryObservedDto;
