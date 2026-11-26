@@ -64,8 +64,10 @@ export const IN_PROGRESS_NOTE =
   'The run had not finished when this file was written. In a write run, a line still of class apply and without written was in flight or not yet sent, and its outcome is not known. A line with sentInLostRequest was sent in a request whose answer was lost, so the target may hold it.';
 
 /**
- * What a line with `checked: false` says, of any class: its request was sent
- * and the run ended before direct evidence settled it.
+ * What a product line with `checked: false` says: its request was sent and
+ * the run ended before direct evidence settled it. Such a product line is
+ * always of class `outcome unknown` (see `markUnsettled`). A decision row with
+ * `checked: false` keeps its own class and says why in its own `detail`.
  */
 export const UNKNOWN_OUTCOME_REASON =
   'its request was sent and its outcome is not known: the target may hold it. Run the dry run again to settle it';
@@ -200,7 +202,9 @@ export const WASH_NOTE =
 
 /**
  * What the note adds when the dropped size took a unit change with it: the
- * task only clears the size, so nobody carries the unit.
+ * task only clears the size, so nobody carries the unit. Only a change to a
+ * unit other than `UNIT` needs it: a wash candidate's target product holds
+ * `UNIT` already (see `washCandidate`).
  */
 export function washUnitNote(field) {
   return `the unit change (defaultUnit from ${field.from ?? 'none'} to ${field.to ?? 'none'}) was not carried, and release task 0009 will not carry it either, because it only clears the size: set the unit on the target by hand`;
@@ -208,10 +212,14 @@ export function washUnitNote(field) {
 
 /**
  * The note of a line whose size was left to the wash task: `WASH_NOTE`, and
- * the unit sentence when the dropped fields hold a unit change.
+ * the unit sentence when the dropped fields hold a unit change whose `to` the
+ * target does not hold yet. The target holds `UNIT` (see `washCandidate`), so
+ * a change to `UNIT` is there already and the note does not name it.
  */
 export function washNote(dropped) {
-  const unit = dropped.find((field) => field.field === 'defaultUnit');
+  const unit = dropped.find(
+    (field) => field.field === 'defaultUnit' && field.to !== 'UNIT'
+  );
   return unit ? `${WASH_NOTE}. ${washUnitNote(unit)}` : WASH_NOTE;
 }
 
@@ -721,8 +729,10 @@ function markWritten(group) {
  * - Anything else stops the run: a 429 after the client's waits, a 401 or 403
  *   after the session's new login, a second 413, any other 5xx, an answer
  *   lost a fourth time. The products of the request in flight are
- *   `not written` (or `already there` when a read back shows they landed),
- *   every product after them is `not sent`, and a `ReplayStopped` is thrown.
+ *   `not written`, `already there` when a read back shows they landed, or
+ *   `outcome unknown` when the request may have landed and nothing proved it
+ *   (see below). Every product after them is `not sent`, and a
+ *   `ReplayStopped` is thrown.
  *
  * A product sent in a request whose outcome is not known (any lost answer, a
  * 2xx whose body could not be read among them, or a 5xx) carries
