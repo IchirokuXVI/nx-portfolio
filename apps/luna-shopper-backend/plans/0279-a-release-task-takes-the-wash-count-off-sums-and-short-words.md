@@ -1,10 +1,7 @@
-# 0029 (backlog) A release task takes the wash count off sums and short words
+# 0279 A release task takes the wash count off sums and short words
 
-> **Status: backlog. Not scheduled for development.**
-> Plans in `plans/backlog/` are designed and agreed but are not part of the build order, and
-> nothing in them has been built. They carry their own numbering starting at `0001`, separate
-> from the sequence in `plans/`. When one is picked up it moves into `plans/` and takes the next
-> free number there, so parking a design never burns a number in the build sequence.
+> Picked up on 2026-11-26 from backlog `0029`, after the owner answered O1 to O3 (see
+> "Decisions"). It is built as release task `0009`.
 
 > Found on 2026-11-20 by the rehearsal of the harvester round on a copy of the staging data of
 > that day (itself a copy of production of 2026-11-19, after release tasks `0006` to `0008` ran
@@ -70,22 +67,22 @@ deletes nothing, counts before it writes, and leaves a review list of what it co
 
 ### Target state
 
-1. A task directory `k8s/release-tasks/tasks/<NNNN>-wash-sums-and-short-words-leave-products/`
+1. A task directory `k8s/release-tasks/tasks/0009-wash-sums-and-short-words-leave-products/`
    with `task.env`, `check.sh` and `post.sh`, in the shape of task `0007`.
 2. A selection for this task in the harvester's wash command (section 3), with `--count`,
    `--review <file>` and `--max <n> --review <file>`, as `0007` has.
 3. Every product that section 1 selects has no size after the task. Its pack count stays.
-4. The review list is in the ConfigMap `release-task-<NNNN>-review` of the namespace, and no line
+4. The review list is in the ConfigMap `release-task-0009-review` of the namespace, and no line
    of it reached the deploy log.
 5. Task `0007` answers exactly what it answered before, on the same data.
 6. No price row, no `source_catalog_entries` row, and no product outside the selection changes.
 
 ### Scope
 
-- `k8s/release-tasks/tasks/<NNNN>-.../`: `task.env`, `check.sh`, `post.sh`.
+- `k8s/release-tasks/tasks/0009-.../`: `task.env`, `check.sh`, `post.sh`.
 - `apps/luna-shopper-backend/harvester`: the selection of section 1 in the wash command and its
   specs (section 3).
-- `k8s/release-tasks/README.md`: a section "Task <NNNN>", like the one of task `0007`.
+- `k8s/release-tasks/README.md`: a section "Task 0009", like the one of task `0007`.
 - Nothing else. No catalog change, no migration, no adapter change, no `openapi.json` change.
   Classes F2, F3 and F4 of the rehearsal are not in scope unless the owner answers O1 otherwise.
 
@@ -116,7 +113,7 @@ deletes nothing, counts before it writes, and leaves a review list of what it co
 
 The `--count` output of the new selection on the copy before and after a write run (the second
 printing `products 0`), `0007`'s `--count` on the same copy before and after your change (equal
-before the write run), the review list of the rehearsal kept in `tmp/plan-<NNNN>/` of the main
+before the write run), the review list of the rehearsal kept in `tmp/plan-0279/` of the main
 checkout, the specs, `node k8s/release-tasks/check-tasks.mjs`, and `check.sh` and `post.sh` run
 against the copy through the `WASH_SIZES` override.
 
@@ -206,7 +203,7 @@ is the one of section 1.3 and Target state 5: `0007` answers what it answered be
 
 ```sh
 # Take the wash count off the products whose size is a printed sum or short word
-# (backend backlog plan 0029, built as plan <NNNN>).
+# (backend backlog plan 0029, built as plan 0279).
 UNIT="velista"
 RUN_UNTIL_STAGING="<a UTC date, at most 14 days after the commit that writes it>"
 RUN_UNTIL_PRODUCTION="<a UTC date, at most 14 days after the commit that writes it>"
@@ -240,7 +237,7 @@ To tell an old command from a new one, the builder may run `--selection sum-and-
 ### 4.3 `post.sh`
 
 Copy `0007`'s: count, refuse as `check.sh` does, do nothing at `products 0`, write with
-`--max <ceiling>`, count again. Copy the review list into `release-task-<NNNN>-review` with
+`--max <ceiling>`, count again. Copy the review list into `release-task-0009-review` with
 `kubectl apply`, merged with what an earlier run recorded, as `0007` does. Print only the line
 counts and the ConfigMap name. Refuse where the pod has no new command, so the task stays at
 `pre-done` and the next deploy finishes it.
@@ -256,7 +253,7 @@ Same columns as `0007` (plan `0271` section 5). `wash_size_format` holds the sum
 word. Read it on the host as the `deploy` user:
 
 ```sh
-kubectl -n luna-shopper get configmap release-task-<NNNN>-review \
+kubectl -n luna-shopper get configmap release-task-0009-review \
   -o jsonpath='{.data.review\.tsv}'
 ```
 
@@ -277,7 +274,7 @@ the curator's input. After this task, those products join the wash products with
 4. Run `--selection sum-and-short-word --count`. Expect `chain deza 12`, `chain eljamon 61`,
    `products 73`, `pack 0`, `unread 0`. Explain any other number before you go on, including the
    one `short-wash-word` row that the 2026-11-20 rehearsal still saw after its fixes.
-5. `--review tmp/plan-<NNNN>/review.tsv`, then the write run with `--max 80`, then `--count`
+5. `--review tmp/plan-0279/review.tsv`, then the write run with `--max 80`, then `--count`
    again: `products 0`. `0007`'s count now prints `short-wash-word 0` and `sum 0`.
 6. Assert on the copy: no `item_prices` row and no `supermarket_items` price changed; only the
    selected products changed, and only `unitSize`.
@@ -345,4 +342,11 @@ selections are disjoint, so the order costs nothing); or the release after it.
 
 ## Decisions
 
-None yet. Decision 140a (owner, 2026-11-25) asks for this task; O1 to O3 are open.
+Decision 140a (owner, 2026-11-25) asks for this task. The owner answered O1 to O3 on
+2026-11-26:
+
+- **O1: A.** Classes F2, F3 and F4 (the 26 writes that set a value) stay manual. They are not
+  in this task.
+- **O2: a note.** Carrefour `pack-of-units` stays a note, and is not in the selection.
+- **O3: `0.20.0`.** The task ships in velista release `0.20.0`, in order after tasks `0007` and
+  `0008`.

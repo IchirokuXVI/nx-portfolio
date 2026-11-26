@@ -60,6 +60,17 @@ import {
  * that says so (a run stopped after it, or an answer that timed out), so every
  * run that is given recorded lists confirms their planned lines by reading
  * the product ({@link reconcileReview}).
+ *
+ * **A second selection (backend plan 0279, release task 0009).** The data
+ * proved that the products of a sum (`35+18 lavados`, `30+6lav`) and of El
+ * Jamón's short word (`40lav`, `60lv`) hold the count too. Under
+ * `--selection sum-and-short-word` those two shapes qualify a product by the
+ * same rule ({@link selects}), and nothing else does: `40 lavados` is task
+ * 0007's, so the two selections are disjoint and each task counts only its
+ * own products, in any order. Neither shape prints a pack, so no pack count
+ * is cleared. The notes then keep `pack-of-units` and `mercadona-per-wash`
+ * only, because the other two kinds are now corrections. With no
+ * `--selection`, the command answers exactly what it answered before.
  */
 
 /** The chain whose per wash packs are noted and never corrected. */
@@ -187,6 +198,44 @@ export function readNoteFormat(text: string | null): NoteFormat | null {
 }
 
 /**
+ * Which products a run selects. `printed-count` is task 0007's (plan 0271,
+ * section 1), the default. `sum-and-short-word` is task 0009's (plan 0279,
+ * section 1).
+ */
+export type WashSelection = 'printed-count' | 'sum-and-short-word';
+
+/** Every selection `--selection` accepts. */
+export const WASH_SELECTIONS: readonly WashSelection[] = [
+  'printed-count',
+  'sum-and-short-word',
+];
+
+/** The note kinds a selection corrects, and so never notes. */
+const CORRECTED_KINDS: Record<WashSelection, ReadonlySet<NoteKind>> = {
+  'printed-count': new Set<NoteKind>(),
+  'sum-and-short-word': new Set<NoteKind>(['sum', 'short-wash-word']),
+};
+
+/**
+ * The count a row's printed size qualifies a product with under a selection,
+ * or null. `printed-count` reads {@link readWashFormat}. `sum-and-short-word`
+ * reads only a sum or a short word of {@link readNoteFormat}, which print no
+ * pack.
+ */
+export function readSelectedFormat(
+  text: string | null,
+  selection: WashSelection
+): WashFormat | null {
+  if (selection === 'printed-count') {
+    return readWashFormat(text);
+  }
+  const note = readNoteFormat(text);
+  return note !== null && CORRECTED_KINDS[selection].has(note.kind)
+    ? { count: note.count, pack: null }
+    : null;
+}
+
+/**
  * The chain's slug as its adapter key names it: `deza-web` is `deza`. A chain
  * with no source row is named by its id, which names no product.
  */
@@ -280,11 +329,14 @@ export interface WashSizesPorts {
 /**
  * `recorded` names the file that holds what earlier runs saved: the
  * ConfigMap as `kubectl get -o json` prints it, or nothing when there is none.
+ * `selection` is absent unless `--selection` named one, and absent means
+ * `printed-count`.
  */
-export type WashSizesOptions =
+export type WashSizesOptions = { selection?: WashSelection } & (
   | { mode: 'count' }
   | { mode: 'review'; file: string; recorded: string | null }
-  | { mode: 'write'; max: number; file: string; recorded: string | null };
+  | { mode: 'write'; max: number; file: string; recorded: string | null }
+);
 
 /**
  * A refusal the command words itself. Its message names no product, so it is
@@ -331,30 +383,50 @@ export interface WashSizesPlan {
 
 /**
  * Reads `--count`, `--review <file>`, or `--max <n> --review <file>`, the
- * last two with an optional `--recorded <file|->`. Anything else is refused,
- * so a typo never becomes a run without a ceiling.
+ * last two with an optional `--recorded <file|->`, each with an optional
+ * `--selection <name>` of {@link WASH_SELECTIONS}. Anything else is refused,
+ * so a typo never becomes a run without a ceiling, or a run of the other
+ * task's selection.
  */
 export function parseWashSizesArgs(argv: string[]): WashSizesOptions {
   const usage =
     'usage: node wash-sizes.js --count | --review <file> | ' +
-    '--max <n> --review <file>, each list with [--recorded <file|->]';
-  if (argv.length === 1 && argv[0] === '--count') {
-    return { mode: 'count' };
-  }
+    '--max <n> --review <file>, each list with [--recorded <file|->], ' +
+    `each with [--selection ${WASH_SELECTIONS.join('|')}]`;
   const values: Record<string, string> = {};
-  for (let i = 0; i < argv.length; i += 2) {
+  let count = false;
+  for (let i = 0; i < argv.length; ) {
     const flag = argv[i];
+    if (flag === '--count') {
+      if (count) {
+        throw new WashSizesRefusal(usage);
+      }
+      count = true;
+      i += 1;
+      continue;
+    }
     const value = argv[i + 1];
     if (
-      !['--max', '--review', '--recorded'].includes(flag) ||
+      !['--max', '--review', '--recorded', '--selection'].includes(flag) ||
       flag in values ||
       value === undefined ||
       value.startsWith('--') ||
-      (flag === '--max' && !/^\d+$/.test(value))
+      (flag === '--max' && !/^\d+$/.test(value)) ||
+      (flag === '--selection' &&
+        !(WASH_SELECTIONS as readonly string[]).includes(value))
     ) {
       throw new WashSizesRefusal(usage);
     }
     values[flag] = value;
+    i += 2;
+  }
+  const named = values['--selection'] as WashSelection | undefined;
+  const selection = named === undefined ? {} : { selection: named };
+  if (count) {
+    if (Object.keys(values).some((flag) => flag !== '--selection')) {
+      throw new WashSizesRefusal(usage);
+    }
+    return { mode: 'count', ...selection };
   }
   const file = values['--review'];
   if (file === undefined) {
@@ -362,9 +434,15 @@ export function parseWashSizesArgs(argv: string[]): WashSizesOptions {
   }
   const recorded = values['--recorded'] ?? null;
   if (values['--max'] === undefined) {
-    return { mode: 'review', file, recorded };
+    return { mode: 'review', file, recorded, ...selection };
   }
-  return { mode: 'write', max: Number(values['--max']), file, recorded };
+  return {
+    mode: 'write',
+    max: Number(values['--max']),
+    file,
+    recorded,
+    ...selection,
+  };
 }
 
 /** The products that bear a wash row, then every row the plan reads. */
@@ -422,11 +500,14 @@ function selects(item: ItemView, count: number): boolean {
 
 /**
  * The selection of section 1, the counts of section 6 and the note. Pure: the
- * same rows and products always answer the same plan.
+ * same rows and products always answer the same plan. `selection` decides
+ * which printed sizes qualify a product ({@link readSelectedFormat}) and
+ * which kinds are noted; with none it is task 0007's.
  */
 export function planWashSizes(
   rows: StatedRow[],
-  items: Map<string, ItemView>
+  items: Map<string, ItemView>,
+  selection: WashSelection = 'printed-count'
 ): WashSizesPlan {
   const plan: WashSizesPlan = {
     corrections: [],
@@ -444,7 +525,10 @@ export function planWashSizes(
 
   for (const [itemId, onItem] of byItem) {
     const washRows = onItem
-      .map((row) => ({ row, wash: readWashFormat(row.sizeFormat) }))
+      .map((row) => ({
+        row,
+        wash: readSelectedFormat(row.sizeFormat, selection),
+      }))
       .filter(
         (pair): pair is { row: StatedRow; wash: WashFormat } =>
           pair.wash !== null
@@ -511,7 +595,7 @@ export function planWashSizes(
       continue;
     }
     const kind = noteKindOf(row, item);
-    if (kind !== null) {
+    if (kind !== null && !CORRECTED_KINDS[selection].has(kind)) {
       plan.notes.push({
         kind,
         item,
@@ -679,16 +763,29 @@ export function notesPathOf(reviewPath: string): string {
 export const REVIEW_KEY = 'review.tsv';
 export const NOTES_KEY = 'notes.tsv';
 
-/** The ConfigMap `post.sh` saves the lists in, as kubectl names it. */
-export const REVIEW_CONFIGMAP = 'configmap/release-task-0007-review';
+/**
+ * The ConfigMap each selection's `post.sh` saves the lists in, as kubectl
+ * names it. Each task has its own, so neither writes over the other's list,
+ * and a refusal of a recorded list names the one the run was given.
+ */
+export const REVIEW_CONFIGMAPS: Record<WashSelection, string> = {
+  'printed-count': 'configmap/release-task-0007-review',
+  'sum-and-short-word': 'configmap/release-task-0009-review',
+};
+
+/** Task 0007's ConfigMap, the one a run with no selection names. */
+export const REVIEW_CONFIGMAP = REVIEW_CONFIGMAPS['printed-count'];
 
 /** The key an earlier shape of this task kept the Mercadona note under. */
 const OLD_NOTE_KEY = 'mercadona-per-wash.tsv';
 
 /** The words that end every refusal of a recorded list. */
-const RECORDED_REMEDY =
-  `Delete ${REVIEW_CONFIGMAP}, or restore the header of this task as the ` +
-  'first line of each key, and run again.';
+function recordedRemedy(configMap: string): string {
+  return (
+    `Delete ${configMap}, or restore the header of this task as the ` +
+    'first line of each key, and run again.'
+  );
+}
 
 /** What earlier runs saved in the ConfigMap, by key. */
 export interface RecordedLists {
@@ -700,9 +797,12 @@ export interface RecordedLists {
  * The lists earlier runs saved, read out of the ConfigMap as
  * `kubectl get configmap -o json` prints it. Empty text means there is no
  * ConfigMap yet. Anything else that cannot be read is refused, and the
- * refusal quotes none of it.
+ * refusal quotes none of it, and names `configMap`.
  */
-export function readRecorded(text: string): RecordedLists {
+export function readRecorded(
+  text: string,
+  configMap: string = REVIEW_CONFIGMAP
+): RecordedLists {
   if (text.trim() === '') {
     return { review: '', notes: '' };
   }
@@ -714,14 +814,15 @@ export function readRecorded(text: string): RecordedLists {
   }
   if (!data || typeof data !== 'object') {
     throw new WashSizesRefusal(
-      `Refused, and nothing was changed: ${REVIEW_CONFIGMAP} cannot be ` +
-        `read as a ConfigMap. ${RECORDED_REMEDY}`
+      `Refused, and nothing was changed: ${configMap} cannot be ` +
+        `read as a ConfigMap. ${recordedRemedy(configMap)}`
     );
   }
   if (OLD_NOTE_KEY in data) {
     throw new WashSizesRefusal(
-      `Refused, and nothing was changed: ${REVIEW_CONFIGMAP} holds the key ` +
-        `${OLD_NOTE_KEY} of an earlier shape of this task. ${RECORDED_REMEDY}`
+      `Refused, and nothing was changed: ${configMap} holds the key ` +
+        `${OLD_NOTE_KEY} of an earlier shape of this task. ` +
+        recordedRemedy(configMap)
     );
   }
   const value = (key: string) => {
@@ -783,12 +884,14 @@ export const NOTES_SHAPE: ListShape = {
  * size it recorded, so a product corrected by a run that failed later is
  * never dropped by the next one, and merging the same lines twice changes
  * nothing. The one replacement is the shape's own ({@link REVIEW_SHAPE}).
- * One header, the same order as the list.
+ * One header, the same order as the list. A refusal of the recorded list
+ * names `configMap`.
  */
 export function mergeList(
   shape: ListShape,
   recorded: string,
-  next: string
+  next: string,
+  configMap: string = REVIEW_CONFIGMAP
 ): string {
   const lines = new Map<string, Line>();
   for (const [source, text] of [
@@ -803,8 +906,8 @@ export function mergeList(
       throw new WashSizesRefusal(
         source === 'recorded'
           ? `Refused, and nothing was changed: the key ${shape.key} of ` +
-              `${REVIEW_CONFIGMAP} does not start with the header of this ` +
-              `task. ${RECORDED_REMEDY}`
+              `${configMap} does not start with the header of this ` +
+              `task. ${recordedRemedy(configMap)}`
           : `Refused, and nothing was changed: the ${shape.key} this run ` +
               'wrote does not start with the header of this task.'
       );
@@ -838,7 +941,9 @@ export async function runWashSizes(
     ports.catalog,
     rows.map((row) => row.itemId)
   );
-  const plan = planWashSizes(rows, items);
+  const selection = options.selection ?? 'printed-count';
+  const configMap = REVIEW_CONFIGMAPS[selection];
+  const plan = planWashSizes(rows, items, selection);
   for (const line of countLines(plan)) {
     ports.log(line);
   }
@@ -849,18 +954,19 @@ export async function runWashSizes(
   // while nothing has changed.
   const recorded =
     options.recorded === null
-      ? readRecorded('')
-      : readRecorded(await ports.files.read(options.recorded));
+      ? readRecorded('', configMap)
+      : readRecorded(await ports.files.read(options.recorded), configMap);
   // A recorded list of another shape refuses here, before any write, and not
   // when the lists are written after the updates.
-  mergeList(REVIEW_SHAPE, recorded.review, '');
-  mergeList(NOTES_SHAPE, recorded.notes, '');
+  mergeList(REVIEW_SHAPE, recorded.review, '', configMap);
+  mergeList(NOTES_SHAPE, recorded.notes, '', configMap);
   // Whether there is anything to save is decided on the lists as they were
   // recorded, before the reconcile reads catalog.
   const plannedBefore = plannedIdsOf(recorded.review).length;
   const reconciled: RecordedLists = {
     ...recorded,
-    review: (await reconcileReview(ports.catalog, recorded.review)).text,
+    review: (await reconcileReview(ports.catalog, recorded.review, configMap))
+      .text,
   };
   if (options.mode === 'review') {
     // Nothing is written to a database, so every line this run adds is
@@ -871,7 +977,8 @@ export async function runWashSizes(
       options.file,
       reviewList(plan.corrections),
       plan.notes,
-      reconciled
+      reconciled,
+      configMap
     );
     ports.log(`review ${plan.corrections.length}`);
     ports.log(
@@ -926,7 +1033,8 @@ export async function runWashSizes(
     options.file,
     reviewList(listed, done),
     plan.notes,
-    reconciled
+    reconciled,
+    configMap
   );
   ports.log(`corrected ${done.size}`);
   ports.log(`skipped ${skipped}`);
@@ -967,11 +1075,22 @@ async function writeLists(
   file: string,
   review: string,
   notes: Note[],
-  recorded: RecordedLists
+  recorded: RecordedLists,
+  configMap: string
 ): Promise<RecordedLists> {
   // Both merged before either is written, so a refusal writes neither.
-  const reviewText = mergeList(REVIEW_SHAPE, recorded.review, review);
-  const notesText = mergeList(NOTES_SHAPE, recorded.notes, notesList(notes));
+  const reviewText = mergeList(
+    REVIEW_SHAPE,
+    recorded.review,
+    review,
+    configMap
+  );
+  const notesText = mergeList(
+    NOTES_SHAPE,
+    recorded.notes,
+    notesList(notes),
+    configMap
+  );
   await ports.files.write(file, reviewText);
   await ports.files.write(notesPathOf(file), notesText);
   return { review: reviewText, notes: notesText };
@@ -1020,7 +1139,8 @@ export function confirmsCorrection(item: ItemView | undefined): boolean {
  */
 export async function reconcileReview(
   catalog: CatalogPort,
-  review: string
+  review: string,
+  configMap: string = REVIEW_CONFIGMAP
 ): Promise<{ text: string; turned: number }> {
   const planned = linesOf(review).filter(
     (cells) => cells[OUTCOME] === 'planned'
@@ -1049,7 +1169,10 @@ export async function reconcileReview(
       cells,
     }))
   );
-  return { text: mergeList(REVIEW_SHAPE, review, next), turned: turned.length };
+  return {
+    text: mergeList(REVIEW_SHAPE, review, next, configMap),
+    turned: turned.length,
+  };
 }
 
 /**

@@ -668,6 +668,78 @@ ENVIRONMENT=staging \
   bash k8s/release-tasks/tasks/0008-deza-keys-follow-the-split/post.sh
 ```
 
+## Task 0009
+
+`0009-wash-sums-and-short-words-leave-products` takes the wash count off the
+products whose size is a wash count printed as a sum or as El Jamón's short
+word (backend plan `0279`). Task 0007 noted these rows and never corrected
+them, because no old parser read them as a size. The data then showed that
+such products hold the count all the same.
+
+- **It runs the command of task 0007 with its own selection.** `post.sh` runs
+  `node wash-sizes.js --selection sum-and-short-word`. The command selects
+  every ACTIVE bound row whose printed size is a sum (`35+18 lavados`,
+  `30+6lav`, `23+12 lv`) or a short word (`40lav`, `60 lv.`), and every
+  product of such a row that is `UNIT` and holds that count as its size. Each
+  product loses its size through one `item.update` with the harvester's
+  actor. Its pack count stays, because neither shape prints a pack. No size
+  is set, no price changes, and nothing is deleted.
+- **Its selection and task 0007's are disjoint.** `40 lavados` and
+  `2x40 lavados` are task 0007's alone, and a sum or a short word is this
+  task's alone. The check phase runs for every due task before any task
+  writes, so each task counts only its own products, and neither count
+  depends on the other task having run. A product that both would select is
+  corrected by task 0007, and this task then finds it has no size.
+- **It is armed for staging and for production.** The staging window ends on
+  2026-12-03 and the production one on 2026-12-10, and `PRODUCTION_RELEASE`
+  is `0.20.0`, the release of tasks 0007 and 0008, which run before it.
+- **It states one ceiling per environment**, `MAX_PRODUCTS_<ENVIRONMENT>`,
+  read as task 0007 reads its own. `check.sh` counts with
+  `--selection sum-and-short-word --count` and refuses above it, and so does
+  a row whose count is not a whole number above 0. `post.sh` counts again and
+  passes the ceiling as `--max`, so the command refuses too.
+- **Its `check.sh` passes where the pod has no `wash-sizes.js`, or one that
+  does not know `--selection`.** A command of an earlier release answers the
+  flag with its usage, and the check reads that answer as a pod that runs
+  before this release. `post.sh` refuses in both cases, and the task stays at
+  `pre-done` until a deploy finishes it.
+- **It leaves no marker, and it does not need one.** A corrected product has
+  no size, so a second run counts 0 and corrects nothing.
+- **It leaves a review list for the curator** in the ConfigMap
+  `release-task-0009-review`, keys `review.tsv` and `notes.tsv`, with the
+  columns and the rules of task 0007: `wash_size_format` holds the sum or the
+  short word, the `outcome` is `planned` or `corrected`, a run never drops a
+  line an earlier run saved, and a ConfigMap of another shape is refused
+  before any write. The notes hold `pack-of-units` and `mercadona-per-wash`
+  only, because a sum and a short word are corrections here. The deploy log
+  shows counts only. Read the lists over SSH on the host, as the `deploy`
+  user:
+
+  ```sh
+  kubectl -n luna-shopper get configmap release-task-0009-review \
+    -o jsonpath='{.data.review\.tsv}'
+  kubectl -n luna-shopper get configmap release-task-0009-review \
+    -o jsonpath='{.data.notes\.tsv}'
+  ```
+
+  Nothing deletes the ConfigMap. Delete it when the curator has worked
+  through it.
+
+- **To undo one product, send one item update** with the old size the list
+  names. A restore of the dump also removes everything written to catalog
+  after the task.
+
+To rehearse it, as for task 0007:
+
+```sh
+touch configmap.json
+ENVIRONMENT=staging \
+  WASH_SIZES='node dist/apps/luna-shopper-backend-harvester/wash-sizes.js' \
+  REVIEW_GET='cat configmap.json' \
+  REVIEW_APPLY='tee configmap.json' \
+  bash k8s/release-tasks/tasks/0009-wash-sums-and-short-words-leave-products/post.sh
+```
+
 ## Reverting a task
 
 Restore each dump that the ledger names into a scratch database, then promote

@@ -3,6 +3,8 @@ import {
   type ItemView,
   type UpdateItemInput,
 } from '@portfolio/luna-shopper/contracts';
+import { measuresIn } from '@portfolio/luna-shopper/deza';
+import { splitSize as splitElJamonSize } from '@portfolio/luna-shopper/eljamon';
 import { EventEmitter } from 'events';
 import {
   chainOf,
@@ -20,8 +22,10 @@ import {
   planWashSizes,
   readNoteFormat,
   readRecorded,
+  readSelectedFormat,
   readWashFormat,
   reconcileReview,
+  REVIEW_CONFIGMAPS,
   REVIEW_HEADER,
   REVIEW_SHAPE,
   reviewList,
@@ -30,6 +34,7 @@ import {
   SELECT_WASH_ROWS_SQL,
   statedSizeOf,
   WASH_PREFILTER,
+  WASH_SELECTIONS,
   WashSizesRefusal,
   type CatalogPort,
   type HarvesterDb,
@@ -1587,4 +1592,438 @@ describe('wash sizes: what the entry file prints', () => {
     ]);
     expect(g.exits).toEqual([1, 1]);
   });
+});
+
+/*
+ * Release task 0009 (backend plan 0279): the selection of the sums and the
+ * short words. Every case above runs with no selection and is task 0007's.
+ */
+const SUMS = 'sum-and-short-word' as const;
+
+function planSums(rows: StatedRow[], items: ItemView[]) {
+  return planWashSizes(rows, new Map(items.map((i) => [i.id, i])), SUMS);
+}
+
+const ELJAMON = { chain: 'eljamon', adapterKey: 'eljamon-web' };
+
+describe('wash sizes, task 0009: the selection', () => {
+  it.each([
+    ['35+18 lavados', 53],
+    ['30+6lav', 36],
+    ['40lav', 40],
+    ['60 lv.', 60],
+  ])('selects %s on a product of %d UNIT', (sizeFormat, unitSize) => {
+    const p = planSums(
+      [row('a', { sizeFormat, unitSize })],
+      [item('a', { unitSize })]
+    );
+    expect(p.corrections.map((c) => c.item.id)).toEqual(['a']);
+    expect(p.corrections[0].count).toBe(unitSize);
+    expect(p.corrections[0].clearPack).toBe(false);
+  });
+
+  it.each([
+    [
+      '40lav on a product of 42 UNIT',
+      row('a', { sizeFormat: '40lav' }),
+      item('a', { unitSize: 42 }),
+    ],
+    [
+      '40lav on a product of 40 MILLILITER',
+      row('a', { sizeFormat: '40lav' }),
+      item('a', { defaultUnit: UnitOfMeasure.MILLILITER }),
+    ],
+    ['40 lavados, which is task 0007s', row('a'), item('a')],
+    [
+      '2x40 lavados, which is task 0007s',
+      row('a', { sizeFormat: '2x40 lavados' }),
+      item('a', { unitSize: 80 }),
+    ],
+    [
+      'a Carrefour pack of units',
+      row('a', { sizeFormat: 'pack de 2 unidades de 50 lavados.' }),
+      item('a', { unitSize: 100 }),
+    ],
+    [
+      'a product with no size',
+      row('a', { sizeFormat: '40lav' }),
+      item('a', { unitSize: null }),
+    ],
+    [
+      'a merged product',
+      row('a', { sizeFormat: '40lav' }),
+      item('a', { mergedInto: 'b' }),
+    ],
+  ])('selects nothing for %s', (_label, r, i) => {
+    expect(planSums([r], [i]).corrections).toEqual([]);
+  });
+
+  it('reads only ACTIVE bound rows, as task 0007 does', () => {
+    // The same two SELECTs: a CANDIDATE row is never read.
+    for (const sql of [SELECT_WASH_ROWS_SQL, SELECT_STATED_ROWS_SQL]) {
+      expect(sql).toContain(`e.status = 'ACTIVE' AND e."itemId" IS NOT NULL`);
+    }
+  });
+
+  it('is disjoint from task 0007: each corrects only its own products', () => {
+    const rows = [
+      row('a'),
+      row('b', { ...ELJAMON, sizeFormat: '40lav' }),
+      row('c', { sizeFormat: '23+12 lavados', unitSize: 35 }),
+    ];
+    const items = [item('a'), item('b'), item('c', { unitSize: 35 })];
+    expect(plan(rows, items).corrections.map((c) => c.item.id)).toEqual(['a']);
+    expect(planSums(rows, items).corrections.map((c) => c.item.id)).toEqual([
+      'b',
+      'c',
+    ]);
+  });
+
+  it('reads the count of a sum and a short word, and no pack', () => {
+    expect(readSelectedFormat('35+18 lavados', SUMS)).toEqual({
+      count: 53,
+      pack: null,
+    });
+    expect(readSelectedFormat('40lv', SUMS)).toEqual({ count: 40, pack: null });
+    expect(readSelectedFormat('40 lavados', SUMS)).toBeNull();
+    expect(readSelectedFormat('pack 2 de 50 lavados', SUMS)).toBeNull();
+    expect(readSelectedFormat('40 lavados', 'printed-count')).toEqual(
+      readWashFormat('40 lavados')
+    );
+  });
+
+  it('counts 0lav as unread and a product catalog lacks as held', () => {
+    const p = planSums(
+      [
+        row('a', { ...ELJAMON, sizeFormat: '0lav' }),
+        row('b', { ...ELJAMON, sizeFormat: '40lav' }),
+      ],
+      [item('a', { unitSize: 0 })]
+    );
+    expect(p.unread).toBe(1);
+    expect(p.held).toBe(1);
+    expect(p.corrections).toEqual([]);
+  });
+
+  it('counts the products under each chain that qualifies them', () => {
+    const p = planSums(
+      [
+        row('a', { sizeFormat: '35+18 lavados' }),
+        row('b', { ...ELJAMON, sizeFormat: '40lav' }),
+        row('c', { ...ELJAMON, sizeFormat: '30+6lav' }),
+        row('d', { ...ELJAMON, sizeFormat: '60lv' }),
+      ],
+      [
+        item('a', { unitSize: 53 }),
+        item('b'),
+        item('c', { unitSize: 36 }),
+        item('d', { unitSize: 61 }),
+      ]
+    );
+    expect(countLines(p)).toEqual([
+      'chain deza 1',
+      'chain eljamon 2',
+      'products 3',
+      'pack 0',
+      'content 0',
+      'unread 0',
+      'held 0',
+      'pack-of-units 0',
+      'short-wash-word 0',
+      'sum 0',
+      'mercadona-per-wash 0',
+    ]);
+  });
+});
+
+describe('wash sizes, task 0009: the notes', () => {
+  it('notes a Carrefour pack of units and a Mercadona per wash pack', () => {
+    const p = planSums(
+      [
+        row('c', {
+          chain: 'carrefour',
+          adapterKey: 'carrefour-web',
+          sizeFormat: 'pack de 2 unidades de 50 lavados.',
+        }),
+        row('m', {
+          chain: 'mercadona',
+          adapterKey: 'mercadona-api',
+          sizeFormat: 'ud',
+          unitSize: 30,
+          sizeUnit: 'UNIT',
+          label: 'lv',
+        }),
+      ],
+      [item('c', { unitSize: 100 }), item('m', { unitSize: 30 })]
+    );
+    expect(p.corrections).toEqual([]);
+    expect(p.notes.map((n) => [n.kind, n.item.id])).toEqual([
+      ['pack-of-units', 'c'],
+      ['mercadona-per-wash', 'm'],
+    ]);
+  });
+
+  it('corrects a sum and a short word and notes neither', () => {
+    const p = planSums(
+      [
+        row('a', { ...ELJAMON, sizeFormat: '40lav' }),
+        row('b', { sizeFormat: '23+12 lavados' }),
+      ],
+      [item('a'), item('b', { unitSize: 35 })]
+    );
+    expect(p.corrections.map((c) => c.item.id)).toEqual(['a', 'b']);
+    expect(p.notes).toEqual([]);
+  });
+
+  it('notes no sum or short word that misses its product either', () => {
+    // Task 0007 would not note these: the count is not the product's size.
+    const p = planSums(
+      [
+        row('a', { ...ELJAMON, sizeFormat: '40lav' }),
+        row('b', { sizeFormat: '23+12 lavados' }),
+      ],
+      [item('a', { unitSize: 42 }), item('b', { unitSize: 23 })]
+    );
+    expect(p.corrections).toEqual([]);
+    expect(p.notes).toEqual([]);
+  });
+
+  it('leaves the notes of task 0007 as they were', () => {
+    const p = plan(
+      [
+        row('a', { ...ELJAMON, sizeFormat: '40lav' }),
+        row('b', { sizeFormat: '23+12 lavados' }),
+      ],
+      [item('a'), item('b', { unitSize: 35 })]
+    );
+    expect(p.corrections).toEqual([]);
+    expect(p.notes.map((n) => n.kind)).toEqual(['short-wash-word', 'sum']);
+  });
+});
+
+describe('wash sizes, task 0009: the arguments', () => {
+  it('reads --selection in every mode, before or after the others', () => {
+    expect(parseWashSizesArgs(['--selection', SUMS, '--count'])).toEqual({
+      mode: 'count',
+      selection: SUMS,
+    });
+    expect(parseWashSizesArgs(['--count', '--selection', SUMS])).toEqual({
+      mode: 'count',
+      selection: SUMS,
+    });
+    expect(
+      parseWashSizesArgs(['--review', 'r.tsv', '--selection', SUMS])
+    ).toEqual({
+      mode: 'review',
+      file: 'r.tsv',
+      recorded: null,
+      selection: SUMS,
+    });
+    expect(
+      parseWashSizesArgs([
+        '--max',
+        '80',
+        '--review',
+        'r.tsv',
+        '--recorded',
+        '-',
+        '--selection',
+        SUMS,
+      ])
+    ).toEqual({
+      mode: 'write',
+      max: 80,
+      file: 'r.tsv',
+      recorded: '-',
+      selection: SUMS,
+    });
+    expect(
+      parseWashSizesArgs(['--count', '--selection', 'printed-count'])
+    ).toEqual({ mode: 'count', selection: 'printed-count' });
+  });
+
+  it('states no selection when none is named', () => {
+    expect('selection' in parseWashSizesArgs(['--count'])).toBe(false);
+  });
+
+  it.each([
+    [['--count', '--selection', 'sums']],
+    [['--count', '--selection']],
+    [['--count', '--selection', '--max']],
+    [['--count', '--count']],
+    [['--count', '--selection', SUMS, '--selection', SUMS]],
+    [['--selection', SUMS]],
+    [['--count', '--selection', SUMS, '--recorded', '-']],
+  ])('refuses %j', (argv) => {
+    expect(() => parseWashSizesArgs(argv)).toThrow(/usage/);
+  });
+
+  it('names every selection in its usage', () => {
+    expect(() => parseWashSizesArgs([])).toThrow(
+      new RegExp(WASH_SELECTIONS.join('\\|'))
+    );
+  });
+});
+
+/** A harvester whose first SELECT keeps what the SQL's prefilter keeps. */
+class PrefilterHarvester extends FakeHarvester {
+  override async query<T>(sql: string): Promise<T[]> {
+    if (sql === SELECT_WASH_ROWS_SQL) {
+      return this.rows
+        .filter((r) => this.prefilter.test(r.sizeFormat ?? ''))
+        .map((r) => ({ itemId: r.itemId })) as T[];
+    }
+    return super.query<T>(sql);
+  }
+}
+
+describe('wash sizes, task 0009: the command', () => {
+  const rows = () => [
+    row('a', { ...ELJAMON, sizeFormat: '40lav' }),
+    row('b', { sizeFormat: '35+18 lavados', unitSize: null, sizeUnit: null }),
+    row('c'),
+  ];
+  const items = () => [
+    item('a', { name: { es: 'Nombre secreto' }, packCount: 3 }),
+    item('b', { unitSize: 53 }),
+    item('c'),
+  ];
+  function sumsStack() {
+    const s = stack(rows(), items());
+    const harvester = new PrefilterHarvester(rows());
+    return { ...s, harvester, ports: { ...s.ports, harvester } };
+  }
+
+  it('corrects only its own products, keeps the pack count, and counts 0 after', async () => {
+    const s = sumsStack();
+    const failures = await runWashSizes(s.ports, {
+      mode: 'write',
+      max: 2,
+      file: 'r.tsv',
+      recorded: null,
+      selection: SUMS,
+    });
+    expect(failures).toBe(0);
+    expect(s.catalog.updates).toEqual([
+      {
+        itemId: 'a',
+        unitSize: null,
+        expect: { defaultUnit: UnitOfMeasure.UNIT, unitSize: 40, packCount: 3 },
+      },
+      {
+        itemId: 'b',
+        unitSize: null,
+        expect: {
+          defaultUnit: UnitOfMeasure.UNIT,
+          unitSize: 53,
+          packCount: null,
+        },
+      },
+    ]);
+    expect(s.catalog.items.get('a')?.packCount).toBe(3);
+    expect(s.catalog.items.get('c')?.unitSize).toBe(40);
+    expect(s.harvester.other).toEqual([]);
+    const list = s.files.get('r.tsv') ?? '';
+    expect(list).toContain('eljamon\ta\tNombre secreto\t40\tUNIT\t3\t40lav\t');
+    expect(list).toContain(
+      'deza\tb\tDetergente b\t53\tUNIT\t\t35+18 lavados\t'
+    );
+    expect(list).not.toContain('\tc\t');
+    expect(s.log.join('\n')).not.toMatch(/Nombre|Detergente/);
+
+    s.log.length = 0;
+    await runWashSizes(s.ports, { mode: 'count', selection: SUMS });
+    expect(s.log).toContain('products 0');
+    s.log.length = 0;
+    await runWashSizes(s.ports, { mode: 'count' });
+    expect(s.log).toContain('products 1');
+  });
+
+  it('answers task 0007 what it answered before, on the same data', async () => {
+    const s = sumsStack();
+    await runWashSizes(s.ports, { mode: 'count' });
+    expect(s.log).toEqual([
+      'chain deza 1',
+      'products 1',
+      'pack 0',
+      'content 0',
+      'unread 0',
+      'held 0',
+      'pack-of-units 0',
+      'short-wash-word 1',
+      'sum 1',
+      'mercadona-per-wash 0',
+    ]);
+    expect(s.catalog.updates).toEqual([]);
+  });
+
+  it('refuses above --max before any write', async () => {
+    const s = sumsStack();
+    await expect(
+      runWashSizes(s.ports, {
+        mode: 'write',
+        max: 1,
+        file: 'r.tsv',
+        recorded: null,
+        selection: SUMS,
+      })
+    ).rejects.toThrow('Refused, and nothing was changed: 2 products, above 1.');
+    expect(s.catalog.updates).toEqual([]);
+  });
+});
+
+describe('wash sizes, task 0009: its own ConfigMap', () => {
+  it('names a ConfigMap per task', () => {
+    expect(REVIEW_CONFIGMAPS).toEqual({
+      'printed-count': 'configmap/release-task-0007-review',
+      'sum-and-short-word': 'configmap/release-task-0009-review',
+    });
+  });
+
+  it('names its own ConfigMap when it refuses a recorded list, and task 0007 its own', async () => {
+    for (const [selection, own, other] of [
+      [SUMS, '0009', '0007'],
+      [undefined, '0007', '0009'],
+    ] as const) {
+      const s = stack([], []);
+      s.files.set(
+        'old.json',
+        JSON.stringify({ data: { 'review.tsv': 'x\n' } })
+      );
+      const run = runWashSizes(s.ports, {
+        mode: 'review',
+        file: 'r.tsv',
+        recorded: 'old.json',
+        ...(selection ? { selection } : {}),
+      });
+      await expect(run).rejects.toThrow(
+        `configmap/release-task-${own}-review does not start with the header`
+      );
+      await expect(run).rejects.not.toThrow(`release-task-${other}-review`);
+    }
+  });
+});
+
+describe('wash sizes, task 0009: a walk writes no size back', () => {
+  // Plan 0279, section 2: the readings a walk makes of these texts today.
+  it.each(['35+18 lavados', '30+6lav', '40lav'])(
+    'DEZA reads no size in %s',
+    (text) => {
+      const measured = measuresIn(`Detergente MARCA azul ${text}`);
+      expect(measured.unitSize).toBeNull();
+      expect(measured.sizeUnit).toBeNull();
+      expect(measured.packCount).toBeNull();
+    }
+  );
+
+  it.each(['35+18 lavados', '30+6lav', '40lav'])(
+    'El Jamón reads no size in %s',
+    (text) => {
+      const read = splitElJamonSize(`detergente azul, ${text}`);
+      expect(read.sizeFormat).toBe(text);
+      expect(read.unitSize).toBeNull();
+      expect(read.sizeUnit).toBeNull();
+      expect(read.packCount).toBeNull();
+    }
+  );
 });
