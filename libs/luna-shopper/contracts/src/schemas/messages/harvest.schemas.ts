@@ -1851,6 +1851,7 @@ const sourceEntryObserved = object(
     packCount: packCountOrNull(),
     soldByWeight: boolean(),
     approxWeight: numberOrNull(),
+    packaging: nullableString(),
   },
   [
     'name',
@@ -1862,6 +1863,7 @@ const sourceEntryObserved = object(
     'packCount',
     'soldByWeight',
     'approxWeight',
+    'packaging',
   ]
 );
 

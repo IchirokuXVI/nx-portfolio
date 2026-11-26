@@ -129,6 +129,9 @@ The fields a decision is made on, as `SourceCatalogEntryView` prints them:
 | `unitSize`, `sizeUnit` | the size the parser read from it, which a `createItem` falls back to |
 | `packCount` | the pack the row states, which a `createItem` takes when its item leaves it out |
 | `soldByWeight`, `approxWeight` | a piece by the kilo is a different product kind (plan `0244`) |
+| `packaging` | the container the chain prints (plan `0248`), by which the matcher tells a can from a bottle of one name and size (decision 154a) |
+
+Ten fields in all: `packaging` joined the first nine by decision 154a.
 
 Every field is required inside `observed`, with `null` where the row holds nothing. A partial
 `observed` would guard less than it seems to, and a reader of the file could not tell.
@@ -179,8 +182,8 @@ as it is for the other combinations (DTO comment, `harvest.dto.ts` lines 513 to 
 
 - **The suggestions decider** (`commands.mjs` lines 801 to 804) writes
   `observed: { name, brand, ean, sizeFormat, unitSize, sizeUnit, packCount, soldByWeight,
-  approxWeight }` from the entry beside `status` and `lastSeenAt`. Same cluster, both are sent
-  and both are compared, which is today's check plus the content. Curation CLI plan `0006`
+  approxWeight, packaging }` from the entry beside `status` and `lastSeenAt`. Same cluster,
+  both are sent and both are compared, which is today's check plus the content. Curation CLI plan `0006`
   sends `observed` without `lastSeenAt` when it replays a file to another cluster.
 - **The decisions file format** gains the field inside each record's `expect`. A file without
   it stays valid.
@@ -246,6 +249,16 @@ Each A is the smallest build, and the other options can be added later.
 `observed`, so an explicit `null` is a 400 as the contract schema says, and absent is still
 allowed. Every field of `SourceEntryObservedDto` is read as sent (`asSent`, as plan 0193 did for
 body flags), so a value of the wrong JSON type is a 400 rather than a value the pipe converted.
+
+**154a (owner, 2026-11-26, built in [#1116](https://github.com/IchirokuXVI/nx-portfolio/pull/1116)):** `packaging` joins `observed` as its tenth field, required and
+nullable, a string as `SourceCatalogEntryView.packaging` prints it, compared exactly like the
+other text fields. The matcher tells a can from a bottle of one name and size by it
+(`matching.ts`, the sibling key), so a row accepted onto the can product while its packaging
+said "lata" is not bound when a later walk changed it to "botella" and nothing else. A
+decisions file written before this carries nine fields and is refused with a 400; it is decided
+again, or sent with `lastSeenAt` only. The curation replay (CLI plan `0006`, section 6) forwards
+`observed` as the file holds it and lists the ten fields for its completeness gate, so it
+refuses such a file before sending anything.
 
 ## Open decisions for the owner
 

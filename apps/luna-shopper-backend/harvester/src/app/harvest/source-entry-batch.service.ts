@@ -1008,6 +1008,7 @@ const OBSERVED_FIELDS: readonly (keyof SourceEntryObserved)[] = [
   'packCount',
   'soldByWeight',
   'approxWeight',
+  'packaging',
 ];
 
 /** The numeric fields, compared as numbers rather than as their spelling. */
@@ -1036,6 +1037,7 @@ function observedOf(row: SourceCatalogEntry): SourceEntryObserved {
     packCount: view.packCount ?? null,
     soldByWeight: view.soldByWeight,
     approxWeight: view.approxWeight ?? null,
+    packaging: view.packaging ?? null,
   };
 }
 

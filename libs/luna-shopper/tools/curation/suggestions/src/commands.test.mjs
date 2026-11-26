@@ -575,6 +575,7 @@ test('a CREATE writes into the rehearsal catalog and never into the main one', a
       packCount: null,
       soldByWeight: false,
       approxWeight: null,
+      packaging: null,
     },
   });
 
@@ -660,6 +661,7 @@ test('a decided row carries what the entry said, and buildOperations copies it (
         packCount: 2,
         soldByWeight: true,
         approxWeight: 250,
+        packaging: 'Bandeja',
         // Never part of the check: a price moves every week.
         prices: [{ priceScopeId: 's', price: 3.2 }],
       }),
@@ -687,6 +689,7 @@ test('a decided row carries what the entry said, and buildOperations copies it (
     packCount: 2,
     soldByWeight: true,
     approxWeight: 250,
+    packaging: 'Bandeja',
   });
   assert.equal(row.expect.lastSeenAt, '2026-09-08T10:00:00.000Z');
 

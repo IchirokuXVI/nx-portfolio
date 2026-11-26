@@ -1207,6 +1207,7 @@ const observed = {
   packCount: null,
   soldByWeight: false,
   approxWeight: null,
+  packaging: 'Brik',
 };
 const expect = {
   status: 'CANDIDATE',
@@ -1247,6 +1248,20 @@ test('a decisions file without the content expect is refused whole', () => {
         implementation: 'suggestions',
       }),
     /1 of the 2 decided rows .* carry no complete expect\.observed/
+  );
+  // A file written before decision 154a holds nine fields, no packaging.
+  const { packaging: _packaging, ...nine } = observed;
+  assert.throws(
+    () =>
+      prepareDecisions({
+        file: 'd.jsonl',
+        header: { header: true },
+        records: [
+          { ...linkRow(1, id(1)), expect: { ...expect, observed: nine } },
+        ],
+        implementation: 'suggestions',
+      }),
+    /1 of the 1 decided rows .* carry no complete expect\.observed/
   );
   assert.throws(
     () =>
