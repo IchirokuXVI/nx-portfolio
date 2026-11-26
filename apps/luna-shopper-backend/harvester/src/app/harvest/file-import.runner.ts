@@ -26,6 +26,7 @@ import {
   type SourceIngestCounters,
   type SourceObservation,
 } from './source-ingest';
+import { isWalkKind } from './source-snapshot';
 
 export interface FileImportInput {
   supermarketId: string;
@@ -288,9 +289,11 @@ export class FileImportRunner {
    * import of a walk's kind (`OFFICIAL_WEB`, `OFFICIAL_API`): the
    * harvester's export states `category_paths_complete` for a row the
    * exported walk read whole, and the import stands where that walk stood.
-   * The replacing paths are those of every such product, `category_path`
-   * included, and the write names this import's run on the row, so an
-   * export of this import carries the statement on.
+   * The replacing paths are the `category_paths` of every such product, and
+   * never `category_path`: the export writes that one from the row's
+   * `categoryPath` whether or not the walk still read it. The write names
+   * this import's run on the row, so an export of this import carries the
+   * statement on.
    *
    * Written after the ingest, so each row the import created exists, as a
    * walk writes its paths at the drain after the last chunk. An ingest that
@@ -311,14 +314,19 @@ export class FileImportRunner {
     outcomes: readonly SourceEntryOutcome[],
     onWritten: () => void
   ): Promise<void> {
-    const replaces = WALK_KINDS.has(sourceKind);
-    const byEntry = new Map<string, { paths: string[][]; whole: boolean }>();
+    const replaces = isWalkKind(sourceKind);
+    const byEntry = new Map<
+      string,
+      { added: string[][]; listed: string[][]; whole: boolean }
+    >();
     outcomes.forEach((outcome, index) => {
       const product = products[index];
-      const paths = [
-        ...(product?.category_paths ?? []),
-        product?.category_path ?? [],
-      ].filter((path) => path.length > 0);
+      const listed = (product?.category_paths ?? [])
+        .filter((path) => path.length > 0)
+        .map((path) => [...path]);
+      const added = [...listed, [...(product?.category_path ?? [])]].filter(
+        (path) => path.length > 0
+      );
       // Asked of every product of the row, one with no path included, so a
       // second product that does not state its paths whole keeps the row
       // at `ADD`.
@@ -326,19 +334,21 @@ export class FileImportRunner {
         replaces && product !== undefined && statesPathsWhole(product);
       const held = byEntry.get(outcome.entry.id);
       if (held) {
-        held.paths.push(...paths.map((path) => [...path]));
+        held.added.push(...added);
+        held.listed.push(...listed);
         held.whole = held.whole && whole;
       } else {
-        byEntry.set(outcome.entry.id, {
-          paths: paths.map((path) => [...path]),
-          whole,
-        });
+        byEntry.set(outcome.entry.id, { added, listed, whole });
       }
     });
     const writes = [...byEntry]
-      .map(([entryId, { paths, whole }]) => ({
+      .map(([entryId, { added, listed, whole }]) => ({
         entryId,
-        paths: distinctCategoryPaths(paths),
+        // A row replaced takes `category_paths` alone: the export writes
+        // `category_path` from the row's `categoryPath`, which a walk moves
+        // only on a full observation, so it may name a path the walk proved
+        // gone.
+        paths: distinctCategoryPaths(whole ? listed : added),
         mode: whole ? ('REPLACE' as const) : ('ADD' as const),
       }))
       .filter((write) => write.paths.length > 0);
@@ -533,15 +543,6 @@ export function soldByWeightOf(
   }
   return product.extra?.['basis'] === 'kg' ? true : undefined;
 }
-
-/**
- * The kinds an import may replace a row's category paths as (164a): the
- * kinds a walk stamps. A leaflet, a person and every other kind only add.
- */
-const WALK_KINDS: ReadonlySet<PriceSourceKind> = new Set([
-  PriceSourceKind.OFFICIAL_WEB,
-  PriceSourceKind.OFFICIAL_API,
-]);
 
 /**
  * Whether a product of the document states its category paths whole (164a):

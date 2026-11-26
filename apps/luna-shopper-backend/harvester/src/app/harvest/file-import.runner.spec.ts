@@ -1464,6 +1464,20 @@ describe('FileImportRunner (plan 0086)', () => {
         }
       );
 
+      it('replaces with category_paths alone, never bringing back a stale category_path the walk proved gone', async () => {
+        // The source row kept `categoryPath` [Bebidas] while its walk
+        // replaced the paths with [DAIRY, SECOND]; the export writes both.
+        const { runner, context, stored } = importing([
+          product({ category_path: WRONG }),
+        ]);
+
+        const counters = await runner.run(context, asWalk);
+
+        expect(stored[0].categoryPaths).toEqual([DAIRY, SECOND]);
+        expect(stored[0].categoryPathsReplacedByRunId).toBe(RUN);
+        expect(counters.categoryPathsWritten).toBe(1);
+      });
+
       it('names the import on a row whose paths it states as they are, and counts no write', async () => {
         const { runner, context, stored } = importing([product()], {
           categoryPaths: [DAIRY, SECOND],

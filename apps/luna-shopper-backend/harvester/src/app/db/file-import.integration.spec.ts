@@ -1068,6 +1068,31 @@ describeIntegration('the one source product schema (real Postgres)', () => {
         });
       });
 
+      it('replaces with the stated paths alone, never bringing back the stale category_path the export writes', async () => {
+        // The source row kept `categoryPath` from an earlier full
+        // observation; its walk replaced the paths without it.
+        const STALE = ['Navidad'];
+        const document = await exportedWhole({ categoryPath: STALE });
+        expect(document.products[0]).toMatchObject({
+          category_path: STALE,
+          category_paths: [DAIRY, BREAKFAST],
+          category_paths_complete: true,
+        });
+        const held = await wronglyFiled();
+
+        await importer().run(importContext(document), asWalk);
+
+        expect(await entries.findOneByOrFail({ id: held.id })).toMatchObject({
+          categoryPaths: [DAIRY, BREAKFAST],
+          categoryPathsReplacedByRunId: RUN,
+        });
+        const again = await exportOf(RUN);
+        expect(again.products[0]).toMatchObject({
+          category_paths: [DAIRY, BREAKFAST],
+          category_paths_complete: true,
+        });
+      });
+
       it('only adds for a product that does not state its paths whole', async () => {
         const document = await exportedWhole();
         const plain = {
