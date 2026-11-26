@@ -1177,7 +1177,23 @@ export type SourceEntryDecisionDto = {
  */
 export type SourceEntryExpectationDto = {
   status: 'ACTIVE' | 'CANDIDATE' | 'UNRESOLVED' | 'REJECTED';
-  lastSeenAt: string;
+  lastSeenAt?: string;
+  observed?: SourceEntryObservedDto;
+};
+
+/**
+ * `SourceEntryObservedDto` in the gateway's OpenAPI document.
+ */
+export type SourceEntryObservedDto = {
+  name: string;
+  brand: string | null;
+  ean: string | null;
+  sizeFormat: string | null;
+  unitSize: number | null;
+  sizeUnit: 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'UNIT' | null;
+  packCount: number | null;
+  soldByWeight: boolean;
+  approxWeight: number | null;
 };
 
 /**

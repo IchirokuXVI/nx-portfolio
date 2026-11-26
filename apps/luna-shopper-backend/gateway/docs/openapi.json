@@ -35082,6 +35082,66 @@
           }
         }
       },
+      "SourceEntryObservedDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "brand": {
+            "type": "string",
+            "nullable": true
+          },
+          "ean": {
+            "type": "string",
+            "nullable": true
+          },
+          "sizeFormat": {
+            "type": "string",
+            "nullable": true
+          },
+          "unitSize": {
+            "type": "number",
+            "nullable": true
+          },
+          "sizeUnit": {
+            "type": "string",
+            "enum": [
+              "GRAM",
+              "KILOGRAM",
+              "MILLILITER",
+              "LITER",
+              "UNIT"
+            ],
+            "nullable": true
+          },
+          "packCount": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 2,
+            "maximum": 1000
+          },
+          "soldByWeight": {
+            "type": "boolean"
+          },
+          "approxWeight": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "name",
+          "brand",
+          "ean",
+          "sizeFormat",
+          "unitSize",
+          "sizeUnit",
+          "packCount",
+          "soldByWeight",
+          "approxWeight"
+        ]
+      },
       "SourceEntryExpectationDto": {
         "type": "object",
         "properties": {
@@ -35097,12 +35157,19 @@
           "lastSeenAt": {
             "type": "string",
             "format": "date-time",
-            "description": "Exactly the string the queue listing printed for this row. A row observed again since then fails the check."
+            "description": "Exactly the string the queue listing printed for this row. When present, a row observed again since then fails the check, whatever it says. At least one of this and `observed` is present."
+          },
+          "observed": {
+            "description": "The fields the decision was made on, exactly as the queue listing printed them, every one present with null where the row holds nothing. When present, each field is compared with the row under the route’s lock, and a field that differs fails the operation with `EXPECT_MISMATCH` naming it. A row a later walk saw again but that says the same passes. Prices are not compared. At least one of this and `lastSeenAt` is present.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SourceEntryObservedDto"
+              }
+            ]
           }
         },
         "required": [
-          "status",
-          "lastSeenAt"
+          "status"
         ]
       },
       "SourceEntryDecisionDto": {
