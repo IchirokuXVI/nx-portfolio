@@ -353,6 +353,7 @@ test('a decisions part refused at a step other than VALIDATE fails the run, with
       packCount: null,
       soldByWeight: false,
       approxWeight: null,
+      packaging: null,
     },
   };
   writeFileSync(
