@@ -149,7 +149,12 @@
   gap: var(--app-space-1);
   flex: 1;
   min-inline-size: 0;
+  // The body reaches across the row's gap to the control after it, so no strip
+  // between the words and the amount is dead to a tap. The padding and the
+  // negative margin cancel, and nothing moves.
+  margin-inline-end: calc(var(--app-space-3) * -1);
   padding: 0;
+  padding-inline-end: var(--app-space-3);
   border: none;
   background: transparent;
   font-family: inherit;
