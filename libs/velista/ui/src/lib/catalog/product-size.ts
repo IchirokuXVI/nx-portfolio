@@ -50,9 +50,9 @@ export const NO_COUNTS: SizeCounts = { packCount: null, pieceCount: null };
  * 100 piezas". One unit is the total divided by the pack, in the same unit word,
  * derived here and never stored. A unit that is not whole at the precision its
  * unit prints is rounded with a tilde, "185 g (7 × ~26 g)" (O1 A). A counted size
- * prints its units only when the division is whole. Where the size cannot carry
- * the pack (beside a weight, with no size, or a counted size that does not
- * divide), the pack prints as its own words, "Pack de 4", as it did before. A
+ * prints its units only when the division is whole and one unit is more than one.
+ * Where the size cannot carry the pack (beside a weight, with no size, or a
+ * counted size that does not divide or divides into ones), the pack prints as its own words, "Pack de 4", as it did before. A
  * caller that prints the total alone passes {@link NO_COUNTS}.
  */
 export function productSizeText(
@@ -125,8 +125,9 @@ function totalText(
 /**
  * One unit of a pack in the total's unit word: plain when it is whole at the
  * precision the unit prints (no decimals for g and ml, up to three for kg and
- * L), else rounded to it with a tilde. A counted unit that does not divide
- * answers null, so the pack prints as its own words.
+ * L), else rounded to it with a tilde. A counted unit that does not divide, or
+ * divides into ones, answers null, so the pack prints as its own words: "4 uds
+ * · Pack de 4", never "4 uds (4 × 1 uds)".
  */
 function unitText(
   each: number,
@@ -135,7 +136,7 @@ function unitText(
   locale: string,
   translate: SizeTranslate
 ): string | null {
-  if (counted && !Number.isInteger(each)) {
+  if (counted && (!Number.isInteger(each) || each < 2)) {
     return null;
   }
   const digits = unit === 'GRAM' || unit === 'MILLILITER' || counted ? 0 : 3;

@@ -292,6 +292,62 @@ describe('productSizeText with its counts (velista 0209)', () => {
       '10 units · Pack 3',
       '10 uds · Pack de 3',
     ]);
+    expect(both(12, 'UNIT', 6, null)).toEqual([
+      '12 units (6 × 2 units)',
+      '12 uds (6 × 2 uds)',
+    ]);
+    expect(both(12, 'UNIT', 5, null)).toEqual([
+      '12 units · Pack 5',
+      '12 uds · Pack de 5',
+    ]);
+  });
+
+  it('prints a counted size whose pack divides into ones as the total and the pack words', () => {
+    expect(both(4, 'UNIT', 4, null)).toEqual([
+      '4 units · Pack 4',
+      '4 uds · Pack de 4',
+    ]);
+  });
+
+  it('prints one unit of a float total plain when it divides, with a tilde when it does not', () => {
+    expect(both(0.3, 'KILOGRAM', 3, null)).toEqual([
+      '0.3 kg (3 × 0.1 kg)',
+      '0,3 kg (3 × 0,1 kg)',
+    ]);
+    expect(both(1.5, 'LITER', 6, null)).toEqual([
+      '1.5 L (6 × 0.25 L)',
+      '1,5 L (6 × 0,25 L)',
+    ]);
+    expect(both(1, 'LITER', 3, null)).toEqual([
+      '1 L (3 × ~0.333 L)',
+      '1 L (3 × ~0,333 L)',
+    ]);
+  });
+
+  it('falls back to the pack words for a unit that rounds to zero, never "~0"', () => {
+    expect(both(5, 'GRAM', 20, null)).toEqual([
+      '5 g · Pack 20',
+      '5 g · Pack de 20',
+    ]);
+    expect(both(5, 'GRAM', null, 20)).toEqual([
+      '5 g, 20 pieces',
+      '5 g, 20 piezas',
+    ]);
+  });
+
+  it('prints no pieces beside a counted size', () => {
+    expect(both(12, 'UNIT', null, 24)).toEqual(['12 units', '12 uds']);
+    expect(both(12, 'UNIT', 6, 24)).toEqual([
+      '12 units (6 × 2 units)',
+      '12 uds (6 × 2 uds)',
+    ]);
+  });
+
+  it('groups thousands as each language does, Spanish from ten thousand', () => {
+    expect(both(12000, 'MILLILITER', 6, null)).toEqual([
+      '12,000 ml (6 × 2,000 ml)',
+      '12.000 ml (6 × 2000 ml)',
+    ]);
   });
 
   it('keeps a weight first, with a pack beside it as its own words', () => {
