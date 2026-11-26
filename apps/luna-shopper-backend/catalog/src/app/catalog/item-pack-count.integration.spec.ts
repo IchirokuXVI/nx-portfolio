@@ -210,5 +210,61 @@ describeIntegration('the pack count (real Postgres)', () => {
         })
       ).toEqual({ written: 1 });
     });
+
+    // Plan 0278, section 2: `item_piece_count_on_sized` refuses a pack count
+    // at or above the piece count, and one refused row would fail the chunk.
+    it('skips a product whose piece count is not above the offered count, and writes the rest', async () => {
+      const equal = await items.create({
+        userId: HARVESTER,
+        name: { es: 'Caramelos de menta' },
+        categoryIds: [categoryId('milk')],
+        defaultUnit: UnitOfMeasure.GRAM,
+        unitSize: 35,
+        pieceCount: 4,
+      });
+      const below = await items.create({
+        userId: HARVESTER,
+        name: { es: 'Caramelos de fresa' },
+        categoryIds: [categoryId('milk')],
+        defaultUnit: UnitOfMeasure.GRAM,
+        unitSize: 35,
+        pieceCount: 3,
+      });
+      const larger = await items.create({
+        userId: HARVESTER,
+        name: { es: 'Caramelos surtidos' },
+        categoryIds: [categoryId('milk')],
+        defaultUnit: UnitOfMeasure.GRAM,
+        unitSize: 70,
+        pieceCount: 100,
+      });
+      const plain = await newItem();
+
+      const result = await items.fillPackCounts({
+        userId: HARVESTER,
+        entries: [
+          { itemId: equal.id, packCount: 4 },
+          { itemId: below.id, packCount: 4 },
+          { itemId: larger.id, packCount: 2 },
+          { itemId: plain.id, packCount: 6 },
+        ],
+      });
+
+      expect(result).toEqual({ written: 2 });
+      const stored = async (id: string) => rows.findOneByOrFail({ id });
+      expect(await stored(equal.id)).toMatchObject({
+        packCount: null,
+        pieceCount: 4,
+      });
+      expect(await stored(below.id)).toMatchObject({
+        packCount: null,
+        pieceCount: 3,
+      });
+      expect(await stored(larger.id)).toMatchObject({
+        packCount: 2,
+        pieceCount: 100,
+      });
+      expect((await stored(plain.id)).packCount).toBe(6);
+    });
   });
 });

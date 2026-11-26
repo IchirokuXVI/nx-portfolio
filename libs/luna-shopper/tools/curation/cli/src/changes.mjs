@@ -29,8 +29,8 @@ export const AUDIT_ORIGIN = 'catalog_audit';
  * `field` is the property the audit trail records, `send` the property the
  * batch takes for both the edit and the `expect` (the same name unless said),
  * `kind` how two values are compared, and `read` how the lookup's view holds
- * it. A field the `expect` learns to guard is one more line here: backend plan
- * 0278 adds `pieceCount` as `{ field: 'pieceCount', kind: 'number' }`.
+ * it. A field the `expect` learns to guard is one more line here, as
+ * `pieceCount` was when backend plan 0278 gave the `expect` that field.
  */
 export const CARRIED_FIELDS = [
   { field: 'name', kind: 'name' },
@@ -40,6 +40,7 @@ export const CARRIED_FIELDS = [
   { field: 'quantityStep', kind: 'number' },
   { field: 'defaultUnit', kind: 'text' },
   { field: 'packCount', kind: 'number' },
+  { field: 'pieceCount', kind: 'number' },
   {
     field: 'categories',
     send: 'categorySlugs',

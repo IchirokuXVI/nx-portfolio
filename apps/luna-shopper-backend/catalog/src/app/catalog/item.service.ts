@@ -1,4 +1,4 @@
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   APPROX_WEIGHT_FILL_MAX,
@@ -482,6 +482,8 @@ function rankedWhereSql(
  */
 @Injectable()
 export class ItemService {
+  private readonly logger = new Logger(ItemService.name);
+
   constructor(
     @InjectRepository(Item) private readonly items: Repository<Item>,
     @InjectRepository(ProductGroup)
@@ -1161,6 +1163,10 @@ export class ItemService {
    * survives every run after it. A pair naming a product that is gone writes
    * nothing and is not counted.
    *
+   * **It never writes a pack count at or above a piece count** (plan 0278,
+   * section 2). Such a product is skipped and logged, not counted in
+   * `written`, so the rest of the call still lands.
+   *
    * The harvester already left out every product whose sources disagree, so a
    * product named twice here is a caller's mistake and is refused whole rather
    * than settled by whichever pair came last.
@@ -1199,19 +1205,43 @@ export class ItemService {
     }
 
     return this.audit.write(actor, async (tx) => {
+      const params = [
+        entries.map((entry) => entry.itemId),
+        entries.map((entry) => entry.packCount),
+      ];
       // `UPDATE ... RETURNING` answers `[rows, rowCount]` through `query()`.
+      // A product a person gave a piece count takes only a pack count below
+      // it (plan 0278, section 2): `item_piece_count_on_sized` refuses the
+      // rest, and one refused row would fail the whole chunk.
       const [rows] = (await tx.manager.query(
         `UPDATE "items" AS i
             SET "packCount" = v."packCount", "updatedAt" = now()
            FROM unnest($1::uuid[], $2::smallint[]) AS v("id", "packCount")
           WHERE i."id" = v."id"
             AND i."packCount" IS NULL
+            AND (i."pieceCount" IS NULL OR v."packCount" < i."pieceCount")
       RETURNING i."id", i."packCount"`,
-        [
-          entries.map((entry) => entry.itemId),
-          entries.map((entry) => entry.packCount),
-        ]
+        params
       )) as [{ id: string; packCount: number }[], number];
+      // The answer has no room for a skip without a contract change, so the
+      // products the piece count kept out are logged for the curator.
+      const kept = (await tx.manager.query(
+        `SELECT i."id"
+           FROM "items" AS i
+           JOIN unnest($1::uuid[], $2::smallint[]) AS v("id", "packCount")
+             ON i."id" = v."id"
+          WHERE i."packCount" IS NULL
+            AND i."pieceCount" IS NOT NULL
+            AND v."packCount" >= i."pieceCount"`,
+        params
+      )) as { id: string }[];
+      if (kept.length > 0) {
+        this.logger.warn(
+          `A pack count fill skipped ${kept.length} product(s) whose piece ` +
+            `count is not above the offered pack count: ` +
+            kept.map((row) => row.id).join(', ')
+        );
+      }
       // Only the one column moved, so the trail records that and nothing
       // else: every other field reads the same on both sides.
       for (const row of rows) {

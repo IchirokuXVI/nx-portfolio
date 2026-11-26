@@ -42,6 +42,7 @@ const product = (n, over = {}) => ({
   quantityStep: null,
   defaultUnit: 'GRAM',
   packCount: null,
+  pieceCount: null,
   categories: [{ slug: 'leche' }],
   ...over,
 });
@@ -97,7 +98,8 @@ function serverTrimmedOrNull(value) {
  * Each field an expectation names that the row does not hold, as catalog
  * finds them: a name half left out expects no name in that language, a brand
  * by key, `unitSize` and `approxWeight` as numbers because Postgres answers a
- * `numeric` as a string, the rest strictly, null meaning the row holds nothing.
+ * `numeric` as a string, `pieceCount` as a number too (backend plan 0278), the
+ * rest strictly, null meaning the row holds nothing.
  */
 function serverMismatches(row, expect) {
   const mismatches = [];
@@ -126,7 +128,7 @@ function serverMismatches(row, expect) {
       actual: row.brand,
     });
   }
-  for (const field of ['unitSize', 'approxWeight']) {
+  for (const field of ['unitSize', 'approxWeight', 'pieceCount']) {
     if (expect[field] !== undefined) {
       const actual =
         row[field] === null || row[field] === undefined
@@ -293,6 +295,8 @@ test('the fake compares as catalog does', () => {
   assert.deepEqual(fields({ unitSize: '500' }), ['unitSize']);
   assert.deepEqual(fields({ categorySlugs: ['b', 'a'] }), ['categorySlugs']);
   assert.deepEqual(fields({ packCount: 0 }), ['packCount']);
+  assert.deepEqual(fields({ pieceCount: null }), []);
+  assert.deepEqual(fields({ pieceCount: 50 }), ['pieceCount']);
 });
 
 const patches = (calls) => calls.filter((call) => call.path === BATCH_PATH);
@@ -424,6 +428,57 @@ test('the expect holds from plus name and brand, and a field already at to is no
       brand: 'Marca',
     },
   });
+});
+
+test('a piece count is carried as the pack count is: sent, expected, compared as a number', async () => {
+  const pieces = [
+    { field: 'packCount', from: null, to: 2 },
+    { field: 'pieceCount', from: null, to: 100 },
+  ];
+  const line = classify(change(1, pieces), product(1));
+  assert.equal(line.class, CLASS.APPLY);
+  assert.deepEqual(batchEntry(line), {
+    itemId: id(1),
+    packCount: 2,
+    pieceCount: 100,
+    expect: {
+      packCount: null,
+      pieceCount: null,
+      name: { es: 'Producto 1', en: 'Product 1' },
+      brand: 'Marca',
+    },
+  });
+  // A count the target already holds, answered as a string, is already there.
+  assert.equal(
+    classify(
+      change(2, [{ field: 'pieceCount', from: '50', to: 48 }]),
+      product(2, { pieceCount: '48' })
+    ).class,
+    CLASS.ALREADY
+  );
+  // A third count is a conflict.
+  assert.equal(
+    classify(
+      change(3, [{ field: 'pieceCount', from: 50, to: 48 }]),
+      product(3, { pieceCount: 60 })
+    ).class,
+    CLASS.CONFLICT
+  );
+
+  const { client, store } = fakeTarget([product(4), product(5)]);
+  // The second product moved on the target after the edit was made.
+  store.get(id(5)).pieceCount = 30;
+  const changes = [4, 5].map((n) => change(n, pieces));
+  const { lines } = await replayChanges({ changes, client, write: true });
+  assert.deepEqual(
+    lines.map((written) => written.class),
+    [CLASS.APPLY, CLASS.CONFLICT]
+  );
+  assert.equal(store.get(id(4)).pieceCount, 100);
+  assert.equal(store.get(id(4)).packCount, 2);
+  assert.equal(store.get(id(5)).pieceCount, 30);
+  const again = await replayChanges({ changes: [change(4, pieces)], client });
+  assert.equal(again.lines[0].class, CLASS.ALREADY);
 });
 
 test('a write changes the apply class only, and a second dry run finds it already there', async () => {

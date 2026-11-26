@@ -132,6 +132,10 @@ back office or the admin API. The replay then carries those fixes to staging or
 production. It writes a change only when the target product still holds what
 the change expected. Every run writes a report, and a dry run is the default.
 
+It carries the fields that an `expect` can guard: `name`, `brand`, `unitSize`,
+`approxWeight`, `quantityStep`, `defaultUnit`, `packCount`, `pieceCount` and
+the categories (sent as `categorySlugs`).
+
 ### Before the first write
 
 - Take a backup of the target's catalog database.

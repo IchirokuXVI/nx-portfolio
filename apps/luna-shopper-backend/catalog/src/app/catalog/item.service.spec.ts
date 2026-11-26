@@ -2248,6 +2248,40 @@ describe('ItemService', () => {
       }
     );
 
+    it('refuses the one entry of a batch edit that raises the pack count to the stored piece count', async () => {
+      const BAG = '0b1c2d3e-4f50-4617-8899-aabbccddeef1';
+      const PACK = '0b1c2d3e-4f50-4617-8899-aabbccddeef2';
+      const repository = {
+        ...items(),
+        find: jest.fn(async () => [
+          { ...CANDIES, id: BAG, packCount: null, pieceCount: 50 },
+          { ...CANDIES, id: PACK },
+        ]),
+      } as unknown as jest.Mocked<Repository<Item>>;
+      const { service } = build({ items: repository });
+      const error = await refusal(
+        service.updateMany({
+          userId: ADMIN,
+          items: [
+            // Below the piece count of 100: allowed on its own.
+            { itemId: PACK, packCount: 4 },
+            // The merged state is a pack count of 50 beside 50 pieces.
+            { itemId: BAG, packCount: 50 },
+          ],
+        })
+      );
+      expect(error).toBeInstanceOf(ItemPieceCountNotAllowedException);
+      expect(error.code).toBe('item_piece_count_not_allowed');
+      // An edit names its product, as every edit rule does; the position of
+      // an entry is named by a batch create, whose entries have no id yet.
+      expect(error.details).toMatchObject({
+        itemId: BAG,
+        pieceCount: 50,
+        packCount: 50,
+      });
+      expect(repository.save).not.toHaveBeenCalled();
+    });
+
     it('lets the existing rules answer first', async () => {
       const { service } = build({ items: items() });
       // A weight beside a size is the weight rule's.
