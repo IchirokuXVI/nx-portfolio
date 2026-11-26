@@ -236,11 +236,14 @@ request it stopped on as `not written` with the answer (or `already there`
 when a read back shows they landed), and every product after them as
 `not sent`. The header names the answer under `error`.
 
-A `not written` line with `checked: false` was sent, and its outcome is not
-known: the target may hold it. Its `reason` says so. A product that was ever in
-a request whose answer was lost, and that no later answer settled, is always
-reported this way, never as `not sent`, whatever stopped the run. This holds
-for the fourth lost answer and for a 5xx too.
+A line with `checked: false` was sent in a request whose outcome is not known,
+and nothing since settled it: the target may hold it. Its `reason` says so.
+It can sit on any class (`not written`, `refused`, `conflict` and the others),
+and it always means "run the dry run again". Only three things settle a
+product: an answer that wrote it, a read back that saw its new values, and an
+expectation failure that names it. A product that is still waiting to be sent
+again is `not written`, never `not sent`, whatever stopped the run. This holds
+for the fourth lost answer, a 5xx and a 2xx whose body could not be read too.
 
 **After any stop, and after any lost answer, run the dry run (step 3) again.**
 It reads the target and settles every line marked `checked: false`: what
@@ -255,7 +258,7 @@ waiting to be sent again after a lost answer is `not written` with
 process exits with 130 (143 for a `kill`).
 
 stderr and the report's `counts` count the lines with `checked: false` apart,
-as `outcomeUnknown`. Those lines are also counted under `not written`. When the
+as `outcomeUnknown`. Those lines are also counted under their class. When the
 count is above zero, stderr says "N products were sent and their outcome is not
 known, run the dry run again".
 

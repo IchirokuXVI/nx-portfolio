@@ -730,6 +730,110 @@ test('a 504 whose read back sees the new values is conclusive: already there, ch
   assert.doesNotMatch(countsLine(countLines(lines)), /outcome is not known/);
 });
 
+/** Runs a write replay of `n` size changes and answers the report and stderr. */
+async function writeRun(client, n, { batchSize = 10 } = {}) {
+  const changeList = sizeChangeList(n);
+  const stderr = sink();
+  let report = null;
+  let failure = null;
+  try {
+    await runReplay({
+      changeFile: 'changes.jsonl',
+      changeList,
+      folded: foldChanges(changeList),
+      targetUrl: 'http://localhost:43700',
+      write: true,
+      batchSize,
+      reportPath: 'report.json',
+      client,
+      stderr,
+      writeFile: (_path, text) => {
+        report = JSON.parse(text);
+      },
+    });
+  } catch (error) {
+    failure = error;
+  }
+  return { report, stderr: stderr.text(), failure };
+}
+
+test('a 200 with an unreadable body whose read back fails leaves the products not checked', async () => {
+  const fake = fakeTarget(products(2), {
+    lose: (send) => (send === 1 ? 'unreadable' : null),
+  });
+  let lookups = 0;
+  const client = {
+    requests: 0,
+    async request(path, init) {
+      if (path === LOOKUP_PATH && ++lookups === 2) {
+        throw new HttpError(504);
+      }
+      return fake.client.request(path, init);
+    },
+  };
+  const { report, stderr, failure } = await writeRun(client, 2);
+  assert.ok(failure instanceof ReplayStopped);
+  // The server committed the batch, and the report does not say otherwise.
+  assert.equal(fake.store.get(id(1)).unitSize, 450);
+  assert.deepEqual(
+    report.lines.map((line) => [line.class, line.checked]),
+    [
+      [CLASS.NOT_WRITTEN, false],
+      [CLASS.NOT_WRITTEN, false],
+    ]
+  );
+  assert.equal(report.counts.outcomeUnknown, 2);
+  assert.match(
+    stderr,
+    /2 products were sent and their outcome is not known, run the dry run again/
+  );
+});
+
+test('a resend refused for its content after a late commit is refused and not checked', async () => {
+  // Sent, 504, read back too early (old values), committed, sent again: the
+  // brand check runs before the guard, so the refusal says nothing of the
+  // first send.
+  const { client, store } = fakeTarget(products(1), {
+    lose: (send) => (send === 1 ? 'late' : null),
+    refuse: (_entries, send) => {
+      if (send === 2) {
+        throw new HttpError(422, {
+          code: 'brand_not_registered',
+          detail: 'the brand is not registered',
+        });
+      }
+    },
+  });
+  const { report, stderr, failure } = await writeRun(client, 1);
+  assert.equal(failure, null);
+  assert.equal(store.get(id(1)).unitSize, 450);
+  const [line] = report.lines;
+  assert.equal(line.class, CLASS.REFUSED);
+  assert.equal(line.code, 'brand_not_registered');
+  assert.equal(line.checked, false);
+  assert.equal(line.sentInLostRequest, true);
+  assert.equal(report.counts.outcomeUnknown, 1);
+  assert.match(
+    stderr,
+    /1 products were sent and their outcome is not known, run the dry run again/
+  );
+});
+
+test('a refused line that was never in a lost request stays checked', async () => {
+  const { client } = fakeTarget(products(1), {
+    refuse: () => {
+      throw new HttpError(422, { code: 'brand_not_registered' });
+    },
+  });
+  const { report, stderr } = await writeRun(client, 1);
+  const [line] = report.lines;
+  assert.equal(line.class, CLASS.REFUSED);
+  assert.equal(line.checked, undefined);
+  assert.equal(line.sentInLostRequest, undefined);
+  assert.equal(report.counts.outcomeUnknown, 0);
+  assert.doesNotMatch(stderr, /outcome is not known/);
+});
+
 test('a report snapshot that fails after a lost answer leaves the products not written and not checked, never not sent', async () => {
   // Batch 1 of 2 loses its answer, the read back sees the old values and the
   // first send commits after that read.

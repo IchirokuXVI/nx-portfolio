@@ -64,8 +64,8 @@ export const IN_PROGRESS_NOTE =
   'The run had not finished when this file was written. In a write run, a line still of class apply and without written was in flight or not yet sent, and its outcome is not known. A line with sentInLostRequest was sent in a request whose answer was lost, so the target may hold it.';
 
 /**
- * What a `not written` line with `checked: false` says when the run stopped
- * after its request was sent and before an answer or a read back settled it.
+ * What a line with `checked: false` says, of any class: its request was sent
+ * and the run ended before direct evidence settled it.
  */
 export const UNKNOWN_OUTCOME_REASON =
   'its request was sent and its outcome is not known: the target may hold it. Run the dry run again to settle it';
@@ -507,23 +507,48 @@ function readBackSettles(error) {
   return typeof status === 'number' && status >= 200 && status < 300;
 }
 
-/** Marks a line as sent in a request whose outcome is not known yet. */
+/**
+ * Marks a line as sent in a request whose outcome is not known yet. Set before
+ * every read back, whatever the answer that led to it, so a read that fails or
+ * a stop after it still knows the products were sent.
+ */
 function markSentInLostRequest(group) {
   for (const line of group) {
     line.sentInLostRequest = true;
   }
 }
 
-/** A later answer or read back said what the target holds for this line. */
+/**
+ * Direct evidence said what the target holds for this line, and this is the
+ * only way the flag is cleared. Three events count: a written answer for it, a
+ * read back that saw its new values, and an `item_expectation_failed` refusal
+ * that names it (the guard ran on it inside the transaction). A read back that
+ * saw the old values is not one of them, nor is any other refusal: the server
+ * runs some content checks before the guard and outside the transaction, so
+ * such a refusal says nothing of an earlier request.
+ */
 function settle(line) {
   delete line.sentInLostRequest;
 }
 
-/** A line the run stopped on whose request may still land. */
-function markOutcomeUnknown(line) {
-  line.class = CLASS.NOT_WRITTEN;
-  line.checked = false;
-  line.reason = UNKNOWN_OUTCOME_REASON;
+/**
+ * The end of a run, in every path (the end of the write, a stop, a signal, a
+ * failed report write): every line that still carries the flag, of any class,
+ * is not checked, so the counts and stderr tell the operator to run the dry
+ * run again. A line still waiting to be sent is `not written`, never
+ * `not sent`, since its first send may land.
+ */
+export function markUnsettled(lines) {
+  for (const line of lines) {
+    if (!line.sentInLostRequest) {
+      continue;
+    }
+    if (line.class === CLASS.APPLY && !line.written) {
+      line.class = CLASS.NOT_WRITTEN;
+    }
+    line.checked = false;
+    line.reason = UNKNOWN_OUTCOME_REASON;
+  }
 }
 
 /** The fields of an expectation failure, as the report reads them. */
@@ -674,10 +699,11 @@ function markWritten(group) {
  *   `not written` (or `already there` when a read back shows they landed),
  *   every product after them is `not sent`, and a `ReplayStopped` is thrown.
  *
- * A product sent in a request whose outcome is not known (a lost answer
- * other than a 2xx, or a 5xx) carries `sentInLostRequest: true` until a later
- * answer or read back settles it. Whatever stops the run, such a product is
- * `not written` with `checked: false`, never `not sent`.
+ * A product sent in a request whose outcome is not known (any lost answer, a
+ * 2xx whose body could not be read among them, or a 5xx) carries
+ * `sentInLostRequest: true` until direct evidence settles it (see `settle`).
+ * When the write ends, in any way, a product that still carries it has
+ * `checked: false` whatever its class (see `markUnsettled`).
  *
  * `progress.current` holds the group in flight, so a signal handler can mark
  * it, and `onAnswer` is called after every answer is sorted.
@@ -771,11 +797,10 @@ export async function writeApply(
 
     if (lostAnswer(error)) {
       lostRounds += 1;
-      // Before the read back, so a read that fails or a stop after it still
-      // knows these products were sent.
-      if (!readBackSettles(error)) {
-        markSentInLostRequest(group);
-      }
+      // Before the read back, also after a 2xx: the server committed, and a
+      // read that fails must not leave the products looking unsent. What the
+      // read back sees with the old values stays flagged and is sent again.
+      markSentInLostRequest(group);
       const rest = await readBack(client, group);
       if (lostRounds > MAX_LOST_ROUNDS) {
         throw new ReplayStopped(
@@ -868,27 +893,26 @@ export async function writeApply(
       if (line.class === CLASS.APPLY && !line.written) {
         line.class = CLASS.NOT_WRITTEN;
         line.error = stop.answer;
-        if (line.sentInLostRequest) {
-          markOutcomeUnknown(line);
-        }
       }
     }
     progress.current = null;
     for (const line of [...queue.flat(), ...pending.slice(cursor)]) {
-      if (line.class !== CLASS.APPLY || line.written) {
+      // A line waiting to be sent again after a lost answer is left to
+      // markUnsettled below.
+      if (
+        line.class !== CLASS.APPLY ||
+        line.written ||
+        line.sentInLostRequest
+      ) {
         continue;
       }
-      if (line.sentInLostRequest) {
-        // Waiting to be sent again after a lost answer: the first send may
-        // still land, so it is never `not sent`.
-        markOutcomeUnknown(line);
-      } else {
-        line.class = CLASS.NOT_SENT;
-        line.reason = 'the run stopped before this product was sent';
-      }
+      line.class = CLASS.NOT_SENT;
+      line.reason = 'the run stopped before this product was sent';
     }
     stop.stats = stats;
     throw stop;
+  } finally {
+    markUnsettled(pending);
   }
   return stats;
 }
@@ -1270,6 +1294,7 @@ export function reportKeeper({
         return report;
       }
       closed = true;
+      markUnsettled(report.lines);
       complete({ running: false });
       let writeError = null;
       try {
@@ -1303,6 +1328,7 @@ export function reportKeeper({
         message: `the run was stopped with ${signal} while this request was in flight, so whether it landed is not known`,
       };
       mark(answer);
+      markUnsettled(report.lines);
       report.header.stoppedBy = `the run was stopped with ${signal}`;
       report.header.error = answer;
       complete({ running: false });
@@ -1322,30 +1348,27 @@ export function reportKeeper({
 }
 
 /**
- * Marks the products of a stopped write: in flight unknown, a product sent in
- * a request whose answer was lost unknown too, the rest not sent.
+ * Marks the products of a stopped write: those in flight carry the flag, as a
+ * request whose answer will never be read, and the rest not yet sent are
+ * `not sent`. The keeper's `markUnsettled` then marks every flagged line.
  */
 function markProductsInterrupted({ lines, inFlight, write, answer }) {
   for (const line of inFlight ?? []) {
     if (line.class === CLASS.APPLY && !line.written) {
       line.class = CLASS.NOT_WRITTEN;
       line.error = answer;
-      line.checked = false;
+      line.sentInLostRequest = true;
     }
   }
   if (!write) {
     return;
   }
   for (const line of lines) {
-    if (line.class !== CLASS.APPLY || line.written) {
+    if (line.class !== CLASS.APPLY || line.written || line.sentInLostRequest) {
       continue;
     }
-    if (line.sentInLostRequest) {
-      markOutcomeUnknown(line);
-    } else {
-      line.class = CLASS.NOT_SENT;
-      line.reason = 'the run stopped before this product was sent';
-    }
+    line.class = CLASS.NOT_SENT;
+    line.reason = 'the run stopped before this product was sent';
   }
 }
 

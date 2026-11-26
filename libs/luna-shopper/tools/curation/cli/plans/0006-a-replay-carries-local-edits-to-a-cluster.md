@@ -705,6 +705,24 @@ than the tool knows.
   header's `stoppedBy` and `error`, and a non zero exit. The message on stderr names the step only;
   the server's error text is kept in the report, because it may name a row.
 
+**Second fix round of the report, 2026-11-26.** One uniform rule for the flag replaces the
+choices above where they differ.
+
+- The flag is set before every read back, whatever answer led to it: no answer, a timeout, any
+  5xx, and a 2xx whose body could not be read. A 2xx means the server committed, so a read back
+  that fails after it must not leave the products looking unsent. The 2xx shortcut is gone for
+  the products; it stays for the decisions.
+- Only direct evidence about a product clears it: an answer that wrote it, a read back that saw
+  its new values, or an `item_expectation_failed` refusal that names it. A read back that saw the
+  old values clears nothing, after a 2xx too; such a product is sent again and that answer
+  settles it. A content refusal clears nothing either: the server checks the brand, the
+  categories and a merged product before the guard and outside the transaction, so a refusal of
+  the resend says nothing of the earlier request.
+- When the run ends, in any path (the end of the write, a stop, a signal, a failed report write),
+  one function, `markUnsettled`, gives every line that still carries the flag `checked: false`,
+  whatever its class, so it is counted in `outcomeUnknown` and covered by the stderr sentence. A
+  request in flight at a signal is flagged too.
+
 ## Open decisions for the owner
 
 **O1. Source of the change list (recommended, owner to confirm).** The local `catalog_audit` is
