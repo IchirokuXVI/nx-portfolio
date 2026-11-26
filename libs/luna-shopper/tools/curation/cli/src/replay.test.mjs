@@ -1,5 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -11,6 +18,7 @@ import {
   DECISION_CLASS,
   LOOKUP_PATH,
   MAX_IDLE_DECISION_ROUNDS,
+  RENAME_TRIES,
   ReplayStopped,
   SHORT_WASH_WORD,
   WASH_SUM,
@@ -28,6 +36,7 @@ import {
   runReplayIdentity,
   washCount,
   writeApply,
+  writeFileAtomic,
 } from './replay.mjs';
 
 // Made up ids only: nothing here names a real product or entry.
@@ -687,6 +696,76 @@ test('three lost answers in a row stop the run, and nothing is resent a fourth t
     [CLASS.NOT_WRITTEN, CLASS.NOT_WRITTEN]
   );
   assert.equal(lines[0].error.code, 'no_answer');
+  // A 504 may still commit after the last read back: not checked.
+  for (const line of lines) {
+    assert.equal(line.checked, false);
+    assert.equal(line.sentInLostRequest, true);
+    assert.match(line.reason, /request was sent and its outcome is not known/);
+  }
+  const counts = countLines(lines);
+  assert.equal(counts.outcomeUnknown, 2);
+  assert.match(
+    countsLine(counts),
+    /; 2 products were sent and their outcome is not known, run the dry run again$/
+  );
+});
+
+test('a 504 whose read back sees the new values is conclusive: already there, checked', async () => {
+  const { client } = fakeTarget(products(2), {
+    lose: () => 'after',
+  });
+  const { lines } = await replayChanges({
+    changes: sizeChanges(2),
+    client,
+    write: true,
+    stderr: sink(),
+  });
+  for (const line of lines) {
+    assert.equal(line.class, CLASS.ALREADY);
+    assert.equal(line.afterLostAnswer, true);
+    assert.equal(line.checked, undefined);
+    assert.equal(line.sentInLostRequest, undefined);
+  }
+  assert.equal(countLines(lines).outcomeUnknown, 0);
+  assert.doesNotMatch(countsLine(countLines(lines)), /outcome is not known/);
+});
+
+test('a report snapshot that fails after a lost answer leaves the products not written and not checked, never not sent', async () => {
+  // Batch 1 of 2 loses its answer, the read back sees the old values and the
+  // first send commits after that read.
+  const { client, calls, store } = fakeTarget(products(3), {
+    lose: (send) => (send === 1 ? 'late' : null),
+  });
+  const { lines } = await replayChanges({ changes: sizeChanges(3), client });
+  await assert.rejects(
+    () =>
+      writeApply(client, lines, {
+        batchSize: 2,
+        stderr: sink(),
+        onAnswer: () => {
+          throw new ReplayStopped('the report could not be written', {
+            status: null,
+            code: 'report_not_written',
+            message: 'EPERM',
+          });
+        },
+      }),
+    /the report could not be written/
+  );
+  assert.equal(patches(calls).length, 1);
+  assert.deepEqual(
+    lines.map((line) => [line.class, line.checked]),
+    [
+      [CLASS.NOT_WRITTEN, false],
+      [CLASS.NOT_WRITTEN, false],
+      [CLASS.NOT_SENT, undefined],
+    ]
+  );
+  assert.match(lines[0].reason, /outcome is not known/);
+  // And the target does hold them.
+  assert.equal(store.get(id(1)).unitSize, 450);
+  assert.equal(store.get(id(2)).unitSize, 450);
+  assert.equal(store.get(id(3)).unitSize, 500);
 });
 
 test('a run that stops on batch 2 of 3 keeps batch 1 written and batch 3 not sent', async () => {
@@ -784,6 +863,9 @@ for (const [status, body] of [
       [...Array(4).fill(CLASS.NOT_WRITTEN), ...Array(4).fill(CLASS.NOT_SENT)]
     );
     assert.equal(lines[0].error.status, status);
+    // A 500 may hide a write that commits after the read back; a 429 or a
+    // 403 refused the request.
+    assert.equal(lines[0].checked, status === 500 ? false : undefined);
   });
 }
 
@@ -1556,6 +1638,124 @@ test('a signal during the lookup reports every product not sent', async () => {
   assert.deepEqual(calls, [LOOKUP_PATH]);
 });
 
+test('a commit that lands after the timeout and after the read back, then a signal, leaves the products not written and not checked', async () => {
+  // Batch 1 of 2 gets no answer; the read back sees the old values; the
+  // server commits right after that read; the operator stops the run before
+  // the batch is sent again.
+  const { client, store } = fakeTarget(products(3), {
+    lose: (send) => (send === 1 ? 'late' : null),
+  });
+  const changeList = sizeChangeList(3);
+  const controls = {};
+  const stderr = sink();
+  let snapshots = 0;
+  let stopped = null;
+  let heldAtStop = null;
+  const run = runReplay({
+    changeFile: 'changes.jsonl',
+    changeList,
+    folded: foldChanges(changeList),
+    targetUrl: 'http://localhost:43700',
+    write: true,
+    batchSize: 2,
+    reportPath: 'report.json',
+    client,
+    stderr,
+    controls,
+    writeFile: (_path, text) => {
+      const report = JSON.parse(text);
+      if (report.header.stoppedBy) {
+        stopped = report;
+        return;
+      }
+      snapshots += 1;
+      if (snapshots === 1) {
+        // The answer to batch 1 was sorted; the signal comes before the
+        // resend leaves.
+        assert.equal(controls.interrupt('SIGINT'), true);
+        heldAtStop = [1, 2, 3].map((n) => store.get(id(n)).unitSize);
+      }
+    },
+  });
+  await run;
+  assert.ok(stopped, 'the signal wrote the report');
+  assert.deepEqual(
+    stopped.lines.map((line) => [line.class, line.checked]),
+    [
+      [CLASS.NOT_WRITTEN, false],
+      [CLASS.NOT_WRITTEN, false],
+      [CLASS.NOT_SENT, undefined],
+    ]
+  );
+  for (const line of stopped.lines.slice(0, 2)) {
+    assert.equal(line.sentInLostRequest, true);
+    assert.match(line.reason, /request was sent and its outcome is not known/);
+  }
+  assert.equal(stopped.counts.outcomeUnknown, 2);
+  assert.match(
+    stderr.text(),
+    /2 products were sent and their outcome is not known, run the dry run again/
+  );
+  // At the stop the target held what the report could not confirm.
+  assert.deepEqual(heldAtStop, [450, 450, 500]);
+});
+
+test('a rename refused with EPERM is tried again, and the report lands', () => {
+  const dir = reportDir();
+  const path = join(dir, 'report.json');
+  let refusals = 0;
+  const waits = [];
+  writeFileAtomic(path, 'newest\n', {
+    rename: (from, to) => {
+      if (refusals < 2) {
+        refusals += 1;
+        throw Object.assign(new Error('EPERM: operation not permitted'), {
+          code: 'EPERM',
+        });
+      }
+      renameSync(from, to);
+    },
+    wait: (ms) => waits.push(ms),
+  });
+  assert.equal(readFileSync(path, 'utf8'), 'newest\n');
+  assert.equal(waits.length, 2);
+  assert.deepEqual(readdirSync(dir), ['report.json']);
+});
+
+test('a rename that keeps failing keeps the temp file and names its path; the next write removes it', () => {
+  const dir = reportDir();
+  const path = join(dir, 'report.json');
+  writeFileSync(path, 'older\n');
+  let tries = 0;
+  let thrown = null;
+  try {
+    writeFileAtomic(path, 'newest\n', {
+      rename: () => {
+        tries += 1;
+        throw Object.assign(new Error('EBUSY: resource busy or locked'), {
+          code: 'EBUSY',
+        });
+      },
+      wait: () => undefined,
+    });
+  } catch (error) {
+    thrown = error;
+  }
+  assert.ok(thrown, 'the write failed');
+  assert.equal(tries, RENAME_TRIES);
+  assert.equal(thrown.code, 'EBUSY');
+  assert.ok(thrown.message.includes(thrown.tempPath), thrown.message);
+  assert.ok(existsSync(thrown.tempPath));
+  assert.equal(readFileSync(thrown.tempPath, 'utf8'), 'newest\n');
+  assert.equal(readFileSync(path, 'utf8'), 'older\n');
+
+  // Once the file is free again, the next write leaves no stale temp file.
+  writeFileAtomic(path, 'newer still\n');
+  assert.equal(readFileSync(path, 'utf8'), 'newer still\n');
+  assert.equal(existsSync(thrown.tempPath), false);
+  assert.deepEqual(readdirSync(dir), ['report.json']);
+});
+
 test('a failed report write prints the counts and the stop, then throws the write failure', async () => {
   const { client } = fakeTarget(products(2), {
     refuse: (_entries, send) => {
@@ -1743,45 +1943,166 @@ test('a lost answer to a decisions part reads the rows back and classes them by 
   );
   assert.deepEqual(byEntry, {
     e1: [DECISION_CLASS.DECIDED_ON_TARGET, undefined],
-    e2: [DECISION_CLASS.NOT_WRITTEN, undefined],
+    // Still pending right after a part with no answer: the part may land
+    // after the read, so the row is not checked.
+    e2: [DECISION_CLASS.NOT_WRITTEN, false],
     e3: [DECISION_CLASS.NOT_WRITTEN, false],
     e4: [DECISION_CLASS.NOT_WRITTEN, false],
   });
   assert.equal(lines[0].targetStatus, 'ACTIVE');
+  assert.match(lines[1].detail, /may still land after that read/);
+});
+
+test('a decisions part that timed out, or got a 504, leaves a pending row not checked; a 2xx settles it', async () => {
+  const entries = {
+    [id(2)]: [{ id: 'e2', status: 'CANDIDATE', itemId: id(2) }],
+  };
+  const timeout = new Error('The operation was aborted due to timeout');
+  timeout.name = 'TimeoutError';
+  const gateway = new HttpError(504);
+  const unreadable = new HttpError(201);
+  unreadable.body = '<html>ok</html>';
+  for (const [lost, checked] of [
+    [timeout, false],
+    [gateway, false],
+    [unreadable, undefined],
+  ]) {
+    const { client } = fakeTarget([], { entries });
+    const lines = [];
+    await assert.rejects(
+      () =>
+        replayDecisions({
+          prepared: {
+            header: { header: true, runId: 'r' },
+            records: [linkRow(2, id(2))],
+          },
+          items: new Map([[id(2), {}]]),
+          write: true,
+          partBase: 'report.decisions',
+          splitParts: (records) => [records],
+          writeFile: () => undefined,
+          applyFile: async () => {
+            throw lost;
+          },
+          client,
+          lines,
+        }),
+      ReplayStopped
+    );
+    assert.deepEqual(
+      lines.map((line) => [line.class, line.checked]),
+      [[DECISION_CLASS.NOT_WRITTEN, checked]],
+      lost.message
+    );
+  }
 });
 
 test('the products a decisions part left orphaned are copied into the report', async () => {
   const { client } = fakeTarget([product(1)]);
   const changeList = sizeChangeList(0);
   const orphan = id(7);
-  const report = await runReplay({
-    changeFile: 'changes.jsonl',
-    changeList,
-    folded: foldChanges(changeList),
-    targetUrl: 'http://localhost:43700',
-    write: true,
-    batchSize: 1,
-    reportPath: 'report.json',
-    client,
-    stderr: sink(),
-    writeFile: () => undefined,
-    decisions: {
-      file: 'd.jsonl',
-      prepared: {
-        header: { header: true, runId: 'r' },
-        records: [createRow(1)],
-      },
-      splitParts: (records) => [records],
-      applyFile: async () => ({
-        applied: false,
-        failedStep: 'APPLY',
-        error: 'step three failed',
-        results: [],
-        orphanedItemIds: [orphan],
+  let report = null;
+  const stderr = sink();
+  // Refused at a step other than VALIDATE: a stopped run, with its error in
+  // the header, and the part after it not sent.
+  await assert.rejects(
+    () =>
+      runReplay({
+        changeFile: 'changes.jsonl',
+        changeList,
+        folded: foldChanges(changeList),
+        targetUrl: 'http://localhost:43700',
+        write: true,
+        batchSize: 1,
+        reportPath: 'report.json',
+        client,
+        stderr,
+        writeFile: (path, text) => {
+          if (path === 'report.json') {
+            report = JSON.parse(text);
+          }
+        },
+        decisions: {
+          file: 'd.jsonl',
+          prepared: {
+            header: { header: true, runId: 'r' },
+            records: [createRow(1), createRow(2)],
+          },
+          splitParts: (records) => records.map((record) => [record]),
+          applyFile: async () => ({
+            applied: false,
+            failedStep: 'APPLY',
+            error: 'step three failed',
+            results: [],
+            orphanedItemIds: [orphan],
+          }),
+        },
       }),
+    (error) =>
+      error instanceof ReplayStopped &&
+      /the decisions stopped: the target refused a part at APPLY/.test(
+        error.message
+      )
+  );
+  assert.deepEqual(report.decisions.orphanedItemIds, [orphan]);
+  assert.match(report.header.stoppedBy, /refused a part at APPLY/);
+  assert.deepEqual(report.header.error, {
+    status: null,
+    code: 'APPLY',
+    message: 'step three failed',
+  });
+  assert.deepEqual(
+    report.decisions.lines.map((line) => [line.entryId, line.class]),
+    [
+      ['e1', DECISION_CLASS.REFUSED],
+      ['e2', DECISION_CLASS.NOT_SENT],
+    ]
+  );
+  assert.equal(report.header.inProgress, undefined);
+  assert.doesNotMatch(stderr.text(), /step three failed/);
+});
+
+test('a decisions part refused in three rounds that each drop a row is not cut short by the idle cap', async () => {
+  const sent = [];
+  const records = [1, 2, 3, 4, 5].map((n) => linkRow(n, id(n)));
+  const result = await replayDecisions({
+    prepared: { header: { header: true, runId: 'r' }, records },
+    items: new Map([1, 2, 3, 4, 5].map((n) => [id(n), {}])),
+    write: true,
+    partBase: 'report.decisions',
+    splitParts: (all) => [all],
+    writeFile: () => undefined,
+    applyFile: async (path) => {
+      sent.push(path);
+      // Rounds 1 to 3 each refuse one row; round 4 is applied.
+      if (sent.length <= 3) {
+        return {
+          applied: false,
+          failedStep: 'VALIDATE',
+          results: [
+            {
+              entryId: `e${sent.length}`,
+              error: { code: 'EXPECT_MISMATCH', detail: 'moved' },
+            },
+          ],
+        };
+      }
+      return { applied: true, results: [] };
     },
   });
-  assert.deepEqual(report.decisions.orphanedItemIds, [orphan]);
+  assert.ok(MAX_IDLE_DECISION_ROUNDS < 3);
+  assert.equal(sent.length, 4);
+  assert.match(sent[3], /round-4/);
+  assert.deepEqual(
+    result.lines.map((line) => [line.entryId, line.class]),
+    [
+      ['e1', DECISION_CLASS.CONFLICT],
+      ['e2', DECISION_CLASS.CONFLICT],
+      ['e3', DECISION_CLASS.CONFLICT],
+      ['e4', DECISION_CLASS.APPLIED],
+      ['e5', DECISION_CLASS.APPLIED],
+    ]
+  );
 });
 
 test('a decisions part refused in rounds that drop nothing stops after the cap', async () => {

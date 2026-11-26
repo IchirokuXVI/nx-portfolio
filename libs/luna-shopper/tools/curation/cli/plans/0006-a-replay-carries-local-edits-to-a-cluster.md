@@ -669,6 +669,42 @@ read from `CURATION_TARGET_PASSWORD` set for the one command. A replay refuses
 - A decisions part refused twice in a row without dropping a row stops the run with an error: its
   rows are `refused` with the code `no_progress`, the parts after it `not sent`.
 
+**Builder choices, fix round of the report, 2026-11-26.** The rule: the report never claims more
+than the tool knows.
+
+- A product sent in a request whose outcome is not known carries `sentInLostRequest: true` until
+  a later answer or read back settles it. An answer that writes it, an expectation failure that
+  names it, and a read back that sees it landed settle it; a content refusal does not, so a
+  `refused` line may keep the flag. Any stop (the write's own catch, a failed report snapshot, a
+  signal) reports such a product `not written` with `checked: false` and a `reason` that says its
+  request was sent and its outcome is not known, never `not sent`.
+- A read back is conclusive only after a 2xx whose body could not be read, because only then had
+  the server finished. After no answer, a timeout, a 502, 503 or 504, and after a plain 500 too, a
+  read back that sees the old values proves nothing: those products are marked as above, so the
+  fourth lost answer and a 5xx stop leave them `not written` with `checked: false`. A read back
+  that sees the new values is still `already there`. The plain 500 is marked too because the
+  existing comment ("a server error may still hide a write that committed") does not justify the
+  opposite: the gateway renders a failure on its side of the broker, such as a reply it stopped
+  waiting for, as a 500 while the catalog service may still write.
+- A 429 after the waits, a 401 or 403 and a second 413 refused the request, so the products in
+  flight on those stay `not written` without `checked: false`, unless an earlier lost request
+  marked them.
+- After a lost answer to a decisions part, a row still pending is `not written` with
+  `checked: false`, except after a 2xx whose body could not be read.
+- The counts carry `outcomeUnknown`, the lines with `checked: false`, for the products and for
+  the decisions. They stay inside `not written` too; no new class was added, because the naming
+  of classes is the owner's. stderr says "N products were sent and their outcome is not known,
+  run the dry run again" when the count is above zero, and the same of rows for the decisions.
+- The rename of the report's temp file is tried again on EPERM, EBUSY and EACCES, five tries in
+  all with a wait of 50, 100, 150 and 200 ms between them, through `Atomics.wait`, so the write
+  stays synchronous in the signal path too. When it still fails the temp file is kept and the
+  error names its full path. The temp file has one name a run, so the next write that succeeds
+  renames it away.
+- A decisions part refused at a step other than `VALIDATE` (or at `VALIDATE` naming no row) is a
+  stopped run like the others: a `ReplayStopped` whose answer has the step as its code, in the
+  header's `stoppedBy` and `error`, and a non zero exit. The message on stderr names the step only;
+  the server's error text is kept in the report, because it may name a row.
+
 ## Open decisions for the owner
 
 **O1. Source of the change list (recommended, owner to confirm).** The local `catalog_audit` is

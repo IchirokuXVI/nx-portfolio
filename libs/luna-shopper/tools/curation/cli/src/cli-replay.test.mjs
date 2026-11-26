@@ -338,6 +338,86 @@ test('a write through main that stops on batch 2 of 3 still writes the report, a
   assert.doesNotMatch(stderr.text(), /00000000-0000/);
 });
 
+test('a decisions part refused at a step other than VALIDATE fails the run, with the error in the header', async () => {
+  const { dir, file } = changeFile();
+  const decisionsFile = join(dir, 'decisions.jsonl');
+  const expect = {
+    status: 'CANDIDATE',
+    observed: {
+      name: 'Leche',
+      brand: null,
+      ean: null,
+      sizeFormat: '1 l',
+      unitSize: 1000,
+      sizeUnit: 'MILLILITER',
+      packCount: null,
+      soldByWeight: false,
+      approxWeight: null,
+    },
+  };
+  writeFileSync(
+    decisionsFile,
+    [
+      { header: true, runId: 'r', mainUrl: 'http://localhost:3000' },
+      { entryId: 'e1', decision: 'LINK', itemId: ITEM, expect },
+    ]
+      .map((line) => `${JSON.stringify(line)}\n`)
+      .join('')
+  );
+  const gateway = fakeGateway();
+  let decided = 0;
+  const fetchImpl = async (url, init = {}) => {
+    if (new URL(url).pathname === '/v1/admin/harvest/entries/decisions') {
+      decided += 1;
+      return new Response(
+        JSON.stringify({
+          runId: 'r',
+          applied: false,
+          failedStep: 'APPLY',
+          error: 'step three failed',
+          results: [],
+          orphanedItemIds: [],
+        }),
+        { status: 201, headers: { 'content-type': 'application/json' } }
+      );
+    }
+    return gateway.fetchImpl(url, init);
+  };
+  const report = join(dir, 'report.json');
+  await assert.rejects(
+    () =>
+      main(
+        [
+          '--replay',
+          file,
+          '--target-url',
+          TARGET,
+          '--write',
+          '--confirm-host',
+          'localhost',
+          '--decisions',
+          decisionsFile,
+          '--report',
+          report,
+        ],
+        {
+          stderr: sink(),
+          env: { [REPLAY_PASSWORD_ENV]: 'p' },
+          isTty: false,
+          fetchImpl,
+          spawn: async () => ({ code: 1, stdout: '', stderr: '' }),
+          sleep: async () => undefined,
+        }
+      ),
+    /the decisions stopped: the target refused a part at APPLY/
+  );
+  assert.equal(decided, 1);
+  const written = JSON.parse(readFileSync(report, 'utf8'));
+  assert.match(written.header.stoppedBy, /refused a part at APPLY/);
+  assert.equal(written.header.error.code, 'APPLY');
+  assert.equal(written.decisions.lines[0].class, 'refused');
+});
+
 test('--replay-identity refuses a report of another url before it signs in', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'curation-replay-'));
   const report = join(dir, 'report.json');

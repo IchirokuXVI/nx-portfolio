@@ -13,7 +13,7 @@
  */
 
 import { renameSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import {
   LOCAL_GAP,
   NOT_CARRIED,
@@ -61,7 +61,14 @@ export const MAX_IDLE_DECISION_ROUNDS = 2;
 
 /** What the header says while the report is written during a run. */
 export const IN_PROGRESS_NOTE =
-  'The run had not finished when this file was written. In a write run, a line still of class apply and without written was in flight or not yet sent, and its outcome is not known.';
+  'The run had not finished when this file was written. In a write run, a line still of class apply and without written was in flight or not yet sent, and its outcome is not known. A line with sentInLostRequest was sent in a request whose answer was lost, so the target may hold it.';
+
+/**
+ * What a `not written` line with `checked: false` says when the run stopped
+ * after its request was sent and before an answer or a read back settled it.
+ */
+export const UNKNOWN_OUTCOME_REASON =
+  'its request was sent and its outcome is not known: the target may hold it. Run the dry run again to settle it';
 
 /** The classes of section 4.1, in the order the table checks them. */
 export const CLASS = Object.freeze({
@@ -75,7 +82,10 @@ export const CLASS = Object.freeze({
   CONFLICT: 'conflict',
   APPLY: 'apply',
   REFUSED: 'refused',
-  /** Sent in the request the run stopped on, and not on the target after it. */
+  /**
+   * Sent in the request the run stopped on, and not on the target after it.
+   * With `checked: false` the outcome is not known: the target may hold it.
+   */
   NOT_WRITTEN: 'not written',
   /** Never sent, because the run stopped before it. */
   NOT_SENT: 'not sent',
@@ -480,6 +490,42 @@ function lostAnswer(error) {
   );
 }
 
+/**
+ * Whether a read back after this failure settles what did not land.
+ *
+ * Only a 2xx says the server had finished the request when it answered. After
+ * no answer, a timeout, a 502, 503 or 504 the backend may still commit later:
+ * the cluster's proxy gives up after 15 seconds while the backend carries on.
+ * A plain 500 proves no more, because the gateway renders a failure on its own
+ * side of the broker (a reply it stopped waiting for) as a 500 too, while the
+ * catalog service may still be writing. So after any of those, a read back
+ * that sees the new values is conclusive, and one that sees the old ones is
+ * not.
+ */
+function readBackSettles(error) {
+  const status = error?.status;
+  return typeof status === 'number' && status >= 200 && status < 300;
+}
+
+/** Marks a line as sent in a request whose outcome is not known yet. */
+function markSentInLostRequest(group) {
+  for (const line of group) {
+    line.sentInLostRequest = true;
+  }
+}
+
+/** A later answer or read back said what the target holds for this line. */
+function settle(line) {
+  delete line.sentInLostRequest;
+}
+
+/** A line the run stopped on whose request may still land. */
+function markOutcomeUnknown(line) {
+  line.class = CLASS.NOT_WRITTEN;
+  line.checked = false;
+  line.reason = UNKNOWN_OUTCOME_REASON;
+}
+
 /** The fields of an expectation failure, as the report reads them. */
 function failedFields(failure) {
   return (failure?.fields ?? []).map((field) => field.field);
@@ -584,6 +630,7 @@ async function readBack(client, group) {
     if (landed) {
       line.class = CLASS.ALREADY;
       line.afterLostAnswer = true;
+      settle(line);
     } else {
       rest.push(line);
     }
@@ -595,6 +642,8 @@ async function readBack(client, group) {
 function markWritten(group) {
   for (const line of group) {
     line.written = true;
+    // The expect held `from`, so no earlier lost request had landed.
+    settle(line);
     for (const field of sentFields(line)) {
       field.sent = true;
     }
@@ -625,6 +674,11 @@ function markWritten(group) {
  *   `not written` (or `already there` when a read back shows they landed),
  *   every product after them is `not sent`, and a `ReplayStopped` is thrown.
  *
+ * A product sent in a request whose outcome is not known (a lost answer
+ * other than a 2xx, or a 5xx) carries `sentInLostRequest: true` until a later
+ * answer or read back settles it. Whatever stops the run, such a product is
+ * `not written` with `checked: false`, never `not sent`.
+ *
  * `progress.current` holds the group in flight, so a signal handler can mark
  * it, and `onAnswer` is called after every answer is sorted.
  */
@@ -645,7 +699,6 @@ export async function writeApply(
   let halved = false;
   let cursor = 0;
   let lostRounds = 0;
-  let unchecked = false;
   const queue = [];
   progress.current = null;
 
@@ -680,6 +733,8 @@ export async function writeApply(
       for (const line of hit) {
         const failure = named.get(line.itemId);
         const fields = failedFields(failure);
+        // The failure names what the target holds now, which settles it.
+        settle(line);
         if (refusedAsAlreadyThere(line, failure)) {
           line.class = CLASS.ALREADY;
           if (lostRounds > 0) {
@@ -716,13 +771,12 @@ export async function writeApply(
 
     if (lostAnswer(error)) {
       lostRounds += 1;
-      let rest;
-      try {
-        rest = await readBack(client, group);
-      } catch (readError) {
-        unchecked = true;
-        throw readError;
+      // Before the read back, so a read that fails or a stop after it still
+      // knows these products were sent.
+      if (!readBackSettles(error)) {
+        markSentInLostRequest(group);
       }
+      const rest = await readBack(client, group);
       if (lostRounds > MAX_LOST_ROUNDS) {
         throw new ReplayStopped(
           `the write stopped: ${stopReason(error, { lostRounds })}`,
@@ -765,12 +819,14 @@ export async function writeApply(
     }
 
     // A server error may still hide a write that committed, so the batch is
-    // read back before its products are called not written.
+    // read back before its products are called not written. What the read
+    // back does not see landed may still land: see readBackSettles.
     if (error.status >= 500) {
+      markSentInLostRequest(group);
       try {
         await readBack(client, group);
       } catch {
-        unchecked = true;
+        // The products stay marked, and the stop reports them not checked.
       }
     }
     throw new ReplayStopped(
@@ -812,14 +868,21 @@ export async function writeApply(
       if (line.class === CLASS.APPLY && !line.written) {
         line.class = CLASS.NOT_WRITTEN;
         line.error = stop.answer;
-        if (unchecked) {
-          line.checked = false;
+        if (line.sentInLostRequest) {
+          markOutcomeUnknown(line);
         }
       }
     }
     progress.current = null;
     for (const line of [...queue.flat(), ...pending.slice(cursor)]) {
-      if (line.class === CLASS.APPLY && !line.written) {
+      if (line.class !== CLASS.APPLY || line.written) {
+        continue;
+      }
+      if (line.sentInLostRequest) {
+        // Waiting to be sent again after a lost answer: the first send may
+        // still land, so it is never `not sent`.
+        markOutcomeUnknown(line);
+      } else {
         line.class = CLASS.NOT_SENT;
         line.reason = 'the run stopped before this product was sent';
       }
@@ -933,10 +996,16 @@ export function countLines(lines) {
   let written = 0;
   let landedAfterLostAnswer = 0;
   let sizeLeftToWashTask = 0;
+  let outcomeUnknown = 0;
   for (const line of lines) {
     classes[line.class] = (classes[line.class] ?? 0) + 1;
     if (line.written) {
       written += 1;
+    }
+    // Counted inside `not written` too, and apart here, so a product the
+    // target may hold does not hide among those it does not.
+    if (line.checked === false) {
+      outcomeUnknown += 1;
     }
     // Landed through a request whose answer was lost, so the target holds an
     // audit row for it while `written` does not count it.
@@ -953,9 +1022,17 @@ export function countLines(lines) {
     classes,
     written,
     landedAfterLostAnswer,
+    outcomeUnknown,
     fieldsSent,
     sizeLeftToWashTask,
   };
+}
+
+/** What stderr says of the lines whose outcome is not known, or nothing. */
+function outcomeUnknownText(count, noun) {
+  return count > 0
+    ? `; ${count} ${noun} were sent and their outcome is not known, run the dry run again`
+    : '';
 }
 
 /** What the change list holds that no replay carries (section 5). */
@@ -1067,17 +1144,70 @@ export function countsLine(counts) {
   const landed = counts.landedAfterLostAnswer
     ? `, ${counts.landedAfterLostAnswer} more landed after a lost answer`
     : '';
-  return `${counts.products} products: ${parts.join(', ') || 'none'}${wash}; ${counts.written} written${landed}, ${counts.fieldsSent} fields sent`;
+  return `${counts.products} products: ${parts.join(', ') || 'none'}${wash}; ${counts.written} written${landed}, ${counts.fieldsSent} fields sent${outcomeUnknownText(counts.outcomeUnknown ?? 0, 'products')}`;
+}
+
+/**
+ * The codes of a rename that Windows refuses while another program (an
+ * editor, an antivirus scan) holds the file. They pass after a moment.
+ */
+const RENAME_BUSY_CODES = new Set(['EPERM', 'EBUSY', 'EACCES']);
+
+/** A rename refused with one of those codes is tried this many times. */
+export const RENAME_TRIES = 5;
+
+/** The wait before the next try grows by this much each time. */
+export const RENAME_WAIT_MS = 50;
+
+/**
+ * Blocks the thread for `ms`. The report is written synchronously in the
+ * signal path, where no timer would run, so the wait cannot be a promise.
+ */
+function waitSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
 /**
  * Writes a file whole or not at all: a temp file beside it, then a rename
  * over it. A stop between the two leaves the previous version in place.
+ *
+ * A rename refused with EPERM, EBUSY or EACCES is tried again, up to
+ * {@link RENAME_TRIES} times with a short synchronous wait. When it still
+ * fails, the temp file holds the newest text and is kept: the error names its
+ * full path, so the operator can open it. The temp file has one name a run,
+ * so the next write that succeeds renames it away and leaves no stale copy.
  */
-export function writeFileAtomic(path, text) {
+export function writeFileAtomic(
+  path,
+  text,
+  {
+    rename = renameSync,
+    tries = RENAME_TRIES,
+    waitMs = RENAME_WAIT_MS,
+    wait = waitSync,
+  } = {}
+) {
   const temp = join(dirname(path), `.${basename(path)}.${process.pid}.tmp`);
   writeFileSync(temp, text, 'utf8');
-  renameSync(temp, path);
+  for (let attempt = 1; ; attempt++) {
+    try {
+      rename(temp, path);
+      return;
+    } catch (error) {
+      if (RENAME_BUSY_CODES.has(error?.code) && attempt < tries) {
+        wait(waitMs * attempt);
+        continue;
+      }
+      const kept = resolve(temp);
+      const failure = new Error(
+        `${error?.code ?? 'the rename failed'}: ${path} could not be replaced after ${attempt} ${attempt === 1 ? 'try' : 'tries'}, and the newest report is kept at ${kept}`,
+        { cause: error }
+      );
+      failure.code = error?.code;
+      failure.tempPath = kept;
+      throw failure;
+    }
+  }
 }
 
 /** Writes the report, never to stdout. */
@@ -1191,7 +1321,10 @@ export function reportKeeper({
   };
 }
 
-/** Marks the products of a stopped write: in flight unknown, the rest not sent. */
+/**
+ * Marks the products of a stopped write: in flight unknown, a product sent in
+ * a request whose answer was lost unknown too, the rest not sent.
+ */
 function markProductsInterrupted({ lines, inFlight, write, answer }) {
   for (const line of inFlight ?? []) {
     if (line.class === CLASS.APPLY && !line.written) {
@@ -1204,7 +1337,12 @@ function markProductsInterrupted({ lines, inFlight, write, answer }) {
     return;
   }
   for (const line of lines) {
-    if (line.class === CLASS.APPLY && !line.written) {
+    if (line.class !== CLASS.APPLY || line.written) {
+      continue;
+    }
+    if (line.sentInLostRequest) {
+      markOutcomeUnknown(line);
+    } else {
       line.class = CLASS.NOT_SENT;
       line.reason = 'the run stopped before this product was sent';
     }
@@ -1360,13 +1498,21 @@ export function dropUnits(records, dropped) {
  *
  * Only an `accept` that names a product can be read: its row is listed by
  * that product's source rows. A row that is no longer pending is
- * `decided on target`. A row still pending did not land and is `not written`.
- * Every other row (a `createItem`, an `accept` onto a product the part made,
- * a row the product does not list, a read that failed) is `not written` with
- * `checked: false`: its outcome is not known. After one failed read the rest
- * are not read, so a target that hangs is not asked once a row.
+ * `decided on target`. A row still pending is `not written`, and with
+ * `checked: false` unless `settles` (the answer was a 2xx, so the server had
+ * finished): after a timeout, no answer or a 5xx the part may still land after
+ * the read. Every other row (a `createItem`, an `accept` onto a product the
+ * part made, a row the product does not list, a read that failed) is
+ * `not written` with `checked: false`: its outcome is not known. After one
+ * failed read the rest are not read, so a target that hangs is not asked once
+ * a row.
  */
-export async function readBackDecisions(client, records, answer) {
+export async function readBackDecisions(
+  client,
+  records,
+  answer,
+  { settles = false } = {}
+) {
   const lines = [];
   const rowsOf = new Map();
   let reachable = Boolean(client);
@@ -1410,12 +1556,19 @@ export async function readBackDecisions(client, records, answer) {
           afterLostAnswer: true,
         })
       );
-    } else {
+    } else if (settles) {
       lines.push(
         decisionLine(record, DECISION_CLASS.NOT_WRITTEN, {
           code: answer.code,
           detail: `the answer to this part was lost (${answer.message}), and the row is still ${row.status} on the target`,
         })
+      );
+    } else {
+      lines.push(
+        unknown(
+          record,
+          `the row was still ${row.status} on the target when it was read, and the part may still land after that read`
+        )
       );
     }
   }
@@ -1425,7 +1578,9 @@ export async function readBackDecisions(client, records, answer) {
 /**
  * Replays the decisions (section 6): a no twin `accept` is dropped first, then
  * in a write run the rest go in parts of at most the route's cap, and a part
- * refused at `VALIDATE` loses the refused rows and is sent again.
+ * refused at `VALIDATE` loses the refused rows and is sent again. A part
+ * refused at any other step, or at `VALIDATE` naming no row, stops the run
+ * with a `ReplayStopped`, as a stop of the product write does.
  *
  * `applyFile(path)` is the suggestions decider's `apply` with the target url,
  * `splitParts(records)` its split by the cap, and `writeFile` writes each part
@@ -1504,7 +1659,9 @@ export async function replayDecisions({
         if (lostAnswer(error) || error?.status >= 500) {
           // The part may have landed: what the target holds decides.
           lines.push(
-            ...(await readBackDecisions(client, pending, stop.answer))
+            ...(await readBackDecisions(client, pending, stop.answer, {
+              settles: readBackSettles(error),
+            }))
           );
         } else {
           // Refused before anything was written: nothing of the part landed.
@@ -1542,17 +1699,33 @@ export async function replayDecisions({
         }
       }
       if (answer.failedStep !== 'VALIDATE' || refused.size === 0) {
-        // Refused for a reason no single row carries: nothing more is sent.
+        // Refused for a reason no single row carries: nothing more is sent,
+        // and the run is a stopped run like any other.
+        const step = answer.failedStep ?? 'refused';
         lines.push(
           ...pending.map((record) =>
             decisionLine(record, DECISION_CLASS.REFUSED, {
-              code: answer.failedStep ?? 'refused',
+              code: step,
               detail: answer.error ?? null,
             })
           )
         );
         notSentAfter(index);
-        return { lines, requests, stopped: true };
+        // The message names only the step, because stderr prints it and the
+        // server's error text may name a row. The report keeps that text.
+        throw new ReplayStopped(
+          `the decisions stopped: the target refused a part at ${answer.failedStep ?? 'a step it did not name'}, for a reason no row carries`,
+          {
+            status: null,
+            code: step,
+            message:
+              typeof answer.error === 'string'
+                ? answer.error
+                : answer.error
+                  ? JSON.stringify(answer.error)
+                  : 'the part was refused for a reason no row carries',
+          }
+        );
       }
       const next = dropUnits(pending, refused);
       lines.push(...next.removed);
@@ -1679,7 +1852,7 @@ export async function runReplay({
         .map(([name, count]) => `${name} ${count}`);
       const orphaned = report.decisions.orphanedItemIds.length;
       stderr.write(
-        `${report.decisions.counts.rows} decided rows: ${parts.join(', ') || 'none'}${orphaned ? `; ${orphaned} products left orphaned on the target` : ''}\n`
+        `${report.decisions.counts.rows} decided rows: ${parts.join(', ') || 'none'}${orphaned ? `; ${orphaned} products left orphaned on the target` : ''}${outcomeUnknownText(report.decisions.counts.outcomeUnknown, 'rows')}\n`
       );
     }
     if (withPath) {
@@ -1892,8 +2065,12 @@ export function countDecisions(lines) {
   for (const name of Object.values(DECISION_CLASS)) {
     classes[name] = 0;
   }
+  let outcomeUnknown = 0;
   for (const line of lines) {
     classes[line.class] = (classes[line.class] ?? 0) + 1;
+    if (line.checked === false) {
+      outcomeUnknown += 1;
+    }
   }
-  return { rows: lines.length, classes };
+  return { rows: lines.length, classes, outcomeUnknown };
 }

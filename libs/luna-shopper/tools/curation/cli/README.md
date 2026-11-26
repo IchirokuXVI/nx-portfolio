@@ -223,19 +223,47 @@ is known so far. While the run goes on, its header carries `inProgress` and no
 or not yet sent. Each write goes to a temp file beside the report and is then
 renamed over it, so a stop never leaves half a file.
 
+A read back that sees the new values is conclusive: those products are
+`already there`. A read back that sees the old values proves nothing yet after
+a timeout, no answer, a 502, 503 or 504, or any other 5xx, because the server
+may still commit after the read. The cluster's proxy gives up after 15
+seconds while the backend carries on. So every product sent in such a request
+carries `sentInLostRequest: true` until a later answer or read back settles it.
+
 When the run stops, it still writes the report and then exits with an error.
 The report holds every product written before the stop, the products of the
 request it stopped on as `not written` with the answer (or `already there`
 when a read back shows they landed), and every product after them as
-`not sent`. A `not written` line with `checked: false` could not be read back,
-so the target may hold it. The header names the answer under `error`. Fix the cause and run
-step 3 again: what was written is `already there`, the rest is `apply`.
+`not sent`. The header names the answer under `error`.
+
+A `not written` line with `checked: false` was sent, and its outcome is not
+known: the target may hold it. Its `reason` says so. A product that was ever in
+a request whose answer was lost, and that no later answer settled, is always
+reported this way, never as `not sent`, whatever stopped the run. This holds
+for the fourth lost answer and for a 5xx too.
+
+**After any stop, and after any lost answer, run the dry run (step 3) again.**
+It reads the target and settles every line marked `checked: false`: what
+landed is `already there`, the rest is `apply`. Fix the cause of the stop
+first.
 
 Ctrl+C (or a `kill`) stops the run at once and does not wait for the request in
 flight. The report is written first: the products of that request are
-`not written` with `checked: false` and the code `interrupted`, every product
-after them is `not sent`, and the process exits with 130 (143 for a `kill`).
-Run step 3 again to see what landed.
+`not written` with `checked: false` and the code `interrupted`, a product
+waiting to be sent again after a lost answer is `not written` with
+`checked: false` too, every other product after them is `not sent`, and the
+process exits with 130 (143 for a `kill`).
+
+stderr and the report's `counts` count the lines with `checked: false` apart,
+as `outcomeUnknown`. Those lines are also counted under `not written`. When the
+count is above zero, stderr says "N products were sent and their outcome is not
+known, run the dry run again".
+
+On Windows an editor or an antivirus scan that holds the report makes the
+rename fail with EPERM, EBUSY or EACCES. The run tries the rename again a few
+times with a short wait. If it still fails, the temp file beside the report
+holds the newest report and is kept, and the error names its full path: open
+that file. The next write that succeeds renames it away.
 
 If the report itself cannot be written (a full disk, a locked file), the run
 stops before the next batch. stderr then prints the counts, the reason the run
@@ -255,8 +283,9 @@ So the products this run changed on the target are `written` plus
 `landedAfterLostAnswer`. They are the products the target's `catalog_audit`
 shows changed by the operator you signed in as, between the header's
 `startedAt` and `endedAt`, unless someone else made the same edit there in the
-meantime. A `not written` line with `checked: false` may be one more: run
-step 3 to see.
+meantime. Each of the `outcomeUnknown` products (the lines with
+`checked: false`) may be one more, and its audit row may come after
+`endedAt`: run step 3 to see.
 
 ### 5. Dry run again
 
@@ -303,15 +332,22 @@ whose product the target does not hold is reported `no twin`. A part refused at
 `VALIDATE` loses the refused rows, and the rest is sent again. A part refused
 twice in a row without losing a row (the refusal names none of its rows) stops
 the run: its rows are `refused` with the code `no_progress`, and the parts
-after it are `not sent`.
+after it are `not sent`. A part refused at any other step stops the run the
+same way: its rows are `refused` with the step as the code, the parts after it
+are `not sent`, the header names the step under `error`, and the process exits
+with an error.
 
 When the answer to a part is lost, the run reads its rows back on the target.
 A row that is no longer pending there is `decided on target`, with the status
-it holds under `targetStatus`. A row still pending is `not written`. A row that
-cannot be read back (a `createItem`, an `accept` onto a product the same part
-creates, a row its product does not list, or a failed read) is `not written`
-with `checked: false`: the target
-may hold it. The products the route created and could not delete again are
+it holds under `targetStatus`. A row still pending is `not written` with
+`checked: false` after a timeout, no answer or a 5xx, because the part may
+still land after the read; only after a 2xx whose body could not be read is it
+plainly `not written`. A row that cannot be read back (a `createItem`, an
+`accept` onto a product the same part creates, a row its product does not
+list, or a failed read) is `not written` with `checked: false`: the target may
+hold it. stderr counts the rows with `checked: false` apart, and the report
+counts them as `decisions.counts.outcomeUnknown`. Run the dry run again to
+settle them. The products the route created and could not delete again are
 listed under `decisions.orphanedItemIds` of the report, and stderr counts them.
 
 A queue row that you decided by hand in the back office leaves no decisions
@@ -319,20 +355,20 @@ file, so it is not carried.
 
 ### The classes of the report
 
-| Class                 | What it means                                                                                                             |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `not carried`         | a product created, deleted or merged locally, or one whose only edits are to `ean`, `sku`, `imageUrl` or `productGroupId` |
-| `local gap`           | someone not exported changed the product between two exported edits                                                       |
-| `no twin`             | the target has no product with that id                                                                                    |
-| `merged on target`    | the target merged the product; the report names the survivor                                                              |
-| `excluded: wash task` | a wash count that release task `0009` corrects; found by its rule, with the row text that matched                         |
-| `identity changed`    | the target's name or brand is not the one the edit was made on                                                            |
-| `already there`       | the target holds every new value                                                                                          |
-| `conflict`            | a field holds neither the old nor the new value                                                                           |
-| `apply`               | at least one field holds the old value and none holds a third one                                                         |
-| `refused`             | the target refused the write, with its code and message                                                                   |
-| `not written`         | sent in the request the run stopped on, and not on the target after it; the line names the answer                         |
-| `not sent`            | never sent, because the run stopped before it                                                                             |
+| Class                 | What it means                                                                                                                                                                                       |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `not carried`         | a product created, deleted or merged locally, or one whose only edits are to `ean`, `sku`, `imageUrl` or `productGroupId`                                                                           |
+| `local gap`           | someone not exported changed the product between two exported edits                                                                                                                                 |
+| `no twin`             | the target has no product with that id                                                                                                                                                              |
+| `merged on target`    | the target merged the product; the report names the survivor                                                                                                                                        |
+| `excluded: wash task` | a wash count that release task `0009` corrects; found by its rule, with the row text that matched                                                                                                   |
+| `identity changed`    | the target's name or brand is not the one the edit was made on                                                                                                                                      |
+| `already there`       | the target holds every new value                                                                                                                                                                    |
+| `conflict`            | a field holds neither the old nor the new value                                                                                                                                                     |
+| `apply`               | at least one field holds the old value and none holds a third one                                                                                                                                   |
+| `refused`             | the target refused the write, with its code and message                                                                                                                                             |
+| `not written`         | sent in the request the run stopped on, and not on the target after it; the line names the answer. With `checked: false` its outcome is not known: the target may hold it, and a dry run settles it |
+| `not sent`            | never sent, because the run stopped before it                                                                                                                                                       |
 
 A dry run cannot predict a refusal of the write itself, such as an
 unregistered brand, because the route has no dry run.
