@@ -1,3 +1,5 @@
+> **PR:** [#1117](https://github.com/IchirokuXVI/nx-portfolio/pull/1117)
+
 # 0209: a size names its units and its pieces
 
 > Asked for by the owner on 2026-11-26 (decision 153a). A product that is a pack has the
