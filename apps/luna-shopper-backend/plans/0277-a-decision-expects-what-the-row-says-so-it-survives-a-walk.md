@@ -1,3 +1,5 @@
+> **PR:** [#1110](https://github.com/IchirokuXVI/nx-portfolio/pull/1110)
+
 # 0277 A decision expects what the row says, so it survives a walk
 
 > Asked for by the owner on 2026-11-25 ("yes, go ahead with it too"), beside curation CLI plan
