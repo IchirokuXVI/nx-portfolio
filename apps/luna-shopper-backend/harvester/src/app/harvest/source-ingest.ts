@@ -1111,9 +1111,9 @@ export class SourceIngest {
    * the paths when they change. When they do not, the run has still read
    * them whole, so the column alone is written, one statement for the rows
    * of a chunk that do not hold `runId` yet, with `updatedAt` left as it
-   * was. Neither counts as a written
-   * row: the count and `onWritten` stay what they were, rows whose paths
-   * changed. An `ADD` leaves the column alone.
+   * was. Neither counts as a written row: the count and `onWritten` stay
+   * what they were, rows whose paths changed. An `ADD` leaves the column
+   * alone.
    */
   async writeCategoryPaths(
     runId: string,
@@ -2460,7 +2460,6 @@ function copiesFor(
   return copies;
 }
 
-/** The item an observation resolves to, which only an `ACTIVE` row states. */
 /** The key {@link SourceIngest.storedPriceInstants} answers by. */
 function priceRowKey(entryId: string, priceScopeId: string): string {
   return `${entryId}|${priceScopeId}`;
@@ -2487,6 +2486,7 @@ function olderThanStored(
   );
 }
 
+/** The item an observation resolves to, which only an `ACTIVE` row states. */
 function activeItemOf(row: SourceCatalogEntry): string | null {
   return row.status === SourceEntryStatus.ACTIVE ? row.itemId : null;
 }
