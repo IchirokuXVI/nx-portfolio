@@ -1,3 +1,5 @@
+> **PR:** [#1114](https://github.com/IchirokuXVI/nx-portfolio/pull/1114)
+
 # 0278 A product counts its pieces beside its pack
 
 > Asked for by the owner on 2026-11-26 (decision 153a). A product that is a pack of several units
