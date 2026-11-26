@@ -3,6 +3,7 @@ import {
   ItemSourceMatch,
   PriceSourceKind,
   SourceEntryStatus,
+  UnitOfMeasure,
   validateHarvestDocument,
   type HarvestDocument,
   type HarvestRunWarning,
@@ -1141,6 +1142,109 @@ describe('FileImportRunner (plan 0086)', () => {
           sizeUnit: null,
           approxWeight: 950,
         });
+      });
+
+      it('keeps the size text beside the size of a fixed pack when the document states no size at all', async () => {
+        const { runner, context, stored } = build({
+          rows: [
+            {
+              ...walked(),
+              externalId: '9001',
+              name: 'Leche',
+              sizeFormat: '1 L',
+              unitSize: 1000,
+              sizeUnit: UnitOfMeasure.MILLILITER,
+              soldByWeight: false,
+            },
+          ],
+          document: document({
+            schema_version: 2,
+            products: [{ external_id: '9001', name: 'Leche', prices: [] }],
+          }),
+        });
+
+        const counters = await runner.run(context, asWalk);
+
+        expect(stored[0]).toMatchObject({
+          sizeFormat: '1 L',
+          unitSize: 1000,
+          sizeUnit: UnitOfMeasure.MILLILITER,
+        });
+        expect(counters).toMatchObject({ unchanged: 1, updated: 0 });
+      });
+
+      it('keeps the text and the size for a size text with no quantity', async () => {
+        const { runner, context, stored } = build({
+          rows: [
+            {
+              ...walked(),
+              sizeFormat: '1 L',
+              unitSize: 1000,
+              sizeUnit: UnitOfMeasure.MILLILITER,
+              soldByWeight: false,
+            },
+          ],
+          document: document({
+            schema_version: 2,
+            products: [
+              {
+                external_id: '1001',
+                name: 'Leche entera',
+                size: { label: '250 g' },
+                prices: [],
+              },
+            ],
+          }),
+        });
+
+        await runner.run(context, asWalk);
+
+        expect(stored[0]).toMatchObject({
+          sizeFormat: '1 L',
+          unitSize: 1000,
+          sizeUnit: UnitOfMeasure.MILLILITER,
+        });
+      });
+
+      it('reads a stated quantity that converts to no size as a fixed pack with no size, as origin/dev did', async () => {
+        // Rows from before plan 0270 still hold a wash count or a length as
+        // their size.
+        for (const size of [
+          { label: '40 lavados', quantity: 40, unit: 'lavados' },
+          { label: '30 m', quantity: 30, unit: 'm' },
+        ]) {
+          const { runner, context, stored } = build({
+            rows: [
+              {
+                ...walked(),
+                sizeFormat: size.label,
+                unitSize: size.quantity,
+                sizeUnit: null,
+                soldByWeight: false,
+              },
+            ],
+            document: document({
+              schema_version: 2,
+              products: [
+                {
+                  external_id: '1001',
+                  name: 'Leche entera',
+                  size,
+                  prices: [],
+                },
+              ],
+            }),
+          });
+
+          await runner.run(context, asWalk);
+
+          expect(stored[0]).toMatchObject({
+            soldByWeight: false,
+            unitSize: null,
+            sizeUnit: null,
+            sizeFormat: size.label,
+          });
+        }
       });
 
       it('makes a new row the document does not say about a fixed pack', async () => {

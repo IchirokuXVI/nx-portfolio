@@ -267,6 +267,17 @@ describe('buildHarvestDocument', () => {
     expect(validateHarvestDocument(document).failures).toEqual([]);
   });
 
+  it('counts a name in code points, so an astral character counts once', async () => {
+    // Each emoji is two UTF-16 units, so `.length` reads 400 and 402 here.
+    const AT_BOUND = ['Lácteos', '🥛'.repeat(200)];
+    const PAST = ['Lácteos', '🥛'.repeat(201)];
+    const document = build([entry({ categoryPaths: [AT_BOUND, PAST] })]);
+    const [product] = productsOf(document);
+
+    expect(product['category_paths']).toEqual([AT_BOUND]);
+    expect(validateHarvestDocument(document).failures).toEqual([]);
+  });
+
   it('states no paths when no stored element is one', async () => {
     const [product] = productsOf(
       build([

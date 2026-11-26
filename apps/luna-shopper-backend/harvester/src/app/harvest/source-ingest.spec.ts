@@ -2528,10 +2528,12 @@ describe('SourceIngest, rows sold by weight bound to one product (plan 0181)', (
         {
           ...observation({ externalId: 'k-2', name: 'Chuleta' }),
           fromDocument: true,
+          statesSizeQuantity: false,
         },
         {
           ...observation({ externalId: 'k-3', name: 'Lomo' }),
           fromDocument: true,
+          statesSizeQuantity: false,
         },
       ],
     });
@@ -2555,10 +2557,22 @@ describe('SourceIngest, rows sold by weight bound to one product (plan 0181)', (
       sizeUnit: null,
       approxWeight: 950,
     });
-    const documentOf = (over: Partial<SourceObservation>) => {
-      const each: Partial<SourceObservation> & { fromDocument: true } = {
+    /**
+     * A document's product with no flag. `statesSizeQuantity` is what the
+     * runner reads from the file before the conversion; by default whether
+     * the converted size is a number.
+     */
+    const documentOf = (
+      over: Partial<SourceObservation>,
+      statesSizeQuantity = typeof over.unitSize === 'number'
+    ) => {
+      const each: Partial<SourceObservation> & {
+        fromDocument: true;
+        statesSizeQuantity: boolean;
+      } = {
         ...observation({ externalId: 'k-4', name: 'Queso curado', ...over }),
         fromDocument: true,
+        statesSizeQuantity,
       };
       delete each.soldByWeight;
       return each as SourceObservation;
@@ -2640,6 +2654,147 @@ describe('SourceIngest, rows sold by weight bound to one product (plan 0181)', (
         soldByWeight: false,
         unitSize: 500,
         sizeUnit: UnitOfMeasure.GRAM,
+      });
+    });
+
+    it('keeps the size text beside the size it keeps, and counts the row unchanged', async () => {
+      const { ingest, context, saved } = build({
+        rows: [
+          {
+            externalId: '9001',
+            name: 'Leche',
+            soldByWeight: false,
+            sizeFormat: '1 L',
+            unitSize: 1000,
+            sizeUnit: UnitOfMeasure.MILLILITER,
+          },
+        ],
+      });
+
+      const { counters } = await ingest.ingest(context, {
+        ...session,
+        observations: [
+          {
+            ...documentOf({ externalId: '9001', name: 'Leche' }),
+            // What the runner passes for a product with no `size`.
+            sizeFormat: null,
+          },
+        ],
+      });
+
+      expect(saved[0]).toMatchObject({
+        sizeFormat: '1 L',
+        unitSize: 1000,
+        sizeUnit: UnitOfMeasure.MILLILITER,
+      });
+      expect(counters).toMatchObject({ unchanged: 1, updated: 0 });
+    });
+
+    it('makes a new row that states no size hold no size text', async () => {
+      const { ingest, context, saved } = build({});
+
+      await ingest.ingest(context, {
+        ...session,
+        observations: [documentOf({ externalId: '9002', name: 'Leche' })],
+      });
+
+      expect(saved[0]).toMatchObject({
+        sizeFormat: null,
+        unitSize: null,
+        soldByWeight: false,
+      });
+    });
+
+    it('reads a quantity that converts to no size as a stated size, as origin/dev did', async () => {
+      // A row from before plan 0270, which still holds the wash count as its
+      // size, and a document that states `40 lavados`.
+      const { ingest, context, saved } = build({
+        rows: [
+          {
+            externalId: 'k-4',
+            name: 'Detergente',
+            soldByWeight: false,
+            sizeFormat: '40 lavados',
+            unitSize: 40,
+            sizeUnit: null,
+          },
+        ],
+      });
+
+      await ingest.ingest(context, {
+        ...session,
+        observations: [
+          documentOf(
+            {
+              name: 'Detergente',
+              sizeFormat: '40 lavados',
+              unitSize: null,
+              sizeUnit: null,
+            },
+            true
+          ),
+        ],
+      });
+
+      expect(saved[0]).toMatchObject({
+        soldByWeight: false,
+        unitSize: null,
+        sizeUnit: null,
+        sizeFormat: '40 lavados',
+      });
+    });
+
+    it('keeps the text and the size of a known row for a size text with no quantity', async () => {
+      const { ingest, context, saved } = build({
+        rows: [
+          {
+            externalId: 'k-4',
+            name: 'Queso curado',
+            soldByWeight: false,
+            sizeFormat: '1 kg',
+            unitSize: 1000,
+            sizeUnit: UnitOfMeasure.GRAM,
+          },
+        ],
+      });
+
+      const { counters } = await ingest.ingest(context, {
+        ...session,
+        observations: [
+          documentOf({ sizeFormat: '250 g', unitSize: null, sizeUnit: null }),
+        ],
+      });
+
+      // Never `250 g` beside 1000 g: the text and the size agree.
+      expect(saved[0]).toMatchObject({
+        soldByWeight: false,
+        sizeFormat: '1 kg',
+        unitSize: 1000,
+        sizeUnit: UnitOfMeasure.GRAM,
+      });
+      expect(counters.unchanged).toBe(1);
+    });
+
+    it('makes a new row hold the size text it was keyed by, with no size', async () => {
+      const { ingest, context, saved } = build({});
+
+      await ingest.ingest(context, {
+        ...session,
+        observations: [
+          documentOf({
+            externalId: entryKey('Queso tierno', '250 g'),
+            name: 'Queso tierno',
+            sizeFormat: '250 g',
+            unitSize: null,
+            sizeUnit: null,
+          }),
+        ],
+      });
+
+      expect(saved[0]).toMatchObject({
+        sizeFormat: '250 g',
+        unitSize: null,
+        soldByWeight: false,
       });
     });
   });

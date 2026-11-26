@@ -5,6 +5,7 @@ import {
   ItemSourceMatch,
   PriceSourceKind,
   SourceEntryStatus,
+  UnitOfMeasure,
   type HarvestDocument,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -975,6 +976,39 @@ describeIntegration('the one source product schema (real Postgres)', () => {
           approxWeight: null,
         });
       });
+    });
+
+    it('keeps the size, its unit and its text for a file that states no size, and counts the row unchanged', async () => {
+      const held = await walkedRow(
+        TARGET_RUN,
+        {
+          externalId: '9001',
+          name: 'Leche',
+          sizeFormat: '1 L',
+          unitSize: 1000,
+          sizeUnit: UnitOfMeasure.MILLILITER,
+          soldByWeight: false,
+        },
+        { amount: 0.99, observedAt: '2026-11-20T09:00:00Z' }
+      );
+
+      const counters = await importer().run(
+        importContext({
+          schema_version: 2,
+          sha256: DIGEST,
+          producer: { name: MARK, produced_at: '2026-11-21T08:00:00Z' },
+          products: [{ external_id: '9001', name: 'Leche', prices: [] }],
+        }),
+        asWalk
+      );
+
+      const after = await entries.findOneByOrFail({ id: held.id });
+      expect({
+        sizeFormat: after.sizeFormat,
+        unitSize: after.unitSize === null ? null : Number(after.unitSize),
+        sizeUnit: after.sizeUnit,
+      }).toEqual({ sizeFormat: '1 L', unitSize: 1000, sizeUnit: 'MILLILITER' });
+      expect(counters).toMatchObject({ unchanged: 1, updated: 0 });
     });
 
     it('replaces the newer price of the row with the older one the file states (today, an owner choice)', async () => {

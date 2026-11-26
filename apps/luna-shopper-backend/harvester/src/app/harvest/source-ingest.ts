@@ -357,15 +357,23 @@ type DocumentUnstated =
  * export leaves out every field its row holds as null.
  *
  * {@link soldByWeight} follows the same rule only when the document states
- * no size quantity either: a known row keeps how it is sold, its size and its
- * piece weight, and a new row is not sold by weight. Beside a size quantity
- * an absent flag says a fixed pack (`fieldsOf`).
+ * no size quantity either ({@link statesSizeQuantity}): a known row keeps how
+ * it is sold, its size, its size text and its piece weight, and a new row is
+ * not sold by weight. Beside a size quantity an absent flag says a fixed pack
+ * (`fieldsOf`).
  */
 export interface DocumentObservation extends Omit<
   SourceObservation,
   DocumentUnstated
 > {
   fromDocument: true;
+  /**
+   * Whether the document states a size quantity, read before the
+   * conversion: `40 lavados` or `30 m` convert to no size (plans 0183 and
+   * 0270), and still state one, so the row writes the no size they convert
+   * to, as a walk does.
+   */
+  statesSizeQuantity: boolean;
   brand?: string | null;
   ean?: string | null;
   url?: string | null;
@@ -1789,7 +1797,13 @@ export class SourceIngest {
       // state is no size (owner decision 143a).
       unitSize: fields.unitSize ?? null,
       sizeUnit: fields.sizeUnit ?? null,
-      sizeFormat: fields.sizeFormat ?? null,
+      // The text a document printed beside no size quantity and no flag,
+      // which `fieldsOf` holds back from a known row, is this row's own: half
+      // of the key it was found under. For a walk the two are the same.
+      sizeFormat:
+        fields.sizeFormat !== undefined
+          ? fields.sizeFormat
+          : (observation.sizeFormat ?? null),
       // Nor is a category path the observation did not state.
       categoryPath: fields.categoryPath ?? [],
       // Nor any identity field: a document that states none of them creates
@@ -2547,22 +2561,24 @@ function fieldsOf(
   observation: FullObservation,
   sourceKind: PriceSourceKind
 ): SourceEntryFields {
-  const fromDocument = 'fromDocument' in observation;
   // How the product is sold. Absent is false for a walk, which always means
   // it: an adapter with no field for it sells nothing by weight.
   //
   // A document that does not state the flag answers by its size. **A size
   // quantity says a fixed pack**, and the flag is written false with it, as
   // before documents could state the flag: a row sold by weight never holds
-  // a size. **No size quantity says nothing** about how the product is sold,
-  // so the flag stays undefined: the stored one stays (`applySourceGroup`)
-  // and a new row gets false (`create`).
-  const unflagged = observation.soldByWeight === undefined;
-  const packBySize = typeof observation.unitSize === 'number';
-  const soldByWeightStated =
-    fromDocument && unflagged && !packBySize
-      ? undefined
-      : observation.soldByWeight === true;
+  // a size. The quantity is the one the document states, read before the
+  // conversion, so `40 lavados`, which converts to no size, still writes
+  // that no size, as `origin/dev` did. **No size quantity says nothing**
+  // about how the product is sold, so the flag stays undefined: the stored
+  // one stays (`applySourceGroup`) and a new row gets false (`create`).
+  const statesNothing =
+    'fromDocument' in observation &&
+    observation.soldByWeight === undefined &&
+    !observation.statesSizeQuantity;
+  const soldByWeightStated = statesNothing
+    ? undefined
+    : observation.soldByWeight === true;
   const soldByWeight = soldByWeightStated === true;
   // A row sold by weight states no size, held here for every adapter (plan
   // 0181): the weight is not the same on every pack, so a leaflet tile that
@@ -2572,12 +2588,12 @@ function fieldsOf(
   // A size the observation does not state stays undefined (owner decision
   // 143a), so the stored size and its unit stay, unless a weight below says
   // the row holds no size. A document that states neither a flag nor a size
-  // quantity states no size either: its null is not written, so the size of
-  // a fixed pack stays, and a row that stays sold by weight keeps its piece
-  // weight (`approxWeight` below follows the size).
+  // quantity writes no size: its null is not written, so the size of a fixed pack
+  // stays, and a row that stays sold by weight keeps its piece weight
+  // (`approxWeight` below follows the size).
   const stated = soldByWeight
     ? null
-    : soldByWeightStated === undefined
+    : statesNothing
       ? undefined
       : observation.unitSize;
   const weighed =
@@ -2612,7 +2628,14 @@ function fieldsOf(
       unitSize === null || unitSize === undefined
         ? observation.approxWeight
         : null,
-    sizeFormat: observation.sizeFormat,
+    // A document that states neither a flag nor a size quantity writes no
+    // size text either, on a known row: the row keeps its text beside
+    // the size it keeps, so the two never disagree. Its null would leave a
+    // size with no text, and a label alone (`250 g` over a row of 1000
+    // MILLILITER) a text that names another size than the row holds, a pair
+    // rung 4 would compare though no source printed it. A new row gets the
+    // document's text, which a row keyed on its name needs (`create`).
+    sizeFormat: statesNothing ? undefined : observation.sizeFormat,
     packaging: observation.packaging,
     packCount: observation.packCount,
     categoryPath: observation.categoryPath,

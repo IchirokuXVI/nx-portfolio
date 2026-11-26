@@ -369,6 +369,9 @@ export class FileImportRunner {
       // The one observation that may leave a field unstated, and the mark
       // that it is a document's.
       fromDocument: true,
+      // Read from the document and not from the converted size, so a
+      // quantity that converts to none (`40 lavados`) still states a size.
+      statesSizeQuantity: typeof product.size?.quantity === 'number',
       externalId,
       name: product.name,
       // **Absent stays absent.** A field the document does not state is
