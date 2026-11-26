@@ -361,7 +361,9 @@ export function ApiProblemResponses(
       // Plan 0244, section 3.2: a weight never beside a size.
       ERROR_CODES.ITEM_APPROX_WEIGHT_BESIDE_SIZE,
       // Plan 0261, section 3: a step only on a product by the kilo.
-      ERROR_CODES.ITEM_QUANTITY_STEP_NOT_ALLOWED
+      ERROR_CODES.ITEM_QUANTITY_STEP_NOT_ALLOWED,
+      // Plan 0278, section 2: pieces only on a sized product, above its pack.
+      ERROR_CODES.ITEM_PIECE_COUNT_NOT_ALLOWED
     );
   }
   if (options.itemExpectation) {

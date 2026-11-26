@@ -1510,6 +1510,19 @@ export interface ItemView {
    */
   packCount: number | null;
   /**
+   * How many pieces the whole product holds, counted across its pack, a whole
+   * number from {@link PIECE_COUNT_MIN} to {@link PIECE_COUNT_MAX}, or null
+   * (plan 0278): a bag of 35 g holds 50 candies, two such bags hold 100.
+   *
+   * It sits beside {@link packCount} and answers another question: the pack
+   * count counts units a shopper uses one at a time, this counts small pieces
+   * whose number matters more than their weight. Never a wash count, a
+   * serving count or the sheets of a roll. Only on a product with a fixed
+   * size in `GRAM` or `MILLILITER`, and above the pack count when that is set.
+   * A person writes it, and no run does.
+   */
+  pieceCount: number | null;
+  /**
    * The leaves this product sits on, in the order they were written, and never
    * empty (plan 0166, section 2). The first is the one a row shows when it has
    * room for one; grouping by category draws the product under every one.
@@ -2465,6 +2478,13 @@ export interface CreateItemRequest extends AdminCredential {
   /** How many units the pack holds (plan 0162). See {@link ItemView.packCount}. */
   packCount?: number | null;
   /**
+   * How many pieces the whole product holds (plan 0278). See
+   * {@link ItemView.pieceCount}. A count on a product without a fixed size in
+   * `GRAM` or `MILLILITER`, or not above the pack count, is refused with
+   * `item_piece_count_not_allowed`. A run never sends one.
+   */
+  pieceCount?: number | null;
+  /**
    * One or more leaf ids, in the order meant (plan 0166, section 3). An empty
    * list is refused with `item_needs_a_category`, a root with
    * `category_not_a_leaf` and an unknown id with `category_not_found`.
@@ -2561,6 +2581,16 @@ export interface UpdateItemRequest extends AdminCredential {
    */
   packCount?: number | null;
   /**
+   * Set, change or (with `null`) clear the piece count (plan 0278, section
+   * 2). See {@link ItemView.pieceCount}.
+   *
+   * An edit that takes a product with pieces out of the rules (a cleared
+   * size, another unit, a weight, or a pack count raised to the piece count)
+   * must send `pieceCount: null` with it, or it is refused with
+   * `item_piece_count_not_allowed`.
+   */
+  pieceCount?: number | null;
+  /**
    * Replace the whole set of the product's leaves, in the order meant (plan
    * 0166, section 3). Absent leaves the set alone; an empty list is refused with
    * `item_needs_a_category`, because a product always has one.
@@ -2605,6 +2635,8 @@ export interface ItemExpectation {
   quantityStep?: number | null;
   defaultUnit?: UnitOfMeasure;
   packCount?: number | null;
+  /** Compared as a number, as `packCount` is (plan 0278, section 3). */
+  pieceCount?: number | null;
   categorySlugs?: string[];
 }
 
@@ -2657,6 +2689,17 @@ export interface UpdateItemsResult {
  */
 export const PACK_COUNT_MIN = 2;
 export const PACK_COUNT_MAX = 1000;
+
+/**
+ * The bounds of a piece count (plan 0278, section 2), which the check
+ * `item_piece_count_bounds` restates.
+ *
+ * A count of 1 says nothing and is stored as null, as a pack count of 1 is.
+ * The upper bound holds a large bag of small sweets and stays far from any
+ * weight in grams a misplaced value would carry.
+ */
+export const PIECE_COUNT_MIN = 2;
+export const PIECE_COUNT_MAX = 10000;
 
 /**
  * A pack count, or null when the value is not one.

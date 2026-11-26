@@ -346,3 +346,10 @@ copies the name, brand, size, pack count, unit and weight onto a buy.
   on production and type 4 in "Units in the pack".
 - **C. One request file sent to each cluster's batch route with `expect`**, without the replay.
   Example: the same 22 edits, sent by `curl` to staging and then to production.
+
+## Decisions
+
+2026-11-26: the build took the recommended option of each open decision, pending the owner's
+answer. O1 A: no harvest run, fill or release task writes the piece count. O2 A: a purchase
+snapshot does not keep it, so `ItemSnapshot` is unchanged. O3 and O4 are about data, not code:
+the build sets no value, and the rows of section 7 wait for the owner.

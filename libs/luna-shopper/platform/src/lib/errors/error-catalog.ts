@@ -272,6 +272,10 @@ export const ERROR_CATALOG: Record<
     en: 'Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.',
     es: 'Solo un producto que se vende por kilo tiene un paso, y el paso es uno de los permitidos. Elige un paso permitido o quita el paso.',
   },
+  [ERROR_CODES.ITEM_PIECE_COUNT_NOT_ALLOWED]: {
+    en: 'Only a product with a fixed size in grams or millilitres has a piece count, from 2 to 10000 and above its pack count. Correct the count, or clear it.',
+    es: 'Solo un producto con un tamaño fijo en gramos o mililitros tiene un número de piezas, de 2 a 10000 y mayor que el número de unidades del pack. Corrige el número o quítalo.',
+  },
   [ERROR_CODES.ITEM_MERGED]: {
     en: 'This product was merged into another one. Work on the product it was merged into.',
     es: 'Este producto se fusionó con otro. Trabaja con el producto con el que se fusionó.',

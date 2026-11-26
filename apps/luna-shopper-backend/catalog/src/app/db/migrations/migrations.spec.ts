@@ -1,7 +1,15 @@
-import { QUANTITY_STEPS } from '@portfolio/luna-shopper/contracts';
+import {
+  PIECE_COUNT_MAX,
+  PIECE_COUNT_MIN,
+  QUANTITY_STEPS,
+} from '@portfolio/luna-shopper/contracts';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { ITEM_QUANTITY_STEPS_SQL } from './1759500000000-ItemQuantityStep';
+import {
+  ITEM_PIECE_COUNT_MAX_SQL,
+  ITEM_PIECE_COUNT_MIN_SQL,
+} from './1759600000000-ItemPieceCount';
 import { CATALOG_MIGRATIONS } from './index';
 
 /**
@@ -48,6 +56,14 @@ describe('CATALOG_MIGRATIONS', () => {
     // so a step added to the contract and not to a migration fails here and
     // not as a 500 from the database.
     expect([...ITEM_QUANTITY_STEPS_SQL]).toEqual([...QUANTITY_STEPS]);
+  });
+
+  it('restates the bounds of plan 0278 in the check of ItemPieceCount', () => {
+    // The check `item_piece_count_bounds` holds its own literals, so a bound
+    // moved in the contract and not in a migration fails here and not as a
+    // 500 from the database.
+    expect(ITEM_PIECE_COUNT_MIN_SQL).toBe(PIECE_COUNT_MIN);
+    expect(ITEM_PIECE_COUNT_MAX_SQL).toBe(PIECE_COUNT_MAX);
   });
 
   it('is not empty', () => {

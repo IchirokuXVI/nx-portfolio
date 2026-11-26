@@ -366,6 +366,7 @@ export type CreateItemDto = {
   approxWeight?: number | null;
   quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount?: number | null;
+  pieceCount?: number | null;
   categoryIds?: string[];
   categorySlugs?: string[];
   defaultUnit: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
@@ -565,6 +566,7 @@ export type ItemExpectationDto = {
   quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
   packCount?: number | null;
+  pieceCount?: number | null;
   categorySlugs?: string[];
 };
 
@@ -768,6 +770,7 @@ export type ProblemDetails = {
     | 'item_kilogram_has_size'
     | 'item_approx_weight_beside_size'
     | 'item_quantity_step_not_allowed'
+    | 'item_piece_count_not_allowed'
     | 'item_merged'
     | 'item_merge_two_articles_one_chain'
     | 'item_merge_format_differs'
@@ -1342,6 +1345,7 @@ export type UpdateItemBatchEntryDto = {
   approxWeight?: number | null;
   quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount?: number | null;
+  pieceCount?: number | null;
   categoryIds?: string[];
   categorySlugs?: string[];
   defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
@@ -1363,6 +1367,7 @@ export type UpdateItemDto = {
   approxWeight?: number | null;
   quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount?: number | null;
+  pieceCount?: number | null;
   categoryIds?: string[];
   categorySlugs?: string[];
   defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
@@ -2510,6 +2515,7 @@ export type BasketBasketProductView = {
   approxWeightSetBy?: 'SOURCE' | 'ADMIN' | null;
   quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount: number | null;
+  pieceCount: number | null;
   categories: CatalogItemCategoryView[];
   defaultUnit: EnumsUnitOfMeasure;
   productGroupId: string | null;
@@ -3179,6 +3185,7 @@ export type CatalogItemView = {
   approxWeightSetBy?: 'SOURCE' | 'ADMIN' | null;
   quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount: number | null;
+  pieceCount: number | null;
   categories: CatalogItemCategoryView[];
   defaultUnit: EnumsUnitOfMeasure;
   productGroupId: string | null;

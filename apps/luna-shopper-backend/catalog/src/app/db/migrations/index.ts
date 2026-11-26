@@ -34,6 +34,7 @@ import { SupermarketItemDelistedAt1759200000000 } from './1759200000000-Supermar
 import { ItemApproxWeight1759300000000 } from './1759300000000-ItemApproxWeight';
 import { SupermarketItemComparablePrice1759400000000 } from './1759400000000-SupermarketItemComparablePrice';
 import { ItemQuantityStep1759500000000 } from './1759500000000-ItemQuantityStep';
+import { ItemPieceCount1759600000000 } from './1759600000000-ItemPieceCount';
 
 /**
  * Every catalog migration, in the order TypeORM must apply them (plan 0027,
@@ -81,4 +82,5 @@ export const CATALOG_MIGRATIONS = [
   ItemApproxWeight1759300000000,
   SupermarketItemComparablePrice1759400000000,
   ItemQuantityStep1759500000000,
+  ItemPieceCount1759600000000,
 ];
