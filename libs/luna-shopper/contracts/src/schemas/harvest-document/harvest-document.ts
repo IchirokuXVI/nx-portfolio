@@ -225,9 +225,21 @@ export interface HarvestDocumentProduct {
    * Every path the chain files the product under, each root first, version 2
    * (plan 0268). The harvester's export states the paths a row holds. The
    * import adds them to the paths of the row, with `category_path`, and
-   * removes none: a file does not say that a stored path is gone.
+   * removes none: a file does not say that a stored path is gone, unless it
+   * states {@link HarvestDocumentProduct.category_paths_complete}.
    */
   category_paths?: string[][] | null;
+  /**
+   * Whether {@link HarvestDocumentProduct.category_paths} is every path the
+   * chain files the product under, version 2. The harvester's export states
+   * `true` only for a row whose paths the exported run replaced whole, and
+   * never for a list it trimmed to the schema's bounds; it states nothing
+   * otherwise. An import as `OFFICIAL_WEB` or `OFFICIAL_API` then replaces
+   * the paths of the row with the stated ones. Any other kind, a `false`, an
+   * absent field, or no paths stated only adds, so a file cannot clear the
+   * paths of a row by stating none.
+   */
+  category_paths_complete?: boolean;
   url?: string | null;
   /**
    * The address of the photo the chain prints for the product, version 2

@@ -782,10 +782,9 @@ describeIntegration('the one source product schema (real Postgres)', () => {
         itemId: ITEM,
         // The one path the walk filed it under, as a walk there writes it.
         categoryPath: DAIRY,
-        // ADD, for every product: the export does not state that the walk
-        // read every shelf of the product, because the run keeps no record of
-        // it per row, so no product replaces its trails and the wrong one
-        // stays beside the two the walk met.
+        // ADD: no run replaced the source row's paths whole, so the export
+        // does not state them complete, and the wrong trail stays beside the
+        // two the walk met.
         categoryPaths: [WRONG, DAIRY, BREAKFAST],
       });
       // The bound product keeps its chain photo: its link is sent again, on
@@ -1011,36 +1010,212 @@ describeIntegration('the one source product schema (real Postgres)', () => {
       expect(counters).toMatchObject({ unchanged: 1, updated: 0 });
     });
 
-    it('replaces the newer price of the row with the older one the file states (today, an owner choice)', async () => {
-      // Not a guard: what the ingest does today, pinned so a change to it is
-      // a decision someone takes. `source_entry_prices` keeps one row per
-      // (row, scope, kind), and an import of that kind upserts it with the
-      // file's values whatever their date. Catalog is sent the older
-      // observation too, and its own read keeps the newer row current,
-      // because the current price is the latest `observedAt`.
-      const document = await exported();
-      const held = await target();
+    describe('trails a walk read whole (164a)', () => {
+      /** The export of a walk whose drain replaced the row's paths whole. */
+      async function exportedWhole(
+        patch: Partial<SourceCatalogEntry> = {}
+      ): Promise<HarvestDocument> {
+        const walked = await walkedRow(
+          SOURCE_RUN,
+          { categoryPath: DAIRY, ...patch },
+          { amount: 0.95, observedAt: '2026-11-01T09:00:00Z' }
+        );
+        // What the drain of a walk calls for a product it read whole.
+        await new SourceIngest(
+          entries,
+          prices,
+          {} as CatalogClient
+        ).writeCategoryPaths(SOURCE_RUN, [
+          { entryId: walked.id, paths: [DAIRY, BREAKFAST], mode: 'REPLACE' },
+        ]);
+        const document = await exportOf(SOURCE_RUN);
+        await clean();
+        return document;
+      }
 
-      await importer().run(importContext(document), asWalk);
+      /** The target's row, with a wrong trail and a price older than the file's. */
+      async function wronglyFiled(
+        patch: Partial<SourceCatalogEntry> = {}
+      ): Promise<SourceCatalogEntry> {
+        return walkedRow(
+          TARGET_RUN,
+          { categoryPath: WRONG, categoryPaths: [WRONG], ...patch },
+          { amount: 1.05, observedAt: '2026-10-20T09:00:00Z' }
+        );
+      }
 
-      const stored = await prices.find({
-        where: {
-          entryId: held.id,
-          priceScopeId: NORTH,
-          sourceKind: PriceSourceKind.OFFICIAL_WEB,
-        },
+      it('replaces the wrong trail of the target, names the import on it, and its export says so again', async () => {
+        const document = await exportedWhole();
+        expect(document.products[0]).toMatchObject({
+          category_paths: [DAIRY, BREAKFAST],
+          category_paths_complete: true,
+        });
+        const held = await wronglyFiled();
+
+        const counters = await importer().run(importContext(document), asWalk);
+
+        expect(await entries.findOneByOrFail({ id: held.id })).toMatchObject({
+          categoryPath: DAIRY,
+          categoryPaths: [DAIRY, BREAKFAST],
+          categoryPathsReplacedByRunId: RUN,
+        });
+        expect(counters.categoryPathsWritten).toBe(1);
+        // The import's own export carries the statement on.
+        const again = await exportOf(RUN);
+        expect(again.products[0]).toMatchObject({
+          category_paths: [DAIRY, BREAKFAST],
+          category_paths_complete: true,
+        });
       });
-      expect(stored).toHaveLength(1);
-      expect(Number(stored[0].price)).toBe(0.95);
-      expect(stored[0].observedAt.toISOString()).toBe(
-        '2026-11-01T09:00:00.000Z'
-      );
-      expect(owed).toEqual([
-        expect.objectContaining({
-          price: 0.95,
-          observedAt: '2026-11-01T09:00:00.000Z',
-        }),
-      ]);
+
+      it('replaces with the stated paths alone, never bringing back the stale category_path the export writes', async () => {
+        // The source row kept `categoryPath` from an earlier full
+        // observation; its walk replaced the paths without it.
+        const STALE = ['Navidad'];
+        const document = await exportedWhole({ categoryPath: STALE });
+        expect(document.products[0]).toMatchObject({
+          category_path: STALE,
+          category_paths: [DAIRY, BREAKFAST],
+          category_paths_complete: true,
+        });
+        const held = await wronglyFiled();
+
+        await importer().run(importContext(document), asWalk);
+
+        expect(await entries.findOneByOrFail({ id: held.id })).toMatchObject({
+          categoryPaths: [DAIRY, BREAKFAST],
+          categoryPathsReplacedByRunId: RUN,
+        });
+        const again = await exportOf(RUN);
+        expect(again.products[0]).toMatchObject({
+          category_paths: [DAIRY, BREAKFAST],
+          category_paths_complete: true,
+        });
+      });
+
+      it('only adds for a product that does not state its paths whole', async () => {
+        const document = await exportedWhole();
+        const plain = {
+          ...document,
+          products: document.products.map((product) => {
+            const rest = { ...product };
+            delete rest.category_paths_complete;
+            return rest;
+          }),
+        };
+        const held = await wronglyFiled({
+          categoryPathsReplacedByRunId: TARGET_RUN,
+        });
+
+        await importer().run(importContext(plain), asWalk);
+
+        expect(await entries.findOneByOrFail({ id: held.id })).toMatchObject({
+          categoryPaths: [WRONG, DAIRY, BREAKFAST],
+          categoryPathsReplacedByRunId: TARGET_RUN,
+        });
+      });
+
+      it('never replaces through an import of a leaflet kind', async () => {
+        const document = await exportedWhole();
+        const held = await wronglyFiled();
+
+        await importer().run(importContext(document), {
+          ...asWalk,
+          sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+        });
+
+        const after = await entries.findOneByOrFail({ id: held.id });
+        expect(after.categoryPaths).toEqual([WRONG, DAIRY, BREAKFAST]);
+        expect(after.categoryPathsReplacedByRunId).toBeNull();
+      });
+
+      it('states nothing whole for a row whose paths another run replaced', async () => {
+        const walked = await walkedRow(
+          SOURCE_RUN,
+          { categoryPath: DAIRY, categoryPaths: [DAIRY] },
+          { amount: 0.95, observedAt: '2026-11-01T09:00:00Z' }
+        );
+        await new SourceIngest(
+          entries,
+          prices,
+          {} as CatalogClient
+        ).writeCategoryPaths(LATER_RUN, [
+          { entryId: walked.id, paths: [DAIRY], mode: 'REPLACE' },
+        ]);
+
+        const document = await exportOf(SOURCE_RUN);
+
+        expect(Object.keys(document.products[0])).not.toContain(
+          'category_paths_complete'
+        );
+      });
+    });
+
+    describe('a price older than the one the row holds (165a)', () => {
+      it('is skipped and counted, and the rest of the product is written', async () => {
+        const document = await exported();
+        const held = await target();
+
+        const counters = await importer().run(importContext(document), asWalk);
+
+        const stored = await prices.find({
+          where: {
+            entryId: held.id,
+            priceScopeId: NORTH,
+            sourceKind: PriceSourceKind.OFFICIAL_WEB,
+          },
+        });
+        expect(stored).toHaveLength(1);
+        expect(Number(stored[0].price)).toBe(1.05);
+        expect(stored[0].observedAt.toISOString()).toBe(
+          '2026-11-20T09:00:00.000Z'
+        );
+        expect(stored[0].runId).toBe(TARGET_RUN);
+        // Catalog is sent no current observation for it.
+        expect(owed).toEqual([]);
+        expect(counters).toMatchObject({
+          pricesSkippedOlder: 1,
+          pricesRecorded: 0,
+        });
+        // The trails of the file are still added.
+        expect(
+          (await entries.findOneByOrFail({ id: held.id })).categoryPaths
+        ).toEqual([WRONG, DAIRY, BREAKFAST]);
+      });
+
+      it('writes a newer one, and one at the same instant', async () => {
+        const document = await exported();
+        const held = await walkedRow(
+          TARGET_RUN,
+          { categoryPath: WRONG, categoryPaths: [WRONG] },
+          { amount: 1.05, observedAt: '2026-10-20T09:00:00Z' }
+        );
+
+        const newer = await importer().run(importContext(document), asWalk);
+
+        const [stored] = await prices.find({
+          where: { entryId: held.id, sourceKind: PriceSourceKind.OFFICIAL_WEB },
+        });
+        expect(Number(stored.price)).toBe(0.95);
+        expect(stored.observedAt.toISOString()).toBe(
+          '2026-11-01T09:00:00.000Z'
+        );
+        expect(newer.pricesSkippedOlder).toBe(0);
+        expect(owed).toEqual([
+          expect.objectContaining({
+            price: 0.95,
+            observedAt: '2026-11-01T09:00:00.000Z',
+          }),
+        ]);
+
+        // The same file again: an equal instant writes, as before.
+        const same = await importer().run(
+          importContext({ ...document, sha256: 'b'.repeat(64) }),
+          asWalk
+        );
+        expect(same.pricesSkippedOlder).toBe(0);
+        expect(same.pricesRecorded).toBe(1);
+      });
     });
   });
 });

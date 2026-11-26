@@ -34,6 +34,7 @@ import { SourceEntryPackaging1760500000000 } from './1760500000000-SourceEntryPa
 import { SourceEntrySizeDoubt1760600000000 } from './1760600000000-SourceEntrySizeDoubt';
 import { SourceEntryCategoryPaths1760680000000 } from './1760680000000-SourceEntryCategoryPaths';
 import { RunWalkConfig1760720000000 } from './1760720000000-RunWalkConfig';
+import { SourceEntryCategoryPathsReplacedBy1760760000000 } from './1760760000000-SourceEntryCategoryPathsReplacedBy';
 
 /**
  * Every harvester migration, in the order TypeORM must apply them (plan 0027,
@@ -80,4 +81,5 @@ export const HARVESTER_MIGRATIONS = [
   SourceEntrySizeDoubt1760600000000,
   SourceEntryCategoryPaths1760680000000,
   RunWalkConfig1760720000000,
+  SourceEntryCategoryPathsReplacedBy1760760000000,
 ];

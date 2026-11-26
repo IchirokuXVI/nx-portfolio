@@ -424,6 +424,10 @@ export class RunExecutor implements OnApplicationShutdown {
       await this.store.setReport(runId, {
         ...(await this.store.load(runId)).report,
         ...describePrices(imported),
+        // 165a: prices of the file older than the price the row holds for
+        // the same scope and kind, neither stored nor sent to catalog. Only
+        // an import states it: a walk's prices are never skipped as older.
+        pricesSkippedOlder: imported.pricesSkippedOlder,
         // Plan 0221: rows proposed by the words of their name in any order.
         wordOrderProposals: imported.wordOrderProposals,
         wordOrderRejectedPointers: imported.wordOrderRejectedPointers,

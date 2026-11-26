@@ -26,6 +26,7 @@ import {
   type SourceIngestCounters,
   type SourceObservation,
 } from './source-ingest';
+import { isWalkKind } from './source-snapshot';
 
 export interface FileImportInput {
   supermarketId: string;
@@ -260,9 +261,15 @@ export class FileImportRunner {
       this.recordOutcomes(context, document.products, outcomes)
     );
     await afterIngest('CATEGORY_PATHS', () =>
-      this.writeCategoryPaths(document.products, outcomes, () => {
-        categoryPathsWritten += 1;
-      })
+      this.writeCategoryPaths(
+        context.runId,
+        input.sourceKind,
+        document.products,
+        outcomes,
+        () => {
+          categoryPathsWritten += 1;
+        }
+      )
     );
     await afterIngest('FLUSH', () => context.flush());
     return { ...counters, categoryPathsWritten };
@@ -274,12 +281,19 @@ export class FileImportRunner {
    * `category_paths`, then `category_path` when it is not among them.
    * `onWritten` is called once for each row whose paths changed, as it lands.
    *
-   * **Always `ADD`.** A document is one reading of one source: a leaflet
-   * shows one department of a product, not every shelf it sits on. The
-   * harvester's own export of a walk states every path the row holds, and
-   * not whether the walk read every shelf of the product, because the run
-   * keeps no record of that per row. Neither has shown that a stored path no
-   * longer holds.
+   * **`ADD`, unless the file states the paths whole** (164a). A document is
+   * one reading of one source: a leaflet shows one department of a product,
+   * not every shelf it sits on, and has not shown that a stored path no
+   * longer holds. A row's paths are replaced only when every product of the
+   * document that resolved to it {@link statesPathsWhole}, and only for an
+   * import of a walk's kind (`OFFICIAL_WEB`, `OFFICIAL_API`): the
+   * harvester's export states `category_paths_complete` for a row the
+   * exported walk read whole, and the import stands where that walk stood.
+   * The replacing paths are the `category_paths` of every such product, and
+   * never `category_path`: the export writes that one from the row's
+   * `categoryPath` whether or not the walk still read it. The write names
+   * this import's run on the row, so an export of this import carries the
+   * statement on.
    *
    * Written after the ingest, so each row the import created exists, as a
    * walk writes its paths at the drain after the last chunk. An ingest that
@@ -294,41 +308,54 @@ export class FileImportRunner {
    * did before (plan 0081).
    */
   private async writeCategoryPaths(
+    runId: string,
+    sourceKind: PriceSourceKind,
     products: readonly HarvestDocumentProduct[],
     outcomes: readonly SourceEntryOutcome[],
     onWritten: () => void
   ): Promise<void> {
-    const byEntry = new Map<string, string[][]>();
+    const replaces = isWalkKind(sourceKind);
+    const byEntry = new Map<
+      string,
+      { added: string[][]; listed: string[][]; whole: boolean }
+    >();
     outcomes.forEach((outcome, index) => {
       const product = products[index];
-      const paths = [
-        ...(product?.category_paths ?? []),
-        product?.category_path ?? [],
-      ].filter((path) => path.length > 0);
-      if (paths.length === 0) {
-        return;
-      }
+      const listed = (product?.category_paths ?? [])
+        .filter((path) => path.length > 0)
+        .map((path) => [...path]);
+      const added = [...listed, [...(product?.category_path ?? [])]].filter(
+        (path) => path.length > 0
+      );
+      // Asked of every product of the row, one with no path included, so a
+      // second product that does not state its paths whole keeps the row
+      // at `ADD`.
+      const whole =
+        replaces && product !== undefined && statesPathsWhole(product);
       const held = byEntry.get(outcome.entry.id);
       if (held) {
-        held.push(...paths.map((path) => [...path]));
+        held.added.push(...added);
+        held.listed.push(...listed);
+        held.whole = held.whole && whole;
       } else {
-        byEntry.set(
-          outcome.entry.id,
-          paths.map((path) => [...path])
-        );
+        byEntry.set(outcome.entry.id, { added, listed, whole });
       }
     });
     const writes = [...byEntry]
-      .map(([entryId, paths]) => ({
+      .map(([entryId, { added, listed, whole }]) => ({
         entryId,
-        paths: distinctCategoryPaths(paths),
-        mode: 'ADD' as const,
+        // A row replaced takes `category_paths` alone: the export writes
+        // `category_path` from the row's `categoryPath`, which a walk moves
+        // only on a full observation, so it may name a path the walk proved
+        // gone.
+        paths: distinctCategoryPaths(whole ? listed : added),
+        mode: whole ? ('REPLACE' as const) : ('ADD' as const),
       }))
       .filter((write) => write.paths.length > 0);
     if (writes.length === 0) {
       return;
     }
-    await this.ingest.writeCategoryPaths(writes, onWritten);
+    await this.ingest.writeCategoryPaths(runId, writes, onWritten);
   }
 
   /**
@@ -515,6 +542,21 @@ export function soldByWeightOf(
     return product.sold_by_weight;
   }
   return product.extra?.['basis'] === 'kg' ? true : undefined;
+}
+
+/**
+ * Whether a product of the document states its category paths whole (164a):
+ * `category_paths_complete` is `true` **and** `category_paths` holds at least
+ * one path. A statement of completeness beside no paths, an empty list or
+ * only empty paths replaces nothing, so a file cannot wipe the paths of a row
+ * by stating none.
+ */
+export function statesPathsWhole(product: HarvestDocumentProduct): boolean {
+  return (
+    product.category_paths_complete === true &&
+    Array.isArray(product.category_paths) &&
+    distinctCategoryPaths(product.category_paths).length > 0
+  );
 }
 
 /**

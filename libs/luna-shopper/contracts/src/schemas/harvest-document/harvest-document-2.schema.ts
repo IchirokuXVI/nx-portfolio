@@ -183,7 +183,7 @@ const product: JsonSchema = {
     category_paths: {
       type: ['array', 'null'],
       description:
-        'Every path the chain files the product under, each root first (plan 0268). The import adds them to the paths the row holds and removes none.',
+        'Every path the chain files the product under, each root first (plan 0268). The import adds them to the paths the row holds and removes none, unless category_paths_complete is true.',
       maxItems: HARVEST_CATEGORY_PATHS_BOUNDS.paths,
       items: {
         type: 'array',
@@ -193,6 +193,11 @@ const product: JsonSchema = {
           maxLength: HARVEST_CATEGORY_PATHS_BOUNDS.nameLength,
         },
       },
+    },
+    category_paths_complete: {
+      type: 'boolean',
+      description:
+        "Whether category_paths is every path the chain files the product under. The harvester's export states true only for a row whose paths the exported run replaced whole, and never for a list it had to trim. An import as OFFICIAL_WEB or OFFICIAL_API then replaces the paths of the row with the stated ones; any other kind, a false, an absent field, or no paths stated only adds.",
     },
     url: { type: ['string', 'null'] },
     image_url: {

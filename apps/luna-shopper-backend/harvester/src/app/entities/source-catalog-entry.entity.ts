@@ -204,6 +204,20 @@ export class SourceCatalogEntry extends BaseEntity {
   @Column({ type: 'jsonb', default: () => `'[]'::jsonb` })
   categoryPaths!: string[][];
 
+  /**
+   * The run whose `REPLACE` write last stated {@link categoryPaths} whole: a
+   * walk that read every path of the product, or an import of a file that
+   * stated its paths complete. Null for a row no such write reached.
+   *
+   * Set by that write whether or not the paths changed, because a run that
+   * read the same paths again has proved them again. An `ADD` leaves it
+   * alone. The export of a run states `category_paths_complete` only for a
+   * row whose value is that run, so a file never claims a list is whole on
+   * the word of an earlier run.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  categoryPathsReplacedByRunId!: string | null;
+
   @Column({ type: 'varchar', nullable: true })
   url!: string | null;
 
