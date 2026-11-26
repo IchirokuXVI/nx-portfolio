@@ -13,6 +13,7 @@ import {
   type SourceSize,
 } from '@portfolio/luna-shopper/contracts';
 import { distinctCategoryPaths } from './category-paths';
+import { documentPhotoOf } from './document-photo';
 import { readHarvestDocument } from './harvest-document.reader';
 import { resolveImportWindow, type ImportWindow } from './import-window';
 import { entryKey } from './matching';
@@ -20,6 +21,7 @@ import { PriceScopeResolver } from './price-scope-resolver';
 import type { RunContext } from './run-context';
 import {
   SourceIngest,
+  type DocumentObservation,
   type SourceEntryOutcome,
   type SourceIngestCounters,
   type SourceObservation,
@@ -179,6 +181,7 @@ export class FileImportRunner {
         documentWindow,
         fallbackObservedAt,
         duplicates,
+        adapterKey: input.adapterKey,
       })
     );
 
@@ -266,14 +269,17 @@ export class FileImportRunner {
   }
 
   /**
-   * The one category path each product of the document states, added to the
-   * paths its row holds (plan 0268, section 3). `onWritten` is called once
-   * for each row whose paths changed, as it lands.
+   * The category paths each product of the document states, added to the
+   * paths its row holds (plan 0268, section 3): every path of
+   * `category_paths`, then `category_path` when it is not among them.
+   * `onWritten` is called once for each row whose paths changed, as it lands.
    *
    * **Always `ADD`.** A document is one reading of one source: a leaflet
-   * shows one department of a product, not every shelf it sits on, and the
-   * harvester's own export of a walk keeps one `category_path` of the several
-   * the walk met. Neither has shown that a stored path no longer holds.
+   * shows one department of a product, not every shelf it sits on. The
+   * harvester's own export of a walk states every path the row holds, and
+   * not whether the walk read every shelf of the product, because the run
+   * keeps no record of that per row. Neither has shown that a stored path no
+   * longer holds.
    *
    * Written after the ingest, so each row the import created exists, as a
    * walk writes its paths at the drain after the last chunk. An ingest that
@@ -294,15 +300,22 @@ export class FileImportRunner {
   ): Promise<void> {
     const byEntry = new Map<string, string[][]>();
     outcomes.forEach((outcome, index) => {
-      const path = products[index]?.category_path ?? [];
-      if (path.length === 0) {
+      const product = products[index];
+      const paths = [
+        ...(product?.category_paths ?? []),
+        product?.category_path ?? [],
+      ].filter((path) => path.length > 0);
+      if (paths.length === 0) {
         return;
       }
       const held = byEntry.get(outcome.entry.id);
       if (held) {
-        held.push([...path]);
+        held.push(...paths.map((path) => [...path]));
       } else {
-        byEntry.set(outcome.entry.id, [[...path]]);
+        byEntry.set(
+          outcome.entry.id,
+          paths.map((path) => [...path])
+        );
       }
     });
     const writes = [...byEntry]
@@ -331,11 +344,19 @@ export class FileImportRunner {
       documentWindow: ImportWindow | null;
       fallbackObservedAt: Date;
       duplicates: Set<string>;
+      /** The importing chain's adapter, whose host rule a photo passes. */
+      adapterKey: string | null;
     }
-  ): SourceObservation {
+  ): DocumentObservation {
     const sizeFormat = product.size?.label ?? product.size?.unit ?? null;
+    const soldByWeight = soldByWeightOf(product);
     const externalId =
       product.external_id ?? entryKey(product.name, sizeFormat);
+    const imageUrl = documentPhotoOf(
+      product.image_url,
+      context.adapterKey,
+      externalId
+    );
     // The product's own window beats the document's, and neither is required.
     const window = product.validity
       ? resolveImportWindow({
@@ -345,17 +366,31 @@ export class FileImportRunner {
       : context.documentWindow;
 
     return {
+      // The one observation that may leave a field unstated, and the mark
+      // that it is a document's.
+      fromDocument: true,
+      // Read from the document and not from the converted size, so a
+      // quantity that converts to none (`40 lavados`) still states a size.
+      statesSizeQuantity: typeof product.size?.quantity === 'number',
       externalId,
       name: product.name,
-      brand: product.brand ?? null,
-      ean: product.ean ?? null,
+      // **Absent stays absent.** A field the document does not state is
+      // passed as undefined, and the ingest leaves the stored value of the
+      // row alone, whatever the kind of the import. Only a stated value, a
+      // null included, writes. A file is not the chain: a field it leaves
+      // out says nothing about the product, and a harvester export leaves
+      // out every field its row holds as null.
+      brand: product.brand,
+      ean: product.ean,
       // `size.quantity` in the unit `size.unit` names (plan 0177). The unit
       // used to be dropped, which left a 750 read from `75 cl` with nothing to
       // say it was already millilitres.
       ...sizeOf(product.size),
-      // A tile priced by the kilo (plan 0181). The ingest then writes the row
-      // with no size, whatever the tile printed as one.
-      soldByWeight: soldByWeightOf(product),
+      // How the product is sold (plan 0181): stated by the export, or a tile
+      // priced by the kilo. The ingest then writes the row with no size,
+      // whatever the tile printed as one. Absent when the document does not
+      // say, so a known row keeps its flag, as for the weight below.
+      soldByWeight,
       // The weight of one piece in grams (plan 0244, section 5.5). The reader
       // refused it beside a size. Absent stays absent, so a document that
       // states none leaves the weight a row holds alone.
@@ -363,17 +398,23 @@ export class FileImportRunner {
         ? {}
         : { approxWeight: product.approx_weight }),
       sizeFormat,
-      categoryPath: product.category_path ?? [],
-      url: product.url ?? null,
-      // A file names no photo (plan 0198): a document that an admin uploads
-      // cannot name an address a shopper's browser will load. On a row that
-      // a walk owns this null is not written, like the rest of the group.
-      imageUrl: null,
+      // A null path is a statement that the source files it nowhere.
+      categoryPath:
+        product.category_path === undefined
+          ? undefined
+          : (product.category_path ?? []),
+      url: product.url,
+      // A document names a photo only through the rule a walk's address
+      // passed (plan 0198): the host list of the importing chain's own
+      // adapter library. An address that fails it is not written, so a
+      // document cannot make a shopper's browser load an arbitrary host,
+      // and the stored address stays.
+      imageUrl,
       observedAt:
         parseInstant(product.observed_at) ?? context.fallbackObservedAt,
       // Stored and shown, never interpreted (D6). Whatever the producer knew
       // that the import does not read is in here and stays in here.
-      extra: product.extra ?? null,
+      extra: product.extra,
       prices: context.duplicates.has(externalId)
         ? []
         : pricesOf(product, window),
@@ -424,7 +465,7 @@ function pricesOf(
   product: HarvestDocumentProduct,
   window: ImportWindow | null
 ): SourceObservation['prices'] {
-  const soldByWeight = soldByWeightOf(product);
+  const soldByWeight = soldByWeightOf(product) === true;
   const unpayable = unpayableForOne(product);
   return (product.prices ?? []).map((price) => {
     const own = price.validity
@@ -450,20 +491,30 @@ function pricesOf(
 }
 
 /**
- * Whether a product of the document is sold by weight (plan 0181).
+ * Whether a product of the document is sold by weight (plan 0181), or
+ * undefined when the document does not say.
  *
- * **It reads `extra.basis`, and it is the one rule that reads `extra`.** The
- * file schema has no field for how a product is sold. The leaflet producer
- * writes the tile's basis into `extra` (`unit`, `kg`, `l`), and a tile whose
- * basis is `kg` prints the price of a kilo: a piece of cheese, a tray of
- * meat, loose fruit.
+ * **`sold_by_weight` first**, which the harvester's export states from the
+ * flag its row holds, true or false.
  *
- * **A litre basis is not a way to sell.** It is the comparison figure of a
- * bottle, and the bottle has a size and a price of its own. So `l` answers
- * false and its price stays null when the producer stated none.
+ * **Then `extra.basis`, the one rule that reads `extra`.** The leaflet
+ * producer writes no `sold_by_weight`. It writes the tile's basis into
+ * `extra` (`unit`, `kg`, `l`), and a tile whose basis is `kg` prints the
+ * price of a kilo: a piece of cheese, a tray of meat, loose fruit.
+ *
+ * **Any other basis, or none, says nothing**, and answers undefined: a known
+ * row keeps how it is sold, and a new row is not sold by weight. A litre
+ * basis is not a way to sell either. It is the comparison figure of a
+ * bottle, and the bottle has a size and a price of its own, so its price
+ * stays null when the producer stated none.
  */
-export function soldByWeightOf(product: HarvestDocumentProduct): boolean {
-  return product.extra?.['basis'] === 'kg';
+export function soldByWeightOf(
+  product: HarvestDocumentProduct
+): boolean | undefined {
+  if (typeof product.sold_by_weight === 'boolean') {
+    return product.sold_by_weight;
+  }
+  return product.extra?.['basis'] === 'kg' ? true : undefined;
 }
 
 /**

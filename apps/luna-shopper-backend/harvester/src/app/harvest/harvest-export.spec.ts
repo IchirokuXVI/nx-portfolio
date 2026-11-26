@@ -162,6 +162,132 @@ describe('buildHarvestDocument', () => {
     expect(Object.keys(product)).not.toContain('confidence');
   });
 
+  it('carries the photo address and every category path of the row (plans 0198 and 0268)', async () => {
+    const PHOTO = 'https://prod-mercadona.imgix.net/images/4241.jpg';
+    const SECOND = ['Desayuno', 'Leche'];
+    const document = build([
+      entry({
+        imageUrl: PHOTO,
+        categoryPaths: [['Lácteos', 'Leche'], SECOND],
+      }),
+    ]);
+    const [product] = productsOf(document);
+
+    expect(product).toMatchObject({
+      image_url: PHOTO,
+      category_path: ['Lácteos', 'Leche'],
+      category_paths: [['Lácteos', 'Leche'], SECOND],
+    });
+    // Still a document the schema reads, unchanged in its version.
+    expect(document['schema_version']).toBe(2);
+    expect(validateHarvestDocument(document).valid).toBe(true);
+  });
+
+  it('states no photo and no paths for a row that holds none', async () => {
+    const [product] = productsOf(
+      build([entry({ imageUrl: null, categoryPaths: [], ean: null })])
+    );
+
+    // Absent rather than null: a file never states an absence it did not
+    // read, so its import leaves the importing row's own value alone.
+    expect(Object.keys(product)).not.toContain('image_url');
+    expect(Object.keys(product)).not.toContain('category_paths');
+    expect(Object.keys(product)).not.toContain('ean');
+  });
+
+  it('states how the row is sold, false included (plan 0181)', async () => {
+    const document = build([
+      entry({
+        id: 'e-1',
+        externalId: '3401',
+        soldByWeight: true,
+        unitSize: null,
+        sizeUnit: null,
+        sizeFormat: '1 kg',
+      }),
+      entry({ id: 'e-2', externalId: '4241', soldByWeight: false }),
+    ]);
+    const [byWeight, pack] = productsOf(document);
+
+    expect(byWeight['sold_by_weight']).toBe(true);
+    expect(pack['sold_by_weight']).toBe(false);
+    expect(validateHarvestDocument(document).valid).toBe(true);
+  });
+
+  it('states no way of selling for a row that holds none', async () => {
+    const [product] = productsOf(
+      build([entry({ soldByWeight: null as unknown as boolean })])
+    );
+
+    expect(Object.keys(product)).not.toContain('sold_by_weight');
+  });
+
+  it('states only the stored paths the import reads, through the same rule', async () => {
+    const SECOND = ['Desayuno', 'Leche'];
+    const document = build([
+      entry({
+        // A jsonb column holds what was written to it: an element that is
+        // not a list of names, an empty path and a name that is not a string
+        // are not paths, and a repeat says nothing new.
+        categoryPaths: [
+          ['Lácteos', 'Leche'],
+          'Lácteos',
+          [],
+          ['Desayuno', 7, 'Leche'],
+          ['Lácteos', 'Leche'],
+        ] as unknown as string[][],
+      }),
+    ]);
+    const [product] = productsOf(document);
+
+    expect(product['category_paths']).toEqual([['Lácteos', 'Leche'], SECOND]);
+    expect(validateHarvestDocument(document).valid).toBe(true);
+  });
+
+  it('states only the paths its schema takes, leaving out whole any path past the bounds', async () => {
+    const LONG = Array.from({ length: 13 }, (_, i) => `Nivel ${i + 1}`);
+    const WIDE = ['Lácteos', 'a'.repeat(201)];
+    // A name of 200 characters is at the bound, counted as the schema counts.
+    const AT_BOUND = ['Lácteos', 'é'.repeat(200)];
+    const VALID = Array.from({ length: 51 }, (_, i) => [
+      'Pasillo',
+      `Estante ${i + 1}`,
+    ]);
+    const document = build([
+      entry({ categoryPaths: [LONG, WIDE, AT_BOUND, ...VALID] }),
+    ]);
+    const [product] = productsOf(document);
+
+    // Never cut short, which would be a false path: left out, and the first
+    // fifty of the rest kept.
+    expect(product['category_paths']).toEqual([
+      AT_BOUND,
+      ...VALID.slice(0, 49),
+    ]);
+    expect(validateHarvestDocument(document).failures).toEqual([]);
+  });
+
+  it('counts a name in code points, so an astral character counts once', async () => {
+    // Each emoji is two UTF-16 units, so `.length` reads 400 and 402 here.
+    const AT_BOUND = ['Lácteos', '🥛'.repeat(200)];
+    const PAST = ['Lácteos', '🥛'.repeat(201)];
+    const document = build([entry({ categoryPaths: [AT_BOUND, PAST] })]);
+    const [product] = productsOf(document);
+
+    expect(product['category_paths']).toEqual([AT_BOUND]);
+    expect(validateHarvestDocument(document).failures).toEqual([]);
+  });
+
+  it('states no paths when no stored element is one', async () => {
+    const [product] = productsOf(
+      build([
+        entry({ categoryPaths: [[], 'Lácteos'] as unknown as string[][] }),
+      ])
+    );
+
+    expect(Object.keys(product)).not.toContain('category_paths');
+  });
+
   it('takes every price this run wrote, each naming its own scope', async () => {
     // **The fix to plan 0103, section 1.1.** This asked for one scope before,
     // so a LIDL run, which is refused a single scope and writes 59 regions,

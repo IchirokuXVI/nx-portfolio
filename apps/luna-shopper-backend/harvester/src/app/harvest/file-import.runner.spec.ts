@@ -1,7 +1,9 @@
 import {
   HarvestWarningCode,
+  ItemSourceMatch,
   PriceSourceKind,
   SourceEntryStatus,
+  UnitOfMeasure,
   validateHarvestDocument,
   type HarvestDocument,
   type HarvestRunWarning,
@@ -18,6 +20,7 @@ import {
   FileImportFailedAfterIngestError,
   FileImportRunner,
   unpayableForOne,
+  type FileImportInput,
   type FileImportStepAfterIngest,
 } from './file-import.runner';
 import { entryKey } from './matching';
@@ -100,6 +103,8 @@ function build(options: {
     () => [...stored, ...saved]
   ) as unknown as Repository<SourceCatalogEntry>;
 
+  const linked: { sourceEntryId: string; url?: string }[] = [];
+  const unlinked: string[] = [];
   const priceRows: Record<string, unknown>[] = [];
   const prices = {
     upsert: jest.fn(async (rows: Record<string, unknown>[]) => {
@@ -114,6 +119,16 @@ function build(options: {
       nextCursor: null,
     })),
     addPrices: jest.fn(async () => ({ inserted: 1, confirmed: 0 })),
+    // The photo links of the bound rows (plan 0198), recorded so a case can
+    // say which rows were linked and which were unlinked.
+    linkItemImages: jest.fn(async (links: { sourceEntryId: string }[]) => {
+      linked.push(...links);
+      return { linked: links.length, moved: 0, unchanged: 0, rejected: [] };
+    }),
+    unlinkItemImages: jest.fn(async (ids: string[]) => {
+      unlinked.push(...ids);
+      return { unlinked: ids.length };
+    }),
   };
 
   const warnings: HarvestRunWarning[] = [];
@@ -162,13 +177,16 @@ function build(options: {
     catalog,
     warnings,
     reported,
+    linked,
+    unlinked,
   };
 }
 
-const input = {
+const input: FileImportInput = {
   supermarketId: CHAIN,
   priceScopeId: SCOPE,
   sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+  adapterKey: null,
 };
 
 const codes = (warnings: HarvestRunWarning[]): HarvestWarningCode[] =>
@@ -869,6 +887,517 @@ describe('FileImportRunner (plan 0086)', () => {
 
       expect(saved).toHaveLength(1);
       expect(saved[0].categoryPaths).toEqual([DAIRY, ['Desayuno']]);
+    });
+  });
+
+  describe('a field the document does not state leaves the row alone', () => {
+    const PHOTO = 'https://prod-mercadona.imgix.net/images/1001.jpg';
+    const LINK = 'https://tienda.mercadona.es/product/1001/leche-entera';
+    const DAIRY = ['Lácteos', 'Leche'];
+    /** A row a walk wrote, bound to a product that shows its chain photo. */
+    const walked = (): Partial<SourceCatalogEntry> => ({
+      externalId: '1001',
+      name: 'Leche entera',
+      sizeFormat: '1 L',
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      status: SourceEntryStatus.ACTIVE,
+      itemId: 'item-milk',
+      matchedBy: ItemSourceMatch.EAN,
+      confidence: 1,
+      brand: 'Hacendado',
+      ean: '8480000123456',
+      url: LINK,
+      imageUrl: PHOTO,
+      extra: { packaging: 'Brik' },
+      categoryPath: DAIRY,
+      categoryPaths: [DAIRY],
+    });
+    const asWalk = {
+      ...input,
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      adapterKey: 'mercadona-api',
+    };
+
+    it('keeps the photo, link, extra, EAN, brand and path of a walked row (defects 1 and 2)', async () => {
+      const { runner, context, stored, linked, unlinked } = build({
+        rows: [walked()],
+        document: document({
+          products: [
+            {
+              external_id: '1001',
+              name: 'Leche entera',
+              size: { label: '1 L' },
+              price: { amount: 0.95, currency: 'EUR' },
+            },
+          ],
+        }),
+      });
+
+      await runner.run(context, asWalk);
+
+      expect(stored[0]).toMatchObject({
+        imageUrl: PHOTO,
+        url: LINK,
+        extra: { packaging: 'Brik' },
+        ean: '8480000123456',
+        brand: 'Hacendado',
+        categoryPath: DAIRY,
+        categoryPaths: [DAIRY],
+      });
+      // The bound product keeps its chain photo: the link is sent again and
+      // nothing is unlinked.
+      expect(unlinked).toEqual([]);
+      expect(linked).toEqual([
+        expect.objectContaining({ sourceEntryId: 'held-1', url: PHOTO }),
+      ]);
+    });
+
+    it('keeps what a leaflet does not state on a row a leaflet wrote', async () => {
+      const { runner, context, stored } = build({
+        rows: [
+          {
+            externalId: entryKey('Cerveza Radler', 'lata 33 cl'),
+            name: 'Cerveza Radler',
+            sizeFormat: 'lata 33 cl',
+            brand: 'Mahou',
+            ean: '8410000000001',
+            url: 'https://example.org/folleto/3',
+            extra: { page: 3 },
+          },
+        ],
+        document: document({
+          products: [{ name: 'Cerveza Radler', size: { label: 'lata 33 cl' } }],
+        }),
+      });
+
+      await runner.run(context, input);
+
+      expect(stored[0]).toMatchObject({
+        brand: 'Mahou',
+        ean: '8410000000001',
+        url: 'https://example.org/folleto/3',
+        extra: { page: 3 },
+      });
+    });
+
+    it('writes each field the document states, a null included', async () => {
+      const { runner, context, stored, unlinked } = build({
+        rows: [walked()],
+        document: document({
+          schema_version: 2,
+          products: [
+            {
+              external_id: '1001',
+              name: 'Leche entera',
+              size: { label: '1 L' },
+              brand: null,
+              ean: '8480000654321',
+              url: null,
+              image_url: null,
+              extra: {},
+              category_path: ['Desayuno'],
+              prices: [],
+            },
+          ],
+        }),
+      });
+
+      await runner.run(context, asWalk);
+
+      expect(stored[0]).toMatchObject({
+        brand: null,
+        ean: '8480000654321',
+        url: null,
+        imageUrl: null,
+        extra: {},
+        categoryPath: ['Desayuno'],
+      });
+      // A stated null is the source saying it prints no photo, so the bound
+      // product loses this row's link, as a walk that saw none takes it away.
+      expect(unlinked).toEqual(['held-1']);
+    });
+
+    describe('how the product is sold (plan 0181)', () => {
+      /** A row a walk sells by the kilo: no size, the label kept. */
+      const weighed = (): Partial<SourceCatalogEntry> => ({
+        ...walked(),
+        externalId: '3401',
+        name: 'Queso curado',
+        sizeFormat: '1 kg',
+        unitSize: null,
+        sizeUnit: null,
+        soldByWeight: true,
+      });
+      const product = (over: Record<string, unknown> = {}) =>
+        document({
+          schema_version: 2,
+          products: [
+            {
+              external_id: '3401',
+              name: 'Queso curado',
+              size: { label: '1 kg' },
+              prices: [],
+              ...over,
+            },
+          ],
+        });
+
+      it('keeps the flag of a walked row when the document does not say', async () => {
+        const { runner, context, stored } = build({
+          rows: [weighed()],
+          document: product(),
+        });
+
+        await runner.run(context, asWalk);
+
+        expect(stored[0].soldByWeight).toBe(true);
+      });
+
+      it('keeps it for a basis that is not kg too, which says nothing either', async () => {
+        const { runner, context, stored } = build({
+          rows: [weighed()],
+          document: product({ extra: { basis: 'unit' } }),
+        });
+
+        await runner.run(context, asWalk);
+
+        expect(stored[0].soldByWeight).toBe(true);
+      });
+
+      it('writes the flag the document states, false included', async () => {
+        const { runner, context, stored } = build({
+          rows: [weighed(), { ...walked(), soldByWeight: false }],
+          document: document({
+            schema_version: 2,
+            products: [
+              {
+                external_id: '3401',
+                name: 'Queso curado',
+                size: { label: '1 kg' },
+                sold_by_weight: false,
+                prices: [],
+              },
+              {
+                external_id: '1001',
+                name: 'Leche entera',
+                size: { label: '1 L', quantity: 1, unit: 'l' },
+                sold_by_weight: true,
+                prices: [],
+              },
+            ],
+          }),
+        });
+
+        await runner.run(context, asWalk);
+
+        expect(stored[0].soldByWeight).toBe(false);
+        // Sold by weight holds no size, whatever the document printed.
+        expect(stored[1]).toMatchObject({ soldByWeight: true, unitSize: null });
+      });
+
+      it('writes a stated flag over the kg basis of the bag', async () => {
+        const { runner, context, saved } = build({
+          document: product({ sold_by_weight: false, extra: { basis: 'kg' } }),
+        });
+
+        await runner.run(context, asWalk);
+
+        expect(saved[0].soldByWeight).toBe(false);
+      });
+
+      it('reads a size quantity with no flag as a fixed pack, so no row sold by weight holds a size', async () => {
+        const piece = { ...weighed(), approxWeight: 950 };
+        for (const extra of [{ basis: 'unit' }, undefined]) {
+          const { runner, context, stored } = build({
+            rows: [{ ...piece }],
+            document: product({
+              size: { label: '500 g', quantity: 500, unit: 'g' },
+              ...(extra ? { extra } : {}),
+            }),
+          });
+
+          await runner.run(context, asWalk);
+
+          // What `origin/dev` wrote for this file.
+          expect(stored[0]).toMatchObject({
+            soldByWeight: false,
+            unitSize: 500,
+            sizeUnit: 'GRAM',
+            approxWeight: null,
+          });
+        }
+      });
+
+      it('keeps the flag, the size and the piece weight when the document states neither a flag nor a size quantity', async () => {
+        const { runner, context, stored } = build({
+          rows: [{ ...weighed(), approxWeight: 950 }],
+          document: product({ extra: { basis: 'unit' } }),
+        });
+
+        await runner.run(context, asWalk);
+
+        expect(stored[0]).toMatchObject({
+          soldByWeight: true,
+          unitSize: null,
+          sizeUnit: null,
+          approxWeight: 950,
+        });
+      });
+
+      it('keeps the size text beside the size of a fixed pack when the document states no size at all', async () => {
+        const { runner, context, stored } = build({
+          rows: [
+            {
+              ...walked(),
+              externalId: '9001',
+              name: 'Leche',
+              sizeFormat: '1 L',
+              unitSize: 1000,
+              sizeUnit: UnitOfMeasure.MILLILITER,
+              soldByWeight: false,
+            },
+          ],
+          document: document({
+            schema_version: 2,
+            products: [{ external_id: '9001', name: 'Leche', prices: [] }],
+          }),
+        });
+
+        const counters = await runner.run(context, asWalk);
+
+        expect(stored[0]).toMatchObject({
+          sizeFormat: '1 L',
+          unitSize: 1000,
+          sizeUnit: UnitOfMeasure.MILLILITER,
+        });
+        expect(counters).toMatchObject({ unchanged: 1, updated: 0 });
+      });
+
+      it('keeps the text and the size for a size text with no quantity', async () => {
+        const { runner, context, stored } = build({
+          rows: [
+            {
+              ...walked(),
+              sizeFormat: '1 L',
+              unitSize: 1000,
+              sizeUnit: UnitOfMeasure.MILLILITER,
+              soldByWeight: false,
+            },
+          ],
+          document: document({
+            schema_version: 2,
+            products: [
+              {
+                external_id: '1001',
+                name: 'Leche entera',
+                size: { label: '250 g' },
+                prices: [],
+              },
+            ],
+          }),
+        });
+
+        await runner.run(context, asWalk);
+
+        expect(stored[0]).toMatchObject({
+          sizeFormat: '1 L',
+          unitSize: 1000,
+          sizeUnit: UnitOfMeasure.MILLILITER,
+        });
+      });
+
+      it.each([
+        ['with a size label', { size: { label: '250 g' } }, '250 g'],
+        ['with no size', {}, null],
+      ])(
+        'writes the size text of a stated piece weight that clears the size of a fixed pack, %s',
+        async (_case, size, sizeFormat) => {
+          const { runner, context, stored } = build({
+            rows: [
+              {
+                ...walked(),
+                sizeFormat: '1 L',
+                unitSize: 1000,
+                sizeUnit: UnitOfMeasure.MILLILITER,
+                soldByWeight: false,
+                approxWeight: null,
+              },
+            ],
+            document: document({
+              schema_version: 2,
+              products: [
+                {
+                  external_id: '1001',
+                  name: 'Leche entera',
+                  ...size,
+                  approx_weight: 240,
+                  prices: [],
+                },
+              ],
+            }),
+          });
+
+          await runner.run(context, asWalk);
+
+          // What `origin/dev` wrote: the document's text beside no size.
+          expect(stored[0]).toMatchObject({
+            sizeFormat,
+            unitSize: null,
+            sizeUnit: null,
+            approxWeight: 240,
+          });
+        }
+      );
+
+      it('reads a stated quantity that converts to no size as a fixed pack with no size, as origin/dev did', async () => {
+        // Rows from before plan 0270 still hold a wash count or a length as
+        // their size.
+        for (const size of [
+          { label: '40 lavados', quantity: 40, unit: 'lavados' },
+          { label: '30 m', quantity: 30, unit: 'm' },
+        ]) {
+          const { runner, context, stored } = build({
+            rows: [
+              {
+                ...walked(),
+                sizeFormat: size.label,
+                unitSize: size.quantity,
+                sizeUnit: null,
+                soldByWeight: false,
+              },
+            ],
+            document: document({
+              schema_version: 2,
+              products: [
+                {
+                  external_id: '1001',
+                  name: 'Leche entera',
+                  size,
+                  prices: [],
+                },
+              ],
+            }),
+          });
+
+          await runner.run(context, asWalk);
+
+          expect(stored[0]).toMatchObject({
+            soldByWeight: false,
+            unitSize: null,
+            sizeUnit: null,
+            sizeFormat: size.label,
+          });
+        }
+      });
+
+      it('makes a new row the document does not say about a fixed pack', async () => {
+        const { runner, context, saved } = build({ document: product() });
+
+        await runner.run(context, asWalk);
+
+        expect(saved[0].soldByWeight).toBe(false);
+      });
+    });
+
+    describe('the photo link a document states (plan 0198)', () => {
+      const MOVED = 'https://prod-mercadona.imgix.net/images/1001-b.jpg';
+      const stating = (imageUrl: string) =>
+        document({
+          schema_version: 2,
+          products: [
+            {
+              external_id: '1001',
+              name: 'Leche entera',
+              size: { label: '1 L' },
+              image_url: imageUrl,
+              prices: [],
+            },
+          ],
+        });
+
+      it('writes a link that passes the host rule of the chain', async () => {
+        const { runner, context, stored, linked } = build({
+          rows: [walked()],
+          document: stating(MOVED),
+        });
+
+        await runner.run(context, asWalk);
+
+        expect(stored[0].imageUrl).toBe(MOVED);
+        expect(linked).toEqual([
+          expect.objectContaining({ sourceEntryId: 'held-1', url: MOVED }),
+        ]);
+      });
+
+      it('drops a link on a host outside the chain list and keeps the stored one', async () => {
+        const { runner, context, stored, unlinked } = build({
+          rows: [walked()],
+          document: stating('https://example.com/1001.jpg'),
+        });
+
+        await runner.run(context, asWalk);
+
+        expect(stored[0].imageUrl).toBe(PHOTO);
+        expect(unlinked).toEqual([]);
+      });
+
+      it('takes no link for a chain whose adapter states no photo', async () => {
+        const { runner, context, stored, saved } = build({
+          rows: [walked()],
+          document: document({
+            schema_version: 2,
+            products: [
+              {
+                external_id: '1001',
+                name: 'Leche entera',
+                size: { label: '1 L' },
+                image_url: MOVED,
+                prices: [],
+              },
+              {
+                external_id: '1002',
+                name: 'Leche desnatada',
+                size: { label: '1 L' },
+                image_url: MOVED,
+                prices: [],
+              },
+            ],
+          }),
+        });
+
+        await runner.run(context, { ...asWalk, adapterKey: null });
+
+        expect(stored[0].imageUrl).toBe(PHOTO);
+        expect(saved[0].imageUrl).toBeNull();
+      });
+    });
+
+    it('adds every category path the document states after the stored ones (plan 0268)', async () => {
+      const WRONG = ['Bebidas'];
+      const SECOND = ['Desayuno', 'Leche'];
+      const { runner, context, stored } = build({
+        rows: [{ ...walked(), categoryPaths: [WRONG] }],
+        document: document({
+          schema_version: 2,
+          products: [
+            {
+              external_id: '1001',
+              name: 'Leche entera',
+              size: { label: '1 L' },
+              category_path: DAIRY,
+              category_paths: [DAIRY, SECOND],
+              prices: [],
+            },
+          ],
+        }),
+      });
+
+      const counters = await runner.run(context, asWalk);
+
+      // ADD: the document does not say the run read every shelf of the
+      // product, so the stored trail stays and the two are added after it.
+      expect(stored[0].categoryPaths).toEqual([WRONG, DAIRY, SECOND]);
+      expect(counters.categoryPathsWritten).toBe(1);
     });
   });
 

@@ -184,6 +184,15 @@ export interface SourceObservation {
    */
   detailFetched?: true;
   name: string;
+  /**
+   * The brand the source prints. Null is a statement that it prints none.
+   *
+   * Required and never undefined, as {@link ean}, {@link url},
+   * {@link imageUrl} and {@link extra} are, so an adapter cannot forget to
+   * say: a walk that left one out would keep a stale value on every row. The
+   * one source that may leave them unstated is an uploaded document, which
+   * reports a {@link DocumentObservation} instead.
+   */
   brand: string | null;
   ean: string | null;
   /**
@@ -327,8 +336,59 @@ export interface PartialSourceObservation {
   prices: readonly SourceObservationPrice[];
 }
 
-/** A product as a runner reports it: read whole, or from the listing alone. */
-export type ReportedObservation = SourceObservation | PartialSourceObservation;
+/** The fields a document may leave unstated, which a runner must state. */
+type DocumentUnstated =
+  | 'brand'
+  | 'ean'
+  | 'url'
+  | 'imageUrl'
+  | 'extra'
+  | 'soldByWeight';
+
+/**
+ * One product of an uploaded document, read whole: the one full observation
+ * that may leave an identity field unstated. Only `FileImportRunner.observe`
+ * builds it, and {@link fromDocument} says so.
+ *
+ * **A field the document does not state is absent here**, and leaves the
+ * stored value of a known row alone; a new row gets null for it. A stated
+ * value, a null included, writes as a walk's does. A file is not the chain:
+ * a field it leaves out says nothing about the product, and a harvester
+ * export leaves out every field its row holds as null.
+ *
+ * {@link soldByWeight} follows the same rule only when the document states
+ * no size quantity either ({@link statesSizeQuantity}): a known row keeps how
+ * it is sold, its size, its size text and its piece weight, and a new row is
+ * not sold by weight. Beside a size quantity an absent flag says a fixed pack
+ * (`fieldsOf`).
+ */
+export interface DocumentObservation extends Omit<
+  SourceObservation,
+  DocumentUnstated
+> {
+  fromDocument: true;
+  /**
+   * Whether the document states a size quantity, read before the
+   * conversion: `40 lavados` or `30 m` convert to no size (plans 0183 and
+   * 0270), and still state one, so the row writes the no size they convert
+   * to, as a walk does.
+   */
+  statesSizeQuantity: boolean;
+  brand?: string | null;
+  ean?: string | null;
+  url?: string | null;
+  imageUrl?: string | null;
+  extra?: Record<string, unknown> | null;
+  soldByWeight?: boolean;
+}
+
+/** A product read whole, by a walk or from a document. */
+export type FullObservation = SourceObservation | DocumentObservation;
+
+/**
+ * A product as a runner reports it: read whole, or from the listing alone.
+ */
+export type ReportedObservation = FullObservation | PartialSourceObservation;
 
 /** What a session writes for, decided once and held across every chunk. */
 export interface SourceIngestSessionInput {
@@ -706,7 +766,10 @@ export class SourceIngest {
       }
       if (
         observation.detailFetched !== false &&
-        (!known || writesSourceGroup(known, input.sourceKind))
+        (!known || writesSourceGroup(known, input.sourceKind)) &&
+        // An observation that does not state an EAN writes none, so the
+        // row keeps the one it holds and the count with it.
+        observation.ean !== undefined
       ) {
         eans.note(observation.externalId, observation.ean);
         if (observation.ean) {
@@ -1464,7 +1527,7 @@ export class SourceIngest {
   private warnSoldAnotherWay(
     context: RunContext,
     row: SourceCatalogEntry,
-    observation: SourceObservation
+    observation: FullObservation
   ): void {
     const byWeight = observation.soldByWeight === true;
     context.warn({
@@ -1641,7 +1704,11 @@ export class SourceIngest {
     counters: SourceIngestCounters
   ): Promise<SourceEntryOutcome> {
     const writes = writesSourceGroup(row, fields.sourceKind);
-    const learnedEan = writes && fields.ean !== null && row.ean !== fields.ean;
+    const learnedEan =
+      writes &&
+      fields.ean !== null &&
+      fields.ean !== undefined &&
+      row.ean !== fields.ean;
     if (writes) {
       applySourceGroup(row, fields);
     }
@@ -1655,9 +1722,12 @@ export class SourceIngest {
     let rung: 1 | 2 = 1;
     if (learnedEan && undecided(row)) {
       const match = items.match({
-        ean: fields.ean,
+        // The row's own EAN and brand, which `applySourceGroup` wrote: the
+        // EAN is the one just learned, and a brand the observation did not
+        // state is the stored one.
+        ean: row.ean,
         name: fields.name,
-        brand: fields.brand,
+        brand: row.brand,
         // The row's own size, which `applySourceGroup` wrote: an observation
         // that did not state one left the stored one (owner decision 143a).
         unitSize: row.unitSize === null ? null : Number(row.unitSize),
@@ -1668,7 +1738,7 @@ export class SourceIngest {
       // made at the very moment the identifier that makes fuzziness unnecessary
       // arrived. An EAN another row of the chain carries only proposes.
       if (match && match.matchedBy === ItemSourceMatch.EAN) {
-        const decision: Partial<DecidedFields> = eans.shared(fields.ean)
+        const decision: Partial<DecidedFields> = eans.shared(row.ean)
           ? sharedEanProposal(match.itemId)
           : {
               itemId: match.itemId,
@@ -1713,7 +1783,7 @@ export class SourceIngest {
     supermarketId: string,
     runId: string,
     seenAt: Date,
-    observation: SourceObservation,
+    observation: FullObservation,
     items: ItemMatchIndex,
     siblings: SiblingEntryIndex,
     eans: ChainEanIndex,
@@ -1727,9 +1797,24 @@ export class SourceIngest {
       // state is no size (owner decision 143a).
       unitSize: fields.unitSize ?? null,
       sizeUnit: fields.sizeUnit ?? null,
-      sizeFormat: fields.sizeFormat ?? null,
+      // The text a document printed beside no size quantity and no flag,
+      // which `fieldsOf` holds back from a known row, is this row's own: half
+      // of the key it was found under. For a walk the two are the same.
+      sizeFormat:
+        fields.sizeFormat !== undefined
+          ? fields.sizeFormat
+          : (observation.sizeFormat ?? null),
       // Nor is a category path the observation did not state.
       categoryPath: fields.categoryPath ?? [],
+      // Nor any identity field: a document that states none of them creates
+      // a row that holds none, and is not sold by weight.
+      soldByWeight: fields.soldByWeight ?? false,
+      brand: fields.brand ?? null,
+      brandKey: fields.brandKey ?? null,
+      ean: fields.ean ?? null,
+      url: fields.url ?? null,
+      imageUrl: fields.imageUrl ?? null,
+      extra: fields.extra ?? null,
       timesSeen: 1,
       firstSeenAt: seenAt,
       lastSeenAt: seenAt,
@@ -1754,8 +1839,8 @@ export class SourceIngest {
     // and writes nothing.
     const match = items.match({
       name: observation.name,
-      brand: observation.brand,
-      ean: observation.ean,
+      brand: draft.brand,
+      ean: draft.ean,
       // The row's size and not the observation's: a row sold by weight holds
       // none, whatever the source printed beside it (plan 0181).
       unitSize: draft.unitSize,
@@ -1763,7 +1848,7 @@ export class SourceIngest {
       // 0244, section 5.8), so a piece never proposes one of another weight.
       approxWeight: fields.approxWeight ?? null,
     });
-    if (match && isSharedEan(match, observation.ean, eans)) {
+    if (match && isSharedEan(match, draft.ean, eans)) {
       Object.assign(draft, sharedEanProposal(match.itemId));
       rung = 2;
     } else if (match) {
@@ -2087,12 +2172,17 @@ function emptyCounters(): SourceIngestCounters {
  * Only then. An observation that writes the group writes `soldByWeight` with
  * it, so the row and its price agree by construction. A partial observation
  * has its own rule in `see`, which moves the flag with the price.
+ *
+ * A document that does not state how the product is sold is read as a fixed
+ * pack here, as before the field existed: its prices are figures for a pack,
+ * and on a row a walk sells by weight they would be stored as the price of a
+ * kilo.
  */
 function sellsAnotherWay(
   held: SourceCatalogEntry | undefined,
   observation: ReportedObservation,
   sourceKind: PriceSourceKind
-): observation is SourceObservation {
+): observation is FullObservation {
   return (
     held !== undefined &&
     observation.detailFetched !== false &&
@@ -2468,19 +2558,45 @@ function rewordedProposal(itemId: string): DecidedFields {
 }
 
 function fieldsOf(
-  observation: SourceObservation,
+  observation: FullObservation,
   sourceKind: PriceSourceKind
 ): SourceEntryFields {
-  const soldByWeight = observation.soldByWeight === true;
+  // How the product is sold. Absent is false for a walk, which always means
+  // it: an adapter with no field for it sells nothing by weight.
+  //
+  // A document that does not state the flag answers by its size. **A size
+  // quantity says a fixed pack**, and the flag is written false with it, as
+  // before documents could state the flag: a row sold by weight never holds
+  // a size. The quantity is the one the document states, read before the
+  // conversion, so `40 lavados`, which converts to no size, still writes
+  // that no size, as `origin/dev` did. **No size quantity says nothing**
+  // about how the product is sold, so the flag stays undefined: the stored
+  // one stays (`applySourceGroup`) and a new row gets false (`create`).
+  const statesNothing =
+    'fromDocument' in observation &&
+    observation.soldByWeight === undefined &&
+    !observation.statesSizeQuantity;
+  const soldByWeightStated = statesNothing
+    ? undefined
+    : observation.soldByWeight === true;
+  const soldByWeight = soldByWeightStated === true;
   // A row sold by weight states no size, held here for every adapter (plan
   // 0181): the weight is not the same on every pack, so a leaflet tile that
   // prints `1 kg aprox` beside its price per kilo has no size either.
-  // `sizeFormat` is not touched. It is half of the row's key.
+  // A walk writes its `sizeFormat` as observed; a document may leave it
+  // unwritten (below). It is half of the row's key.
   //
   // A size the observation does not state stays undefined (owner decision
   // 143a), so the stored size and its unit stay, unless a weight below says
-  // the row holds no size.
-  const stated = soldByWeight ? null : observation.unitSize;
+  // the row holds no size. A document that states neither a flag nor a size
+  // quantity states no size: its null is not written, so the size of a
+  // fixed pack stays, and a row that stays sold by weight keeps its piece
+  // weight (`approxWeight` below follows the size).
+  const stated = soldByWeight
+    ? null
+    : statesNothing
+      ? undefined
+      : observation.unitSize;
   const weighed =
     stated === undefined &&
     observation.approxWeight !== undefined &&
@@ -2492,8 +2608,10 @@ function fieldsOf(
     name: observation.name,
     brand: observation.brand,
     // Derived here rather than at the call sites, so every observation that
-    // reaches a row carries the key (plan 0115, section 6).
-    brandKey: brandKey(observation.brand),
+    // reaches a row carries the key (plan 0115, section 6). Absent with the
+    // brand, so a brand left unstated keeps its stored key too.
+    brandKey:
+      observation.brand === undefined ? undefined : brandKey(observation.brand),
     ean: observation.ean,
     unitSize,
     // Held to the size here as well as in every adapter: a unit beside no
@@ -2502,7 +2620,7 @@ function fieldsOf(
       unitSize === null || unitSize === undefined
         ? unitSize
         : (observation.sizeUnit ?? null),
-    soldByWeight,
+    soldByWeight: soldByWeightStated,
     // The weight of one piece (plan 0244), held only beside no size: a size
     // writes a null weight whatever the observation said. With no size, or
     // none stated, a source that never reads a weight leaves the stored one
@@ -2511,25 +2629,40 @@ function fieldsOf(
       unitSize === null || unitSize === undefined
         ? observation.approxWeight
         : null,
-    sizeFormat: observation.sizeFormat,
+    // A document that states neither a flag nor a size quantity writes no
+    // size text either, on a known row: the row keeps its text beside
+    // the size it keeps, so the two never disagree. Its null would leave a
+    // size with no text, and a label alone (`250 g` over a row of 1000
+    // MILLILITER) a text that names another size than the row holds, a pair
+    // rung 4 would compare though no source printed it. A weight that clears
+    // the size writes the document's text with it, as `origin/dev` did. A new
+    // row gets the document's text, which a row keyed on its name needs
+    // (`create`).
+    sizeFormat: statesNothing && !weighed ? undefined : observation.sizeFormat,
     packaging: observation.packaging,
     packCount: observation.packCount,
     categoryPath: observation.categoryPath,
+    // Each passed through as stated, undefined included: an absent field
+    // leaves the stored one alone (`applySourceGroup`), and a new row writes
+    // null for it (`create`).
     url: observation.url,
-    imageUrl: observation.imageUrl ?? null,
+    imageUrl: observation.imageUrl,
     extra: observation.extra,
   };
 }
 
 /**
  * The free bag a price row carries: the observation's, or for a partial one the
- * stored row's, which is what the last full read said.
+ * stored row's, which is what the last full read said. A full observation
+ * that states no bag carries none on its price.
  */
 function extraOf(
   observation: ReportedObservation,
   entry: SourceCatalogEntry
 ): Record<string, unknown> | null {
-  return observation.detailFetched === false ? entry.extra : observation.extra;
+  return observation.detailFetched === false
+    ? entry.extra
+    : (observation.extra ?? null);
 }
 
 function priceEntryFor(
