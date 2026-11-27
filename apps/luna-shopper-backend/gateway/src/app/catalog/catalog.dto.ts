@@ -54,11 +54,19 @@ import {
 /**
  * How many price scopes one read may name.
  *
- * A bound rather than a budget: a shopper's profile holds the chains they
- * actually visit, which is a handful, and the number is here so one request
- * cannot turn a search into a scan of every price in the catalog.
+ * A bound rather than a budget, so one request cannot turn a search into a scan
+ * of every price in the catalog. It must stay above what a profile resolves to,
+ * because velista sends back the scopes `GET /v1/catalog/scope` gave it: with a
+ * chain chosen, the catalog screen names that chain's scopes in the person's
+ * postal codes. Every shop holds its own STORE scope (plan 0116), so that is
+ * one scope per shop. It was 20, and seven Córdoba postal codes hold 32 El Jamón
+ * shops: the chip answered 400 and velista said the catalog had not loaded.
+ *
+ * The ceiling is the URL. One `priceScopeId=<uuid>&` is 50 bytes, and Node
+ * refuses a request whose headers pass 16 KiB, so 200 scopes is 10 KB and
+ * leaves room for the rest of the query and the bearer token.
  */
-const MAX_PRICE_SCOPES = 20;
+export const MAX_PRICE_SCOPES = 200;
 
 /**
  * The products a screen needs the names of, by id (plan 0053, section 1).

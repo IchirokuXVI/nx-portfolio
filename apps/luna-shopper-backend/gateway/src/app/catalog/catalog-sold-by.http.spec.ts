@@ -5,6 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { NatsClient } from '../messaging/nats-client';
 import { CatalogItemsController } from './catalog.controller';
+import { MAX_PRICE_SCOPES } from './catalog.dto';
 import { ScopeResolutionService } from './scope-resolution.service';
 
 /**
@@ -182,5 +183,54 @@ describe('GET /v1/catalog/items?soldBy', () => {
     const response = await fetch(`${app.origin}/v1/catalog/items?${many}`);
 
     expect(response.status).toBe(400);
+  });
+
+  describe('a chain chip names every scope of that chain', () => {
+    /** `count` distinct scope ids, as velista repeats them on the URL. */
+    function scopes(count: number): string[] {
+      return Array.from(
+        { length: count },
+        (_, i) => `aa000000-0000-4000-a000-${String(i).padStart(12, '0')}`
+      );
+    }
+
+    it('takes one scope per shop of a chain dense in the postal codes', async () => {
+      // Production, 2026-11-27: seven Córdoba postal codes hold 32 El Jamón
+      // shops, each with its own STORE scope, and a cap of 20 answered the El
+      // Jamón chip with a 400.
+      const ids = scopes(32);
+      const query = ids.map((id) => `priceScopeId=${id}`).join('&');
+
+      const response = await fetch(
+        `${app.origin}/v1/catalog/items?soldBy=${MERCADONA}&${query}`
+      );
+
+      expect(response.status).toBe(200);
+    });
+
+    it('takes the cap, and the URL that carries it stays under Node’s header limit', async () => {
+      const query = scopes(MAX_PRICE_SCOPES)
+        .map((id) => `priceScopeId=${id}`)
+        .join('&');
+
+      const response = await fetch(
+        `${app.origin}/v1/catalog/items?soldBy=${MERCADONA}&${query}`
+      );
+
+      expect(response.status).toBe(200);
+    });
+
+    it('refuses one scope more than the cap', async () => {
+      const query = scopes(MAX_PRICE_SCOPES + 1)
+        .map((id) => `priceScopeId=${id}`)
+        .join('&');
+
+      const response = await fetch(
+        `${app.origin}/v1/catalog/items?soldBy=${MERCADONA}&${query}`
+      );
+
+      expect(response.status).toBe(400);
+      expect(app.sent).toHaveLength(0);
+    });
   });
 });
