@@ -5119,8 +5119,10 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
     expect(lists(withDue.fixture)).toEqual([['bread']]);
   });
 
-  it('adds the suggested amount through the reel write, and the row goes at once (test 6)', async () => {
+  it('adds the suggested amount through the reel write, and the row stays in its place saying so (test 6)', async () => {
     const { fixture, lines } = await suggested();
+    const scrolled = jest.fn();
+    Element.prototype.scrollIntoView = scrolled;
 
     addButton(fixture, 'eggs').click();
     await settle(fixture);
@@ -5130,15 +5132,53 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
       lineId: 'eggs',
       delta: 1,
     });
-    expect(dueRows(fixture).map((row) => row.lineId)).toEqual([
+    // The taken row stays where it was, and the next suggestion is drawn beside it.
+    const rows = dueRows(fixture);
+    expect(rows.map((row) => row.lineId)).toEqual([
       'coffee',
+      'eggs',
       'yogurt',
       'butter',
     ]);
+    expect(rows[1].added).toBe(1);
+    expect(query(fixture, '[data-due-line-id="eggs"] .add')).toBeNull();
     // Now a wanted line, at its list position.
     expect(lists(fixture)[0]).toEqual(['bread', 'eggs']);
     expect(fixture.componentInstance.announcement()).toBe('list.due.added');
-    expect(document.activeElement).toBe(addButton(fixture, 'yogurt'));
+    // Focus stays on the taken row, and nothing scrolls to the line.
+    expect(document.activeElement).toBe(
+      query(fixture, '[data-due-line-id="eggs"] .body')
+    );
+    expect(scrolled).not.toHaveBeenCalled();
+    delete (Element.prototype as Partial<Element>).scrollIntoView;
+  });
+
+  it('goes to the line when a taken row is tapped', async () => {
+    const { fixture } = await suggested();
+    addButton(fixture, 'eggs').click();
+    await settle(fixture);
+
+    (
+      query(fixture, '[data-due-line-id="eggs"] .body') as HTMLButtonElement
+    ).click();
+    await settle(fixture);
+
+    expect(fixture.componentInstance.markedLine()).toBe('eggs');
+    expect(document.activeElement).toBe(
+      query(fixture, 'li.line[data-line-id="eggs"] .row')
+    );
+  });
+
+  it('forgets the taken rows on another list', async () => {
+    const { fixture, activatedRoute } = await suggested();
+    addButton(fixture, 'eggs').click();
+    await settle(fixture);
+    expect(dueRows(fixture).some((row) => row.added !== undefined)).toBe(true);
+
+    activatedRoute.setList('list-2');
+    await settle(fixture);
+
+    expect(dueRows(fixture).some((row) => row.added !== undefined)).toBe(false);
   });
 
   it('moves focus to the due row of a line lowered to 0 there, and says nothing (velista 0192)', async () => {

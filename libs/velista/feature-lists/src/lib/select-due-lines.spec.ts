@@ -123,4 +123,48 @@ describe('selectDueLines (velista 0089)', () => {
   it('skips a row the server did not name', () => {
     expect(select([lineRow('eggs')], []).rows).toEqual([]);
   });
+
+  it('keeps a taken row in its place, outside the fold of three', () => {
+    const ids = ['a', 'b', 'c', 'd', 'e'];
+    // 'b' was taken: its line is above zero, so the composed rows lack it.
+    const rows = ids.filter((id) => id !== 'b').map((id) => lineRow(id));
+    const dues = ids.map((id) => due(id));
+    const taken = {
+      lineId: 'b',
+      name: 'Name b',
+      reasonKey: 'list.due.period',
+      reasonArgs: {},
+      quantity: 2,
+      unit: 'UNIT',
+      added: 2,
+    } as const;
+
+    const vm = select(rows, dues, {
+      added: new Map([['b', taken]]),
+      order: ids,
+    });
+
+    expect(vm.rows.map((row) => row.lineId)).toEqual(['a', 'b', 'c', 'd']);
+    expect(vm.rows[1].added).toBe(2);
+    expect(vm.hiddenCount).toBe(1);
+  });
+
+  it('draws a taken row the server no longer names last', () => {
+    const taken = {
+      lineId: 'z',
+      name: 'Name z',
+      reasonKey: 'list.due.period',
+      reasonArgs: {},
+      quantity: 1,
+      unit: 'UNIT',
+      added: 1,
+    } as const;
+
+    const vm = select([lineRow('a')], [due('a')], {
+      added: new Map([['z', taken]]),
+      order: ['a'],
+    });
+
+    expect(vm.rows.map((row) => row.lineId)).toEqual(['a', 'z']);
+  });
 });

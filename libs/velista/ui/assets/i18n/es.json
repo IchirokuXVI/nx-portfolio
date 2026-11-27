@@ -1214,7 +1214,8 @@
       "add": "Añadir",
       "addLabel": "Añadir {{count}} de {{name}} a la lista",
       "more": "Ver más sugerencias",
-      "added": "{{name}} añadido a la lista"
+      "added": "{{name}} añadido a la lista",
+      "addedNote": "Has añadido {{amount}} a la lista, toca para ir a la línea"
     },
     "row": {
       "noPrice": "Sin precio",

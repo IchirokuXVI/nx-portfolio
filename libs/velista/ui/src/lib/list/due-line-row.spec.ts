@@ -404,4 +404,43 @@ describe('DueLineRow, the press (velista 0196)', () => {
       )
     ).toBe(false);
   });
+
+  describe('a taken row', () => {
+    it('draws the sentence with the amount, and no stepper and no button', async () => {
+      const fixture = await render(row({ added: 3 }));
+      const host = fixture.nativeElement as HTMLElement;
+
+      expect(el(fixture, '.reason').textContent).toContain(
+        'list.due.addedNote'
+      );
+      expect(host.querySelector('lib-quantity-stepper')).toBeNull();
+      expect(host.querySelector('lib-quantity-reel')).toBeNull();
+      expect(host.querySelector('.add')).toBeNull();
+      expect(fixture.componentInstance.addedWords()).toBe(3);
+    });
+
+    it('goes to the line when tapped, and opens no sheet', async () => {
+      const fixture = await render(row({ added: 3 }));
+      const went: string[] = [];
+      const opened: string[] = [];
+      fixture.componentInstance.goTo.subscribe((id) => went.push(id));
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+      el(fixture, '.body').click();
+
+      expect(went).toEqual(['l-1']);
+      expect(opened).toEqual([]);
+    });
+
+    it('says "Added 3 to the list" in English and Spanish', () => {
+      const words = (json: unknown) =>
+        (json as { list: { due: { addedNote: string } } }).list.due.addedNote;
+      expect(words(en)).toBe(
+        'Added {{amount}} to the list, tap to go to the line'
+      );
+      expect(words(es)).toBe(
+        'Has añadido {{amount}} a la lista, toca para ir a la línea'
+      );
+    });
+  });
 });

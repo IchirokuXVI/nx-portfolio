@@ -14,6 +14,14 @@ export interface DueLinesInput {
   readonly locale: string;
   /** Whether "Show more suggestions" was pressed on this visit. */
   readonly expanded: boolean;
+  /**
+   * The rows taken on this visit whose line is still on the list above zero, by line
+   * id, each with its `added` amount. They are drawn in their place and count against
+   * no fold.
+   */
+  readonly added?: ReadonlyMap<string, DueLineRowVm>;
+  /** The server's order of the due line ids, which places a taken row. */
+  readonly order?: readonly string[];
 }
 
 export interface DueLinesVm {
@@ -34,14 +42,19 @@ export interface DueLinesVm {
  * **Three, then all.** The server answers every due line and the section draws the
  * first {@link DUE_LINES_SHOWN}. Taking one of them draws the next in its place at once,
  * because the rest are already held.
+ *
+ * **A taken row stays in its place.** It says how much it added and counts against no
+ * fold, so the next suggestion is still drawn beside it. A taken row the server no
+ * longer names is drawn last.
  */
 export function selectDueLines(input: DueLinesInput): DueLinesVm {
   const relative = relativeDays(input.locale);
 
+  const added = input.added ?? new Map<string, DueLineRowVm>();
   const all: DueLineRowVm[] = [];
   for (const row of input.rows) {
     const due = input.dueOf(row.id);
-    if (due === undefined || !row.adjustable) {
+    if (due === undefined || !row.adjustable || added.has(row.id)) {
       continue;
     }
     all.push({
@@ -56,8 +69,29 @@ export function selectDueLines(input: DueLinesInput): DueLinesVm {
     });
   }
 
-  const rows = input.expanded ? all : all.slice(0, DUE_LINES_SHOWN);
-  return { rows, hiddenCount: all.length - rows.length };
+  const shown = input.expanded ? all : all.slice(0, DUE_LINES_SHOWN);
+  const hiddenCount = all.length - shown.length;
+  if (added.size === 0) {
+    return { rows: shown, hiddenCount };
+  }
+
+  const byId = new Map<string, DueLineRowVm>([
+    ...shown.map((row) => [row.lineId, row] as const),
+    ...added,
+  ]);
+  const rows: DueLineRowVm[] = [];
+  for (const lineId of [
+    ...(input.order ?? []),
+    ...shown.map((row) => row.lineId),
+    ...added.keys(),
+  ]) {
+    const row = byId.get(lineId);
+    if (row !== undefined) {
+      rows.push(row);
+      byId.delete(lineId);
+    }
+  }
+  return { rows, hiddenCount };
 }
 
 function reasonOf(
