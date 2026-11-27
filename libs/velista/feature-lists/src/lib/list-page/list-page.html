@@ -80,149 +80,149 @@
 </lib-page-header>
 
 <!--
-  The head block (velista 0189): pinned between the page header and the column, so
-  the field stays put while the column scrolls. Who else is here and whether the list
-  is live, then the field; the group is in the page header since velista 0205. It
-  draws from the cache when the caller arrived from the group page, so the common path
-  shows it on the first frame and skeletons only the lines. On a cold arrival the lines still load without it, which
-  is rule L2 and is the whole reason these are two requests.
--->
-<div class="page-top">
-  @if (current.kind !== 'error' && current.kind !== 'gone') {
-    @if (header(); as list) {
-      <lib-list-header [header]="list" />
-    }
-  }
-
-  <!--
-    Pinned under the head block, and **absent** rather than disabled without `WRITE`: a
-    disabled text field is an invitation that does not work and costs a tap to find
-    out (section 3.2). Drawn from certainty, so it is absent from the first frame rather
-    than taken away after a refusal.
-  -->
-  @if (loaded(); as page) {
-    @if (page.abilities.canWrite) {
-      <!--
-        The field, then what was heard and what was done under it (plan 0038, section
-        5; velista 0189, decision E). Under and not above, so the field stays where the
-        thumb learned it when a strip appears.
-
-        Mishearing is the characteristic failure of a voice interface, and an action
-        you cannot see is an action you cannot check. The strip is `polite`, it is
-        dismissible, and the next recording **replaces** it rather than adding to
-        it: this is not a chat. Somebody who wants a conversation has the assistant
-        panel, and this page has a list.
-      -->
-      <div class="composer-dock">
-        <!--
-          The one field: it adds, and since velista 0117 it is also the list's search.
-          What it finds is drawn in the column, under it.
-
-          The composer holds the words on a send (velista 0170): the page clears them
-          at once for an add it draws, and keeps them for an add that may come back
-          as a question. Escape belongs to the question while it is open.
-        -->
-        <lib-line-composer
-          (noticeDismissed)="dismissNotice()"
-          (queryChanged)="onComposerQuery($event)"
-          (recordingFailed)="onRecordingFailed()"
-          (spoke)="addAloud($event)"
-          (submitted)="add($event)"
-          [busy]="composerBusy()"
-          [escapeClears]="addChoice() === null"
-          [holdOnSend]="true"
-          [notice]="composerNotice()"
-          [resultsId]="resultsId"
-          [takeFocus]="page.empty"
-          [voice]="voiceOffered()"
-          libTourAnchor="list-composer"
-        />
-
-        @if (voiceStrip(); as strip) {
-          <div
-            [class.failed]="strip.failed"
-            aria-live="polite"
-            class="voice-strip"
-          >
-            <div class="voice-said">
-              @if (strip.heard) {
-                <p class="voice-heard">
-                  {{ 'list.add.heard' | rokuT }}: “{{ strip.heard }}”
-                </p>
-              }
-              <!--
-                The assistant is still working out what was said (velista 0079,
-                section 5). The spinner is decoration beside a sentence that says the
-                same thing, and it sits inside the strip's own polite region, so the
-                reply that replaces it is announced like any other.
-              -->
-              @if (strip.working) {
-                <p class="voice-reply voice-working">
-                  <lib-spinner-icon
-                    aria-hidden="true"
-                    class="voice-working-glyph"
-                  />
-                  <span>{{ 'list.add.working' | rokuT }}</span>
-                </p>
-              } @else if (strip.messageKey) {
-                <p class="voice-reply">
-                  {{ strip.messageKey | rokuT: strip.messageArgs ?? {} }}
-                </p>
-              } @else if (strip.reply) {
-                <p class="voice-reply">{{ strip.reply }}</p>
-              }
-            </div>
-
-            <button
-              (click)="dismissVoice()"
-              [attr.aria-label]="'list.add.dismissHeard' | rokuT"
-              class="voice-dismiss"
-              type="button"
-            >
-              <lib-close-icon class="voice-dismiss-glyph" />
-            </button>
-          </div>
-        }
-      </div>
-
-      <!--
-        Which line takes it? An add that two or more lines of the list meet, typed
-        or a chosen product (velista 0170, alternative D; the owner's ruling of
-        2026-11-16), held against the plus that was pressed. Below
-        the composer's plus, which sits at the top of the page, and above a card's
-        button in the results (velista 0189).
-      -->
-      @if (addChoice(); as asked) {
-        <lib-anchored-popover
-          (closed)="closeChoice($event)"
-          [labelledBy]="choiceTitleId"
-          [open]="true"
-          [origin]="asked.anchor"
-          [side]="choiceSide()"
-          align="end"
-          frame="choice"
-        >
-          <lib-add-choice
-            (chose)="chooseLine($event)"
-            (dismissed)="closeChoice('escape')"
-            (newLine)="chooseNewLine()"
-            [name]="choiceName()"
-            [offerNewLine]="choiceOffersNewLine()"
-            [rows]="choiceRows()"
-            [titleId]="choiceTitleId"
-            scope="list"
-          />
-        </lib-anchored-popover>
-      }
-    }
-  }
-</div>
-
-<!--
   The first touch or pen drag of the column takes the focus off the field, so a phone
   puts its keyboard away and the results get the room (velista 0189, section 4).
 -->
 <main (dragged)="releaseField()" #column class="page" libDragReleasesField>
+  <!--
+    The head block (velista 0189): the column's first rows. Who else is here and
+    whether the list is live scrolls away with the lines, and only the field stays
+    pinned under the page header. Then the field; the group is in the page header since velista 0205. It
+    draws from the cache when the caller arrived from the group page, so the common path
+    shows it on the first frame and skeletons only the lines. On a cold arrival the lines still load without it, which
+    is rule L2 and is the whole reason these are two requests.
+  -->
+  <div class="page-top">
+    @if (current.kind !== 'error' && current.kind !== 'gone') {
+      @if (header(); as list) {
+        <lib-list-header [header]="list" />
+      }
+    }
+
+    <!--
+      Pinned to the top of the column, and **absent** rather than disabled without `WRITE`: a
+      disabled text field is an invitation that does not work and costs a tap to find
+      out (section 3.2). Drawn from certainty, so it is absent from the first frame rather
+      than taken away after a refusal.
+    -->
+    @if (loaded(); as page) {
+      @if (page.abilities.canWrite) {
+        <!--
+          The field, then what was heard and what was done under it (plan 0038, section
+          5; velista 0189, decision E). Under and not above, so the field stays where the
+          thumb learned it when a strip appears.
+
+          Mishearing is the characteristic failure of a voice interface, and an action
+          you cannot see is an action you cannot check. The strip is `polite`, it is
+          dismissible, and the next recording **replaces** it rather than adding to
+          it: this is not a chat. Somebody who wants a conversation has the assistant
+          panel, and this page has a list.
+        -->
+        <div class="composer-dock">
+          <!--
+            The one field: it adds, and since velista 0117 it is also the list's search.
+            What it finds is drawn in the column, under it.
+
+            The composer holds the words on a send (velista 0170): the page clears them
+            at once for an add it draws, and keeps them for an add that may come back
+            as a question. Escape belongs to the question while it is open.
+          -->
+          <lib-line-composer
+            (noticeDismissed)="dismissNotice()"
+            (queryChanged)="onComposerQuery($event)"
+            (recordingFailed)="onRecordingFailed()"
+            (spoke)="addAloud($event)"
+            (submitted)="add($event)"
+            [busy]="composerBusy()"
+            [escapeClears]="addChoice() === null"
+            [holdOnSend]="true"
+            [notice]="composerNotice()"
+            [resultsId]="resultsId"
+            [takeFocus]="page.empty"
+            [voice]="voiceOffered()"
+            libTourAnchor="list-composer"
+          />
+
+          @if (voiceStrip(); as strip) {
+            <div
+              [class.failed]="strip.failed"
+              aria-live="polite"
+              class="voice-strip"
+            >
+              <div class="voice-said">
+                @if (strip.heard) {
+                  <p class="voice-heard">
+                    {{ 'list.add.heard' | rokuT }}: “{{ strip.heard }}”
+                  </p>
+                }
+                <!--
+                  The assistant is still working out what was said (velista 0079,
+                  section 5). The spinner is decoration beside a sentence that says the
+                  same thing, and it sits inside the strip's own polite region, so the
+                  reply that replaces it is announced like any other.
+                -->
+                @if (strip.working) {
+                  <p class="voice-reply voice-working">
+                    <lib-spinner-icon
+                      aria-hidden="true"
+                      class="voice-working-glyph"
+                    />
+                    <span>{{ 'list.add.working' | rokuT }}</span>
+                  </p>
+                } @else if (strip.messageKey) {
+                  <p class="voice-reply">
+                    {{ strip.messageKey | rokuT: strip.messageArgs ?? {} }}
+                  </p>
+                } @else if (strip.reply) {
+                  <p class="voice-reply">{{ strip.reply }}</p>
+                }
+              </div>
+
+              <button
+                (click)="dismissVoice()"
+                [attr.aria-label]="'list.add.dismissHeard' | rokuT"
+                class="voice-dismiss"
+                type="button"
+              >
+                <lib-close-icon class="voice-dismiss-glyph" />
+              </button>
+            </div>
+          }
+        </div>
+
+        <!--
+          Which line takes it? An add that two or more lines of the list meet, typed
+          or a chosen product (velista 0170, alternative D; the owner's ruling of
+          2026-11-16), held against the plus that was pressed. Below
+          the composer's plus, which sits at the top of the page, and above a card's
+          button in the results (velista 0189).
+        -->
+        @if (addChoice(); as asked) {
+          <lib-anchored-popover
+            (closed)="closeChoice($event)"
+            [labelledBy]="choiceTitleId"
+            [open]="true"
+            [origin]="asked.anchor"
+            [side]="choiceSide()"
+            align="end"
+            frame="choice"
+          >
+            <lib-add-choice
+              (chose)="chooseLine($event)"
+              (dismissed)="closeChoice('escape')"
+              (newLine)="chooseNewLine()"
+              [name]="choiceName()"
+              [offerNewLine]="choiceOffersNewLine()"
+              [rows]="choiceRows()"
+              [titleId]="choiceTitleId"
+              scope="list"
+            />
+          </lib-anchored-popover>
+        }
+      }
+    }
+  </div>
+
   <!--
     The page's one polite region (velista 0192). Outside every state, so it is in the
     DOM from the first render and stays there when the lines it speaks about are

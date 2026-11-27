@@ -18,12 +18,10 @@
 
   gap: var(--app-space-3);
   padding-inline: 0;
-  // The page header and the head block are the items before this column and outside
-  // its scroll (velista 0130, velista 0189). So what starts this column is content,
-  // 8px under the field, as the mock draws it.
+  // The page header is the item before this column and outside its scroll (velista
+  // 0130). The head block is this column's first rows (velista 0189).
   padding-block-start: var(--app-space-3);
-  // This column is the scroll and the field sits **above** it, so the field is not
-  // something to scroll to. `min-block-size` goes back to zero because the mixin's
+  // `min-block-size` goes back to zero because the mixin's
   // `100%` would make the column as tall as the host on its own and push it past the
   // bottom of the host.
   flex: 1;
@@ -41,37 +39,36 @@
 }
 
 // The head block (velista 0189, decisions B and D): the tools row and its chips, then
-// the field. An item of the host's column and not a row of the scroller, so the field
-// is reachable whatever the scroll, which is the one thing the foot gave it. The
-// column's top padding above it, and the mock's 16px between the tools row and the
-// field. No inline padding: the column's rows reach the edges and so does this
-// block's ground, and each item takes its own gutter.
+// the field. The first rows of the column rather than an item of the host before it,
+// so the tools row scrolls away with the lines and only the field stays on screen.
+// `display: contents`, so the field's containing block is the column and its sticky
+// pin holds for the whole scroll, not only while this block is in view. No inline
+// padding: the column's rows reach the edges, and each item takes its own gutter.
 .page-top {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  gap: var(--app-space-5);
-  padding-block-start: var(--app-space-3);
-  background: var(--app-surface-ground);
-
-  // Nothing to hold while the basket loads or after it failed: no padding over the
-  // message, as on the list page.
-  &:empty {
-    display: none;
-  }
+  display: contents;
 }
 
-// The field, pinned in the head block, the same treatment and the same reasoning as
-// the list page's dock. It takes the 16px gutter the tools row has, so the two start
-// on one edge.
+// The field, pinned to the top of the column once the tools row has scrolled off,
+// the same treatment and the same reasoning as the list page's dock. It takes the
+// 16px gutter the tools row has, so the two start on one edge. Its own ground and
+// padding on both sides, so the lines scrolling under it stop short of the field
+// rather than running into its edge.
 //
 // A sheet still covers it (plan 0040): a sheet is fixed to the viewport at its own
 // stacking order, so the composer is under the sheet and its scrim rather than
 // floating a text field over the settle controls.
 .composer-dock {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
   display: block;
   flex: none;
+  // The negative margins take back the column's gap on both sides, so in the flow the
+  // field sits 16px under the tools row and 8px over the first line, as before.
+  margin-block: calc(var(--app-space-3) * -1);
+  padding-block: var(--app-space-3);
   padding-inline: var(--app-space-5);
+  background: var(--app-surface-ground);
 }
 
 lib-line-composer {
@@ -163,7 +160,10 @@ lib-line-composer {
   position: absolute;
 }
 
+// The end margin is the mock's 16px between the tools row and the field, where the
+// column's gap is 8px.
 .page-top > lib-list-tools {
+  margin-block-end: var(--app-space-3);
   padding-inline-start: var(--app-space-5);
 }
 

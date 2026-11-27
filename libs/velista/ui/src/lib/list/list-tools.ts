@@ -34,11 +34,12 @@ import { FilterIcon } from '../icons/icons';
  * under the row, which is where the basket's chips go. The zone list page projects
  * none of the three.
  *
- * ## Pinned by the page
+ * ## Not pinned
  *
  * The host carries `tools-bar`. It was sticky inside the basket's scroller (velista
- * `0079`, section 2) until velista `0189` moved it into the page's head block, which
- * sits outside the scroller and so stays without a position of its own.
+ * `0079`, section 2) and then pinned in a head block outside it (velista `0189`). It
+ * is the scroller's first row now and scrolls away with the lines: only the field
+ * under it stays on screen, so it has no position of its own.
  */
 @Component({
   selector: 'lib-list-tools',

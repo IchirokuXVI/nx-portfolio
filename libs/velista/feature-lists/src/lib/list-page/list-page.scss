@@ -13,16 +13,13 @@
   block-size: 100%;
 }
 
-// The one scroll container on this screen, in both run modes. The page header and the
-// head block are the items of the host before it, rather than rows inside it, so
-// neither ever scrolls away (velista 0130, velista 0189).
-//
-// Its top padding is the 12px the mock draws between the field and the first row.
+// The one scroll container on this screen, in both run modes. The page header is the
+// item of the host before it, rather than a row inside it, so it never scrolls away
+// (velista 0130). The head block is this column's first rows (velista 0189).
 .page {
   @include list-page.page;
 
   min-block-size: 0;
-  padding-block-start: var(--app-space-4);
 }
 
 // The page's polite region: visually hidden and still announced. `display: none` would
@@ -42,22 +39,12 @@
 // The head block (velista 0189, decisions B and C): the viewers and the stale band, then
 // the field. The group ("en Casa") is the line under the page header's title since
 // velista 0205, so with nobody else here and a live list the field is the block's first
-// item. An item of the host's column and not a row of the scroller, so the field is
-// reachable whatever the scroll, which is the one thing the foot gave it. The column's
-// inline padding and its top padding, so the block and the rows line up, and the
-// column's gap between the head block and the field: the mock's 12px.
+// item. The column's first rows rather than an item of the host before it, so the
+// viewers and the band scroll away with the lines and only the field stays on screen.
+// `display: contents`, so the field's containing block is the column and its sticky pin
+// holds for the whole scroll, not only while this block is in view.
 .page-top {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  gap: var(--app-space-4);
-  padding: var(--app-space-5) var(--app-space-5) 0;
-  background: var(--app-surface-ground);
-
-  // Nothing to hold, on a list that is gone or failed: no padding over the message.
-  &:empty {
-    display: none;
-  }
+  display: contents;
 
   // The add choice's host draws nothing of its own (its popover goes to the top
   // layer), so it is taken out of the flow and adds no gap under the field.
@@ -83,14 +70,25 @@
   color: var(--app-text-secondary);
 }
 
-// The field and the voice strip under it, pinned in the head block (velista 0189). It
-// was the item after the scroller, at the foot of the screen (velista 0106); it is now
-// in the block before it, so the list scrolls under it and nothing can be over it.
+// The field and the voice strip under it, pinned at the top of the column (velista
+// 0189). It was the item after the scroller, at the foot of the screen (velista 0106).
 //
 // One container rather than two, because the voice strip travels with the field.
+//
+// Sticky at the top of the column, on its own ground from edge to edge and with 12px
+// above and below it, so the lines scrolling under it stop short of the field rather
+// than running into its edge. The negative margins take back the column's gap and its
+// inline padding, so in the flow the field sits where it did: 12px under the viewers,
+// 12px over the first row.
 .composer-dock {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
   display: block;
   flex: none;
+  margin: calc(var(--app-space-4) * -1) calc(var(--app-space-5) * -1);
+  padding: var(--app-space-4) var(--app-space-5);
+  background: var(--app-surface-ground);
 }
 
 lib-line-composer {
@@ -129,7 +127,7 @@ lib-line-composer {
 // The tint is laid over the ground rather than painted alone (velista 0079, section
 // 6): `--app-status-danger-bg` is translucent. A colour can only be the last background
 // layer, which is why the tint is written as a flat gradient. The tint reaches a step
-// past the field on each side, into the head block's own padding, so the sentence keeps
+// past the field on each side, into the dock's own padding, so the sentence keeps
 // its place under the field and still has room inside the tint.
 .voice-strip.failed {
   margin-inline: calc(var(--app-space-3) * -1);
@@ -303,7 +301,7 @@ lib-line-composer {
 // What the composer's field found (velista 0117, rule F1), in place of the list. It
 // scrolls with the page from the top. At least as tall as the column only so the
 // catalog's surface reaches the foot of the column however few lines matched (velista
-// 0189): the head block is pinned now, and nothing has to scroll above the fold.
+// 0189): the field is pinned, and nothing has to scroll above the fold.
 .results {
   display: flex;
   flex-direction: column;

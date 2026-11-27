@@ -1866,10 +1866,12 @@ export class BasketPage {
   private _resultsDrawn = false;
 
   /**
-   * When the results first appear, the column goes back to its top, so they start
-   * under the field however far down the basket somebody was. The tools row and the
-   * field are pinned above this column (velista `0189`), so the top of the column is
-   * the top of what moves, as on the zone list.
+   * When the results first appear, the column goes back up to where the field pins,
+   * so they start under the field however far down the basket somebody was. The
+   * tools row is the column's first row and the field is pinned under it (velista
+   * `0189`), so the column goes back no further than the tools row's bottom edge: a
+   * scroll to the very top would bring the tools row back and move the field under
+   * the thumb. A column already above that point stays where it is.
    *
    * Not on a return to the basket: the results were already on screen when
    * somebody left, and the place they were reading in is what {@link _scroll} puts
@@ -1889,7 +1891,11 @@ export class BasketPage {
       return;
     }
     this._resultsDrawn = true;
-    column.scrollTo?.({ top: 0, behavior: 'auto' });
+    const tools = column.querySelector<HTMLElement>('lib-list-tools');
+    const pinned = tools === null ? 0 : tools.offsetTop + tools.offsetHeight;
+    if (column.scrollTop > pinned) {
+      column.scrollTo?.({ top: pinned, behavior: 'auto' });
+    }
   });
 
   /** Whether an open of the search entry was asked for and has not landed yet. */
