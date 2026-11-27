@@ -1091,11 +1091,9 @@ describe('the basket header, live', () => {
 
       expect(query(fixture, 'lib-page-header')).not.toBeNull();
       expect(query(fixture, 'main lib-page-header')).toBeNull();
-      // The scroller is still the column the page scrolls, after the head block
-      // (velista 0189).
+      // The scroller is the column the page scrolls, right after the header.
       const next = query(fixture, 'lib-page-header')?.nextElementSibling;
-      expect(next?.classList).toContain('page-top');
-      expect(next?.nextElementSibling?.tagName).toBe('MAIN');
+      expect(next?.tagName).toBe('MAIN');
     });
 
     it('holds the basket’s name as the page’s one title', async () => {
@@ -1811,28 +1809,31 @@ describe('searching the basket', () => {
       expect(query(fixture, '.tools-bar lib-basket-row')).toBeNull();
     });
 
-    it('scrolls in its own column in both run modes, with the head block before it', async () => {
+    it('scrolls in its own column in both run modes, with only the field pinned', async () => {
       // velista 0106 and 0189. The app is a frame that never scrolls, so `.page` is
-      // the scroll container standalone and mounted alike, and the tools row and the
-      // composer are in the head block, the item of the host before it, rather than
-      // rows inside it. jsdom cannot lay any of this out, so the markup and the
-      // stylesheet are the halves a spec can see.
+      // the scroll container standalone and mounted alike. The tools row and the
+      // composer are its first rows: the tools row scrolls away with the lines and
+      // the field alone is sticky. jsdom cannot lay any of this out, so the markup
+      // and the stylesheet are the halves a spec can see.
       const css = readFileSync(join(__dirname, 'basket-page.scss'), 'utf8')
         // Comments out, because the stylesheet says what it used to do.
         .replace(/\/\/.*$/gm, '');
 
       expect(css).not.toContain('.standalone');
-      expect(css).not.toMatch(/position:\s*sticky/);
-      expect(css).toMatch(/\.page-top\s*\{[^}]*flex:\s*none/);
-      expect(css).toMatch(/\.composer-dock\s*\{[^}]*flex:\s*none/);
+      // The head block draws no box, so the field's pin holds for the whole column.
+      expect(css).toMatch(/\.page-top\s*\{[^}]*display:\s*contents/);
+      expect(css).toMatch(/\.composer-dock\s*\{[^}]*position:\s*sticky/);
+      // The pinned field has its own ground and room under it, so the lines do not
+      // run into its edge once the column scrolls.
+      expect(css).toMatch(/\.composer-dock\s*\{[^}]*padding-block:/);
+      expect(css).toMatch(/\.composer-dock\s*\{[^}]*background:/);
+      expect(css.match(/position:\s*sticky/g)).toHaveLength(1);
 
       const { fixture } = await render({ lines: threeLines, served });
-      const top = query(fixture, '.page-top');
+      const top = query(fixture, 'main.page > .page-top');
       expect(top?.querySelector('lib-list-tools')).not.toBeNull();
       expect(top?.querySelector('.composer-dock')).not.toBeNull();
-      expect(top?.nextElementSibling?.matches('main.page')).toBe(true);
-      expect(query(fixture, 'main.page lib-list-tools')).toBeNull();
-      expect(query(fixture, 'main.page .composer-dock')).toBeNull();
+
       // The field sits under the tools row.
       const tools = top?.querySelector('lib-list-tools') as Node;
       const dockNode = top?.querySelector('.composer-dock') as Node;
@@ -5835,11 +5836,11 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
 
     expect(query(fixture, NUMBER)).toBeNull();
 
-    // First in the scroll, under the field, and above the changes banner. The tools
-    // row is in the head block since velista 0189, so nothing precedes it.
+    // In the scroll, under the field, and above the changes banner. The head block
+    // is the column's first row (velista 0189).
     const note = query(fixture, NOTE);
     expect(note?.parentElement?.matches('main.page')).toBe(true);
-    expect(note?.previousElementSibling).toBeNull();
+    expect(note?.previousElementSibling?.classList).toContain('page-top');
     expect(note?.nextElementSibling?.tagName).toBe('LIB-CHANGES-BANNER');
   });
 
