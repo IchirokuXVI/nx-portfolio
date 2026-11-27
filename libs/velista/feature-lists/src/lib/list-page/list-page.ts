@@ -64,6 +64,7 @@ import {
   APP_BASE_PATH,
   type CatalogSuggestion,
   DUE_LINE_ADDS_ON_STEP,
+  type DueLineRowVm,
   type Line,
   LINE_UNITS,
   LINE_VOICE_MAX_SECONDS,
@@ -897,6 +898,15 @@ export class ListPage {
   /** Whether "Show more suggestions" was pressed on this visit to this list. */
   private readonly _dueExpanded = signal(false);
 
+  /**
+   * The due rows taken on this visit, by line id, each the row as it was drawn with its
+   * `added` amount. A taken row stays in the section saying what it added until the page
+   * leaves the list or is loaded again. Not restored on a return to the list.
+   */
+  private readonly _dueAdded = signal<ReadonlyMap<string, DueLineRowVm>>(
+    new Map()
+  );
+
   /** Whether a change of a due row's amount adds the line by itself. Off for now. */
   readonly dueAddsOnStep = DUE_LINE_ADDS_ON_STEP;
 
@@ -983,11 +993,21 @@ export class ListPage {
     const byId = new Map(
       this._dueLines.lines().map((due) => [due.lineId, due])
     );
+    // Only a taken row whose line is still on the list above zero: lowered to zero
+    // again, the line is a plain suggestion once more.
+    const lines = this._lineById();
+    const added = new Map(
+      [...this._dueAdded()].filter(
+        ([lineId]) => (lines.get(lineId)?.quantity ?? 0) > 0
+      )
+    );
     const section = selectDueLines({
       rows: shown.due,
       dueOf: (lineId) => byId.get(lineId),
       locale: this._locale(),
       expanded: this._dueExpanded(),
+      added,
+      order: this._dueLines.lines().map((due) => due.lineId),
     });
     return section.rows.length === 0 ? null : section;
   });
@@ -1385,8 +1405,22 @@ export class ListPage {
         if (listId !== foldedFor) {
           foldedFor = listId;
           this._dueExpanded.set(false);
+          this._dueAdded.set(new Map());
         }
       });
+    });
+
+    // A taken due row whose line went back to zero, or left the list, is forgotten, so
+    // raising the line again later does not draw an old "Added" sentence.
+    effect(() => {
+      const lines = this._lineById();
+      const taken = this._dueAdded();
+      const kept = [...taken].filter(
+        ([lineId]) => (lines.get(lineId)?.quantity ?? 0) > 0
+      );
+      if (kept.length !== taken.size) {
+        untracked(() => this._dueAdded.set(new Map(kept)));
+      }
     });
 
     // The due lines, once the lines have arrived and never in front of them (velista
@@ -3354,12 +3388,14 @@ export class ListPage {
    *
    * The stepper's own write, from zero to the chosen amount, so the line is raised
    * exactly as a step would raise it. The write is optimistic, so the line is above
-   * zero before this awaits anything and the row leaves the section at once. A failed write puts the
-   * quantity back, which brings the row back, and says why through the polite region:
-   * the line's own row, where a stepper write reports, is not drawn while it is at zero.
+   * zero before this awaits anything. The row stays where it was and says what it
+   * added, with no stepper and no button, so the page does not move under somebody who
+   * is adding more. A failed write puts the quantity back and the row back as it was,
+   * and says why through the polite region: the line's own row, where a stepper write
+   * reports, is not drawn while it is at zero.
    *
-   * Focus moves to the next due row's button, or to the line just added when none is
-   * left, and the polite region says the line was added.
+   * Focus stays on the row, on the tap that goes to the line, and the polite region
+   * says the line was added. Nothing scrolls.
    */
   async addDueLine(event: { lineId: string; quantity: number }): Promise<void> {
     const page = this.loaded();
@@ -3372,21 +3408,29 @@ export class ListPage {
       return;
     }
 
-    const rows = this.dueSection()?.rows ?? [];
-    const at = rows.findIndex((row) => row.lineId === event.lineId);
+    const row = this.dueSection()?.rows.find(
+      (candidate) => candidate.lineId === event.lineId
+    );
     const pending = this._lines.addQuantity(event.lineId, delta, {
       reportDropped: true,
     });
+    if (row !== undefined) {
+      this._dueAdded.update((taken) =>
+        new Map(taken).set(event.lineId, { ...row, added: delta })
+      );
+    }
 
-    const next = this.dueSection()?.rows[Math.max(0, at)];
-    this._focusAfterRender(
-      next === undefined
-        ? `[data-line-id="${event.lineId}"] .row`
-        : `[data-due-line-id="${next.lineId}"] .add`
-    );
+    this._focusAfterRender(`[data-due-line-id="${event.lineId}"] .body`, {
+      preventScroll: true,
+    });
 
     const outcome = await pending;
     if (outcome === 'failed') {
+      this._dueAdded.update((taken) => {
+        const next = new Map(taken);
+        next.delete(event.lineId);
+        return next;
+      });
       this._reportPageError(this._lines.errorOf(this.listId()), 'lines.write');
       return;
     }
@@ -3398,13 +3442,39 @@ export class ListPage {
     );
   }
 
+  /**
+   * A taken due row was tapped: its line's row is brought to the middle of the page,
+   * drawn with the ring a linked row gets, and focused.
+   */
+  goToDueLine(lineId: string): void {
+    const column = this._column()?.nativeElement;
+    const row = Array.from(
+      column?.querySelectorAll<HTMLElement>('[data-line-id]') ?? []
+    ).find((candidate) => candidate.dataset['lineId'] === lineId);
+    if (row === undefined) {
+      return;
+    }
+
+    // Optional call: `scrollIntoView` is absent in jsdom and in a server render.
+    row.scrollIntoView?.({ block: 'center', behavior: 'auto' });
+    row.querySelector<HTMLElement>('.row')?.focus({ preventScroll: true });
+    if (this._markTimer !== null) {
+      clearTimeout(this._markTimer);
+    }
+    this.markedLine.set(lineId);
+    this._markTimer = setTimeout(() => {
+      this._markTimer = null;
+      this.markedLine.set(null);
+    }, MARK_DURATION_MS);
+  }
+
   /** Focus the first element matching `selector` in the column, once it is drawn. */
-  private _focusAfterRender(selector: string): void {
+  private _focusAfterRender(selector: string, options?: FocusOptions): void {
     afterNextRender(
       () => {
         this._column()
           ?.nativeElement.querySelector<HTMLElement>(selector)
-          ?.focus();
+          ?.focus(options);
       },
       { injector: this._injector }
     );

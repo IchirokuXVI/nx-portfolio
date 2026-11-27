@@ -51,50 +51,66 @@ import { QuantityStepper } from './quantity-stepper';
   imports: [RokuTranslatorPipe, QuantityReel, QuantityStepper],
   template: `
     @let vm = row();
-    <div [attr.data-due-line-id]="vm.lineId" class="row">
-      <button (click)="opened.emit(vm.lineId)" class="body" type="button">
-        <span class="name">{{ vm.name }}</span>
-        <span class="reason">{{ vm.reasonKey | rokuT: vm.reasonArgs }}</span>
-      </button>
+    @if (vm.added !== undefined) {
+      <!--
+        A row taken on this visit. It stays where it was, so the rows below do not
+        move under a thumb that is adding more, and one tap goes to the line it made.
+      -->
+      <div [attr.data-due-line-id]="vm.lineId" class="row taken">
+        <button (click)="goTo.emit(vm.lineId)" class="body" type="button">
+          <span class="name">{{ vm.name }}</span>
+          <span class="reason">{{
+            'list.due.addedNote' | rokuT: { amount: addedWords() }
+          }}</span>
+        </button>
+      </div>
+    } @else {
+      <div [attr.data-due-line-id]="vm.lineId" class="row">
+        <button (click)="opened.emit(vm.lineId)" class="body" type="button">
+          <span class="name">{{ vm.name }}</span>
+          <span class="reason">{{ vm.reasonKey | rokuT: vm.reasonArgs }}</span>
+        </button>
 
-      <div class="acts">
-        @if (layout() === 'compact') {
-          <lib-quantity-reel
-            (stepped)="step($event.to)"
-            [label]="'amount.group' | rokuT: { name: vm.name }"
-            [min]="1"
-            [step]="vm.step ?? null"
-            [unit]="vm.unit"
-            [value]="amount()"
-          />
-        } @else {
-          <lib-quantity-stepper
-            (valueChange)="step($event)"
-            [min]="1"
-            [name]="vm.name"
-            [step]="vm.step ?? null"
-            [unit]="vm.unit"
-            [value]="amount()"
-            variant="row"
-          />
-        }
-        <!--
+        <div class="acts">
+          @if (layout() === 'compact') {
+            <lib-quantity-reel
+              (stepped)="step($event.to)"
+              [label]="'amount.group' | rokuT: { name: vm.name }"
+              [min]="1"
+              [step]="vm.step ?? null"
+              [unit]="vm.unit"
+              [value]="amount()"
+            />
+          } @else {
+            <lib-quantity-stepper
+              (valueChange)="step($event)"
+              [min]="1"
+              [name]="vm.name"
+              [step]="vm.step ?? null"
+              [unit]="vm.unit"
+              [value]="amount()"
+              variant="row"
+            />
+          }
+          <!--
           "Add" alone in both views (velista 0203, target state 7): the amount is on
           the control beside it. The accessible name still says the amount and the
           product, so a screen reader hears what the press adds.
         -->
-        <button
-          (click)="add()"
-          [attr.aria-label]="
-            'list.due.addLabel' | rokuT: { count: amountWords(), name: vm.name }
-          "
-          class="add"
-          type="button"
-        >
-          {{ 'list.due.add' | rokuT }}
-        </button>
+          <button
+            (click)="add()"
+            [attr.aria-label]="
+              'list.due.addLabel'
+                | rokuT: { count: amountWords(), name: vm.name }
+            "
+            class="add"
+            type="button"
+          >
+            {{ 'list.due.add' | rokuT }}
+          </button>
+        </div>
       </div>
-    </div>
+    }
   `,
   styleUrl: './due-line-row.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -120,6 +136,9 @@ export class DueLineRow {
   /** A tap on the name, which opens the line detail sheet. */
   readonly opened = output<string>();
 
+  /** A tap on a taken row, which goes to the line it put on the list. */
+  readonly goTo = output<string>();
+
   /**
    * The suggested number alone, so a view model drawn again with the same suggestion is
    * not a change: the page makes new row objects whenever any line moves.
@@ -142,14 +161,23 @@ export class DueLineRow {
    * (velista `0182`).
    */
   readonly amountWords = computed<string | number>(() =>
-    !isMeasured(this.row().unit)
-      ? this.amount()
+    this._words(this.amount())
+  );
+
+  /** The amount a taken row added, as {@link amountWords} says an amount. */
+  readonly addedWords = computed<string | number>(() =>
+    this._words(this.row().added ?? 0)
+  );
+
+  private _words(amount: number): string | number {
+    return !isMeasured(this.row().unit)
+      ? amount
       : formatAmount(
-          this.amount(),
+          amount,
           this.row().unit,
           this._localeStore?.locale() ?? 'en'
-        )
-  );
+        );
+  }
 
   private _timer: ReturnType<typeof setTimeout> | null = null;
 

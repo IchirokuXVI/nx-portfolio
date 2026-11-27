@@ -81,4 +81,10 @@ export interface DueLineRowVm {
   readonly unit: LineUnit;
   /** The step its stepper presses by, the line row's (velista `0186`), or null. */
   readonly step?: number | null;
+  /**
+   * The amount this visit added, once the row was taken. The row then stays where it
+   * was, with no stepper and no button, and says how much it put on the list until the
+   * page leaves the list or is loaded again. Absent on a row not taken.
+   */
+  readonly added?: number;
 }

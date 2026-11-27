@@ -488,6 +488,7 @@
                 <li>
                   <lib-due-line-row
                     (added)="addDueLine($event)"
+                    (goTo)="goToDueLine($event)"
                     (opened)="openLine($event)"
                     [addsOnStep]="dueAddsOnStep"
                     [layout]="listRows.layout()"
