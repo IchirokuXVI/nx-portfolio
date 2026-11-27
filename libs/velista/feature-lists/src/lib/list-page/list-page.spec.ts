@@ -720,7 +720,8 @@ describe('ListPage', () => {
    *
    * jsdom has no layout, so the sharing of one surface is asserted as the structure
    * that produces it: the strip and the composer are in the same pinned container,
-   * and since velista 0189 that container is in the head block, before the column.
+   * and since velista 0189 that container is in the head block, the column's first
+   * rows, and the only sticky rule on the page.
    */
   describe('the voice strip shares the composer container', () => {
     it('puts the strip and the field in one dock, the strip under the field', async () => {
@@ -742,13 +743,28 @@ describe('ListPage', () => {
 
       expect(relation & Node.DOCUMENT_POSITION_PRECEDING).not.toBe(0);
 
-      // The head block holds the header and the dock, and comes before the column.
-      const top = query(fixture, '.page-top');
+      // The head block holds the header and the dock, as the column's first rows.
+      const top = query(fixture, 'main.page > .page-top');
       expect(top?.querySelector('lib-list-header')).not.toBeNull();
       expect(top?.contains(dock)).toBe(true);
-      expect(top?.nextElementSibling?.matches('main.page')).toBe(true);
-      expect(query(fixture, 'main.page lib-list-header')).toBeNull();
-      expect(query(fixture, 'main.page .composer-dock')).toBeNull();
+      const header = top?.querySelector('lib-list-header') as Node;
+      expect(
+        header.compareDocumentPosition(dock as Node) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).not.toBe(0);
+
+      // Only the field is pinned: the head block draws no box, so the dock's sticky
+      // pin holds for the whole column, and the dock has its own ground and room
+      // under it so the rows do not run into its edge.
+      const css = readFileSync(
+        join(__dirname, 'list-page.scss'),
+        'utf8'
+      ).replace(/\/\/.*$/gm, '');
+      expect(css).toMatch(/\.page-top\s*\{[^}]*display:\s*contents/);
+      expect(css).toMatch(/\.composer-dock\s*\{[^}]*position:\s*sticky/);
+      expect(css).toMatch(/\.composer-dock\s*\{[^}]*padding:/);
+      expect(css).toMatch(/\.composer-dock\s*\{[^}]*background:/);
+      expect(css.match(/position:\s*sticky/g)).toHaveLength(1);
     });
 
     it('draws no progress, no To buy heading and no reorder action (velista 0189)', async () => {
@@ -1032,17 +1048,16 @@ describe('ListPage', () => {
       expect(title?.textContent?.trim()).toBe('Weekly shop');
     });
 
-    it('is the only h1 and the only header element, and sits before the head block and the scroller', async () => {
+    it('is the only h1 and the only header element, and sits before the scroller', async () => {
       const { fixture } = await render();
       const host = fixture.nativeElement as HTMLElement;
 
       expect(host.querySelectorAll('h1')).toHaveLength(1);
       expect(host.querySelectorAll('header')).toHaveLength(1);
       expect(query(fixture, 'main lib-page-header')).toBeNull();
-      // The head block comes between them since velista 0189.
+      // The head block is the scroller's first rows (velista 0189).
       const next = query(fixture, 'lib-page-header')?.nextElementSibling;
-      expect(next?.matches('.page-top')).toBe(true);
-      expect(next?.nextElementSibling?.matches('main.page')).toBe(true);
+      expect(next?.matches('main.page')).toBe(true);
     });
 
     it('goes back through the page, by the name the back button always had', async () => {
@@ -4578,12 +4593,18 @@ describe('ListPage: searching and viewing one category', () => {
       elsewhere.remove();
     });
 
-    it('takes the column to its top when the results first show, and not on a return', async () => {
+    it('takes the column back to where the field pins when the results first show, and not on a return', async () => {
       const scrollTo = jest.fn();
       const original = HTMLElement.prototype.scrollTo;
       HTMLElement.prototype.scrollTo = scrollTo;
       try {
         const { fixture } = await render({ lines: LINES, items: ITEMS });
+        // Somebody far down the list. jsdom lays nothing out, so the viewers row
+        // ends at 0 and that is where the field pins.
+        Object.defineProperty(query(fixture, 'main.page'), 'scrollTop', {
+          configurable: true,
+          value: 400,
+        });
         typeInto(fixture, 'le');
         await fixture.whenStable();
 
@@ -4617,6 +4638,23 @@ describe('ListPage: searching and viewing one category', () => {
           top: 0,
           behavior: 'auto',
         });
+      } finally {
+        HTMLElement.prototype.scrollTo = original;
+      }
+    });
+
+    it('leaves a column that has not scrolled past the field where it is', async () => {
+      // Back to the very top would bring the viewers row back over the field and
+      // move the field under the thumb (velista 0189, decision G).
+      const scrollTo = jest.fn();
+      const original = HTMLElement.prototype.scrollTo;
+      HTMLElement.prototype.scrollTo = scrollTo;
+      try {
+        const { fixture } = await render({ lines: LINES, items: ITEMS });
+        typeInto(fixture, 'le');
+        await fixture.whenStable();
+
+        expect(scrollTo).not.toHaveBeenCalled();
       } finally {
         HTMLElement.prototype.scrollTo = original;
       }

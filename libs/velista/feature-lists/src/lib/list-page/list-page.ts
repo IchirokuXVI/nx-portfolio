@@ -1137,10 +1137,12 @@ export class ListPage {
   private _resultsDrawn = false;
 
   /**
-   * When the results first appear, the column goes to its top (velista `0189`,
-   * decision G), so they start under the field however far down the list somebody
-   * was. The head block is pinned outside the column, so nothing above the results
-   * is lost by it, as on the basket.
+   * When the results first appear, the column goes back up to where the field pins
+   * (velista `0189`, decision G), so they start under the field however far down
+   * the list somebody was. The viewers row is the column's first row and the field
+   * is pinned under it, so the column goes back no further than that row's bottom
+   * edge: a scroll to the very top would bring the row back and move the field under
+   * the thumb. A column already above that point stays where it is, as on the basket.
    *
    * Not on a return to the page: the results were already on screen when somebody
    * left, and the place they were reading in is what {@link _scroll} puts back.
@@ -1159,7 +1161,12 @@ export class ListPage {
       return;
     }
     this._resultsDrawn = true;
-    column.scrollTo?.({ top: 0, behavior: 'auto' });
+    const viewers = column.querySelector<HTMLElement>('lib-list-header');
+    const pinned =
+      viewers === null ? 0 : viewers.offsetTop + viewers.offsetHeight;
+    if (column.scrollTop > pinned) {
+      column.scrollTo?.({ top: pinned, behavior: 'auto' });
+    }
   });
 
   /** Whether an open of the search entry was asked for and has not landed yet. */

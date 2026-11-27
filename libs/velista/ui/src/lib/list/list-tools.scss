@@ -1,9 +1,9 @@
 // The tools row, and whatever the page projects under it (velista 0079, section 2).
 // Moved here from the basket page by velista 0082.
 //
-// It held itself at the top of the scroll until velista 0189. The page pins it now,
-// in a head block outside its scroller, so nothing scrolls under it and it needs no
-// position of its own. The ground stays painted, the page's own.
+// It held itself at the top of the scroll until velista 0189. It is the scroller's
+// first row now and scrolls away with the lines; the page pins only the field under
+// it, so it needs no position of its own. The ground stays painted, the page's own.
 :host {
   display: flex;
   flex-direction: column;

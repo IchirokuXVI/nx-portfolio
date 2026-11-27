@@ -5,8 +5,9 @@ import { OfflineIcon } from '../icons/icons';
 import { ListViewers } from '../presence/list-viewers';
 
 /**
- * The list's head block, pinned under the page header (velista `0189`): who else has
- * the list open, and whether it is live.
+ * The list's head block, the first row of the page's column above the field (velista
+ * `0189`): who else has the list open, and whether it is live. It scrolls away with
+ * the lines; only the field under it stays pinned.
  *
  * ## The name and the group are not here
  *
