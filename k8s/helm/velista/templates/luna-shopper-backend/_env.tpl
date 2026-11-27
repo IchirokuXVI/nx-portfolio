@@ -56,6 +56,15 @@ them.
       name: {{ $cfg }}
       key: {{ $key }}
 {{- end }}
+{{- /*
+Node options of one entry, stated on that entry as `nodeOptions`. Rendered only
+for an entry that sets it, so every other container keeps the defaults of Node.
+The harvester sets its heap ceiling here, to fit the limit its entry states.
+*/}}
+{{- if $svc.nodeOptions }}
+- name: NODE_OPTIONS
+  value: {{ $svc.nodeOptions | quote }}
+{{- end }}
 {{- if or (eq $svc.role "gateway") (eq $svc.role "realtime") (eq $svc.role "harvester") }}
 # Redis (plan 0028). Only these three roles receive it, and each **requires** it:
 # realtime is incorrect at more than one replica without the backplane, and a
