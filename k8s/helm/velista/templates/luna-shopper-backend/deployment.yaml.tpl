@@ -127,7 +127,11 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 20
             failureThreshold: 3
+          {{- /* An entry may state its own `resources`, which is taken whole, as
+               the Postgres `instanceOverrides` are. The harvester does (see its
+               entry in values.yaml): the last stage of a catalog walk holds the
+               whole walk in memory. */}}
           resources:
-            {{- toYaml $ls.resources | nindent 12 }}
+            {{- toYaml (.resources | default $ls.resources) | nindent 12 }}
 {{- end }}
 {{- end }}

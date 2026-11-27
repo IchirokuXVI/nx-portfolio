@@ -730,6 +730,15 @@ lunaShopperBackend:
     # would not share the work, it would start a second run. The database's active
     # run index refuses that, but a rolling update briefly running two pods would
     # mean the new one cannot start until the old one's run finishes.
+    #
+    # Its own `resources` and `nodeOptions`, measured on production on
+    # 2026-11-27. The last stage of a DEZA catalog walk holds 16,500 products and
+    # about 181,000 shop claims in memory. Inside the shared 512Mi limit Node ran
+    # out of heap there and the run ended STALE. With a 2Gi limit and a 1536 MB
+    # heap the same walk completed, and the pod peaked near 500Mi between
+    # samples. The heap ceiling sits below the limit so that Node collects before
+    # the kernel kills the pod. `resources` on an entry is taken whole, so state
+    # requests and limits together.
     - name: luna-shopper-backend-harvester
       role: harvester
       image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-harvester
@@ -738,6 +747,14 @@ lunaShopperBackend:
       optional: harvester
       replicas: 1
       strategy: Recreate
+      resources:
+        requests:
+          cpu: 50m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 2Gi
+      nodeOptions: --max-old-space-size=1536
     # The assistant (plan 0039). Internal, with no route of its own: the client
     # reaches it through the gateway at `/v1/assistant`.
     #
